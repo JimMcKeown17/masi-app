@@ -7,7 +7,7 @@
  * deliberately NOT here: the panel writes immediately, the sheet defers via
  * pendingChanges. Only reads and pure counting live in this module.
  */
-import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS } from './assessmentRegistry';
+import { PEDAGOGICAL_ORDERS } from './assessmentRegistry';
 import { computeAssessmentMastery } from './letterMastery';
 
 export async function loadMasteryState({ repositories, userId, childId, languageCode }) {
@@ -27,12 +27,9 @@ export async function loadMasteryState({ repositories, userId, childId, language
   });
   const assessmentMastered = computeAssessmentMastery(latestAssessment, pedagogicalOrder);
 
-  const allMastery = await repositories.mastery.getLetterMastery({ userId, childId });
-  // Plan 2 re-keys letter_mastery to codes
-  const confirmationLanguage = LANGUAGE_LABELS[languageCode];
-  const taughtRecords = allMastery.filter(
-    r => r.child_id === childId && r.language === confirmationLanguage && !r._deleted
-  );
+  const taughtRecords = (await repositories.mastery.getLetterMastery({
+    childId, language: languageCode,
+  })).filter(r => r.confirmed);
 
   return { pedagogicalOrder, assessmentMastered, latestAssessment, taughtRecords };
 }

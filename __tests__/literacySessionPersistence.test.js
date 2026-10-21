@@ -185,7 +185,7 @@ describe('literacySessionPersistence', () => {
     }
   });
 
-  test('saves each tracker change with the language it was made in, stamped with the save time', async () => {
+  test('saves each tracker change with the language it was made in, stamped with the tap time', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
     try {
@@ -223,10 +223,10 @@ describe('literacySessionPersistence', () => {
       });
 
       expect(await db.getAllAsync(
-        'select child_id, letter, language, created_at from letter_mastery order by child_id'
+        'select child_id, letter, language, changed_at, confirmed from letter_mastery order by child_id'
       )).toEqual([
-        { child_id: 'child-1', letter: 'a', language: 'isiXhosa', created_at: '2026-05-21T09:30:00.000Z' },
-        { child_id: 'child-2', letter: 'm', language: 'English', created_at: '2026-05-21T09:30:00.000Z' },
+        { child_id: 'child-1', letter: 'a', language: 'xh', changed_at: MADE_AT, confirmed: 1 },
+        { child_id: 'child-2', letter: 'm', language: 'en', changed_at: MADE_AT, confirmed: 1 },
       ]);
     } finally {
       await db.closeAsync();
@@ -300,26 +300,13 @@ describe('literacySessionPersistence', () => {
       }, { actorUserId: 'user-1' });
 
       const masteryRepository = createMasteryRepository({ database: db });
-      await masteryRepository.saveLetterMasteryRecord({
-        id: 'mastery-deleted-a',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        programme_id: 'programme-a',
-        letter: 'a',
-        language: 'English',
-        source: 'taught',
-        _deleted: true,
-        synced: false,
+      await masteryRepository.setLetterMastery({
+        childId: 'child-1', programmeId: 'programme-a', letter: 'a', language: 'en',
+        confirmed: false, changedAt: '2026-05-19T08:00:00.000Z',
       });
-      await masteryRepository.saveLetterMasteryRecord({
-        id: 'mastery-active-s',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        programme_id: 'programme-a',
-        letter: 's',
-        language: 'English',
-        source: 'taught',
-        synced: false,
+      await masteryRepository.setLetterMastery({
+        childId: 'child-1', programmeId: 'programme-a', letter: 's', language: 'en',
+        confirmed: true, changedAt: '2026-05-19T08:00:00.000Z',
       });
 
       await persistLiteracySession({
@@ -350,13 +337,12 @@ describe('literacySessionPersistence', () => {
         .toEqual({ id: 'session-1' });
       expect(await db.getFirstAsync('select session_id, child_id from session_attendees where session_id = ?', 'session-1'))
         .toEqual({ session_id: 'session-1', child_id: 'child-1' });
-      // Rows are keyed by their natural logical key now (deterministic ids), so assert by letter.
-      expect(await db.getFirstAsync("select deleted_at from letter_mastery where letter = 'a'"))
-        .toEqual({ deleted_at: null }); // previously soft-deleted 'a' re-taught → active again
-      expect(await db.getFirstAsync("select child_id, letter, deleted_at from letter_mastery where letter = 'm'"))
-        .toEqual({ child_id: 'child-1', letter: 'm', deleted_at: null }); // newly taught
-      expect((await db.getFirstAsync("select deleted_at from letter_mastery where letter = 's'")).deleted_at)
-        .toBe('2026-05-21T09:30:00.000Z'); // previously active 's' untaught → soft-deleted
+      expect(await db.getAllAsync('select letter, language, confirmed, changed_at from letter_mastery order by letter'))
+        .toEqual([
+          { letter: 'a', language: 'en', confirmed: 1, changed_at: MADE_AT },
+          { letter: 'm', language: 'en', confirmed: 1, changed_at: MADE_AT },
+          { letter: 's', language: 'en', confirmed: 0, changed_at: MADE_AT },
+        ]);
       expect(await db.getAllAsync('select table_name from sync_outbox order by table_name, record_id'))
         .toEqual(expect.arrayContaining([
           { table_name: 'sessions' },
@@ -382,6 +368,9 @@ describe('literacySessionPersistence', () => {
         synced: false,
       }, { actorUserId: 'user-1' });
 
+      await db.runAsync(`create trigger fail_tracker_outbox before insert on sync_outbox
+        when new.table_name = 'letter_mastery'
+        begin select raise(abort, 'tracker outbox failed'); end`);
       await expect(persistLiteracySession({
         database: db,
         session: {
@@ -401,10 +390,8 @@ describe('literacySessionPersistence', () => {
           },
         },
         nowIso: '2026-05-21T09:30:00.000Z',
-        idFactory: () => {
-          throw new Error('id generation failed');
-        },
-      })).rejects.toThrow('id generation failed');
+        idFactory: () => 'unused',
+      })).rejects.toMatchObject({ message: 'tracker outbox failed' });
 
       expect(await db.getFirstAsync('select id from sessions where id = ?', 'session-rollback'))
         .toBeNull();
@@ -417,70 +404,83 @@ describe('literacySessionPersistence', () => {
     }
   });
 
-  test('tracker persistence never reuses mastery rows from another programme', async () => {
+  test('a confirmation recorded under another programme is the same record (C23)', async () => {
     const db = await createMigratedDatabase(runMigrations);
-
     try {
       await seedCoreData(db);
       await createChildrenRepository({ database: db }).save({
-        id: 'child-1',
-        first_name: 'Amahle',
-        last_name: 'Dlamini',
-        class_id: 'class-1',
-        created_by: 'user-1',
-        synced: false,
+        id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1',
+        created_by: 'user-1', synced: true,
       }, { actorUserId: 'user-1' });
-
-      const masteryRepository = createMasteryRepository({ database: db });
-      await masteryRepository.saveLetterMasteryRecord({
-        id: 'mastery-numeracy-deleted',
-        user_id: 'user-1',
-        child_id: 'child-1',
-        programme_id: 'programme-b',
-        letter: 'z',
-        language: 'English',
-        source: 'taught',
-        _deleted: true,
-        synced: false,
+      const mastery = createMasteryRepository({ database: db });
+      const previous = await mastery.setLetterMastery({
+        childId: 'child-1', programmeId: 'programme-b', letter: 'z', language: 'en',
+        confirmed: false, changedAt: '2026-05-19T08:00:00.000Z',
       });
-
       await persistLiteracySession({
         database: db,
         session: {
-          id: 'session-programme-scoped',
-          user_id: 'user-1',
-          class_id: 'class-1',
-          session_date: '2026-05-21',
-          children_ids: ['child-1'],
-          group_ids: [],
-          activities: { letters_focused: ['z'] },
-          synced: false,
+          id: 'session-programme-scoped', user_id: 'user-1', programme_id: 'programme-a',
+          class_id: 'class-1', session_date: '2026-05-21', children_ids: ['child-1'],
+          activities: { letters_focused: ['z'] }, synced: false,
         },
-        letterTrackerChanges: {
-          'child-1': {
-            z: { mastered: true, languageCode: 'en', madeAt: MADE_AT },
-          },
-        },
-        nowIso: '2026-05-21T09:30:00.000Z',
-        idFactory: () => 'mastery-literacy-z',
+        letterTrackerChanges: { 'child-1': { z: { mastered: true, languageCode: 'en', madeAt: MADE_AT } } },
+        nowIso: '2026-05-21T09:30:00.000Z', idFactory: () => 'unused',
       });
+      expect(await db.getAllAsync("select id, programme_id, language, confirmed from letter_mastery where letter = 'z'"))
+        .toEqual([{ id: previous.id, programme_id: 'programme-a', language: 'en', confirmed: 1 }]);
+      expect(await db.getAllAsync("select operation from sync_outbox where table_name = 'letter_mastery'"))
+        .toEqual([{ operation: 'update' }]);
+    } finally { await db.closeAsync(); }
+  });
 
-      // The numeracy (programme-b) deleted 'z' row is NOT reused for the literacy session;
-      // a separate active 'z' row is created under programme-a (distinct deterministic ids).
-      expect(await db.getFirstAsync(
-        "select programme_id, deleted_at from letter_mastery where letter = 'z' and programme_id = 'programme-b'"
-      )).toEqual({
-        programme_id: 'programme-b',
-        deleted_at: expect.any(String),
-      });
-      expect(await db.getFirstAsync(
-        "select programme_id, deleted_at from letter_mastery where letter = 'z' and programme_id = 'programme-a'"
-      )).toEqual({
-        programme_id: 'programme-a',
-        deleted_at: null,
-      });
-    } finally {
-      await db.closeAsync();
-    }
+  test.each([
+    ["a Monday mark saved on Wednesday keeps Monday's correction time", true],
+    ['an un-mark without a stored record writes a confirmed false correction', false],
+  ])('%s', async (_name, confirmed) => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1', first_name: 'Test', last_name: 'Child', created_by: 'user-1', synced: true,
+      }, { actorUserId: 'user-1' });
+      await db.runAsync('delete from sync_outbox');
+      const idFactory = jest.fn(() => 'unused');
+      await persistLiteracySession({ database: db,
+        session: { id: 'session-wed', user_id: 'user-1', programme_id: 'programme-a', session_date: '2026-10-21',
+          children_ids: ['child-1'], activities: { letters_focused: ['a'] }, synced: false },
+        letterTrackerChanges: { 'child-1': { m: { mastered: confirmed, languageCode: 'en', madeAt: '2026-10-19T08:00:00.000Z' } } },
+        nowIso: '2026-10-21T09:30:00.000Z', idFactory });
+      expect(await db.getFirstAsync("select changed_at, confirmed, sync_status from letter_mastery where letter = 'm'"))
+        .toEqual({ changed_at: '2026-10-19T08:00:00.000Z', confirmed: confirmed ? 1 : 0, sync_status: 'pending' });
+      const { payload } = await db.getFirstAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+      expect(JSON.parse(payload)).toMatchObject({ letter: 'm', confirmed, language: 'en', changed_at: '2026-10-19T08:00:00.000Z' });
+      expect(idFactory).not.toHaveBeenCalled();
+    } finally { await db.closeAsync(); }
+  });
+
+  test("a Monday mark saved on Wednesday leaves this phone's newer unsent Tuesday correction queued", async () => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1', first_name: 'Test', last_name: 'Child', created_by: 'user-1', synced: true,
+      }, { actorUserId: 'user-1' });
+      await db.runAsync('delete from sync_outbox');
+      const mastery = createMasteryRepository({ database: db });
+      const tuesday = await mastery.setLetterMastery({ childId: 'child-1', letter: 'm', language: 'en',
+        confirmed: false, changedAt: '2026-10-20T08:00:00.000Z' });
+      await persistLiteracySession({ database: db,
+        session: { id: 'session-wed', user_id: 'user-1', programme_id: 'programme-a', session_date: '2026-10-21',
+          children_ids: ['child-1'], activities: { letters_focused: ['a'] }, synced: false },
+        letterTrackerChanges: { 'child-1': { m: { mastered: true, languageCode: 'en', madeAt: '2026-10-19T08:00:00.000Z' } } },
+        nowIso: '2026-10-21T09:30:00.000Z', idFactory: () => 'unused' });
+      expect(await db.getFirstAsync("select changed_at, confirmed, correction_id, sync_status from letter_mastery where letter = 'm'"))
+        .toEqual({ changed_at: '2026-10-20T08:00:00.000Z', confirmed: 0, correction_id: tuesday.correction_id, sync_status: 'pending' });
+      const slots = await db.getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+      expect(slots.map(s => JSON.parse(s.payload))).toEqual([expect.objectContaining({
+        confirmed: false, changed_at: '2026-10-20T08:00:00.000Z', correction_id: tuesday.correction_id })]);
+      expect(await db.getFirstAsync("select id from sessions where id = 'session-wed'")).toEqual({ id: 'session-wed' });
+    } finally { await db.closeAsync(); }
   });
 });

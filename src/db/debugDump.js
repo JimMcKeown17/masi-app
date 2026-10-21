@@ -122,6 +122,34 @@ const getFailedOutboxRows = async (db, tableNames) => {
   }
 };
 
+const getLetterMastery = async (db, tableNames) => {
+  if (!tableNames.includes('letter_mastery')) return [];
+
+  try {
+    const rows = await db.getAllAsync(`
+      select child_id, letter, language, confirmed, changed_at, correction_id, changed_by,
+             programme_id, sync_status, server_changed_at, server_correction_id
+      from letter_mastery
+      order by child_id, letter
+    `);
+    return rows.map(row => ({
+      childId: row.child_id,
+      letter: row.letter,
+      language: row.language,
+      confirmed: Boolean(row.confirmed),
+      changedAt: row.changed_at,
+      correctionId: row.correction_id,
+      changedBy: row.changed_by,
+      programmeId: row.programme_id,
+      syncStatus: row.sync_status,
+      serverChangedAt: row.server_changed_at,
+      serverCorrectionId: row.server_correction_id,
+    }));
+  } catch (error) {
+    return diagnosticError(error);
+  }
+};
+
 export async function debugDump({ handle }) {
   assertExportHandle(handle);
   const db = await handle.getReader();
@@ -135,6 +163,7 @@ export async function debugDump({ handle }) {
     tableCounts: await getTableCounts(db, tableNames),
     syncState: await getSyncState(db, tableNames),
     failedOutboxRows: await getFailedOutboxRows(db, tableNames),
+    letterMastery: await getLetterMastery(db, tableNames),
     generatedAt: new Date().toISOString(),
   };
   assertExportHandle(handle);

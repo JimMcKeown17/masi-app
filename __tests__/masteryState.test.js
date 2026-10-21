@@ -21,9 +21,21 @@ describe('loadMasteryState', () => {
   const load = languageCode => loadMasteryState({
     repositories, userId: f.userId, childId: f.childId, languageCode,
   });
-  const confirm = (letter, language, extra = {}) => repositories.mastery.saveLetterMasteryRecord({
-    id: uuid(), user_id: f.userId, child_id: f.childId, letter, language, source: 'taught', ...extra,
+  const confirm = (letter, language, confirmed = true) => repositories.mastery.setLetterMastery({
+    childId: f.childId, letter, language, confirmed,
   });
+  const insertRow = async (overrides) => {
+    const row = {
+      id: uuid(), child_id: f.childId, letter: 'a', language: 'en', confirmed: 1,
+      changed_at: '2026-10-20T08:00:00.000Z', correction_id: uuid(), changed_by: f.userId,
+      programme_id: f.programmeId, sync_status: 'synced', ...overrides,
+    };
+    await f.db.runAsync(`insert into letter_mastery
+      (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id, sync_status)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id, row.child_id, row.letter, row.language, row.confirmed, row.changed_at,
+    row.correction_id, row.changed_by, row.programme_id, row.sync_status);
+  };
 
   test('picks the latest LETTER assessment even when a word assessment is newer', async () => {
     const { id } = await f.save(1, { result: questionResult(1, {
@@ -51,12 +63,25 @@ describe('loadMasteryState', () => {
     expect(state.assessmentMastered).toEqual(new Set());
   });
 
-  test('taught records exclude soft-deleted rows and other languages', async () => {
-    const activeId = await confirm('a', 'English');
-    await confirm('b', 'English', { _deleted: true });
-    await confirm('c', 'isiXhosa');
+  test('taught records exclude unconfirmed rows and other languages', async () => {
+    const active = await confirm('a', 'en', true);
+    await confirm('b', 'en', false);
+    await confirm('c', 'xh', true);
     const state = await load('en');
-    expect(state.taughtRecords.map(r => r.id)).toEqual([activeId]);
+    expect(state.taughtRecords.map(r => r.id)).toEqual([active.id]);
+  });
+
+  test('confirmations from any EA and any programme count; unconfirmed, terminal and other-language rows do not', async () => {
+    await f.db.runAsync("insert into programmes (id, code, name) values ('programme-b', 'other', 'Other Programme')");
+    await confirm('a', 'en', true);
+    await insertRow({ letter: 'b', language: 'en', confirmed: 1, changed_by: 'other-ea', programme_id: 'programme-b', sync_status: 'synced' });
+    await insertRow({ letter: 'c', language: 'en', confirmed: 0, changed_by: 'other-ea', sync_status: 'synced' });
+    await insertRow({ letter: 'd', language: 'en', confirmed: 1, sync_status: 'terminal' });
+    await confirm('e', 'xh', true);
+    const read = jest.spyOn(repositories.mastery, 'getLetterMastery');
+    const state = await load('en');
+    expect(read).toHaveBeenCalledWith({ childId: f.childId, language: 'en' });
+    expect(state.taughtRecords.map(r => r.letter)).toEqual(['a', 'b']);
   });
 
   test('an Afrikaans child reads Afrikaans results and confirmations only', async () => {
@@ -70,13 +95,13 @@ describe('loadMasteryState', () => {
       items: [{ position: 0, item_key: '0', prompt: 'z', is_correct: true, metadata: { reached: true } }],
     }) });
     await f.db.runAsync("update assessments set assessment_date = '2099-01-01' where id = ?", en.id);
-    await confirm('k', 'Afrikaans');
-    await confirm('s', 'English');
+    await confirm('k', 'af', true);
+    await confirm('s', 'en', true);
     const state = await load('af');
     expect(state.pedagogicalOrder).toEqual(['a','s','m','e','k','i','r','o','n','t','d','l','p','u','b','g','h','v','w','y','f','j','c','z','x','q']);
     expect(state.latestAssessment.id).toBe(af.id);
     expect(state.assessmentMastered).toEqual(new Set(['l', 'm', 'e']));
-    expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['k', 'Afrikaans']]);
+    expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['k', 'af']]);
     expect(countMastered({ ...state, taughtLetters: new Set(state.taughtRecords.map(r => r.letter)) })).toBe(4);
   });
 
@@ -109,12 +134,12 @@ describe('loadMasteryState', () => {
       }),
     });
     bindTestActor(f.db, f.userId);
-    await confirm('e', 'isiXhosa');
-    await confirm('z', 'English');
+    await confirm('e', 'xh', true);
+    await confirm('z', 'en', true);
     const state = await load('xh');
     expect(state.latestAssessment).toMatchObject({ id, user_id: otherUserId, battery_run_id: run.id, language: 'xh' });
     expect(state.assessmentMastered).toEqual(new Set(['a']));
-    expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['e', 'isiXhosa']]);
+    expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['e', 'xh']]);
     expect(countMastered({
       ...state, taughtLetters: new Set(state.taughtRecords.map(r => r.letter)),
     })).toBe(2);

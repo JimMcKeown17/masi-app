@@ -8,7 +8,6 @@
 import { computeAssessmentMastery } from './letterMastery';
 import {
   languageCodeForHomeLanguage,
-  LANGUAGE_LABELS,
   LETTER_EVIDENCE_CODES,
   PEDAGOGICAL_ORDERS,
 } from './assessmentRegistry';
@@ -213,12 +212,10 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
     // Assessment-mastered letters
     const assessmentMastered = computeAssessmentMastery(latest, pedOrder);
 
-    // Coach-taught letters (not deleted, matching language)
-    // Plan 2 re-keys letter_mastery to codes
-    const confirmationLanguage = LANGUAGE_LABELS[languageCode];
+    // Confirmed letters in the child's class language, regardless of recorder or programme.
     const taughtLetters = new Set();
     for (const r of letterMastery) {
-      if (r.child_id === child.id && r.language === confirmationLanguage && !r._deleted) {
+      if (r.child_id === child.id && r.language === languageCode && r.confirmed) {
         taughtLetters.add(r.letter);
       }
     }

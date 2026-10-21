@@ -1,3 +1,5 @@
+import { letterMasteryDomainId } from './domainId';
+
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -794,6 +796,73 @@ alter table class_grouping_state add column row_version integer not null default
       alter table programmes add column default_battery_version text;
     `,
   },
+  {
+    version: 16,
+    name: 'letter_mastery_current_state',
+    sql: `
+      create table letter_mastery_v2 (
+        id text primary key,
+        child_id text not null references children(id) on delete cascade,
+        letter text not null check (length(letter) = 1 and letter = lower(letter)),
+        language text not null check (language glob '[a-z][a-z]'),
+        confirmed integer not null check (confirmed in (0, 1)),
+        changed_at text not null,
+        correction_id text not null,
+        changed_by text not null,
+        programme_id text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        server_changed_at text,
+        server_correction_id text
+      );
+
+      -- Rank before checking sync_status: an unsynced winner clears the whole key.
+      with codes as (
+        select *,
+          lower(letter) as l,
+          case lower(trim(language))
+            when 'english' then 'en'
+            when 'isixhosa' then 'xh'
+            when 'xhosa' then 'xh'
+            when 'isizulu' then 'zu'
+            when 'zulu' then 'zu'
+            when 'afrikaans' then 'af'
+            else case when language glob '[a-z][a-z]' then language else null end
+          end as code
+        from letter_mastery
+      ), ranked as (
+        select *, row_number() over (
+          partition by child_id, l, code order by updated_at desc, id desc
+        ) as rn
+        from codes
+      )
+      insert into letter_mastery_v2 (
+        id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by,
+        programme_id, created_at, updated_at, sync_status, server_updated_at,
+        server_changed_at, server_correction_id
+      )
+      select id, child_id, l, code, (deleted_at is null), updated_at, id, user_id,
+        programme_id, created_at, updated_at, 'synced', server_updated_at, null, null
+      from ranked
+      where rn = 1 and code is not null and length(l) = 1 and sync_status = 'synced';
+
+      delete from sync_outbox where table_name = 'letter_mastery';
+      drop table letter_mastery;
+      alter table letter_mastery_v2 rename to letter_mastery;
+      create unique index idx_letter_mastery_child_key on letter_mastery(child_id, letter, language);
+    `,
+    transform: async (txn) => {
+      const rows = await txn.getAllAsync('select id, child_id, letter, language from letter_mastery');
+      for (const row of rows) {
+        await txn.runAsync('update letter_mastery set id = ? where id = ?', letterMasteryDomainId({
+          childId: row.child_id,
+          letter: row.letter,
+          language: row.language,
+        }), row.id);
+      }
+    },
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
@@ -850,6 +919,7 @@ async function runMigrationsNow(database) {
     for (const migration of pending) {
       await runInTransaction(db, async (txn) => {
         await txn.execAsync(migration.sql);
+        if (migration.transform) await migration.transform(txn);
         await txn.runAsync(
           'insert or ignore into schema_migrations (version, name) values (?, ?)',
           migration.version,

@@ -1,3 +1,5 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+
 jest.mock('@react-navigation/native', () => ({
   NavigationContext: require('react').createContext(undefined),
   useFocusEffect: callback => require('react').useEffect(callback, [callback]),
@@ -74,10 +76,12 @@ test.each(['current EA', 'another EA'])(
     bindTestActor(fixture.db, fixture.userId);
 
     const read = jest.spyOn(repositories.assessments, 'getLetterResults');
+    const masteryRead = jest.spyOn(repositories.mastery, 'getLetterMastery');
     const screen = renderRanking();
     expect(await screen.findByLabelText('View details for Amahle D., 2/26')).toBeTruthy();
     expect(screen.getByText('2/26')).toBeTruthy();
     expect(read).toHaveBeenCalledWith({ userId: fixture.userId });
+    expect(masteryRead).toHaveBeenCalledWith({ childIds: [fixture.childId] });
   },
 );
 
@@ -86,9 +90,8 @@ test.each([null, undefined, 'isiZulu'])(
   async homeLanguage => {
     useClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: homeLanguage }] });
     await fixture.save(1);
-    await repositories.mastery.saveLetterMasteryRecord({
-      id: uuid(), user_id: fixture.userId, child_id: fixture.childId,
-      letter: 'b', language: 'English', source: 'taught',
+    await repositories.mastery.setLetterMastery({
+      childId: fixture.childId, letter: 'b', language: 'en', confirmed: true,
     });
 
     const screen = renderRanking();
@@ -97,3 +100,16 @@ test.each([null, undefined, 'isiZulu'])(
     expect(screen.UNSAFE_getByType(RankedBarRow).props).toMatchObject({ value: 0, maxValue: 26 });
   },
 );
+
+test('a confirmation recorded by another EA counts', async () => {
+  const otherEa = uuid();
+  bindTestActor(fixture.db, otherEa);
+  await repositories.mastery.setLetterMastery({
+    childId: fixture.childId, letter: 'b', language: 'xh', confirmed: true,
+  });
+  bindTestActor(fixture.db, fixture.userId);
+  const read = jest.spyOn(repositories.mastery, 'getLetterMastery');
+  const screen = renderRanking();
+  expect(await screen.findByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  expect(read).toHaveBeenCalledWith({ childIds: [fixture.childId] });
+});

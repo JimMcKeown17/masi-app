@@ -1,4 +1,6 @@
-import { v5 as uuidv5, validate as uuidValidate } from 'uuid';
+import { validate as uuidValidate } from 'uuid';
+import { deterministicDomainId } from '../domainId';
+export { deterministicDomainId, letterMasteryDomainId } from '../domainId';
 import {
   insertOutboxRecord,
   mapRowFromSqlite,
@@ -11,13 +13,6 @@ import { outboxRecordId } from './syncOutboxRepository';
 import { VERSIONED_TABLES } from './rowVersion';
 
 export const LEGACY_PROGRAMME_ID = 'local-legacy-programme';
-const MASI_DOMAIN_ID_NAMESPACE = '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
-
-export const deterministicDomainId = (...parts) => uuidv5(
-  parts.map((part) => String(part ?? '')).join('\u001f'),
-  MASI_DOMAIN_ID_NAMESPACE
-);
-
 export const sessionAttendeeDomainId = (sessionId, childId) => (
   deterministicDomainId('session_attendees', sessionId, childId)
 );
@@ -37,23 +32,6 @@ export const assessmentItemDomainId = ({
   }
   return deterministicDomainId('assessment_items', assessmentId, key);
 };
-
-export const letterMasteryDomainId = ({
-  userId,
-  childId,
-  programmeId,
-  letter,
-  language,
-  source = 'taught',
-}) => deterministicDomainId(
-  'letter_mastery',
-  userId,
-  childId,
-  programmeId,
-  letter,
-  language,
-  source || 'taught'
-);
 
 export const childEaAssignmentDomainId = ({ userId, childId }) => (
   deterministicDomainId('child_ea_assignments', userId, childId)

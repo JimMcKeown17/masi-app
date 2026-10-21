@@ -102,10 +102,12 @@ it('POSITIVE: real capture flows commit through public interfaces with FK ON', a
     );
     expect(attendees).toHaveLength(1);
     expect(attendees[0]).toMatchObject({ session_id: 'session-1', child_id: childId });
-    const masteryLetters = (await db.getAllAsync(
-      "select letter from letter_mastery where child_id = ?", childId
-    )).map((row) => row.letter).sort();
-    expect(masteryLetters).toEqual(['a', 'm']); // both tracked letters committed under this child
+    expect(await db.getAllAsync(
+      "select letter, language, confirmed from letter_mastery where child_id = ? order by letter", childId
+    )).toEqual([
+      { letter: 'a', language: 'en', confirmed: 1 },
+      { letter: 'm', language: 'en', confirmed: 1 },
+    ]);
 
     // assessments → assessment_items
     expect(await db.getAllAsync('select id from assessments where id = ?', assessmentId)).toHaveLength(1);

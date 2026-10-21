@@ -100,6 +100,7 @@ describe('SQLite migration runner', () => {
           events.push('txn:exec-migration-sql');
         }
       }),
+      getAllAsync: jest.fn(async () => []),
       getFirstAsync: jest.fn(async (sql) => {
         events.push(`get:${sql}`);
         return { user_version: 0 };
@@ -139,7 +140,7 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(15);
+      expect(CURRENT_SCHEMA_VERSION).toBe(MIGRATIONS.find(({ name }) => name === 'letter_mastery_current_state').version);
       expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await getTableNames(db)).toEqual(expect.arrayContaining([
         'schema_migrations',
@@ -249,7 +250,7 @@ describe('SQLite migration runner', () => {
       child_group_memberships: ['grouping_version_id'],
       assessments: ['assessment_window_id', 'assessment_purpose', 'grade_snapshot', 'teacher_name_snapshot'],
       session_attendees: ['grade_snapshot'],
-      letter_mastery: ['deleted_at'],
+      letter_mastery: ['confirmed', 'changed_at', 'correction_id', 'changed_by', 'server_changed_at', 'server_correction_id'],
     };
 
     try {
@@ -324,68 +325,19 @@ describe('SQLite migration runner', () => {
 
       await db.runAsync(`
         insert into letter_mastery (
-          id,
-          user_id,
-          child_id,
-          programme_id,
-          letter,
-          language,
-          source
-        )
-        values (
-          'mastery-1',
-          'user-1',
-          'child-1',
-          'programme-1',
-          'a',
-          'isiXhosa',
-          'taught'
-        )
+          id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by
+        ) values ('mastery-1', 'child-1', 'a', 'xh', 1, '2026-10-21T08:00:00.000Z', 'correction-1', 'user-1')
       `);
       await expectSqliteConstraintFailure(db.runAsync(`
         insert into letter_mastery (
-          id,
-          user_id,
-          child_id,
-          programme_id,
-          letter,
-          language,
-          source
-        )
-        values (
-          'mastery-duplicate',
-          'user-1',
-          'child-1',
-          'programme-1',
-          'a',
-          'isiXhosa',
-          'taught'
-        )
+          id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by
+        ) values ('mastery-duplicate', 'child-1', 'a', 'xh', 0, '2026-10-21T09:00:00.000Z', 'correction-2', 'user-2')
       `));
-
-      await db.runAsync(
-        "update letter_mastery set deleted_at = '2026-05-21T00:00:00.000Z' where id = 'mastery-1'"
-      );
-      await expect(db.runAsync(`
+      await expectSqliteConstraintFailure(db.runAsync(`
         insert into letter_mastery (
-          id,
-          user_id,
-          child_id,
-          programme_id,
-          letter,
-          language,
-          source
-        )
-        values (
-          'mastery-2',
-          'user-1',
-          'child-1',
-          'programme-1',
-          'a',
-          'isiXhosa',
-          'taught'
-        )
-      `)).resolves.toBeDefined();
+          id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by
+        ) values ('mastery-label', 'child-1', 'b', 'isiXhosa', 1, '2026-10-21T09:00:00.000Z', 'correction-3', 'user-1')
+      `));
     } finally {
       await db.closeAsync();
     }
@@ -514,6 +466,7 @@ describe('SQLite migration runner', () => {
           // Other pragmas and migration SQL are silently accepted.
         }
       }),
+      getAllAsync: jest.fn(async () => []),
       getFirstAsync: jest.fn(async () => ({ user_version: userVersion })),
       runAsync: jest.fn(async () => undefined),
     };
@@ -606,6 +559,7 @@ describe('SQLite debug dump', () => {
         tableCounts: {},
         syncState: [],
         failedOutboxRows: [],
+        letterMastery: [],
         generatedAt: expect.any(String),
       });
     } finally {
@@ -645,6 +599,7 @@ describe('SQLite debug dump', () => {
           { version: 13, name: 'support_incident_queue' },
           { version: 14, name: 'domain_row_versions' },
           { version: 15, name: 'assessment_results' },
+          { version: MIGRATIONS.find(({ name }) => name === 'letter_mastery_current_state').version, name: 'letter_mastery_current_state' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,
@@ -652,6 +607,7 @@ describe('SQLite debug dump', () => {
         }),
         syncState: [],
         failedOutboxRows: [],
+        letterMastery: [],
         generatedAt: expect.any(String),
       });
       expect(new Date(dump.generatedAt).toString()).not.toBe('Invalid Date');

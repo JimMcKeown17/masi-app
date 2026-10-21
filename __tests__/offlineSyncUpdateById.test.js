@@ -14,7 +14,6 @@ import { initializeTestDatabase, closeDefaultTestHandle } from '../test-support/
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
-import { letterMasteryDomainId } from '../src/db/repositories/domainRepositoryUtils';
 
 const HEAD_OFFICE = 'head-office-1';
 const liveTestSession = async () => ({ data: { session: { user: { id: 'user-1' } } } });
@@ -128,36 +127,6 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     expect(row.last_error).toContain('did not acknowledge exactly one');
   });
 
-  test('a letter_mastery update targets the re-derived deterministic id, not a legacy local id', async () => {
-    await db.runAsync(`
-      insert into children (id, first_name, last_name, created_by, sync_status)
-      values ('child-m', 'Lebo', 'Mokoena', 'user-1', 'synced')
-    `);
-    const legacyLocalId = '0f0f0f0f-0000-4000-8000-000000000001';
-    const payload = {
-      id: legacyLocalId,
-      user_id: 'user-1',
-      child_id: 'child-m',
-      programme_id: 'programme-1',
-      letter: 'a',
-      language: 'isiXhosa',
-      source: 'taught',
-      deleted_at: null,
-    };
-    await enqueue(db, 'letter_mastery', legacyLocalId, 'update', payload);
-    const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
-
-    await engine.syncAll();
-
-    const expectedId = letterMasteryDomainId({
-      userId: 'user-1', childId: 'child-m', programmeId: 'programme-1',
-      letter: 'a', language: 'isiXhosa', source: 'taught',
-    });
-    expect(calls.filter((call) => call.tableName === 'letter_mastery'))
-      .toEqual([expect.objectContaining({ type: 'update', column: 'id', value: expectedId })]);
-  });
-
   test('updates for UPDATE-by-id tables are never batched with inserts', async () => {
     const child = await seedHeadOfficeChild(db, 'child-own-1');
     await db.runAsync(`
@@ -245,28 +214,6 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
     await engine.syncAll({ tableName: 'classes' });
 
     expect((await db.getFirstAsync("select status from sync_outbox where record_id = 'class-2'")).status).toBe('failed');
-  });
-
-  test('a readable letter_mastery row stays retriable while the child assignment is pending', async () => {
-    await db.runAsync(`
-      insert into children (id, first_name, last_name, created_by, sync_status)
-      values ('child-lm', 'Thandi', 'Mbeki', ?, 'synced')
-    `, HEAD_OFFICE);
-    await db.runAsync(`
-      insert into child_ea_assignments (id, child_id, user_id, created_by, sync_status)
-      values ('cea-lm', 'child-lm', 'user-1', ?, 'pending')
-    `, HEAD_OFFICE);
-    const payload = {
-      id: 'lm-1', user_id: 'user-1', child_id: 'child-lm', programme_id: 'programme-1',
-      letter: 'b', language: 'isiXhosa', source: 'taught', deleted_at: null,
-    };
-    await enqueue(db, 'letter_mastery', 'lm-1', 'update', payload);
-    const { supabaseClient } = createSupabaseMock({ updateResults: { letter_mastery: { data: [], error: null } } });
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
-
-    await engine.syncAll({ tableName: 'letter_mastery' });
-
-    expect((await db.getFirstAsync("select status from sync_outbox where record_id = 'lm-1'")).status).toBe('failed');
   });
 
   test('an edit after the assignment ended on the server, with nothing pending, is terminal with a readable reason', async () => {

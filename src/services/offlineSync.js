@@ -1,5 +1,7 @@
 import { SERVER_COLUMNS } from './syncServerColumns';
 import { toSubmitArgs } from './assessmentFamilyPayload';
+import { toSetLetterMasteryArgs, parseSetLetterMasteryResult } from './letterMasteryCorrection';
+import { applyCorrectionAcknowledgement } from '../db/repositories/masteryRepository';
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
@@ -27,7 +29,6 @@ import {
   ensureServerUuid,
   groupEaAssignmentDomainId,
   LEGACY_PROGRAMME_ID,
-  letterMasteryDomainId,
   sessionAttendeeDomainId,
 } from '../db/repositories/domainRepositoryUtils';
 
@@ -66,7 +67,7 @@ const INTENTIONALLY_UNSYNCED = {
 };
 
 // Local-only bookkeeping columns the engine strips before push — never sent to the server.
-const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference', 'started_here'];
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference', 'started_here', 'server_changed_at', 'server_correction_id'];
 
 export const PUSH_ORDER = [
   'time_entries',
@@ -200,10 +201,7 @@ const GRANT_SUBJECTS = {
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { membershipMediatedChild: 'child_id' },
   ],
-  letter_mastery: [
-    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
-    { membershipMediatedChild: 'child_id' },
-  ],
+  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
   grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
@@ -235,7 +233,6 @@ const BATCHABLE_UPSERT_TABLES = new Set([
   'children',
   'class_ea_assignments',
   'group_ea_assignments',
-  'letter_mastery',
   'session_attendees',
   'time_entries',
 ]);
@@ -268,7 +265,6 @@ const ARCHIVE_SERVER_COLUMNS = {
   groups: ['archived_at', 'archived_by_user_id', 'archive_reason'],
   group_ea_assignments: ['unassigned_at', 'handover_reason'],
   child_group_memberships: ['removed_at'],
-  letter_mastery: ['deleted_at'],
 };
 
 // Lifecycle-bearing edits must also avoid single/batched upsert: full snapshots
@@ -477,7 +473,7 @@ const classifyError = (
   }
 
   if (code === '23505') {
-    const requiresRpcAcknowledgement = ['assessments', 'battery_runs'].includes(normalizeTableName(tableName));
+    const requiresRpcAcknowledgement = ['assessments', 'battery_runs', 'letter_mastery'].includes(normalizeTableName(tableName));
     return { terminal: true, markAsSynced: duplicateIsSuccess && !requiresRpcAcknowledgement };
   }
 
@@ -528,6 +524,7 @@ const isHealableRlsError = (record) => {
 
 const buildSyncPayload = (tableName, record, operation) => {
   if (tableName === 'assessments') return toSubmitArgs(record);
+  if (tableName === 'letter_mastery') return toSetLetterMasteryArgs(record);
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
   if (tableName === 'battery_runs') keysToStrip.add('updated_at');
@@ -553,20 +550,6 @@ const buildSyncPayload = (tableName, record, operation) => {
         isCorrect: payload.is_correct,
       })
     );
-  }
-  // letter_mastery's identity is its logical key. Force the deterministic id on every push so a
-  // pre-fix random local id (OTA-updated device) still lands on the canonical server row, and
-  // every device/install agrees on the id — making insert-by-id idempotent (no 23505 to repair).
-  // Unlike ensureServerUuid (which passes a valid random uuid through), this always derives it.
-  if (tableName === 'letter_mastery' && payload.id) {
-    payload.id = letterMasteryDomainId({
-      userId: payload.user_id,
-      childId: payload.child_id,
-      programmeId: payload.programme_id,
-      letter: payload.letter,
-      language: payload.language,
-      source: payload.source || 'taught',
-    });
   }
   // Active-pair identity is the server partial-unique key. Only full insert payloads carry every
   // key column; bare archive payloads must keep their original row id.
@@ -675,10 +658,8 @@ const buildOperationPatch = (tableName, operation, payload) => {
   }
   if (operation === 'update' && UPDATE_BY_ID_TABLES.has(tableName)) {
     // Full stored snapshots may predate an archive/restore. Ordinary edits must
-    // not replay that lifecycle state. Mastery reactivation is intentionally an
-    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
-    const lifecycleColumns = tableName === 'letter_mastery'
-      ? [] : (ARCHIVE_SERVER_COLUMNS[tableName] || []);
+    // not replay that lifecycle state.
+    const lifecycleColumns = ARCHIVE_SERVER_COLUMNS[tableName] || [];
     return Object.fromEntries(
       Object.entries(payload).filter(([column]) => (
         !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
@@ -720,7 +701,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   try {
     payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
   } catch (error) {
-    if (config.tableName !== 'assessments' || !(error instanceof TypeError)) throw error;
+    if (!['assessments', 'letter_mastery'].includes(config.tableName) || !(error instanceof TypeError)) throw error;
     return { success: false, error: { code: '22023', message: error.message } };
   }
 
@@ -748,6 +729,22 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
         message: `save_battery_run returned an unexpected result: ${String(data)}`,
       },
     };
+  }
+
+  if (config.tableName === 'letter_mastery') {
+    const { data, error } = await supabaseClient.rpc('set_letter_mastery', payload);
+    if (error) return { success: false, error };
+    const acknowledgement = parseSetLetterMasteryResult(data);
+    if (!acknowledgement) {
+      return {
+        success: false,
+        error: {
+          code: 'UNEXPECTED_RPC_RESULT',
+          message: `set_letter_mastery returned an unexpected result: ${String(data)}`,
+        },
+      };
+    }
+    return { success: true, acknowledgement, sentCorrectionId: payload.p_correction_id };
   }
 
   if (outboxRecord.operation === 'hard_delete') {
@@ -797,8 +794,6 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   }
 
   if (outboxRecord.operation === 'update' && UPDATE_BY_ID_TABLES.has(config.tableName)) {
-    // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
-    // is the payload id, not the outbox record_id.
     const serverId = payload.id || outboxRecord.record_id;
     const patch = buildOperationPatch(config.tableName, outboxRecord.operation, payload);
     const { data, error } = await supabaseClient
@@ -892,7 +887,13 @@ const finalizeSuccess = async ({
   outboxRecord,
   tableName,
   applyAcknowledgedPayload,
+  serverResult,
 }) => runRepositoryTransaction(database, async (txn) => {
+  const correction = tableName === 'letter_mastery' ? {
+    recordId: outboxRecord.record_id,
+    sentCorrectionId: serverResult.sentCorrectionId,
+    result: serverResult.acknowledgement,
+  } : null;
   const deleteResult = await txn.runAsync(`
     delete from sync_outbox
     where id = ?
@@ -901,6 +902,7 @@ const finalizeSuccess = async ({
   `, outboxRecord.id, outboxRecord.updated_at);
 
   if ((deleteResult?.changes || 0) === 0) {
+    if (correction) await applyCorrectionAcknowledgement(txn, { ...correction, outboxDeleted: false });
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
   }
 
@@ -916,7 +918,9 @@ const finalizeSuccess = async ({
       syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
       lastSyncError: null,
     });
-    if (!hasRemainingOutbox && applyAcknowledgedPayload) {
+    if (correction) {
+      await applyCorrectionAcknowledgement(txn, { ...correction, outboxDeleted: true });
+    } else if (!hasRemainingOutbox && applyAcknowledgedPayload) {
       await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
     }
   }
@@ -1189,6 +1193,7 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           applyAcknowledgedPayload,
           outboxRepository,
+          serverResult,
         });
         return { success: true };
       }
@@ -1236,6 +1241,7 @@ export const createOutboxSyncEngine = ({
           outboxRecord: inFlightRecord,
           tableName: config.tableName,
           outboxRepository,
+          serverResult,
         });
         return { success: true };
       }

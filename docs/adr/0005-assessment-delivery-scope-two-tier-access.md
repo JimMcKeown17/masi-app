@@ -5,6 +5,11 @@ date: 2026-07-24
 
 # Assessment vs delivery access: a class/delivery/group tiered scope model
 
+> **Follow-up 2 built (Assessment Results Plan 2, 2026-10-21):** one record per child, letter and
+> language; current-deliverer writes; the most recently made correction wins (D1).
+> Hosted application and two-phone device verification remain Plan 2 Task 7; mastery pull and
+> assessment-history authorization/hydration remain Plan 3.
+
 > **Implementation status — 2026-09-04 follow-up:** Gate 0 found that hosted RLS did not implement
 > this decision faithfully. The session migrations are now applied to `masi-app-sqlite`: a
 > rollback-only hosted PostgreSQL matrix proved owner, current/former delivery, class-only,

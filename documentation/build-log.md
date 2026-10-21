@@ -1066,7 +1066,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
-### 2026-10-21 — Assessment Results Plan 2 Task 1: server mastery current state
+### 2026-10-21 — Assessment Results Plan 2: server current state and local schema
 
 **Scope:** server-only implementation on `feat/assessment-results-plan-2`. No phone schema,
 repository, sync or UI changes. AF Task 1 is in the stack; AF registry Tasks 2–3 and B2's parallel
@@ -1118,6 +1118,468 @@ The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) 
 `20261021120000_assessment_results_contract` as the newest applied migration. Hosted wipe,
 apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
 
+**AR Plan 2 Task 2, local schema 16 `letter_mastery_current_state`.**
+
+Added the leaf `src/db/domainId.js` module (only `uuid` imported), moving
+`deterministicDomainId` unchanged and re-exporting it and `letterMasteryDomainId` from
+`domainRepositoryUtils`. Mastery IDs now hash child, letter and language code without EA,
+Programme or source; child UUID text is lowercased for server parity. Added the optional
+per-migration `transform(txn)` hook after SQL and before the ledger/version writes in the same
+manual transaction. The new migration rebuilds mastery with its new columns, natural-key unique
+index, nullable Programme context without a local Programme FK, and two nullable server-ordering
+columns.
+
+**Clear rule:** map labels (including `Afrikaans → af`), lowercase letters and rank each mapped
+key by old `updated_at desc, id desc` before filtering. Keep only a synced winner; an unsynced
+winner clears the entire key rather than resurrecting an older synced row. Drop unknown
+languages and multi-character letters, and delete every old mastery outbox operation while
+preserving unrelated work. Retained rows preserve old correction provenance, timestamps and
+server-updated metadata; both new server-ordering fields start null. The JavaScript transform
+then rewrites retained row IDs using UUID v5. Real SQLite proves transform failure rolls back the
+rebuild, clear and version/ledger writes and restores FK enforcement, and relaunch performs no
+writes.
+
+The existing migration suites now check current version or find migrations by name. The
+orchestrator's no-literal-pins instruction takes precedence over the plan/C1 snippets that set
+the newest-version tripwire to N or assert historical version 15: the foundation tripwire and
+new ledger row find `letter_mastery_current_state` by name, and the assessment-results test
+checks named migration order. Historical pre-upgrade setup versions are unchanged. No plan,
+specification, repository write API, sync routing or UI behavior was edited.
+
+| Gate / command (all prefixed with Node 20.19.4 PATH) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/letterMasteryCurrentStateMigration.test.js` | Exit 1: 1 suite failed, 3 tests failed / 1 passed (4 total), 5.31 s. Executed failures: named migration absent (`migration().version`), old columns instead of the new shape, and no failing transform invoked |
+| RED: `npx jest __tests__/letterMasteryIdParity.test.js` | Exit 1: 1 suite failed to load, 0 tests executed; `Cannot find module '../src/db/domainId'`, 0.819 s, as expected by Step 2 |
+| GREEN: same migration command | Exit 0: 1 suite / 4 tests passed, 1.576 s |
+| GREEN: same ID-parity command | Exit 0: 1 suite / 2 tests passed, 0.92 s |
+| `npx jest __tests__/sqliteFoundation.test.js __tests__/hotPathIndexes.test.js __tests__/migrations.assessmentResults.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrationsForeignKeysOff.test.js --runInBand` | Exit 0: 7 suites / 102 tests passed, 6.813 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 338 suites passed / 11 failed (349 total); 4,215 tests passed / 33 failed (4,248 total), 242.984 s. All failures trace to the planned old mastery contracts; no unrelated timeout |
+| `npm run test:integration --silent` | Exit 1: 48 suites passed / 5 failed (53 total); 550 tests passed / 9 failed (559 total), 133.614 s. Failures are the planned old mastery contracts in `offlineSyncOutbox`, `LiteracySessionForm.submit`, `offlineSyncLifecycleEdits`, `syncContractCompleteness` and `foreignKeyEnforcement`; no unrelated timeout |
+
+The full unit failures are `offlineSyncOutbox.test.js`, `LiteracySessionForm.submit.test.js`,
+`literacySessionPersistence.test.js`, `masteryRepository.test.js`, `letterMasterySync.test.js`,
+`offlineSyncLifecycleEdits.test.js`, `syncContractCompleteness.test.js`,
+`LetterMasteryRankingScreen.test.js`, `masteryState.test.js`, `foreignKeyEnforcement.test.js`,
+and `completionPathBudget.test.js`. The SQL failures reference removed `user_id` columns,
+with consequent tracker/ranking UI assertions; the contract-classification assertion reports
+`letter_mastery.confirmed` count 0 rather than 1 pending Task 4. All eleven suites exercise mastery code or
+sync metadata owned by Tasks 3–6. No unrelated failure was found, so no isolated retry was
+required. Static source verification confirms the moved `deterministicDomainId` body is
+byte-identical and its leaf imports only `uuid`; `git diff --check` passes.
+
+Tasks 2–6 remain one local cutover. The old mastery repository, sync and caller contracts are
+expected to fail against the new table until their designated tasks replace them; Task 2 does
+not expand into those tasks. Hosted/backend, PostgreSQL, device, EAS, PR and commit steps are
+outside this task. Schema 16 is this branch's next free version; the controller handles the
+C1/B2 version collision at integration.
+
+**AR Plan 2 Task 3 — mastery repository and acknowledgement write-back.**
+
+Replaced the old create/update/archive/reactivate methods with
+`setLetterMastery({ childId, letter, language, confirmed, changedAt, programmeId, transaction })`.
+Validation names the invalid field before any domain/outbox write. A call samples `Date.now()`
+once, clamps a supplied tap time to that now, takes `changed_by` from the transaction's signed-in
+EA, and mints a UUID v4 correction. A keyed joined read preserves a newer correction while its
+slot is pending, failed or in flight; terminal/synced state and equal-time taps permit replacement.
+A queued time ahead of the corrected phone clock counts as now, so a new immediate tap wins.
+Retained calls return the mapped current record without exposing `outbox_status`.
+
+A new write keeps `created_at` and all server metadata, clears the local error, marks the row
+pending and queues exactly one `letter_mastery:<id>:update` slot with the nine-field payload.
+Programme is supplied context or the caller's active Programme, possibly null, with no legacy
+fallback. Real SQLite verifies one keyed read and two writes plus at most one Programme read;
+a retained save reads once and writes nothing. Caller-transaction rollback and an outbox-trigger
+failure both roll back the domain row and outbox together.
+
+`getLetterMastery` maps `confirmed` to boolean, excludes terminal rows, rejects any `userId` or
+`programmeId` key, supports child/language filters and 500-child chunks, deduplicates child IDs,
+and orders combined rows by child and letter. `getUnsyncedRecords` remains available.
+The named `applyCorrectionAcknowledgement` export implements all table branches. An applied
+or superseded winner is written only after successful outbox deletion with a matching local
+correction; superseded clears unknowable Programme context. A newer local correction keeps all
+its content and slot and receives only server ordering. An acknowledged unreadable record is
+deleted only when the same finalization conditions hold. Server timestamps remain raw strings,
+including microseconds.
+
+The test suite was rewritten using the public repository and real SQLite, registered in the
+integration runner, and expanded to 30 tests covering the specified cases, every acknowledgement
+table cell, the outbox CAS signal, transaction rollback, statement budgets and chunked read order.
+No new dependency, migration, sync dispatch, UI behavior, plan or specification edit.
+
+| Gate / command (Node 20.19.4 PATH prefix) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/masteryRepository.test.js` | Exit 1: 1 suite / all 30 tests failed, 4.893 s. Executed failures include missing `setLetterMastery` and `applyCorrectionAcknowledgement`, old filtered read behavior and integer boolean mapping |
+| GREEN: same command | Exit 0: 1 suite / all 30 tests passed, 2.627 s |
+| GREEN after strengthening the cross-chunk ordering fixture: same command | Exit 0: 1 suite / all 30 tests passed, 2.153 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 339 suites passed / 10 failed (349 total); 4,243 tests passed / 28 failed (4,271 total), 252.956 s. Repository suite turns green; no new failed suite relative to Task 2 |
+| `npm run test:integration --silent` | Exit 1: 49 suites passed / 5 failed (54 total); 580 tests passed / 9 failed (589 total), 201.091 s. Same five old-contract failures as Task 2; repository adds 30 passing tests |
+
+Compared with the Task 2 verification record, `masteryRepository.test.js` is now GREEN
+(30 tests on the new contract), and the full unit failed-suite count drops from 11 to 10.
+The integration run now includes that suite and its 30 passing tests; the five pre-existing
+integration failures remain. No new failed suite and no unrelated timeout was found, so no
+isolated retry was required. Remaining full-unit suites, grouped by the planned next tasks:
+
+- Task 4 sync: `offlineSyncOutbox.test.js`, `letterMasterySync.test.js`,
+  `offlineSyncLifecycleEdits.test.js`, `syncContractCompleteness.test.js`.
+- Task 5 readers: `masteryState.test.js`, `LetterMasteryRankingScreen.test.js`.
+- Task 6 callers/fixtures: `literacySessionPersistence.test.js`,
+  `LiteracySessionForm.submit.test.js`, `foreignKeyEnforcement.test.js`,
+  `completionPathBudget.test.js`.
+
+Reasons are the deliberately removed `saveLetterMasteryRecord` API, the new forbidden-filter
+error, old `user_id` fixture columns and consequent tracker/ranking assertions, plus
+`letter_mastery.confirmed` having classification count 0 instead of 1 until Task 4.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractServerSchema` and
+`designSystemGuard` all pass in the full unit run. `git diff --check` passes.
+
+No implementation-contract deviation was required. The simple cross-chunk read merge deduplicates
+the requested IDs and applies the same child/letter text ordering after each SQL chunk.
+The local TDD skill and approved task order were followed directly; the plan-header superpowers
+execution skills remain unavailable as recorded in Task 1. The build-log entry is required by
+the standing repo rule and the task instructions, although Task 3's file list names only the
+repository, tests and integration registration. The phone contract map's combined acknowledgement
+section remains Task 4's explicit documentation step.
+
+Tasks 4–6 still own RPC dispatch/finalization and migration of readers and write surfaces.
+The new repository's forbidden-filter errors and removed legacy methods deliberately expose
+those remaining old-contract callers. Hosted/PostgreSQL,
+Supabase CLI, EAS, PR and device gates are outside this task.
+
+**AR Plan 2 Task 4 — one RPC per correction, one acknowledgement.**
+
+Added `letterMasteryCorrection.js`: six named RPC arguments, required-field/boolean/date
+validation, and strict single-row acknowledgement parsing with only the five returned fields.
+The raw server timestamp is preserved. The engine now routes mastery exclusively through
+`set_letter_mastery`, maps local TypeErrors to `22023`, refuses malformed replies, and carries
+the parsed winner and sent correction id into success finalization. Mastery is removed from
+batchable upserts and archive/UPDATE-by-id routing; grant evidence is direct child delivery
+assignment only. The server-column allowlist reflects current state, and the two server-ordering
+columns are classified local-only.
+
+Finalization applies Task 3's helper in the same transaction as the outbox CAS delete and normal
+sync bookkeeping. A CAS miss applies only permissible server ordering before restoring the newer
+slot to pending. Applied/superseded writes the returned winner; acknowledged removes a readable
+copy that is no longer authorized; a newer local correction keeps its content and slot. A
+content-update trigger failure rolls the delete and acknowledgement back together, then the
+existing retry handler records failure/backoff without losing the correction.
+
+Added 34 real-SQLite correction cases, three real postgrest-js/stub-fetch cases and two
+classification guards. Coverage includes all outcomes, raw microseconds/offsets, both kinds of
+in-flight acknowledgement, offline coalescing, the Monday/Tuesday delayed-save regressions,
+two separate letter calls, direct-grant evidence transitions, terminal exclusion/attention,
+seven malformed-payload variants, eleven invalid-reply shapes and write-back rollback.
+The correction suite is registered in the integration runner.
+
+Old expectations replaced exactly where Task 4 directs:
+- Deleted the old mastery sync suite's four expectations: send-time random-id remapping
+  (Task 2 now owns conversion/keying), taught/untaught coalescing into an exited INSERT
+  (now a boolean correction update slot), two-install direct-upsert convergence
+  (natural-key resolution now lives in the server RPC), and legacy-random-id 23505 collision
+  (the migration converts old keys and named SQL conflict targets resolve new collisions).
+- Deleted the outbox mastery batching test; the new two-letter test requires two RPCs and no
+  table calls. Adapted the FK/RLS attention test to the real setter, update slot, generated id
+  and `set_letter_mastery` 42501; both terminal/error/attention assertions remain.
+- Deleted UPDATE-by-id mastery identity repair and zero-row/pending-grant tests. Corrections
+  no longer use UPDATE; RPC/direct-grant transitions are covered in the new suite.
+- Deleted archive/reactivation's `deleted_at` exception test; off/on are boolean corrections.
+- Removed mastery from the generic unversioned-send parameter list; the six-argument RPC test
+  covers its exclusion of `row_version` and `updated_at`.
+- Added exact direct-grant/never-UPDATE assertions and a duplicate-success override guard.
+
+| Gate / command (every command prefixed with Node 20.19.4 PATH) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/letterMasteryCorrectionSync.test.js` | Exit 1: 1 suite / all 34 tests failed, 5.056 s; engine called no mastery RPC and kept local values as synced without winner/order write-back |
+| RED: `npx jest __tests__/letterMasteryRpcError.test.js __tests__/classifyErrorHardening.test.js` | Exit 1: 2 suites failed; 5 tests failed / 13 passed (18 total), 1.578 s; direct-table URL, membership-mediated grant arm and duplicate-success bypass exposed |
+| First GREEN attempt: same integration command | Exit 0: 1 suite / all 34 tests passed, 2.569 s |
+| First GREEN attempt: same unit command | Exit 1: 1 suite passed / 1 failed; 17 tests passed / 1 failed (18 total), 1.570 s; success-response fetch stub lacked `headers.get`, required by postgrest-js |
+| GREEN after correcting that test response: same unit command | Exit 0: 2 suites / all 18 tests passed, 1.807 s |
+| `npx jest __tests__/offlineSync* __tests__/rowVersion* __tests__/syncContract* __tests__/assessmentFamily* __tests__/batch*` | Exit 0: 15 suites / all 232 tests passed, 5.649 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 344 suites passed / 6 failed (350 total); 4,284 tests passed / 22 failed (4,306 total), 98.636 s |
+| `npm run test:integration --silent` | Exit 1: 53 suites passed / 2 failed (55 total); 617 tests passed / 7 failed (624 total), 85.163 s |
+| `git diff --check` | Exit 0 |
+
+Relative to Task 3, `offlineSyncOutbox`, `offlineSyncLifecycleEdits` and
+`syncContractCompleteness` turn GREEN; the failed old `letterMasterySync` suite is deleted
+and replaced by the passing correction suite. Unit failed-suite count drops 10 → 6; integration
+drops 5 → 2. All remaining failures use old mastery APIs/filters or dependent tracker assertions:
+Task 5's `masteryState`, `LetterMasteryRankingScreen`; Task 6's
+`literacySessionPersistence`, `LiteracySessionForm.submit`, `foreignKeyEnforcement` and
+`completionPathBudget`. Only the latter form and FK suites fail integration.
+No unrelated failure or timeout occurred, so no isolated rerun was required.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractServerSchema` and
+`designSystemGuard` pass in the full unit run.
+
+Small faithful adaptations, with current source evidence:
+- The fixture exposes its actor-bound database and engine, rather than a literal handle
+  (`test-support/assessmentFamilySyncTestUtils.js:24–52`); tests create the mastery repository
+  against that same database, as its other repositories do.
+- `loadMasteryState` still passes the forbidden `userId` and filters labels
+  (`src/utils/masteryState.js:30–34`); Task 5 owns that conversion. The terminal-exclusion test
+  adapts only its repository-call arguments, preserving real SQLite/repository exclusion.
+- The existing catch after a failed finalizer records retry/backoff
+  (`src/services/offlineSync.js:1286–1308`). The rollback test therefore asserts retained
+  slot/payload and unchanged correction/server values, with failed status, rather than requiring
+  all queue bookkeeping to be byte-identical after a complete engine pass.
+- Added mastery to the existing duplicate-key acknowledgement exclusion
+  (`src/services/offlineSync.js:475–477`): otherwise an explicitly configured duplicate-success
+  table could reach finalization without the required winner. The new test was RED before this
+  addition. No other table's behavior changes.
+
+The contract map now owns the complete phone correction/acknowledgement contract, including A2,
+and removes old mastery archive, batch and re-key exceptions. LEARNING explains receipts, fixed
+effective times, winner display, the owed-slot rule, SQL natural-key resolution and PL/pgSQL
+named conflict targets. The local TDD skill and approved task order were followed; unavailable
+plan-header superpowers execution skills remain as recorded in Task 1.
+
+No PostgreSQL rerun, hosted preflight/wipe/migration,
+Supabase CLI, EAS build, device check or PR was performed. Task 1's controller PostgreSQL evidence
+is retained as such, not claimed as a new Task 4 run. Tasks 5–6 and Plan 3 pull remain separate;
+accepted risks A1/A2 and hosted/device rollout gates remain open.
+
+**AR Plan 2 Task 5 — readers use codes, confirmed rows and child scopes.**
+
+`loadMasteryState` retains its signature and return shape. Assessment evidence still uses
+`userId` to resolve the active Programme; confirmations now read only
+`getLetterMastery({ childId, language: languageCode })` and filter `confirmed`. The repository
+excludes terminal rows, so a refused correction never becomes displayed mastery. The loader
+does not filter confirmation recorder or Programme. `getLetterMasteryRanking` unions stored
+assessment evidence with matching child/code/confirmed rows. Both obsolete label imports and
+“Plan 2 re-keys” comments are removed. The ranking screen requests confirmations for exactly
+the displayed child ids, while its assessment query remains Programme-scoped.
+
+`debugDump` adds `letterMastery`, ordered by child id and letter, with exactly
+`childId, letter, language, confirmed, changedAt, correctionId, changedBy, programmeId,
+syncStatus, serverChangedAt, serverCorrectionId`. It exports boolean confirmation, raw
+timestamps and all statuses (including unconfirmed/terminal rows needed for diagnostics),
+with no names. A fresh database with no mastery table returns an empty array. Query errors
+use the existing diagnostic-error convention rather than falsely reporting an empty set.
+
+Updated the seven named suites: setter-based code-valued fixtures; the exact any-EA/any-Programme
+loader case with unconfirmed/terminal/other-language controls; another-EA ranking; explicit
+child/language and child-id-array call assertions; unconfirmed ranking exclusion; Afrikaans
+sheet filtering; and export field/ordering/false-value checks. Existing ranking counts,
+assessment semantics, unsupported-language behavior, sheet toggles, copy and visual assertions
+remain. No production writer, panel/sheet component, repository, migration, sync or pull edit.
+
+For the command ledger, **focused unit** is:
+`npx jest __tests__/masteryState.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/debugExport.test.js __tests__/sqliteFoundation.test.js`.
+**Focused integration** is:
+`npm run test:integration -- __tests__/masteryState.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/debugExport.test.js __tests__/sqliteFoundation.test.js`.
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: focused unit | Exit 1: 6 suites failed / 1 passed (7 total); 23 tests failed / 38 passed (61 total), 9.328 s. Executed failures show forbidden userId filters, label-based confirmation counting, missing taught tiles and missing export projection |
+| RED: focused integration | Exit 1: 4 suites failed; 10 tests failed / 22 passed (32 total), 9.401 s. Loader/export failures execute on SQLite; ranking suite also exposes its absent integration icon mock |
+| First GREEN: focused unit | Exit 0: 7 suites / all 61 tests passed, 3.456 s |
+| First GREEN attempt: focused integration | Exit 1: 3 suites passed / 1 failed to load; all 32 executed tests passed, 4.254 s. Ranking requires the virtual `@expo/vector-icons` mock already supplied by unit setup |
+| GREEN after adding that local test mock: focused integration | Exit 0: 4 suites / all 38 tests passed, 6.917 s |
+| GREEN with the final test fixture: focused unit | Exit 0: 7 suites / all 61 tests passed, 3.303 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 345 suites passed / 5 failed (350 total); 4,296 tests passed / 14 failed (4,310 total), 71.509 s |
+| `npm run test:integration --silent` | Exit 1: 55 suites passed / 2 failed (57 total); 638 tests passed / 7 failed (645 total), 56.045 s |
+| `rg -n "Plan 2 re-keys letter_mastery" src/utils`; plan's `grep -rn "Plan 2 re-keys letter_mastery" src/utils` | Both exit 1 with no matches, as required |
+| `git diff --check` | Exit 0 |
+
+Compared with Task 4, `masteryState` and `LetterMasteryRankingScreen` turn GREEN.
+Full-unit failed suites move 6 → 5: the two readers pass, while `LetterMasteryPanel` now
+exposes two old label/no-confirmed mock rows after the shared loader cutover. That panel and
+its fixtures are explicitly Task 6. The other four failed unit suites remain Task 6:
+`literacySessionPersistence` (4 failed tests), `LiteracySessionForm.submit` (6),
+`foreignKeyEnforcement` (1), and `completionPathBudget` (1).
+Integration still fails only the form (6 tests) and FK suite (1); the two newly registered
+reader suites pass. No unrelated failure or timeout occurred, so no isolated rerun was needed.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractCompleteness`,
+`syncContractServerSchema`, `designSystemGuard` and `LetterTrackerScreen.plan5` all pass.
+
+Small faithful test adaptations and scope extensions:
+- Global Constraints requires real-SQLite suites to be registered. The loader and ranking screen
+  already use the real SQLite fixture but were not in the integration list. Added them at
+  `jest.integration.config.js:8–9`; the debug/foundation suites were already registered.
+  The new ranking registration needs its own virtual icon mock
+  (`__tests__/LetterMasteryRankingScreen.test.js:1`), because integration setup lacks the
+  mock that unit setup provides (`jest.setup.js:17`).
+- The Afrikaans sheet mock previously returned mixed-language rows and relied on the loader's
+  label filter. It now respects the repository's child/language arguments and asserts that exact
+  read (`__tests__/LetterTrackerBottomSheet.test.js:77–82`).
+- The dashboard fixture's old `xh` “f” row was negative under label-only matching. Under codes,
+  leaving it confirmed/xh would add a fourth mastered letter. It becomes an other-language
+  `en` row, preserving the negative control and unchanged 3/26 assertion
+  (`__tests__/dashboardStats.letterMastery.test.js:36–45`). No expected count was relaxed.
+- The fresh-before-migration debug expectation also gains `letterMastery: []`
+  (`__tests__/sqliteFoundation.test.js:562`), so the public export shape is consistent even
+  without tables. The additional export-order test proves the specified order, both boolean
+  values and absence of names.
+- The standing repo/user instructions require this build-log record although Task 5's Files
+  names no documentation. Standing domain/rollout documentation conversion remains Task 6's
+  explicit scope; no plan/spec or other standing document changed here.
+
+The local TDD skill and approved order were followed. The plan-header superpowers execution
+skills remain unavailable as recorded in Task 1. Step 5 commit, hosted preflight/wipe/migration,
+PostgreSQL harnesses, Supabase CLI, EAS, device and PR actions are controller-owned and not run.
+This task proves local readers/export behavior, not hosted SELECT visibility, two-device
+convergence or release readiness. Tasks 6–7, Plan 3 pull and accepted risks A1/A2 remain separate.
+
+**AR Plan 2 Task 6 — both tracker surfaces write corrections; local cutover checkpoint GREEN.**
+
+`persistLiteracySession` keeps AF's signature, attendee filtering and validation before the
+transaction. Each attendee change now calls `setLetterMastery` inside the same transaction as
+the session/attendees and reading levels, passing its own code, boolean, tap time, Programme and
+transaction. The old prefetch, per-Programme lookup and archive/reactivation branches are removed.
+An un-mark with no existing row writes a false correction. A delayed Monday save retains Monday's
+time; when Tuesday's newer correction is still owed, it keeps that correction/slot while the
+session saves. `idFactory` is retained in the signature but never used for mastery.
+
+`LetterMasteryPanel` now writes exactly one setter call per tap with no `changedAt`, takes its
+displayed value from the returned `confirmed`, and retains the write guard, sync nudges, locked
+assessment cells and exact save-error copy. Cached-id, reread-for-toggle, soft-delete/reactivation
+and local UUID branches are removed. The new `useLetterMasterySyncRefresh` is the plan's exact
+panel-only hook: mount's result is already seen; a new mastery sync result triggers a background
+read; other-table results and callback identity alone do not. Background reads retain the grid
+without a spinner flash, and only the latest numbered load publishes/clears loading.
+
+AF's form selection is preserved without a production form edit:
+`pendingChangesLanguageCode(...) ?? languageCodeForHomeLanguage(classes.find(c => c.id === child.class_id)?.home_language)`
+(`LiteracySessionForm.js:314–315`). Both mixed-language real-form cases pass. The session tracker
+sheet is unchanged, with its open-time baseline and accepted risk A1.
+
+Rewritten old-identity expectations, against the plan's disposition table:
+- Persistence's label/save-time assertion now requires `xh`/`en`, `confirmed` and `changed_at:
+  MADE_AT`. Existing false/true/new transitions use the setter and boolean rows instead of
+  soft-deletion. The per-Programme non-reuse test is replaced by the exact C23 same-record case.
+- The obsolete id-generation rollback injection is replaced by a real SQLite outbox trigger:
+  idFactory is no longer part of this writer, and a failed mastery enqueue must roll back the
+  session and attendees. The rejection uses `rejects.toMatchObject`.
+- Added the named Monday/Wednesday time and newer-unsent-Tuesday regressions, plus an un-mark
+  with no prior row. The time test also proves idFactory is not called.
+- Completion-budget expectations move from one bulk prefetch and archive/insert/update to
+  exactly three keyed `getFirstAsync` reads (`where lm.id = ?`), no mastery `getAllAsync`,
+  at most six mastery record/outbox writes, and three update slots. The real counting adapter
+  records SQL only, so a local runAsync spy distinguishes mastery outbox writes by parameters.
+- FK capture assertions now require both committed letters to have `en` and `confirmed: 1`.
+- Form fixtures seed through the setter, query confirmed rows and expect codes. Each child's
+  class language, pending-language precedence, selection changes and unknown-language empty
+  state remain covered. The English-negative query and payload assertions use codes too.
+- Panel mocks expose get/set only. Reactivation/saved-id assertions become exact correction
+  calls, true/false counts and returned-value behavior. Existing style, lock, missing-language,
+  failure and post-write sync-error assertions remain. Added in-flight guard, background refresh,
+  no-mastery/mount-seen and latest-load tests. Tracker-screen retry mocks now use the setter.
+
+**Controller Task 0 baseline, supplied 2026-10-21; not rerun here.** On wave-1 base `7a831fb`
+before any wave-1 change, Node 20.19.4: unit 346/347 suites and 4,202/4,203 tests passed; the sole
+designSystemGuard parallel-load failure passes alone. Integration: 52 suites / 552 tests passed.
+Types: exit 0. Hosted read-only preflight targeted `segygjzpujphwvrubusm`: uuid-ossp in
+`extensions`, 47 mastery rows all `isiXhosa`, newest applied migration
+`20261021120000_assessment_results_contract`. These are controller records, not Task 6 external
+actions. This branch additionally carries AF Tasks 1–3 and its per-child-language review fix.
+
+Focused unit command:
+`npx jest __tests__/literacySessionPersistence.test.js __tests__/completionPathBudget.test.js __tests__/foreignKeyEnforcement.test.js __tests__/LiteracySessionForm.submit.test.js __tests__/LetterMasteryPanel.test.js __tests__/LetterTrackerScreen.plan5.test.js`.
+Focused integration command:
+`npm run test:integration -- __tests__/literacySessionPersistence.test.js __tests__/completionPathBudget.test.js __tests__/foreignKeyEnforcement.test.js __tests__/LiteracySessionForm.submit.test.js`.
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: focused unit | Exit 1: all 6 suites failed; 24 tests failed / 26 passed (50 total), 13.272 s. Old writer uses forbidden filtered read; old panel never calls the setter, does not refresh on mastery sync and lets an older read clear loading |
+| RED: focused integration | Exit 1: all 4 suites failed; 15 tests failed / 21 passed (36 total), 21.882 s. Real SQLite executes the old writer's forbidden read and rollback mismatch |
+| GREEN: focused unit, same command | Exit 0: 6 suites / all 50 tests passed, 6.398 s |
+| GREEN: focused integration, same command | Exit 0: 4 suites / all 36 tests passed, 7.728 s |
+| `grep -rn "Plan 2 re-keys letter_mastery" src` | Exit 1, no matches |
+| `grep -rn "saveLetterMasteryRecord\|updateLetterMasteryRecord\|removeLetterMasteryRecord" src __tests__ test-support` | Exit 1, no matches |
+| `grep -rn "getLetterMastery({[^}]*userId" src __tests__` | Exit 1, no matches |
+| `grep -n "useLetterMasterySyncRefresh\|useOffline" src/components/session/LetterTrackerBottomSheet.js` | Exit 1, no matches |
+| `grep -rn "LANGUAGE_LABELS" src` | Exit 0; only the five allowed display/registry files |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: all 350 suites / 4,319 tests passed, 67.149 s |
+| `npm run test:integration --silent` | Exit 0: all 59 suites / 665 tests passed, 52.470 s |
+| `npm run test:types` | Exit 0: `tsc --noEmit -p tsconfig.assessment-questions.json` |
+| `git diff --check` | Exit 0 |
+
+**Comparisons (distinct baselines).** Against controller Task 0: unit totals grow 347 → 350
+suites (+3), 4,203 → 4,319 tests (+116), with every test now passing; integration grows
+52 → 59 suites (+7), 552 → 665 tests (+113). These deltas include AF's tests, not just AR Plan 2.
+Against the labelled Task 5 checkpoint: unit 345 passed / 5 failed suites and 4,296 passed /
+14 failed tests (4,310 total) becomes all 350 / 4,319 passing; total tests +9. Integration
+55 passed / 2 failed suites and 638 passed / 7 failed tests (645 total) becomes all 59 / 665
+passing; two newly registered suites and total tests +20. All five remaining old-contract suites
+are GREEN: persistence, form submit, FK enforcement, completion budgets and panel.
+No unrelated failure or timeout occurred; no isolated rerun or full-suite retry was needed.
+All binding, module-state, sync-contract and design-system guards pass.
+
+Tasks 3–5 retain their earlier dated RED/GREEN rows above (repository 30; correction sync 34
+plus RPC/error 18 and sync regressions 232; readers 61 unit / 38 integration). This Task 6 full
+checkpoint closes the intentionally red local cutover from Tasks 2–5; it does not replace or
+reinterpret those executed results.
+
+**Small faithful adaptations.**
+- Registered persistence and budget suites in `jest.integration.config.js:8–9`, as Global
+  Constraints requires for real-SQLite suites; both already use native SQLite adapters.
+- Task 3's literal retired-method absence assertions conflict with Step 4's required no-match
+  grep. `masteryRepository.test.js:72–74` now asserts the exact three-method public surface,
+  preserving and strengthening the absence guard without spelling retired method names.
+- The idFactory-based rollback test cannot hold once idFactory is deliberately unused; the
+  native outbox-trigger failure at `literacySessionPersistence.test.js:371–394` tests the same
+  atomicity boundary under the new writer.
+- Existing transition seeds now carry explicit earlier correction times; otherwise the
+  repository correctly retains their newer unsent state instead of applying the test's older
+  sheet tap. No expected final state or ordering rule was weakened.
+- Standing ROADMAP also retained a mastery-updated_at exception and a “same per-EA identity”
+  comparison outside the cited line ranges. Both are reconciled within the authorized file:
+  mastery now sends only six RPC arguments, and Zazi convergence remains separate work.
+
+Standing docs now describe code-valued current confirmations, any-current-deliverer writes/reads,
+terminal exclusion, fixed receipt times, both producers and the panel-only refresh. ADR-0005 has
+the requested dated Follow-up 2 status note; its historical decision body is preserved. ROADMAP
+retains only hosted/device rollout and Plan 3 pull/completeness as outstanding mastery work.
+No plan/spec edit, dependency, server migration, schema renumber or session-sheet change.
+
+The local TDD and React Native skills were applied. Unavailable plan-header superpowers execution
+skills remain as recorded in Task 1. Step 7 commit and all Task 7 controller/review/release work
+are skipped: no PostgreSQL rerun, hosted wipe/apply/fixtures, Supabase CLI, EAS, device or PR action.
+Hosted state is unchanged by Task 6. Local suites are fully GREEN; hosted/device proof, Plan 3 pull
+and accepted risks A1/A2 remain open.
+
+### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
+
+**What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
+- `5f41036` Task 1: each pending tracker change carries the language and time of its tap; the
+  sheet's language is fixed when it opens; `persistLiteracySession` validates every change before
+  its transaction and refuses the whole save on an invalid one (`TRACKER_CHANGE_INVALID`).
+- `e2ab553` Task 2: `af` in `LANGUAGE_LABELS`, `case 'afrikaans'`, and Zazi's provisional
+  `AFRIKAANS_PEDAGOGICAL_ORDER` in `PEDAGOGICAL_ORDERS`.
+- `31946ee` Task 3: `letter_sounds@2026.2.af` (Grid A, the same 60 letters as Zazi's
+  `afrikaans_60_v2`) and `word_reading@2026.1.af` (Zazi's provisional, unreviewed
+  `afrikaans_words_50`, verified character for character against the Zazi source). WelaPLUS stays
+  `en`/`xh`.
+- `ca1ec6b` review round 1 fix (below).
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`):
+- Round 1, needs-attention, one [high] finding, verified in code: the session form took every
+  tracker's language from the **first selected child's** class, so in a mixed-language session an
+  English child's marks were stamped `af` and saved as `Afrikaans`, invisible to that child's
+  English tracker and ranking. The same bug existed for English/isiXhosa mixes; AF widened it. Fixed
+  at the root (`ca1ec6b`): each child's tracker uses that child's own class language; a pending
+  change's language still wins; an unknown class language shows the empty state, never another
+  child's language. This overrides the plan's "first selected child stays as the default" call
+  (plan line 123). RED (focused tracker/form/persistence suites): 3 failed / 109 passed, the three
+  wrong-language cases; GREEN 112/112.
+- Round 2, approve: no material findings; it confirmed the fix and that `LetterMasteryPanel`
+  derives each child's own language and saves immediately.
+
+**Suites** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`, on `ca1ec6b`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 347 suites / 4,243 tests passed (baseline 4,202) |
+| `npm run test:integration --silent` | 52 suites / 558 tests passed (baseline 552) |
+| `npm run test:types` | Exit 0 |
+| `node scripts/sqlite-staging.cjs check` (main checkout, config only) | OK, `project_ref=segygjzpujphwvrubusm` |
+
+**Device gate (Step 4): not yet run.** Jim chose one combined Android preview build for all
+wave-1 plans (2026-10-21). The AF rows (Afrikaans letter test, word test, capital I vs lower-case l,
+Figtree ê ë ô, Afrikaans tracker with a hosted read-back, no-language class) run on that build on
+the Galaxy A03s, with a mixed-language session added for the round-1 fix. iPhone rows wait for an
+iOS build. Results will be recorded here.
 
 ### 2026-10-21 — Assessment Results Plan 3: server history authority, pages, probes and shared traversal
 
@@ -1434,6 +1896,7 @@ the real refresh's order-independent year switch. No Task 7A implementation rema
 | 2026-10-21 | AR Plan 3 Task 3 marks disposable Auth users with an admin-only fixture namespace and never persists fixture credentials. Recovery cleanup discovers that namespace and verifies exact zero residue; only seed-volume prints the gate credentials on a TTY. | A namespace survives a lost create response without a secret-bearing local manifest. Exact target validation and safe stage-only errors keep hosted credentials out of other output paths. Synthetic probe.1 content preserves the prescribed 61-item cap test without mislabelling published card data. | Controller hosted probe, cleanup/failure recovery or seeded device gates expose a fixture ownership or content-contract mismatch. |
 | 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
 | 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
+| 2026-10-21 | Assessment Results Plan 2 Task 4: one RPC per correction, never batched; volume is a few rows per session. | A parsed reply returns the winner and belongs to one claimed correction; atomic acknowledgement must preserve a newer owed local correction. Mastery ordering uses correction time/UUID and receipts, not send-time row versions. | Field volume makes per-correction requests material, or a reviewed batch RPC preserves the identical per-correction receipt and acknowledgement contract. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |
@@ -1588,6 +2051,7 @@ the real refresh's order-independent year switch. No Task 7A implementation rema
 | 2026-10-20 | **Lesson plan design approved, then aligned with assessment results (rev 2).** Spec `docs/superpowers/specs/2026-10-20-lesson-plan-design.md`: languages are codes (`af` for Afrikaans); the Afrikaans letter test is an `af` copy of Grid A (the same 60 letters as Zazi's `afrikaans_60_v2`); track B1 (mastery inputs) is AR Plans 2–3 with five asks (§7.6). Jim: J21 this workstream writes and builds AR Plans 2–3; J22 `yaml@2.8.2` as an exact devDependency; J23 a child in an EA's group is always one of that EA's own children. | The lesson-plan spec was written against `97e088c`; #89/#90 merged the same day and settled language identity, the family upload and the mastery re-key. Adopting the approved, built design avoids two parallel ones. | AR Plans 2–3 change their contracts, or Head Office seeds a group member without a direct assignment. |
 | 2026-10-20 | **Wave-1 plans written and Codex-reviewed:** `2026-10-20-lesson-plan-{af-afrikaans,a1-content-packs,a3-engine,c1-lesson-draft,b2-session-group}.md` and `2026-10-20-assessment-results-plan-{2,3}.md`. Build order: AF first; AR Plan 2 after AF; AR Plan 3 after Plan 2 and C1's `pullCoverage.js`; A1, A3, C1 and B2 in parallel. Wave 2 (A2, C2–C3, C4, C5) is planned once wave 1 is in code. | Rounds per plan: AF 1, C1 1, B2 2 (approved), A1/A3 2, AR Plan 2 2, AR Plan 3 3. Each round's findings were verified against code before fixing; rounds stopped when findings narrowed to rare timing races, which are recorded as accepted risks in the plans. | A build task finds a plan contradicting the code it cites. |
 | 2026-10-20 | **Accepted plan risks (Codex rounds; no code change):** an open session tracker sheet can show a stale tile after a sync supersedes or refuses a confirmation (AR Plan 2 A1; its refresh was dropped because it raced with cancel taps); a clock rollback can keep back a later explicitly timed sheet tap until upload (AR Plan 2 A2); a developer-build draft pinned to a replaced preview pack shows the no-content state (A1); a refused mastery correction restored by the pull and then manually re-sent can leave the phone showing the restored value (AR Plan 3). | Each needs a rare sequence (a wrong clock and its correction, a manual retry after a refusal and a regained grant, a developer-only preview regeneration). The fixes would add machinery out of proportion to the risk. | Any of them is seen in the field or in a device gate. |
+| 2026-10-21 | **Lesson-plan AF plan calls.** (1) Package Questions keep bundled `en`/`xh` defaults only, so the battery never gets Afrikaans. (2) Dead `egraConstants.js` sets are left in place; only `AFRIKAANS_PEDAGOGICAL_ORDER` is added. (3) The tracker-change slice lands before Afrikaans enters the registry. (4) A pending change is valid only as a non-null object with boolean `mastered`, a code with a tracker order, a letter in that order and a parseable `madeAt`. (5) The tracker sheet's language is fixed when it opens, from the opened child's own class (round 1 replaced the first-selected-child default). (6) `af` is appended last in each map. (7) Item sets are typed, then frozen by statement. (8) Standalone languages are checked separately from battery languages. (9) Score-band and EGRA docs corrected for codes and step-by-step capture. | Each keeps Afrikaans additive and keeps English and isiXhosa behaviour unchanged, while closing the mixed-language mislabel at its source. | AR Plan 2 lands (labels become codes); the real Afrikaans pack lands (A2); WelaPLUS gains Afrikaans. |
 
 ---
 
@@ -1734,6 +2198,7 @@ the real refresh's order-independent year switch. No Task 7A implementation rema
 
 | 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by the B2 plan writer, confirmed by Codex). The retry is an upsert; when the row exists PostgreSQL takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so 42501 with no pending evidence marks the session terminal. Common, not rare: the first retry is 5 s and passes run every 30 s. Pre-existing since `20260521140331`. | Not fixed yet. B2 plan Task 6 (a release prerequisite) makes session inserts insert-or-ignore by id, like the immutable assignment inserts, and deletes the unused `sessionsRepository.updateSession`; Codex approved the plan in round 2. | A retry must never need more authority than the first attempt. |
 | 2026-10-20 | **The reference refresh cannot switch the active academic year if the new year arrives first** (found by Codex on AR Plan 3). `pullReferenceDataRows` fetches years unordered and `replaceFromServer` upserts them one by one against the unique active-year index, so the transaction fails with `SQLITE_CONSTRAINT_UNIQUE` and the phone keeps the old year. Would hit every phone at a January rollover. | Not fixed yet. AR Plan 3 adds a task making the switch atomic and order-independent, tested with both response orders through the real repository. | A unique index plus row-by-row upserts hides an ordering assumption; apply deactivations before activations in one transaction. |
+| 2026-10-21 | **Mixed-language sessions stamped tracker marks with the first selected child's language** (found by the AF adversarial review, round 1). With an Afrikaans child selected first, an English child's marks were saved as `Afrikaans` and vanished from that child's English tracker and ranking; English/isiXhosa mixes had the same bug before AF. | Fixed in `ca1ec6b`: each child's tracker uses that child's own class language; unknown shows the empty state. Real-SQLite regressions cover Afrikaans/English and English/isiXhosa mixes and a null-language child. | A per-session default is a guess whenever a session can mix classes; derive per-child context from the child. |
 
 ---
 
