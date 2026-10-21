@@ -1,0 +1,24 @@
+{
+  "id": "english-interim-letters-v1",
+  "language": "english",
+  "channel": "release",
+  "sound_inventory": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"],
+  "letter_steps": [
+    { "step": 1, "new_letters": ["a", "m", "s", "t"], "blends": [], "words": [], "readers": [] },
+    { "step": 2, "new_letters": ["n", "i"], "blends": [], "words": [], "readers": [] },
+    { "step": 3, "new_letters": ["p", "c"], "blends": [], "words": [], "readers": [] },
+    { "step": 4, "new_letters": ["f", "d"], "blends": [], "words": [], "readers": [] },
+    { "step": 5, "new_letters": ["h", "o"], "blends": [], "words": [], "readers": [] },
+    { "step": 6, "new_letters": ["r", "b"], "blends": [], "words": [], "readers": [] },
+    { "step": 7, "new_letters": ["l", "k"], "blends": [], "words": [], "readers": [] },
+    { "step": 8, "new_letters": ["e", "g"], "blends": [], "words": [], "readers": [] },
+    { "step": 9, "new_letters": ["w", "v"], "blends": [], "words": [], "readers": [] },
+    { "step": 10, "new_letters": ["u", "j"], "blends": [], "words": [], "readers": [] },
+    { "step": 11, "new_letters": ["y", "z"], "blends": [], "words": [], "readers": [] },
+    { "step": 12, "new_letters": ["q", "x"], "blends": [], "words": [], "readers": [] }
+  ],
+  "sound_steps": [],
+  "readers": {},
+  "word_bank": [],
+  "reader_details": {}
+}
