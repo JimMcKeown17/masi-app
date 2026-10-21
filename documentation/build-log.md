@@ -1119,7 +1119,7 @@ The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) 
 apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
 
 
-### 2026-10-21 — Assessment Results Plan 3: server history authority and pages
+### 2026-10-21 — Assessment Results Plan 3: server history authority, pages and probes
 
 #### Task 1: server history read authority
 
@@ -1249,10 +1249,87 @@ PRs remain controller steps. No network, dependency installation, hosted access 
 was used. The controller's disposable PostgreSQL run above establishes the behaviour and the
 performance threshold locally. Hosted PostgREST family-cap proof remains Task 3/later gates.
 
+
+#### Task 3: authenticated HTTP probe and volume fixture
+
+**Scope:** `scripts/assessment-history-http-probe.cjs`, its pure Jest helper tests, the npm
+`assessment-history:probe` command and this register. Task 2 is commit `b8d2b99`; the controller
+completed its PostgreSQL RED/GREEN (144 cases, dense gate passed). No migrations, repositories,
+SQLite, sync, handle or phone implementation changed in Task 3. No hosted mode was run.
+
+Built `buildProbeFamilies`, `validateProbePage`, `buildVolumeFixture` and a project-locked
+`validateProbeEnv` wrapper. The builders produce exactly 20 families / 1,220 items and, at volume,
+2 classes / 70 children / 140 families / 8,540 items / 780 confirmations, with 30 delivery children.
+Every generated family passes the real `assertSubmitShape`; results and confirmations belong to
+the co-EA, while the gate EA holds class/delivery grants. Relationship ids follow the existing
+active-pair UUIDv5 contract; mastery ids follow Plan 2's current-state UUIDv5 contract. Parent and
+item ids are fresh random UUIDs. Page validation checks every family count, item length, declared
+count and position order, duplicate parents, and the more-than-1,000-item control.
+
+**Hosted runtime, written but unrun:** default `probe` seeds a disposable marked account/profile,
+school, Programme assignment and child, inserts the synthetic families as service role, signs in
+with the publishable-key client, calls `get_assessment_history_page` with the active year id and
+page size 50, and validates the response against the generated ids. The separate raw-item query
+must return exactly 1,000 rows. Cleanup runs once in `finally`; success is printed only after
+zero-residue checks. `seed-volume` creates both marked EAs, the class/child/grant/history fixture,
+and checks exact counts before returning only the gate EA's email/password to the operator's TTY.
+`cleanup-volume --namespace <uuid>` recovers the owned accounts from admin-only Auth metadata and
+the school namespace, deletes in dependency order and verifies exact zero counts. Discovery uses
+pagination; filters and inserts are batched. No passwords/service keys or manifests are saved to
+disk. The namespace is printed before seeding so a lost response or interrupted process can be
+cleaned up later. Namespace/account ownership checks precede deletion; account deletion follows
+domain cleanup. Cleanup also handles lesson/run/mastery rows the gate operator may create.
+
+The env loader reuses `parseEnvContent` and the existing four `*_SQLITE` variables, with explicit
+process env taking precedence. Validation reuses the existing probe's required-field/ref guard
+and additionally requires the exact HTTPS SQLite endpoint (no alternate host, credentials, port,
+path, query or fragment). Client construction uses that fixed endpoint. Imports do not read env
+files or construct clients. SDK/parse/request errors are never printed verbatim; fixed stage
+messages avoid echoing secrets. Only `seed-volume` has a credential-output path, behind a TTY gate.
+
+**Choices/adaptations:** synthetic `probe.1` letter results deliberately have the plan's 61 items;
+they are not labelled as the bundled 60-item Grid A. No published content or expected count was
+changed. The volume builder accepts a year id but no year dates; the runner stamps assessment
+dates with the server's active-year start so its generated history is in scope. Existing
+`parseEnvContent` is reused without adding a dependency or importing dotenv directly. Synchronous
+CJS UUIDv5 generation uses built-in SHA-1 because the installed uuid package is ESM; tests compare
+all 780 mastery ids and all 102 active-pair relationship ids with the installed uuid.v5.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npx jest __tests__/assessmentHistoryHttpProbe.test.js --runInBand` — initial RED | Exit 1: 1 failed suite, 0 tests executed, 0.633 s. `Cannot find module '../scripts/assessment-history-http-probe.cjs'` was the specified missing-module failure |
+| Same command — initial helper GREEN | Exit 0: 1 suite, 13 tests passed, 1.255 s |
+| Same command — active-pair regression RED | Exit 1: 1 suite failed; 13 passed / 1 failed tests (14 total), 1.364 s. The new relationship-id assertion received a random UUIDv4 instead of the expected canonical UUIDv5 |
+| Same command — active-pair GREEN | Exit 0: 1 suite, 14 tests passed, 1.394 s |
+| Same command — complete helper GREEN | Exit 0: 1 suite, 16 tests passed, 2.141 s; includes mode parsing and credential-safe failure output |
+| Same command — final focused rerun after runtime cleanup review | Exit 0: 1 suite, 16 tests passed, 1.542 s |
+| `node --check scripts/assessment-history-http-probe.cjs` | PASS, exit 0 |
+| Plain Node import with a failing fetch sentinel and SDK-cache check | PASS, exit 0: zero fetch calls; Supabase SDK not loaded |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 348 suites, 4,256 tests passed, 61.971 s; no isolated rerun required |
+| `git diff --check` | PASS |
+| SQLite integration, PostgreSQL, hosted probe/volume modes | Not run. Task 3 changes only the script/pure tests/npm wiring; no SQLite/migration/repository/sync/handle change triggers the integration gate. All hosted/network execution is explicitly reserved for Jim/controller |
+
+Later operator commands, **not executed in Task 3**:
+
+```sh
+npm run assessment-history:probe
+npm run assessment-history:probe -- seed-volume
+npm run assessment-history:probe -- cleanup-volume --namespace <uuid>
+```
+
+Each uses the Node 20 prefix above. Hosted runs belong to Task 13 and require Jim's approval at
+that time. Task 3 Step 5 (commit), hosted writes/cleanup, EAS, devices and PRs remain controller
+steps. Pure helper results establish fixture shape and local validation only; they do not prove
+hosted API cap behavior, auth provisioning, RLS, migration deployment, seeded phone behavior or
+cleanup after an actual hosted failure.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 3 marks disposable Auth users with an admin-only fixture namespace and never persists fixture credentials. Recovery cleanup discovers that namespace and verifies exact zero residue; only seed-volume prints the gate credentials on a TTY. | A namespace survives a lost create response without a secret-bearing local manifest. Exact target validation and safe stage-only errors keep hosted credentials out of other output paths. Synthetic probe.1 content preserves the prescribed 61-item cap test without mislabelling published card data. | Controller hosted probe, cleanup/failure recovery or seeded device gates expose a fixture ownership or content-contract mismatch. |
 | 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
 | 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
