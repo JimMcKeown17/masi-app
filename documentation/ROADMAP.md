@@ -703,6 +703,7 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 ## 5. Product and UX
 
+- [ ] **Lesson plan (spec 2026-10-20): A1 content packs built; the Hermes decodability device check (A1 Task 7, T1 Android and T2 iOS) remains open.** Record: build log, "Lesson plan A1: content packs".
 - [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Shared look built
   on `feat/bold-red-app` (2026-10-19), following Home (#70). Design source: the Design Round 4
   canvas (https://claude.ai/artifact/8gQRtyqZ5Q1vTCTdSkz6zc, private to Jim), Bold Red (B) boards on

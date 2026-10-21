@@ -2724,6 +2724,61 @@ the plan's cap:
 is B2, then Plan 2, then this plan; the device checks run on the combined Android build Jim chose for
 wave 1.
 
+### 2026-10-21 — Lesson plan A1: content packs
+
+**What shipped on `feat/lesson-plan-a1-content-packs`** (base `7a831fb`; plan
+`docs/superpowers/plans/2026-10-20-lesson-plan-a1-content-packs.md`):
+- `1debdcf` Task 1: the early-reader-books decodability checker vendored byte-for-byte from books
+  commit `1c301cf` into `src/utils/decodability/` plus `src/constants/contracts/decodability-v1.json`,
+  SHA-256 pinned: `index.js` `72c644e4…3614`, `lint.js` `5996751b…ff50`, `normalize.js`
+  `b25cad3e…892d`, `sounds.js` `38ed7e34…663e`, vectors `598fd3ca…2842`. All shared vector loops
+  ported except the books repo's TypeScript generator check (119 tests).
+- `5444285` Task 2: `lintMasiPack`, the shared lint plus Masi rules (ids, language, channel, word
+  bank, reader details, two-letter step blends); malformed input returns a result, never throws.
+- `ab1943c` Task 3: the frozen pack registry (`getPack`, `getPackById`, `CURRENT_PACK_IDS`) and three
+  interim letters-only release packs (`xh`, `en`, `af`), hash-pinned and append-only.
+- `9fea2f8` Task 4: preview content gated twice (C12): the build refuses `MASI_PREVIEW_CONTENT=1` on
+  the `pilot` and `production` profiles, and the runtime refuses the native `preview` and
+  `production` update channels; a `preview-content` internal APK profile for test builds.
+- `b728f3b` Task 5: `isixhosa-candidates-preview-v1`, generated from the books repo at
+  `1c301cfddcee061d5d5f915e991d7470a4ba7f37`: 3,328 candidate words, 12 letter steps, 11 sound steps,
+  one draft reader. The controller regenerated it byte-identical; `yaml@2.8.2` was already locked,
+  and an offline lockfile rebuild was byte-identical.
+- `10faef4` Task 6: `content_diagnostics` in the support export, with a 72-case checker self-check;
+  loaded lazily and fenced so a broken checker cannot break the export.
+- `b555e92`, `ae6219a`: review fixes (below).
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`):
+- Round 1, needs-attention, two [medium] findings, both verified: (1) the lint accepted zero,
+  negative and duplicate step ids, so a malformed future pack could reorder unlocking; (2) the
+  registry test asserted that every bundled release is current, which would block the documented
+  append-only upgrade. Fixed in `b555e92`: `step_id`, `step_id_duplicate` and `sound_step_order`
+  (sound steps after letter steps, per the books design); `createPackRegistry` with a two-version
+  test.
+- Round 2, needs-attention: confirmed both fixes; one new [medium] finding: a non-retired reader with
+  no readable text passed the lint, and the engine would treat it as readable. Fixed in `ae6219a`
+  (`reader_empty`). No third round: the findings narrowed, and the fix is pinned by tests.
+- Accepted plan call kept: the preview pack is bundled in every binary but resolves only through
+  `allowPreview` (decision 8).
+
+**Suites and static checks** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`, on `ae6219a`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 353 suites / 4,574 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 52 suites / 554 tests passed |
+| `npm run test:types` | Exit 0 |
+| `git diff 7a831fb --stat -- supabase src/db src/services src/screens src/components src/utils/assessmentRegistry.js src/constants/egraConstants.js documentation/rls-sync-contract-map.md` | Empty |
+| `git diff 7a831fb --stat -- src/utils/decodability src/constants/contracts` | Exactly the five vendored files |
+| `grep -rn "lessonPlan/packs" src \| grep -v "^src/lessonPlan/"` | Only `src/utils/debugExport.js` |
+| T3, `MASI_PREVIEW_CONTENT=1 EAS_BUILD_PROFILE=pilot node -e "require('./app.config')()"` | Exit 1 with the C12 refusal; `production` is refused the same way |
+
+**Device gate (Step 6): T1 and T2 not yet run.** A1 has no screen, so the 1.0x/1.3x text-size and
+visual checks do not apply. T1 (Android, Hermes, developer path) needs a `preview-content` build on
+the Galaxy A03s; Jim chose one combined Android build for wave 1, so T1 runs on that build if it uses
+the `preview-content` profile. T2 (iOS, field path) waits for an iOS `preview` or `pilot` build. Both
+must pass before any slice that runs the checker on a field phone ships in a pilot build.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -2897,6 +2952,7 @@ wave 1.
 | 2026-10-20 | **Wave-1 plans written and Codex-reviewed:** `2026-10-20-lesson-plan-{af-afrikaans,a1-content-packs,a3-engine,c1-lesson-draft,b2-session-group}.md` and `2026-10-20-assessment-results-plan-{2,3}.md`. Build order: AF first; AR Plan 2 after AF; AR Plan 3 after Plan 2 and C1's `pullCoverage.js`; A1, A3, C1 and B2 in parallel. Wave 2 (A2, C2–C3, C4, C5) is planned once wave 1 is in code. | Rounds per plan: AF 1, C1 1, B2 2 (approved), A1/A3 2, AR Plan 2 2, AR Plan 3 3. Each round's findings were verified against code before fixing; rounds stopped when findings narrowed to rare timing races, which are recorded as accepted risks in the plans. | A build task finds a plan contradicting the code it cites. |
 | 2026-10-20 | **Accepted plan risks (Codex rounds; no code change):** an open session tracker sheet can show a stale tile after a sync supersedes or refuses a confirmation (AR Plan 2 A1; its refresh was dropped because it raced with cancel taps); a clock rollback can keep back a later explicitly timed sheet tap until upload (AR Plan 2 A2); a developer-build draft pinned to a replaced preview pack shows the no-content state (A1); a refused mastery correction restored by the pull and then manually re-sent can leave the phone showing the restored value (AR Plan 3). | Each needs a rare sequence (a wrong clock and its correction, a manual retry after a refusal and a regained grant, a developer-only preview regeneration). The fixes would add machinery out of proportion to the risk. | Any of them is seen in the field or in a device gate. |
 | 2026-10-21 | **Lesson-plan AF plan calls.** (1) Package Questions keep bundled `en`/`xh` defaults only, so the battery never gets Afrikaans. (2) Dead `egraConstants.js` sets are left in place; only `AFRIKAANS_PEDAGOGICAL_ORDER` is added. (3) The tracker-change slice lands before Afrikaans enters the registry. (4) A pending change is valid only as a non-null object with boolean `mastered`, a code with a tracker order, a letter in that order and a parseable `madeAt`. (5) The tracker sheet's language is fixed when it opens, from the opened child's own class (round 1 replaced the first-selected-child default). (6) `af` is appended last in each map. (7) Item sets are typed, then frozen by statement. (8) Standalone languages are checked separately from battery languages. (9) Score-band and EGRA docs corrected for codes and step-by-step capture. | Each keeps Afrikaans additive and keeps English and isiXhosa behaviour unchanged, while closing the mixed-language mislabel at its source. | AR Plan 2 lands (labels become codes); the real Afrikaans pack lands (A2); WelaPLUS gains Afrikaans. |
+| 2026-10-21 | **Lesson plan A1 plan calls.** (1) Pack ids `<name>-interim-letters-v<N>` and `isixhosa-candidates-preview-v<N>`; "current" is the explicit `CURRENT_PACK_IDS` map. (2) Pack language names map to codes inside A1 (`PACK_LANGUAGE_CODES`), own-property only. (3) C12 uses two checks, build profile and native update channel, plus a `preview-content` test profile; no in-app toggle. (4) Lint strictness: word step equals its first decodable step, normalised text, syllables match, every reader has details, two-letter step blends; after review, positive unique step ids with sound steps after letter steps, and no empty active reader. (5) Packs are deep-frozen; release files are hash-pinned and never removed. (6) The test pack is generated from the books repo and refuses drift. (7) The Hermes check lives in the support export, loaded lazily and fenced. (8) The preview pack is bundled in every binary and resolves only through `allowPreview`. | Content comes from the books project as a versioned contract; Masi validates and gates it rather than editing it, and old releases stay resolvable for saved sessions. | The books project ships its own preview file; the real isiXhosa pack is released; A2 moves the tracker to packs, taking the `PEDAGOGICAL_ORDERS` agreement test with it. |
 
 ---
 

@@ -1,4 +1,5 @@
 const { resolveSupabaseProjectConfig } = require('./config/supabaseProjectConfig');
+const { resolvePreviewContentBuildConfig } = require('./config/previewContentConfig');
 
 module.exports = () => {
   const supabaseConfig = resolveSupabaseProjectConfig();
@@ -73,6 +74,7 @@ module.exports = () => {
       },
       extra: {
         ...supabaseConfig,
+        ...resolvePreviewContentBuildConfig(),
         sentryConfigured: Boolean(
           process.env.EXPO_PUBLIC_SENTRY_DSN
           && sentryOrganization

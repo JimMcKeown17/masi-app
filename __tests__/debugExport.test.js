@@ -18,6 +18,8 @@ jest.mock('expo-sharing', () => ({
   shareAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-updates', () => ({ channel: null }));
+
 jest.mock('expo-constants', () => ({
   expoConfig: {
     version: '1.2.0',
@@ -93,6 +95,8 @@ describe('debug database export metadata', () => {
 
     expect(result).toEqual({ success: true });
     const exported = JSON.parse(mockWrittenContent);
+    expect(exported.content_diagnostics.decodabilitySelfCheck).toEqual({ vectorVersion: 1, passed: 72, failed: [] });
+    expect(exported.content_diagnostics.previewContentAllowed).toBe(false);
     expect(exported.sqlite_refactor_build).toBe('plan-6');
     expect(exported.app_version).toBe('1.2.0');
     expect(exported.releaseMetadata).toEqual(expect.objectContaining({
@@ -168,6 +172,33 @@ describe('debug database export metadata', () => {
       'programmeId', 'syncStatus', 'serverChangedAt', 'serverCorrectionId',
     ].sort().join(','))).toBe(true);
     expect(JSON.stringify(dump.letterMastery)).not.toContain('Learner');
+  });
+
+  test('a content diagnostics module that fails to load does not break the export', async () => {
+    const db = await getTestWriter();
+    await runMigrations(db);
+    jest.doMock('../src/lessonPlan/packs/contentDiagnostics', () => { throw new Error('checker failed to load'); });
+    try {
+      const result = await exportDatabase({ handle: requireCurrentHandle() });
+      expect(result).toEqual({ success: true });
+      expect(JSON.parse(mockWrittenContent).content_diagnostics).toEqual({ error: 'Error: checker failed to load' });
+    } finally {
+      jest.dontMock('../src/lessonPlan/packs/contentDiagnostics');
+    }
+  });
+
+  test('a content diagnostics call that throws does not break the export', async () => {
+    const db = await getTestWriter();
+    await runMigrations(db);
+    jest.doMock('../src/lessonPlan/packs/contentDiagnostics', () => ({
+      getContentDiagnostics: () => { throw new Error('diagnostics call failed'); },
+    }));
+    try {
+      expect(await exportDatabase({ handle: requireCurrentHandle() })).toEqual({ success: true });
+      expect(JSON.parse(mockWrittenContent).content_diagnostics).toEqual({ error: 'Error: diagnostics call failed' });
+    } finally {
+      jest.dontMock('../src/lessonPlan/packs/contentDiagnostics');
+    }
   });
 
   test('logs export still shares persisted logger output', async () => {

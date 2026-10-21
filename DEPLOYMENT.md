@@ -61,6 +61,11 @@ Rules while the pilot and the field cohort coexist:
   (`eas update --channel preview --environment preview`). The field cohort's
   channel `production` at runtime 1.1.x/1.2.x is untouched; runtime `1.3.0`
   cannot land on legacy binaries either way.
+- Preview content: never set `MASI_PREVIEW_CONTENT` in an EAS environment.
+  Pilot and production builds refuse `MASI_PREVIEW_CONTENT=1`. Phones on field
+  update channels (`preview` and `production`) ignore it even if an OTA carries
+  the setting. Test builds that need candidate words use `--profile preview-content`
+  (internal Android APK, with no update channel).
 - Sentry: pilot builds report `environment=preview`, keeping pilot noise out of
   the future production stream.
 

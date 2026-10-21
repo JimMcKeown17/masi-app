@@ -31,6 +31,22 @@
         "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview"
       }
     },
+    "preview-content": {
+      "environment": "preview",
+      "distribution": "internal",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_TARGET": "sqlite-staging",
+        "EXPO_PUBLIC_SUPABASE_PROJECT_ID": "segygjzpujphwvrubusm",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://segygjzpujphwvrubusm.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_nBApylByXt6pn1Owd8eaxg_MA_QwZg7",
+        "EXPO_PUBLIC_SENTRY_ENVIRONMENT": "preview",
+        "MASI_PREVIEW_CONTENT": "1"
+      }
+    },
     "pilot": {
       "environment": "preview",
       "distribution": "store",
