@@ -1381,6 +1381,51 @@ rely on the 6–8-day backstop. This is local traversal/SQLite evidence only. Ta
 hosted/Supabase work, PostgreSQL execution, EAS, device checks and PRs belong to the controller;
 none were run here. No task implementation remains open.
 
+#### Task 7A: reference refresh switches the active academic year in any response order
+
+**Scope:** `src/db/repositories/referenceDataRepository.js`, the existing real-SQLite
+`referenceDataRepository.test.js` and `offlineSyncOutbox.test.js` suites, the contract map's
+"Profile and reference refresh" bullet and this register. Task 4 is commit `09e0d62`.
+Task 7A is independent of Tasks 5–7 and does not depend on Plan 2's phone work.
+
+Reproduced the three specified UNIQUE failures through public repository/refresh entry points:
+new-active-year first at the repository, an omitted local active year, and new-active-year first
+through `pullReferenceData`. Both old-year-first controls passed before the fix. Added
+`singleActiveColumn: 'is_active'` to the academic-year config, passed it through `getConfig`
+with a null default, and kept the clear inside the existing replace transaction, after scope
+deletion and before label retargeting and the response-order upserts. Exactly one incoming active
+year clears other active flags; zero or multiple active records do not clear. The original
+partial unique index still rejects multiple active years and rolls back the whole table.
+
+Seven new cases cover both response orders at both entry points, an omitted local active year,
+no-active/empty responses, and full rollback after the first of two incoming active years was
+inserted. Classes retain their historical academic-year FK. The refresh cases use real
+repositories for all seven tables and their own real local-state repository for the completion
+marker. Existing label-retarget/FK coverage remains green. No fetch ordering, schema version,
+unique index, sync service or handle behavior changed; no new dependency or file is needed.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 3: `npm run test:integration -- __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js` — RED | Exit 1: 2 failed suites; 3 failed / 66 passed tests (69 total), 5.321 s. Only the three specified cases fail with `SQLITE_CONSTRAINT_UNIQUE` / `UNIQUE constraint failed: academic_years.is_active` |
+| Same command — RED after strengthening the empty-response, rollback and completion-marker controls | Exit 1: same 3 failed / 66 passed tests, 4.182 s; production code still unchanged |
+| Step 5: same command — GREEN | Exit 0: 2 suites, 69 tests passed, 3.709 s |
+| Step 5: `npx jest __tests__/handleServices.test.js` | Exit 0: 1 suite, 31 tests passed, 1.786 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 349 suites, 4,283 tests passed, 66.423 s |
+| `npm run test:integration --silent` | Exit 0: 53 suites, 578 tests passed, 41.99 s |
+| `git diff --check` | PASS |
+| Read-only diff check of the plan, `offlineSync.js`, `migrations.js` and integration config | Unchanged |
+
+**Choices, limits and gates:** the active-record filter uses the same truthiness as the existing
+SQLite boolean binding. Tests use the existing real-SQLite setup and reference-refresh test
+adapter; no integration registration change is needed because both suites are already registered.
+No plan deviation or unrelated failure occurred, so no isolated failure rerun was needed.
+The 2026-10-20 Bug And Gap Register row records the failure and reuse rule. Task 7A's commit
+step is controller-owned. Hosted Supabase, PostgreSQL execution, EAS, device checks and PRs were
+not performed. Task 8 still owns MR002 refresh-and-restart orchestration; this task establishes
+the real refresh's order-independent year switch. No Task 7A implementation remains open.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -1550,6 +1595,7 @@ none were run here. No task implementation remains open.
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-20 | Reference refresh could not switch the active academic year when the server listed the new year first, or left the phone's active year out: `pullReferenceDataRows` fetches years without ordering (`src/services/offlineSync.js`), `replaceAll` upserts in response order (`src/db/repositories/referenceDataRepository.js`), and `idx_academic_years_active_unique` checks each statement (`src/db/migrations.js`). The UNIQUE failure rolled back the year table, prevented refresh completion and kept last year active on every such refresh. | Fixed in AR Plan 3 Task 7A: with exactly one incoming active year, clear other local active flags inside the replace transaction before retargeting and upserting. Real-SQLite tests exercise the real repository and real refresh in both response orders, an omitted local active year, no-active/empty responses and whole-table rollback for two active years. MR002 recovery in Task 8 depends on this fix. | A one-row rule enforced by a unique index must be kept inside the replace transaction, not left to response order. |
 | 2026-09-04 | The session authorization/RPC contract was source- and CI-proven but not hosted; the app still has no inbound session/attendee hydration. | Applied exactly the two authorized migrations to the verified SQLite backend and passed hosted six-actor, grants, anonymous-denial, cap, plan, cleanup, and no-op gates. The server prerequisite is closed. Mobile parent paging, attendee paging, deadlines, atomic SQLite publication, incomplete-family behavior, reconnect/cold-open proof, release uptake, and field verification remain open and must not be collapsed into this result. | Persisted source, hosted schema, PostgREST behavior, mobile implementation, installed build, device convergence, and field recovery are separate evidence states. Close and label each boundary independently. |
 | 2026-09-04 | The standard staging helper was unusable in the current operator environment: its legacy-config guard raised `LegacyDbConfigLoadError`, and the inherited Supabase access token was stale. | Stopped before writes, switched to an isolated current-main worktree, revalidated non-secret link metadata against `segygjzpujphwvrubusm`, kept credentials process-only, and used canonical Supabase CLI dry-run/push/list commands. Root repair of the local env/token path is deferred because changing user credentials/config was outside this migration gate. | Release runbooks need a target-verified, noninteractive path whose config parser and CLI authentication are both exercised before the action window. A safe operational fallback still preserves canonical DDL and exact-target controls. |
 | 2026-08-29 | The locally proven session authorization slice was product-blocked on complete-family versus child-redacted visibility. | Jim selected the complete aggregate. Ratified it in ADR-0005 and standing contracts, removed it from the open-decision backlog, reran the real PostgreSQL actor/page/plan harness plus complete unit and real-SQLite gates, and prepared the committed source for `main`. Hosted apply and authenticated hosted proof remain deliberately separate. | A shared aggregate needs one explicit admission boundary and a data-classification rule. Row filtering cannot create privacy if the parent payload already carries the same facts. |

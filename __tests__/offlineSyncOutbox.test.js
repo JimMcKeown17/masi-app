@@ -15,6 +15,7 @@ import {
   childProgrammeEnrollmentDomainId,
   classEaAssignmentDomainId,
   deterministicDomainId,
+  getActiveAcademicYear,
   getActiveProgrammeId,
   groupEaAssignmentDomainId,
 } from '../src/db/repositories/domainRepositoryUtils';
@@ -31,6 +32,7 @@ import { createAssessmentsRepository } from '../src/db/repositories/assessmentsR
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
+import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
 
 const seedReferences = async (db) => {
   await db.runAsync("insert into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')");
@@ -2633,6 +2635,58 @@ describe('SQLite outbox offline sync', () => {
       teachers: 1,
       staff_programme_assignments: 1,
     });
+  });
+
+  test.each([
+    ['the new year first', [2027, 2026]],
+    ['the old year first', [2026, 2027]],
+  ])('pullReferenceData switches the active academic year whatever the response order', async (_label, order) => {
+    const db = await createMigratedDatabase(runMigrations);
+    const year = (value, active) => ({
+      id: `year-${value}`, label: String(value), starts_on: `${value}-01-15`,
+      ends_on: `${value}-12-15`, is_active: active,
+    });
+    const rowsByTable = {
+      schools: [{ id: 'school-1', name: 'Masi Primary' }],
+      job_titles: [{ id: 'job-title-1', code: 'ea', name: 'Education Assistant', is_active: true }],
+      programmes: [{ id: 'programme-1', code: 'literacy', name: 'Literacy', is_active: true }],
+      academic_years: [year(2026, true)],
+      assessment_windows: [{
+        id: 'window-2026', academic_year_id: 'year-2026', label: '2026 Baseline',
+        window_type: 'baseline', starts_on: '2026-01-15', ends_on: '2026-03-15', is_required: true,
+      }],
+      teachers: [{ id: 'teacher-1', first_name: 'Test', last_name: 'Teacher', school_id: 'school-1' }],
+      staff_programme_assignments: [{
+        id: 'spa-1', user_id: 'user-1', programme_id: 'programme-1', school_id: 'school-1',
+        assigned_at: '2026-01-15T00:00:00Z', ended_at: null,
+      }],
+    };
+    const supabaseClient = {
+      from: jest.fn((tableName) => {
+        const query = {
+          select: () => query, eq: () => query,
+          then: (resolve) => Promise.resolve({ data: rowsByTable[tableName], error: null }).then(resolve),
+        };
+        return query;
+      }),
+    };
+    const repositories = Object.fromEntries(Object.keys(rowsByTable).map((tableName) => [
+      tableName, createReferenceDataRepository({ database: db, tableName }),
+    ]));
+    const localStateRepository = createLocalStateRepository({ database: db });
+    try {
+      await pullReferenceData({ supabaseClient, repositories, localStateRepository, userId: 'user-1' });
+      expect(await getActiveAcademicYear(db)).toMatchObject({ id: 'year-2026' });
+      rowsByTable.academic_years = order.map((value) => year(value, value === 2027));
+      await expect(pullReferenceData({ supabaseClient, repositories, localStateRepository, userId: 'user-1' })).resolves.toEqual({
+        schools: 1, job_titles: 1, programmes: 1, academic_years: 2,
+        assessment_windows: 1, teachers: 1, staff_programme_assignments: 1,
+      });
+      expect(await getActiveAcademicYear(db)).toMatchObject({ id: 'year-2027', is_active: 1 });
+      expect(await localStateRepository.get('reference_data_complete_at')).toEqual(expect.any(String));
+    } finally {
+      await db.closeAsync();
+    }
   });
 
   test('ensureReferenceData runs one reference pull for concurrent callers on an empty cache', async () => {

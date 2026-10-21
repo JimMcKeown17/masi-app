@@ -145,6 +145,7 @@ const REFERENCE_TABLES = {
       'server_updated_at',
     ],
     booleanColumns: ['is_active'],
+    singleActiveColumn: 'is_active',
     requiredColumns: ['id', 'label', 'starts_on', 'ends_on'],
     retargetOnConflictColumns: ['label'],
     foreignKeyRetargets: [
@@ -244,6 +245,7 @@ export const createReferenceDataRepository = ({
       updatePrimaryKeyOnConflict: updatePrimaryKeyOnConflict || tableConfig.updatePrimaryKeyOnConflict || false,
       orderBy: orderBy || tableConfig.orderBy || 'id',
       replaceScopeColumn: replaceScopeColumn || tableConfig.replaceScopeColumn || null,
+      singleActiveColumn: tableConfig.singleActiveColumn || null,
       retargetOnConflictColumns: retargetOnConflictColumns.length > 0
         ? retargetOnConflictColumns
         : tableConfig.retargetOnConflictColumns || [],
@@ -400,6 +402,19 @@ export const createReferenceDataRepository = ({
           await txn.runAsync(
             `delete from ${quoteIdentifier(tableName)} where ${quoteIdentifier(config.replaceScopeColumn)} = ?`,
             scopeValue
+          );
+        }
+      }
+      if (config.singleActiveColumn) {
+        const activeRecords = records.filter((record) => record[config.singleActiveColumn]);
+        if (activeRecords.length === 1) {
+          // Clear the previous active row before either retargeting its id or upserting
+          // the incoming year: the partial unique index is checked on every statement.
+          await txn.runAsync(
+            `update ${quoteIdentifier(tableName)}
+             set ${quoteIdentifier(config.singleActiveColumn)} = 0
+             where ${quoteIdentifier(config.singleActiveColumn)} = 1 and id <> ?`,
+            activeRecords[0].id
           );
         }
       }
