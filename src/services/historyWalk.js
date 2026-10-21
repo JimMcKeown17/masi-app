@@ -275,6 +275,7 @@ const runOnce = async ({ userId, force, deps, walk: config }) => {
     if (isStaleActorError(error)) throw error;
     const kind = error instanceof HistoryRunStop ? error.kind
       : error?.kind === 'cancelled' ? 'cancelled'
+        : error?.kind === 'query' ? 'query'
         : 'transport';
     if (kind === 'budget') return finish('partial');
     if (kind !== 'cancelled' && !isStale()) {

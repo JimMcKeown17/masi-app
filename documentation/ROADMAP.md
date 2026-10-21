@@ -339,13 +339,15 @@ correctly; the missing contract is inbound hydration.
   the child was a member of that class at any point in the current academic year. After a mid-year
   move, the old-class EA and the new-class EA both see that year's assessments. Do not reuse every
   arm of `current_user_can_read_child`. See ADR-0005's 2026-09-21 follow-up.
-- [ ] Verify and reuse the existing `ClassesContext`/SQLite `class_ea_assignments` hydration for
+- [x] Verify and reuse the existing `ClassesContext`/SQLite `class_ea_assignments` hydration for
   assessment scope. Define one canonical SQLite-derived assessment-eligibility query, including
   inactive/revoked and current-year behavior; do not couple correctness to React context arrival
-  order.
-- [ ] Prove that a server class-assignment row flows through `ClassesContext` into SQLite, survives
+  order. Built in AR Plan 3 Task 7: `readAssessmentScope` in
+  [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js), tested against real SQLite.
+- [x] Prove that a server class-assignment row flows through `ClassesContext` into SQLite, survives
   a fresh read, and is consumed by the canonical assessment-scope query; prove an inactive/revoked
-  assignment does not grant current scope.
+  assignment does not grant current scope. AR Plan 3 Task 7:
+  [ClassesContextPull integration proof](../__tests__/ClassesContextPull.integration.test.js).
 - [x] Add authenticated, Programme-scoped pull for `sessions` and `session_attendees` through the
   corrected delivery-history predicate. Built on `feat/cap-004-session-history-hydration`
   (2026-09-26). Hosted apply and device gates are the remaining items below.
@@ -364,21 +366,26 @@ correctly; the missing contract is inbound hydration.
   arguments, without `updated_at`; the server advances the record timestamp only when a correction applies. See [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and the
   [contract map](./rls-sync-contract-map.md). Controller disposable-PG17 verification is GREEN;
   hosted migration remains Assessment Results Task 14, not completed by this checkbox.
-- [ ] Audit other tables' insert timestamps before adding a delta pull
-  ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)); Assessment Results Plan 3 still owns the
-  assessment/run/mastery pull and its cursor/re-walk behavior.
+- [x] Audit insert timestamps for the new assessment/run/mastery delta pulls
+  ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)). Their server-owned INSERT/UPDATE triggers
+  are in `20261021120000_assessment_results_contract.sql`; AR Plan 3 Task 7 uses their raw
+  timestamps with keyset/overlap/re-walks. See the
+  [walk contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  Audit any additional table before adding a future delta pull for it.
 - [x] **Cheap page apply for assessment families and Battery Runs.** Built in Assessment Results
   Plan 3 Task 5: batched id lookups, whole immutable-family insert-or-ignore, and forward-only run
   merges in `historyPageApply.js`, using multi-row statements with at most 999 bindings through
   the signed-in facade. Present families, including pending uploads, stay untouched. Each page
   commits with its cursor; the 50-family / 3,050-item real-SQLite test uses fewer than 100
   statements. See [page-apply rules](./rls-sync-contract-map.md#page-apply--assessments-and-runs).
-  Mastery page apply remains Task 6, traversal remains Task 7, and A03s timing remains a device
-  gate. The batching rationale is [Z2](./zazi-sync-lessons-for-masi-2026-10-08.md) and CAP-004
+  Mastery page apply and handover are built in Task 6, traversal in Task 7; A03s timing remains
+  a device gate. The batching rationale is [Z2](./zazi-sync-lessons-for-masi-2026-10-08.md) and CAP-004
   plan Task 9 Step 4e.
-- [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
+- [x] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
   `assessment_items` and `battery_runs` — **Assessment Results Plan 3**, not part of the upload
-  completion below. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
+  completion below. Task 7 supplies all three walks and scope queries in
+  [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js); application triggers/status
+  remain Task 8, hosted/device gates Task 14. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
 - [x] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
   Built in Assessment Results Plan 1, Tasks 6–9: exclusive `submit_assessment`, one complete
   outbox payload, one call regardless of the 1,000-row ready limit, no per-item fallback, and atomic
@@ -402,23 +409,38 @@ correctly; the missing contract is inbound hydration.
   natural key inside SQL, covering the ZZ-BUG-20260813-006 race. Both tracker surfaces write
   corrections; local acknowledgement displays the winner and terminal refusals do not count.
   **Remaining: Task 7's hosted apply/practice-data wipe and two-phone device gate.** Each external
-  step needs Jim's yes. Mastery pull remains Assessment Results Plan 3.
+  step needs Jim's yes. The mastery walk is built in Assessment Results Plan 3 Task 7;
+  application triggers/status remain Task 8.
   Assessment evidence already uses the latest non-skipped stored letter result from any recorder
   in the active Programme, including WelaPLUS Q1; `userId` scopes that Programme, not the recorder.
   Confirmation reads have no recorder or Programme filter. The correction rule is in the
   [design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery).
   Practice data is wiped only at the approved release gate; no field-data re-key is planned.
-- [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
-  and child page from the first implementation. Do not ship an unpaginated intermediate path.
-- [ ] Persist each parent and its children transactionally through typed repositories, with parents
-  applied before dependents.
-- [ ] Preserve pending, failed, and terminal local work when server rows overlap.
-- [ ] Define positive parent/child completeness evidence. Ordinary RLS-filtered, expired, errored,
-  or truncated queries may not mark hydration complete and never authorize history deletion.
-- [ ] Update `rls-sync-contract-map.md` with producer, authorization, ordering, identity, conflict,
-  and reconcile rules.
-- [ ] Cover first install, reinstall, second device, offline restart, pending-local collision, and
-  parent-before-child ordering in real-SQLite tests.
+- [x] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
+  and child page from the first implementation. Built by CAP-004 and AR Plan 3 Tasks 2/4/7;
+  assessment items arrive embedded as complete families. See the
+  [walk contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+- [x] Persist each parent and its children transactionally through typed repositories, with parents
+  applied before dependents. AR Plan 3 Tasks 5–7:
+  [page apply](./rls-sync-contract-map.md#page-apply--assessments-and-runs).
+- [x] Preserve pending, failed, and terminal local work when server rows overlap. AR Plan 3
+  Tasks 5–7 preserve immutable families and outstanding corrections; a terminal mastery value
+  can recover while its refusal evidence stays. See the
+  [mastery rules](./rls-sync-contract-map.md#page-apply--mastery-and-handover).
+- [x] Define positive parent/child completeness evidence. AR Plan 3 Tasks 4/7 require an exhausted,
+  error-free delta and no due re-walk; coverage is bounded inside the committing transaction.
+  Ordinary queries never authorize history deletion. See the
+  [walk contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  Per-child lesson-input completeness remains Task 11.
+- [x] Update `rls-sync-contract-map.md` with producer, authorization, ordering, identity, conflict,
+  and reconcile rules. AR Plan 3 Task 7:
+  [history contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3)
+  and the four operation rows.
+- [x] Cover first install, reinstall, second device, offline restart, pending-local collision, and
+  parent-before-child ordering in real-SQLite tests. Synthetic remote history/fresh-state/restart
+  proof: `assessmentHistoryPull.test.js`, `letterMasteryHandover.test.js`,
+  `assessmentHistoryPage.test.js` and `batteryRunHistoryMerge.test.js`.
+  Physical-device proof remains the open gates below.
 - [ ] Add two-device physical gates proving device A history appears on device B.
 - [x] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
   Sessions done (CAP-004 History row); assessments follow with their slice.

@@ -2155,10 +2155,90 @@ return re-walk. The existing Task 5 query-classification follow-up in `historyWa
 outside this task. Task 6 implementation is complete. The commit step, hosted Supabase work,
 PostgreSQL execution, EAS, devices and PRs are controller-owned and were not performed.
 
+#### Task 7: three history walks and server-known scope queries
+
+Built `src/services/assessmentHistoryPull.js` with the exact public constants, scope keys,
+three independent history states and repository factories/fallbacks. Runs and assessments resolve
+one active Programme/year per run and share that year id across coverage and every RPC page.
+They use class and child coverage, page sizes 200 and first-10/then-50 respectively, and stop
+without requests when reference dependencies are missing. Mastery needs neither Programme nor
+year and uses 200-row pages and current-delivery coverage. All three configs use timing logs,
+the shared enqueue deadline/budget/overlap/backstop, and transaction-bound lost-grant coverage.
+
+The canonical queries include only synced active assignments. Assessment coverage spans class
+assignments in any Programme and synced memberships in the selected year, including exited
+memberships. Mastery coverage spans synced current direct assignments. No migration or dependency
+was added. No page performs absence reconcile or deletion. The store, application triggers and
+MR002 reference-refresh/restart remain Task 8; the walk returns the mismatch without completing.
+
+Added two real-SQLite suites and a dynamic keyset/overlap server fixture; registered both suites
+in the integration config. Tests cover the fresh-phone co-EA 61-item result plus confirmation
+union, a zero-Question run and lifecycle delta, gains and loss/return of class/delivery grants,
+pending grants excluded, year agreement and a server rollover between pages, restart from a
+saved cursor, disabled/resumed downloads and absence preserving local rows. ClassesContext now
+has proof that its pulled assignment persists into the canonical scope query and that a later
+acknowledged removal excludes it, without changing production context code.
+
+The handover suite runs the real `setLetterMastery`, real outbox engine/acknowledgement,
+real roster reconcile and real mastery walk. It preserves the pending `s` correction/outbox
+while deleting synced `k`, excludes the lost child from My Children and drops its coverage
+before a walk runs. Return recovers an old `k` behind the overlap, both inside freshness and
+after a request held across the reconcile. Only the server is fake.
+
+**Task 5 follow-up resolved.** One branch in `historyWalk.js` now preserves an external
+saver's `kind = 'query'`, just as it already preserved cancellation. Real validators for all
+three savers produced RED `transport` statuses where `query` was expected. GREEN reports
+query in status/failure log, writes the failure marker and retains the committed cursor.
+An additional malformed second-page case proves ten committed families/items remain while
+the rejected page never advances. The Task 5 Bug And Gap row is resolved. Session config,
+session guard test files and Plan 2's mastery repository are unchanged (read-only diff check).
+
+**Choices and adaptations.** Reused the existing valid UUID assessment fixtures: the plan's
+readable `child-1`/EA labels cannot pass `assessmentFamilyPayload.js:78-79` or
+`historyPageApply.js:45-47`. The handover suite retains the plan's `user-1`, `child-m`,
+`child-n` labels. Fixture setup supplies the required class grade, historical assignment/
+membership dates and active class memberships for My Children
+(`migrations.js:242-246,283-293`; `childrenRepository.js:740-745`). No production assertion
+was weakened. A two-query assessment scope (class ids plus an EXISTS membership query) avoids
+dynamic bind lists and works through the facade. RPC argument construction and page-save
+forwarding are the only small shared config helpers; no new scheduler/state machine was added.
+
+The existing Task 5/6 page-apply subsection is retained; the requested new traversal subsection
+is after CAP-004. CONTEXT broadens the history-reference definition, and all ten specified
+roadmap items have evidence pointers. The timestamp checkbox is explicitly scoped to these
+four tables' already-built INSERT/UPDATE triggers
+(`20261021120000_assessment_results_contract.sql:111-130`); future table audits remain required.
+The two physical-device gate checkboxes stay open.
+
+All recorded verification commands below use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; verified runtime `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 2: `npm run test:integration -- __tests__/assessmentHistoryPull.test.js __tests__/letterMasteryHandover.test.js __tests__/ClassesContextPull.integration.test.js` — initial RED | Exit 1: 3 failed suites, 0 tests executed, 0.907 s; missing `assessmentHistoryPull` module |
+| Same command after adding the configs, before the follow-up fix | Exit 1: 2 failed / 1 passed suites, 10 failed / 22 passed tests (32 total), 3.814 s. Three executed query-vs-transport assertions plus fixture FK/date/My Children setup failures |
+| Same command after fixture corrections | Exit 1: 1 failed / 2 passed suites, 4 failed / 28 passed tests, 3.442 s. Three classification failures plus one remaining membership-date check |
+| Fixture-edit intermediate run | Exit 1: 1 suite could not parse a quoted SQL literal, 2 suites passed / 12 tests passed. The quote was corrected before the clean behavioral RED; this is not behavioral evidence |
+| Same Step 2 command — clean classification RED | Exit 1: 1 failed / 2 passed suites, 3 failed / 29 passed tests (32 total), 3.605 s. Only actual saver validation failures reported `transport` instead of `query` |
+| Same command after preserving query kind — GREEN | Exit 0: 3 suites / 32 tests passed, 3.388 s |
+| Same command with later-page rejection and missing-year guards | Exit 0: 3 suites / 34 tests passed, 4.446 s |
+| Step 4: `npx jest __tests__/productionBindingStatic.test.js` | Exit 0: 1 suite / 14 tests passed, 6.14 s |
+| `npm run test:integration -- __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js __tests__/historyWalk.test.js` | Exit 0: 3 suites / 52 tests passed, 5.191 s |
+| `npx jest __tests__/sessionHistoryStatus.test.js __tests__/OfflineContext.test.js` | Exit 0: 2 suites / 59 tests passed, 3.653 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 358 suites / 4,466 tests passed, 116.629 s |
+| `npm run test:integration --silent` | Exit 0: 66 suites / 785 tests passed, 105.834 s |
+| `git diff --check` and read-only no-diff checks of session config/guards and mastery repository | PASS |
+
+The two full suites ran concurrently; no unrelated failure or timeout required a file rerun.
+Task 7 implementation and local verification are complete. The commit step is controller-owned.
+No PostgreSQL/hosted probe, migration application, hosted fixture, EAS build, device check or PR
+was run; this task adds phone walks and synthetic-remote SQLite evidence only.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 7 uses synced server-known grants for assessment/run/mastery coverage, with one resolved year per Programme run and the existing transactional bounds on every durable write. Saver query classifications survive the traversal boundary. | Timestamp progress alone cannot detect authorization gains or recover a deleted old mastery row. Lost coverage makes return a gain, and expected-year agreement prevents a completed cursor for the wrong year. One extra classification branch fixes the Task 5 reporting gap without changing session traversal. | Controller review or device year-rollover/handover gates expose a mismatch in grants, cursor progress or recovery. |
 | 2026-10-21 | AR Plan 3 Task 6 orders mastery pulls against accepted server tuples and couples handover deletion with coverage removal in the acknowledged assignment transaction. Terminal outbox evidence never owns or blocks the accepted value. | A stale page must not undo a newer acknowledgement, a phone clock must not block accepted-state convergence, and an old timestamp cursor cannot recover locally deleted rows unless the returning child is a coverage gain. The existing breaker admits both assignment ending and deletion together. | Device handover, stale-page or refusal-recovery gates expose convergence or visibility behavior outside the plan's accepted residuals. |
 | 2026-10-21 | AR Plan 3 Task 5 uses multi-row statements with a 999-binding ceiling for assessment-family and run page apply, including set-wise terminal run advancement. | The signed-in facade exposes individual SQL calls rather than native prepare handles. Bounded batched statements preserve one page/cursor transaction while avoiding per-item calls; present immutable families and locally started runs remain untouched. | A03s first-commit timing, production facade compatibility or larger page measurements require tuning within the same atomicity contract. |
 | 2026-10-21 | AR Plan 3 Task 4 shares CAP-004 traversal while retaining sessions as a historical-delivery config. Revocable-grant walks bound all coverage snapshots inside each page/failure write transaction; handover has a db-level removal helper. | Timestamp progress cannot establish authorization coverage. Reading grants in the committing writer prevents an in-flight page from restoring a grant lost while it waited, and preserving the session object contract keeps existing consumers stable. | Assessment/mastery integration, handover or device gates expose coverage restoration, cursor drift or a session regression. |
@@ -2328,7 +2408,7 @@ PostgreSQL execution, EAS, devices and PRs are controller-owned and were not per
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
-| 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Open for the later history-wiring task/controller. Assessment/run savers return the specified query-classified TypeErrors and reject the whole malformed page. The shared walker is outside Task 5's allowed files; completeness remains blocked, but the reported failure category needs to retain query failures. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |
+| 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Resolved in AR Plan 3 Task 7: the shared walker retains an external saver failure with `kind = 'query'` in its returned status and failure log, and records `lastFailureAt` without advancing the committed cursor. Real-SQLite regressions exercise the actual assessment, run and mastery validators, plus a malformed second assessment page after ten committed families. RED observed three `transport` statuses where `query` was expected; GREEN retains the category. Session configs and their guard suites are unchanged. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |
 | 2026-10-20 | Reference refresh could not switch the active academic year when the server listed the new year first, or left the phone's active year out: `pullReferenceDataRows` fetches years without ordering (`src/services/offlineSync.js`), `replaceAll` upserts in response order (`src/db/repositories/referenceDataRepository.js`), and `idx_academic_years_active_unique` checks each statement (`src/db/migrations.js`). The UNIQUE failure rolled back the year table, prevented refresh completion and kept last year active on every such refresh. | Fixed in AR Plan 3 Task 7A: with exactly one incoming active year, clear other local active flags inside the replace transaction before retargeting and upserting. Real-SQLite tests exercise the real repository and real refresh in both response orders, an omitted local active year, no-active/empty responses and whole-table rollback for two active years. MR002 recovery in Task 8 depends on this fix. | A one-row rule enforced by a unique index must be kept inside the replace transaction, not left to response order. |
 | 2026-10-21 | **AR Plan 2 accepted risk A3 — slow-clock correction after observing another phone's winner.** B is an hour slow and receives A's 10:00 winner via a superseded acknowledgement. At real 10:01 B un-confirms at 09:01; its receipt keeps 09:01, ordering retains A's winner, and B finalizes back to confirmed true. The un-confirm is silently reverted and repeats until the slow clock passes the winner's time. | **Accepted by the controller in adversarial review round 1; controller to raise with Jim; not fixed here.** Rare combination of two phones correcting the same child/letter/language plus a clock slow beyond the real correction gap; fast clocks are already clamped. Root revisit: carry the observed winner's correction id as a causal base in set_letter_mastery and accept a correction whose base equals the current winner. This changes the approved server contract. | Revisit trigger: a field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. Wall-clock order does not express causality after a phone observes another writer's result. |
 | 2026-09-04 | The session authorization/RPC contract was source- and CI-proven but not hosted; the app still has no inbound session/attendee hydration. | Applied exactly the two authorized migrations to the verified SQLite backend and passed hosted six-actor, grants, anonymous-denial, cap, plan, cleanup, and no-op gates. The server prerequisite is closed. Mobile parent paging, attendee paging, deadlines, atomic SQLite publication, incomplete-family behavior, reconnect/cold-open proof, release uptake, and field verification remain open and must not be collapsed into this result. | Persisted source, hosted schema, PostgREST behavior, mobile implementation, installed build, device convergence, and field recovery are separate evidence states. Close and label each boundary independently. |

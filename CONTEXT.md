@@ -72,7 +72,7 @@ The grant naming the **subset of children an EA runs the intervention with** (e.
 _Avoid_: using the delivery roster ("My Children") as if it were the class roster — the class is wider.
 
 **History reference child**:
-A child record a phone holds only because the child attended a session the EA is authorized to read; it carries identity and display name and nothing else.
+A child record a phone holds only because the child attended a session, or has an assessment, Battery Run or letter mastery record, the EA may read; it carries identity and display name and nothing else.
 _Avoid_: treating a history reference child as roster, enrollment, assessment scope, or write authority; "phantom child", "stub child", "ghost row".
 
 **Assessment scope vs delivery scope** (the two-tier access model):
@@ -195,7 +195,7 @@ The EA who made a change, stamped on its outbox row from the signed-in EA handle
 - A **Child** has many **Programme Enrollments** (a child may be in Core Literacy *and* Numeracy at once).
 - A **Session** belongs to exactly one **Programme** and optionally one **Class**.
 - An **EA** holds a **Class assignment** (assessment scope) and, within it, a **Delivery assignment** over a subset of that class (delivery scope). A **Class** may have several active **Class assignments** — one per co-EA sharing it.
-- A **Session** hydrated onto a phone may carry **History reference children** for coattendees outside the EA's scopes; the reference grants neither **Delivery** nor **Assessment scope** and is never uploaded.
+- A **Session**, **Assessment**, **Battery Run** or **Letter mastery** record hydrated onto a phone may carry a **History reference child** outside the EA's scopes; the reference grants neither **Delivery** nor **Assessment scope** and is never uploaded.
 
 ## Example dialogue
 

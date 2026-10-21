@@ -946,7 +946,8 @@ The client validates the schema version, completeness flag, authenticated user i
 
 `assessmentsRepository.saveHistoryPage` and `batteryRunsRepository.saveHistoryPage` apply one
 whole page with its cursor in one signed-in handle writer transaction. Mastery page apply is
-described below. Traversal/wiring remains later Plan 3 work; these methods do not fetch from the server.
+described below. The Task 7 walks call these savers; application trigger/status wiring remains
+Task 8. The savers themselves do not fetch from the server.
 
 - **Validate before writing.** Assessment pages reconstruct each flat family from its parent
   and embedded items and call `assertSubmitShape`, including the exact `total_items` count.
@@ -1073,6 +1074,86 @@ Tests: `sessionHistoryFamilyDeltaMigration.test.js`, the disposable PostgreSQL h
 `sessionHistoryStatus.test.js`, `childrenHistoryReference.test.js`, and the ChildrenContext and
 screen tests.
 
+### Assessment, run and mastery history (AR Plan 3)
+
+The three configs in `src/services/assessmentHistoryPull.js` use the shared `historyWalk`.
+Call them in order **Battery Runs → assessments → mastery**. Task 7 supplies the walks; Task 8
+owns the store and application triggers, including reference refresh/restart on year mismatch.
+
+| Walk / RPC | Durable scope | Page size | Window and coverage |
+| --- | --- | --- | --- |
+| Battery Runs / `get_battery_run_history_page` | `battery_run_history_pull:<userId>:<programmeId>` | 200 | Active Programme and academic year; class ids and member child ids |
+| Assessments / `get_assessment_history_page` | `assessment_history_pull:<userId>:<programmeId>` | First page of each run 10, then 50 | Same Programme, year and coverage as runs |
+| Mastery / `get_letter_mastery_page` | `letter_mastery_pull:<userId>` | 200 | No Programme or year bound; current delivery child ids |
+
+All cursors retain raw server `(updated_at, id)` strings, first-walk and re-walk progress,
+covered sets, next backstop time and `lastFailureAt`. A page and its cursor commit together.
+A completed delta resumes with a 120 s overlap on its first page only. Each request has a
+15 s deadline from enqueue; the run admits pages for 60 s. Exhaustion without an outstanding
+re-walk establishes completeness; any recorded failure blocks freshness until a successful page.
+Saver validation errors retain `kind = 'query'` in the returned status and failure log, record
+`lastFailureAt`, and never advance beyond the last committed page.
+
+**Coverage is server-known grants.** `readAssessmentScope(db, { userId, academicYearId })`
+returns sorted distinct `classIds` for this EA's active, synced `class_ea_assignments` in
+**any** Programme, and sorted distinct `childIds` from synced memberships in those classes
+in that year, exited or not. Neither pending assignments nor pending memberships count. The
+phone ordinarily pulls active memberships only for its delivery children, so these child ids
+are a conservative subset of the server's class grant. Class ids detect a newly held class
+even when its members are not on the phone. `readMasteryScope(db, { userId })` returns sorted
+distinct children with an active synced direct delivery assignment; it needs no Programme.
+
+**Coverage tracks authorization separately from timestamp progress.** A gained class, a child
+moving into a held class, or a gained delivery child triggers a full re-walk from a null keyset,
+after the delta. A jittered 6–8 day backstop covers membership changes the phone cannot see.
+All three configs set `dropLostCoverage: true`: every durable page/failure write bounds all
+three covered/snapshot sets to grants read inside that writer transaction. Lost grants
+therefore become gains on return, even when intervening changes are behind the delta cursor.
+Sessions retain their historical-delivery coverage because a former direct assignment still
+grants session reads.
+
+The child EA reconcile also drops the ended child's mastery coverage in the same transaction
+as its admitted handover delete (see “Page apply — mastery and handover”). This is needed even
+inside the 15-minute freshness window, when a walk returns `fresh` without writing anything.
+A walk held across that reconcile cannot restore the lost child to coverage when its page
+commits. Programme walks need no separate reconcile-time coverage drop because no rows are
+deleted from them on handover; their transactional bounds apply when they next write.
+
+**Year agreement.** A Programme run reads one active academic year once, uses its `starts_on`
+as `windowStart`, and uses the same id for coverage and `p_academic_year_id` on every page.
+The server is authoritative and raises `MR002` before reading a mismatched page, even an empty
+one. The walk stops as `year_mismatch`, retaining the last saved position and marking failure
+and incompleteness. The Task 8 store must refresh reference data and restart; the order-independent
+Task 7A refresh changes the local year, whose changed `windowStart` resets Programme cursors.
+Mastery's null window never resets on a year change. Missing Programme/year yields `dependency`
+without a request or stamp for either Programme walk.
+
+**Complete families and identity.** Assessment pages embed the whole item array and their run
+header. The embedded header is readable exactly when its assessment is, including a run started
+before this year; it grants no other Questions. The separate run pager/SELECT remain year-bounded.
+Runs with no Questions and status-only changes arrive through the run walk. Only absent children
+become history references: identity/display names, no roster relationships or upload/write grant.
+Absence never deletes and there is **no page reconcile**. Mastery's one removal path here is the
+acknowledged child EA handover delete; pending/refused work survives it.
+
+**Server switch.** Each RPC consults `private.history_pull_rollout` for its feature
+(`assessments`, `battery_runs`, `letter_mastery`): per-EA row, then everyone row, then off.
+`MR001` returns `disabled`, preserves data and cursor position, and records an incomplete
+failure; re-enabling resumes the saved completed delta with overlap. With Jim's explicit yes,
+the controller can run the following through `npm run sqlite:staging:query`, verifying
+`project_ref=segygjzpujphwvrubusm` first:
+
+```sql
+insert into private.history_pull_rollout (feature, user_id, enabled, note) values ('assessments', '<uuid>', false, '<reason>');
+delete from private.history_pull_rollout where feature = 'assessments' and user_id = '<uuid>';
+```
+
+Real-SQLite/fake-server proof: `assessmentHistoryPull.test.js`,
+`letterMasteryHandover.test.js` and `ClassesContextPull.integration.test.js`. They exercise
+dynamic grant loss/return, class hydration/reconcile, year mismatch between pages, restart,
+absence, the real correction acknowledgement and the handover while a request is held.
+These local tests do not close hosted HTTP, device timing or two-phone gates.
+
 ### Reconcile invariants and safety rails
 
 - Ending a child EA assignment also deletes that child's `synced` `letter_mastery` rows that
@@ -1170,10 +1251,10 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 | `child_group_memberships` | `groupsRepository.addChildToGroup`; removal/archive flows in `groupsRepository` and `childrenRepository` | Insert requires `child_id`, `group_id`, `grouping_version_id`, `created_by`; archive carries `id`, `removed_at` locally and sends `removed_at` plus the claimed `row_version` | Insert uses default upsert. Archive uses acknowledged lifecycle UPDATE by id, avoiding the INSERT-policy check that rejects partial archive upserts. | Active child write access plus group write/access | After `children`, `groups`, and group EA access evidence; archive before ending group EA assignment | `offlineSyncOutbox.test.js` exact RLS regression, acknowledged-update guard, ordering, and group ownership repair tests |
 | `sessions` | `sessionsRepository.saveSession`; inbound `sessionsRepository.saveHistoryPage` from `sessionHistoryPull` (CAP-004) | `user_id`, `programme_id` | Outbound default upsert. The server owns `updated_at` on insert and update (CAP-004 migration), and it means "family last written on the server". Inbound pages of 1–200 parents in ascending `(updated_at, id)`, persisted with the cursor in one SQLite transaction. A missing local `class_id` is stored as null | Direct `user_id = auth.uid()` SELECT fallback plus session read/write helpers. Hosted read authority is owner or any historical direct child delivery assignment; class/group/creator child visibility does not grant the diary | Outbound before `session_attendees`; after `classes` only when `class_id` exists. Inbound parents persist before dependent attendee pages; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js` session-before-attendees lock; `sqlitePlan1Migrations.test.js`; `historyAuthorizationPostgresHarness.test.js`; disposable and hosted PostgreSQL actor/page/plan probes; authenticated/anonymous PostgREST probes |
 | `session_attendees` | `sessionsRepository.saveSession`; inbound `saveHistoryPage` (CAP-004) | `session_id`, `child_id`, `attendance_status` | Outbound batched upsert (onConflict=id) with per-record fallback. Any attendee write re-stamps its parent (`touch_session_family`), so late attendees re-surface the family in the next delta. Inbound pages keyed `(session_id, id)`. A missing local `group_id` is stored as null. A child absent locally becomes a history reference child | Writes require parent session ownership plus active child/group/class access. Hosted historical SELECT follows the authorized parent; the accepted aggregate returns the complete attendee family | Outbound after `sessions`, `children`, and `groups` when `group_id` exists. Inbound after durable parent page; no history absence reconcile | `sessionsRepository.test.js`; `offlineSyncOutbox.test.js`; `sqlitePlan1Migrations.test.js`; disposable and hosted PostgreSQL complete-family actor matrices |
-| `assessments` | `assessmentsRepository.saveQuestionResult` | Owner, child, programme, Question/version, item set, language, stop reason, object derived, exact item count; optional run | `submit_assessment` only: `inserted` / `already_present`; identity or item-set membership mismatch `MA001`, malformed `22023`, duplicate run/Question `23505` never success. One family outbox/ack transaction; no pull yet — Plan 3 | `assessments_select_owner_or_class_year` uses `private.can_read_assessment(user_id, child_id, assessment_date)`: owner without a year bound, or active class assignment plus any membership in that class in the active year and an assessment date inside it. New writes require active child/programme authority; committed retries check identity before current authority. Direct EA DML revoked | After `children` and optional `battery_runs`; items inside the same RPC, no per-row push | `assessmentsRepository.questionResults.test.js`; `assessmentFamilySync.test.js`; `assessmentFamilyRpcError.test.js`; `assessment-results-postgres-harness.cjs` |
-| `assessment_items` | `saveQuestionResult`, inside its parent transaction | Deterministic `id`, parent id, unique non-negative `position`, item key, boolean correctness, object metadata | Only `p_items` inside `submit_assessment`; no independent outbox row/upsert/fallback. Whole family is acknowledged together; no pull yet — Plan 3 | `assessment_items_select_readable_assessment` follows the parent through the same `private.can_read_assessment` call; direct EA DML revoked | Same server and local acknowledgement transactions as parent; absent from `PUSH_ORDER` and batching | `assessmentFamilySync.test.js` complete 61-item send and injected acknowledgement rollback; repository and PostgreSQL family tests |
-| `battery_runs` | `batteryRunsRepository.startRun` / `finalizeRun` / `abandonRun` | Owner, child, programme, optional class, battery code/version, language and stored start time are replay identity | Full-header `save_battery_run`: `inserted` / `updated` / `unchanged`; identity `MA001`, terminal conflict `MA002`, malformed `22023`, `23505` never success; `28000` retriable. No row version; no pull yet — Plan 3 | `battery_runs_select_owner_or_class_year` uses `private.can_read_assessment` with `(started_at at time zone 'Africa/Johannesburg')::date`; owner has no year bound, class reads are active-year bounded. New writes require child/programme authority and optional class membership at start; owned existing runs do not renew assignment checks | After `children`, before linked assessments; optional class is not a local FK dependency | `batteryRunsRepository.test.js`; `assessmentFamilySync.test.js`; `assessment-results-postgres-harness.cjs` |
-| `letter_mastery` | `masteryRepository.setLetterMastery`, called by `persistLiteracySession` with tap time and `LetterMasteryPanel` with now | Required: `child_id, letter, language` (code), `confirmed, changed_at, correction_id, changed_by`; the single-slot payload also has local `id` and nullable `programme_id` context | Exactly one `set_letter_mastery` call per record slot with six arguments, no batch/table write or send-time re-key. Atomic CAS acknowledgement writes the returned winner, deletes an unreadable record, or preserves a newer local correction and updates only server ordering. See the canonical mastery section above. | `letter_mastery_select_writer_or_deliverer`: last writer or current direct deliverer, no year/Programme bound. New correction requires current delivery; replay uses receipt identity; no direct DML | After `children`, D1 by correction time/UUID; only pending direct assignment counts as grant evidence | `masteryRepository.test.js`; `letterMasteryCurrentStateMigration.test.js`; `letterMasteryCorrectionSync.test.js`; `letterMasteryRpcError.test.js`; `masteryState.test.js`; `LetterMasteryRankingScreen.test.js`; `literacySessionPersistence.test.js`; `completionPathBudget.test.js`; `LiteracySessionForm.submit.test.js`; `LetterMasteryPanel.test.js` and disposable PG harness |
+| `assessments` | `assessmentsRepository.saveQuestionResult`; inbound `saveHistoryPage` | Owner, child, programme, Question/version, item set, language, stop reason, object derived, exact item count; optional run | `submit_assessment` only: `inserted` / `already_present`; identity or item-set membership mismatch `MA001`, malformed `22023`, duplicate run/Question `23505` never success. One family outbox/ack transaction. Inbound `get_assessment_history_page` through `runAssessmentHistoryPull`: first 10 then 50 complete families, insert-or-ignore with items/cursor in one transaction; no absence deletion | `assessments_select_owner_or_class_year` uses `private.can_read_assessment(user_id, child_id, assessment_date)`: owner without a year bound, or active class assignment plus any membership in that class in the active year and an assessment date inside it. New writes require active child/programme authority; committed retries check identity before current authority. Direct EA DML revoked | After `children` and optional `battery_runs`; items inside the same RPC, no per-row push | `assessmentsRepository.questionResults.test.js`; `assessmentFamilySync.test.js`; `assessmentFamilyRpcError.test.js`; `assessment-results-postgres-harness.cjs`  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
+| `assessment_items` | `saveQuestionResult` and inbound `saveHistoryPage`, inside the parent transaction | Deterministic `id`, parent id, unique non-negative `position`, item key, boolean correctness, object metadata | Only `p_items` inside `submit_assessment`; no independent outbox row/upsert/fallback. Whole family is acknowledged together. Inbound items are embedded in each assessment page, validated against `total_items`, and inserted after their parent in the same cursor transaction; no independent item pull/reconcile | `assessment_items_select_readable_assessment` follows the parent through the same `private.can_read_assessment` call; direct EA DML revoked | Same server and local acknowledgement transactions as parent; absent from `PUSH_ORDER` and batching | `assessmentFamilySync.test.js` complete 61-item send and injected acknowledgement rollback; repository and PostgreSQL family tests  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
+| `battery_runs` | `batteryRunsRepository.startRun` / `finalizeRun` / `abandonRun`; inbound `saveHistoryPage` | Owner, child, programme, optional class, battery code/version, language and stored start time are replay identity | Full-header `save_battery_run`: `inserted` / `updated` / `unchanged`; identity `MA001`, terminal conflict `MA002`, malformed `22023`, `23505` never success; `28000` retriable. No row version. Inbound `get_battery_run_history_page` through `runBatteryRunHistoryPull` (200 headers/page), plus embedded assessment headers: absent rows have `started_here = 0`, local writers stay unchanged, other runs advance only to terminal; page and cursor commit together | `battery_runs_select_owner_or_class_year` uses `private.can_read_assessment` with `(started_at at time zone 'Africa/Johannesburg')::date`; owner has no year bound, class reads are active-year bounded. New writes require child/programme authority and optional class membership at start; owned existing runs do not renew assignment checks | After `children`, before linked assessments; optional class is not a local FK dependency | `batteryRunsRepository.test.js`; `assessmentFamilySync.test.js`; `assessment-results-postgres-harness.cjs`  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
+| `letter_mastery` | `masteryRepository.setLetterMastery`, called by `persistLiteracySession` with tap time and `LetterMasteryPanel` with now | Required: `child_id, letter, language` (code), `confirmed, changed_at, correction_id, changed_by`; the single-slot payload also has local `id` and nullable `programme_id` context | Exactly one `set_letter_mastery` call per record slot with six arguments, no batch/table write or send-time re-key. Atomic CAS acknowledgement writes the returned winner, deletes an unreadable record, or preserves a newer local correction and updates only server ordering. See the canonical mastery section above. Inbound `get_letter_mastery_page` through `runLetterMasteryHistoryPull` (200/page, no Programme/year filter): monotonic accepted-tuple merge with cursor in one transaction; only acknowledged delivery reconcile deletes synced rows with nothing owed and drops coverage. | `letter_mastery_select_writer_or_deliverer`: last writer or current direct deliverer, no year/Programme bound. New correction requires current delivery; replay uses receipt identity; no direct DML | After `children`, D1 by correction time/UUID; only pending direct assignment counts as grant evidence | `masteryRepository.test.js`; `letterMasteryCurrentStateMigration.test.js`; `letterMasteryCorrectionSync.test.js`; `letterMasteryRpcError.test.js`; `masteryState.test.js`; `LetterMasteryRankingScreen.test.js`; `literacySessionPersistence.test.js`; `completionPathBudget.test.js`; `LiteracySessionForm.submit.test.js`; `LetterMasteryPanel.test.js` and disposable PG harness  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
 
 Support incident transport uses the device-level `masi:device:installId` (one persisted UUID per
 installation, retained across sign-out). The wire repeat key is `<installId>:<repeatKey>` and the

@@ -18,6 +18,7 @@ import { classesRepository } from '../src/db/repositories/classesRepository';
 import { sessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
+import { readAssessmentScope } from '../src/services/assessmentHistoryPull';
 
 const mockPullPreloadedChildData = jest.fn();
 const mockPullReconcileAcknowledgments = jest.fn();
@@ -352,6 +353,8 @@ test('an active programme with zero classes ends the existing active class assig
   const freshClasses = await classesRepository.getClasses({ userId: 'user-1' });
   expect(result.current.classesContext.classes).toEqual(freshClasses);
   expect(freshClasses).toEqual([]);
+  expect(await readAssessmentScope(testDb, { userId: 'user-1', academicYearId: 'year-2026' }))
+    .toEqual({ classIds: [], childIds: [] });
 });
 
 test('RLS-under-returned classes cannot override the server-authoritative acknowledgment set', async () => {
@@ -532,4 +535,36 @@ test('archiving a class offline refreshes child assignment state without a serve
   ]);
   expect(mockPullPreloadedChildData).not.toHaveBeenCalled();
   expect(mockSupabaseFrom).not.toHaveBeenCalled();
+});
+
+test('a server class assignment persisted by the class pull survives a fresh assessment scope read', async () => {
+  await testDb.runAsync("delete from class_ea_assignments where id = 'class-assignment-1'");
+  mockSupabaseFrom.mockImplementation(tableName => queryResult({
+    data: tableName === 'staff_programme_assignments' ? [{ programme_id: 'programme-a' }]
+      : tableName === 'classes' ? [{
+        id: 'class-1', school_id: 'school-1', name: 'Grade 1A', grade: '1',
+        academic_year_id: 'year-2026', created_by: 'user-1',
+        class_ea_assignments: [{
+          id: 'class-assignment-1', class_id: 'class-1', ea_user_id: 'user-1',
+          programme_id: 'programme-a', created_by: 'user-1',
+        }],
+      }] : [],
+    error: null,
+  }));
+  const { result } = renderHook(() => useContexts(), { wrapper });
+  await waitFor(() => expect(result.current.classesContext.loading).toBe(false));
+  expect(await testDb.getFirstAsync("select sync_status, unassigned_at from class_ea_assignments where id = 'class-assignment-1'"))
+    .toEqual({ sync_status: 'synced', unassigned_at: null });
+  expect(await readAssessmentScope(testDb, { userId: 'user-1', academicYearId: 'year-2026' }))
+    .toEqual({ classIds: ['class-1'], childIds: [] });
+
+  mockPullReconcileAcknowledgments.mockResolvedValue(classAcknowledgments({ classEaAssignmentIds: [], classIds: [] }));
+  mockSupabaseFrom.mockImplementation(tableName => queryResult({
+    data: tableName === 'staff_programme_assignments' ? [{ programme_id: 'programme-a' }] : [], error: null,
+  }));
+  await act(async () => { await result.current.classesContext.loadClasses(); });
+  expect(await testDb.getFirstAsync("select unassigned_at from class_ea_assignments where id = 'class-assignment-1'"))
+    .toEqual({ unassigned_at: expect.any(String) });
+  expect(await readAssessmentScope(testDb, { userId: 'user-1', academicYearId: 'year-2026' }))
+    .toEqual({ classIds: [], childIds: [] });
 });
