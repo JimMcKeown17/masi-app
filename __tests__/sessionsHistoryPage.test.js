@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
+import { createGroupsRepository, repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
@@ -151,13 +152,37 @@ describe('sessionsRepository.saveHistoryPage', () => {
     expect(await db.getFirstAsync('select * from sync_state where scope = ?', SCOPE)).toBeNull();
   });
 
-  test('server fields outside SESSION_COLUMNS are dropped without failing persistence', async () => {
+  test("a session keeps its group id when the group is not on this phone; other server-only fields are dropped", async () => {
     await repo.saveHistoryPage([{
       session: serverSession({ group_id: 'group-not-on-phone', state: 'server-state-not-stored' }),
       attendees: [],
     }], { scope: SCOPE, pullState: pullState() });
     expect(await db.getFirstAsync("select group_id, state from sessions where id = 's-1'"))
-      .toEqual({ group_id: null, state: 'completed' });
+      .toEqual({ group_id: 'group-not-on-phone', state: 'completed' });
+  });
+
+  test("keeping a session's group creates no group, assignment, roster entry or upload", async () => {
+    await repo.saveHistoryPage([{
+      session: serverSession({ group_id: 'group-not-on-phone' }),
+      attendees: [serverAttendee({ group_id: 'group-not-on-phone' })],
+    }], { scope: SCOPE, pullState: pullState() });
+
+    expect(await db.getFirstAsync("select group_id from session_attendees where id = 'a-1'"))
+      .toEqual({ group_id: null });
+    for (const table of ['groups', 'group_ea_assignments', 'sync_outbox']) {
+      expect(await db.getFirstAsync(`select count(*) as count from ${table}`)).toEqual({ count: 0 });
+    }
+    const groups = createGroupsRepository({ database: db });
+    expect(await groups.getGroups({ userId: 'user-1', programmeId: 'programme-a' })).toEqual([]);
+    expect(await groups.getGroups()).toEqual([]);
+
+    await repairGroupOwnershipForSync({ database: db });
+
+    expect(await db.getFirstAsync('select count(*) as count from group_ea_assignments')).toEqual({ count: 0 });
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    const sessions = await repo.getSessions({ programmeId: 'programme-a' });
+    expect(sessions[0].group_id).toBe('group-not-on-phone');
+    expect(sessions[0].group_ids).toEqual([]);
   });
 
   test('lastPulledAt is written only when the caller passes it', async () => {

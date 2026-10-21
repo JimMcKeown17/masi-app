@@ -1092,6 +1092,28 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   device checks, PR or Git writes. Task 1 PostgreSQL evidence remains controller-owned. Native
   upgrade/device proof and the remaining B2 producer/pull/sync tasks remain open.
 
+- **2026-10-21 — B2 Task 3: history keeps the session's group.** Added `group_id` immediately
+  after `class_id` in `SESSION_COLUMNS`; `saveHistoryPage` now retains the server value verbatim
+  and `getSessions` returns it. The attendee mapping still nulls an absent group, and attendee-derived
+  `group_ids` is unchanged. No group, assignment, picker/roster entry or outbox row is created,
+  including after `repairGroupOwnershipForSync`.
+- Task 3 TDD, Node 20.19.4: `npm run test:integration -- __tests__/sessionsHistoryPage.test.js __tests__/sessionHistoryPull.test.js`
+  RED exited 1: 2 failed suites, 3 failed / 45 passed tests (48 total), each failure receiving
+  `group_id: null` instead of the server's id. Same-command GREEN exited 0: 2 suites / 48 tests
+  passed. The fresh-phone case runs the real pull service/repository against a scripted RPC
+  boundary and real SQLite; it does not claim new server authorization proof.
+- Updated the B2/hydration/table contracts and `CONTEXT.md` Relationships. Corrected the stale
+  shared-database cursor wording to per-EA files (ADR-0008), and the directly affected forward-prep
+  note that still claimed the repository omitted both fields. Outbound `group_id` stays
+  `INTENTIONALLY_UNSYNCED` until Task 4; the Session definition's planned NOT NULL remains unchanged.
+- Task 3 remaining gates, all with `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/syncContractCompleteness.test.js` passed 1 suite / 5 tests,
+  exit 0 (3.676 s). `npx jest --silent --maxWorkers=25%` passed 349 suites / 4,222 tests,
+  exit 0 (337.112 s). `npm run test:integration --silent` passed 53 suites / 559 tests,
+  exit 0 (43.556 s). No unrelated failures or isolated reruns were needed. The same-command
+  focused RED/GREEN times were 14.812 s / 14.693 s. `git diff --check` passed. Hosted, EAS,
+  device and PR steps were not run.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

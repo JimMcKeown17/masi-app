@@ -19,6 +19,7 @@ const SESSION_COLUMNS = [
   'user_id',
   'programme_id',
   'class_id',
+  'group_id',
   'session_date',
   'started_at',
   'ended_at',
@@ -299,6 +300,7 @@ export const createSessionsRepository = ({ database } = {}) => {
           id: attendee.id,
           session_id: attendee.session_id,
           child_id: attendee.child_id,
+          // The session keeps its historical group id; attendees stay null when the group is missing.
           group_id: await existingId(txn, 'groups', attendee.group_id),
           attendance_status: attendee.attendance_status,
           grade_snapshot: attendee.grade_snapshot ?? null,
