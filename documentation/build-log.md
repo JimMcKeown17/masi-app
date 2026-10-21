@@ -1645,6 +1645,36 @@ remain with the controller. No Git writes, network/dependency work, plan/spec ed
 harness, hosted Supabase, EAS, device or PR action. Accepted risks A1–A3 and the existing
 hosted/device and Plan 3 pull gates remain open.
 
+#### Task 7 — release gates, Steps 1–2 (controller)
+
+Branch `feat/assessment-results-plan-2` at `bac9f8b` (it also carries lesson-plan AF). Commands use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; PostgreSQL is local Docker PG17 on port 65433
+with `PGTZ=UTC`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 350 suites / 4,325 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 60 suites / 684 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres` (on `f88d04e`; no server file changed after it) | `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `5f41036`; AF reviewed
+separately), two rounds, the plan's cap:
+- Round 1, needs-attention: [high] a correction made on a phone whose clock is slow, after it has
+  observed another phone's newer winner, loses to that winner; [medium] the mastery panel's
+  background refresh could overwrite a tap that had just committed. The panel race was fixed in
+  `c7b1d88` (taps invalidate in-flight reads and re-read after the save). The slow-clock case is
+  recorded as **accepted risk A3** (contract map): it needs two phones correcting the same child and
+  letter with one clock slow beyond the gap, and the root fix (a causal base in `set_letter_mastery`)
+  changes the approved server contract, so it goes to Jim.
+- Round 2, needs-attention: [medium] after a failed save the panel kept a stale tile, and a focus
+  load during the failed write could leave the spinner on. Fixed in `bac9f8b` (the re-read runs after
+  success and failure).
+
+**Steps 3–8 (sync-first check, hosted wipe and apply, EAS builds, gate fixture, device checks): not
+yet run.** Each needs Jim's yes. The hosted order is B2, then this plan, then Plan 3. The device
+checks run on the combined Android build Jim chose for wave 1.
+
 ### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
 
 **What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
