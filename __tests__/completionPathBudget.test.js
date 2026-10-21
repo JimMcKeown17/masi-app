@@ -119,8 +119,11 @@ describe('completion-path statement budgets', () => {
         id: 'session-mastery', user_id: 'user-1', programme_id: 'programme-a',
         session_date: '2026-07-12', children_ids: ['child-0'], synced: false,
       },
-      trackerLanguageCode: 'en',
-      letterTrackerChanges: { 'child-0': { a: true, m: true, s: false } },
+      letterTrackerChanges: { 'child-0': {
+        a: { mastered: true, languageCode: 'en', madeAt: '2026-07-12T09:55:00.000Z' },
+        m: { mastered: true, languageCode: 'en', madeAt: '2026-07-12T09:56:00.000Z' },
+        s: { mastered: false, languageCode: 'en', madeAt: '2026-07-12T09:57:00.000Z' },
+      } },
       nowIso: '2026-07-12T10:00:00.000Z',
       idFactory: () => 'ignored-by-deterministic-id',
     });

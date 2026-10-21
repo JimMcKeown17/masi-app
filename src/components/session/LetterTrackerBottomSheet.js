@@ -23,8 +23,8 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
  *   onDismiss       - () => void
  *   child           - child object { id, first_name, last_name }
  *   languageCode    - 'en', 'xh', 'zu' or null
- *   pendingChanges  - { [letter]: true/false } changes made this session
- *   onChangesUpdate - (changes: { [letter]: true/false }) => void
+ *   pendingChanges  - { [letter]: { mastered: boolean, languageCode: string, madeAt: string } } changes made this session
+ *   onChangesUpdate - (changes: { [letter]: { mastered: boolean, languageCode: string, madeAt: string } }) => void
  */
 export default function LetterTrackerBottomSheet({
   visible,
@@ -68,8 +68,8 @@ export default function LetterTrackerBottomSheet({
     if (assessmentMastered.has(letter)) return 'assessment';
 
     // Check pending changes first (overrides existing state)
-    if (pendingChanges[letter] === true) return 'taught';
-    if (pendingChanges[letter] === false) return 'default';
+    if (pendingChanges[letter]?.mastered === true) return 'taught';
+    if (pendingChanges[letter]?.mastered === false) return 'default';
 
     // Fall back to existing stored state
     if (existingTaught.has(letter)) return 'taught';
@@ -87,7 +87,11 @@ export default function LetterTrackerBottomSheet({
       // Toggle OFF
       if (existingTaught.has(letter)) {
         // Was already taught before this session — mark for removal
-        newChanges[letter] = false;
+        newChanges[letter] = {
+          mastered: false,
+          languageCode,
+          madeAt: new Date().toISOString(),
+        };
       } else {
         // Was added during this session — just remove the pending add
         delete newChanges[letter];
@@ -99,7 +103,11 @@ export default function LetterTrackerBottomSheet({
         delete newChanges[letter];
       } else {
         // Brand new — mark for addition
-        newChanges[letter] = true;
+        newChanges[letter] = {
+          mastered: true,
+          languageCode,
+          madeAt: new Date().toISOString(),
+        };
       }
     }
 
@@ -119,7 +127,7 @@ export default function LetterTrackerBottomSheet({
       tone: 'locked', disabled: true,
       accessibilityLabel: `${letter}, mastered from assessment, locked`, accessibilityState: { disabled: true },
     };
-    const added = pendingChanges[letter] === true;
+    const added = pendingChanges[letter]?.mastered === true;
     const taught = state === 'taught';
     return {
       tone: added ? 'taughtNew' : taught ? 'taught' : 'rest',

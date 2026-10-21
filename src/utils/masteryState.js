@@ -41,9 +41,37 @@ export function countMastered({ assessmentMastered, taughtLetters, pendingChange
   let count = 0;
   for (const letter of pedagogicalOrder) {
     if (assessmentMastered.has(letter)) { count += 1; continue; }
-    if (pendingChanges[letter] === true) { count += 1; continue; }
-    if (pendingChanges[letter] === false) continue;
+    if (pendingChanges[letter]?.mastered === true) { count += 1; continue; }
+    if (pendingChanges[letter]?.mastered === false) continue;
     if (taughtLetters.has(letter)) { count += 1; continue; }
   }
   return count;
+}
+
+export function pendingChangesLanguageCode(pendingChanges) {
+  const [firstChange] = Object.values(pendingChanges ?? {});
+  return firstChange?.languageCode ?? null;
+}
+
+export function assertTrackerChanges(changesByChild) {
+  for (const [childId, changes] of Object.entries(changesByChild ?? {})) {
+    for (const [letter, change] of Object.entries(changes ?? {})) {
+      const languageCode = change?.languageCode;
+      const order = Object.prototype.hasOwnProperty.call(PEDAGOGICAL_ORDERS, languageCode)
+        ? PEDAGOGICAL_ORDERS[languageCode]
+        : null;
+      const valid = change !== null && typeof change === 'object' &&
+        typeof change.mastered === 'boolean' &&
+        Array.isArray(order) && order.includes(letter) &&
+        typeof change.madeAt === 'string' && Number.isFinite(Date.parse(change.madeAt));
+
+      if (!valid) {
+        const error = new Error(
+          `Letter tracker change for child ${childId}, letter ${letter} is malformed or has no tracker language (${String(languageCode)})`
+        );
+        error.code = 'TRACKER_CHANGE_INVALID';
+        throw error;
+      }
+    }
+  }
 }

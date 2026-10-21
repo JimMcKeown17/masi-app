@@ -4,7 +4,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 import { v4 as uuid } from 'uuid';
-import { loadMasteryState, countMastered } from '../src/utils/masteryState';
+import { loadMasteryState, countMastered, pendingChangesLanguageCode } from '../src/utils/masteryState';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createFamilySyncFixture, questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 import { bindTestActor } from '../test-support/actorTestUtils';
@@ -102,12 +102,13 @@ describe('loadMasteryState', () => {
 
 describe('countMastered', () => {
   const pedagogicalOrder = ['a', 'b', 'c', 'd'];
+  const change = (mastered, languageCode = 'en', madeAt = '2026-10-19T08:00:00.000Z') => ({ mastered, languageCode, madeAt });
 
   test('counts assessment, pending-add, and stored-taught; pending-remove wins over stored', () => {
     const count = countMastered({
       assessmentMastered: new Set(['a']),
       taughtLetters: new Set(['b', 'c']),
-      pendingChanges: { c: false, d: true },
+      pendingChanges: { c: change(false), d: change(true) },
       pedagogicalOrder,
     });
     // a (assessment) + b (stored) + d (pending add); c removed by pending false
@@ -118,9 +119,18 @@ describe('countMastered', () => {
     const count = countMastered({
       assessmentMastered: new Set(),
       taughtLetters: new Set(['a', 's']),
-      pendingChanges: { m: true, s: false },
+      pendingChanges: { m: change(true), s: change(false) },
       pedagogicalOrder: ['a', 'm', 's'],
     });
     expect(count).toBe(2);
+  });
+
+  test('returns the language of the first pending change', () => {
+    expect(pendingChangesLanguageCode({ a: change(true, 'xh') })).toBe('xh');
+  });
+
+  test('returns null when there are no pending changes', () => {
+    expect(pendingChangesLanguageCode({})).toBeNull();
+    expect(pendingChangesLanguageCode(undefined)).toBeNull();
   });
 });

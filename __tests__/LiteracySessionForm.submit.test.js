@@ -10,18 +10,23 @@ import { requestOpen, resetHandleRegistryForTests } from '../src/session/signedI
 import * as engine from '../test-support/expoSQLiteRealEngine';
 import LiteracySessionForm from '../src/screens/sessions/LiteracySessionForm';
 import { READING_LEVELS } from '../src/constants/literacyConstants';
+import { loadMasteryState } from '../src/utils/masteryState';
 
 const EA = '11111111-1111-4111-8111-111111111111';
 const PROGRAMME = '22222222-2222-4222-8222-222222222222';
 const mockClass = { id: 'class-1', name: 'Grade 1A', home_language: 'English' };
 const mockChild = { id: '33333333-3333-4333-8333-333333333333', first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1' };
+const SECOND_CLASS = { id: 'class-2', name: 'Grade 1B', home_language: 'English' };
+const SECOND_CHILD = { id: '55555555-5555-4555-8555-555555555555', first_name: 'Ben', last_name: 'Smith', class_id: 'class-2' };
 const mockOffline = { refreshSyncStatus: jest.fn(async () => {}), triggerBackgroundSync: jest.fn() };
+let mockClasses = [mockClass];
+let mockChildren = [mockChild];
 
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: '11111111-1111-4111-8111-111111111111' }, profile: {} }) }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => mockOffline }));
-jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => ({ classes: [mockClass] }) }));
+jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => ({ classes: mockClasses }) }));
 jest.mock('../src/context/LookupsContext', () => ({ useLookupsContext: () => ({ jobTitles: [] }) }));
-jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => ({ children: [mockChild], groups: [], getChildrenInGroup: () => [] }) }));
+jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => ({ children: mockChildren, groups: [], getChildrenInGroup: () => [] }) }));
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
     if (prop === '__esModule') return true;
@@ -48,6 +53,8 @@ let writer;
 beforeEach(async () => {
   jest.clearAllMocks();
   mockClass.home_language = 'English';
+  mockClasses = [mockClass];
+  mockChildren = [mockChild];
   await resetHandleRegistryForTests();
   await engine.__resetMockDatabases();
   handle = await requestOpen({
@@ -309,6 +316,120 @@ test('an isiXhosa session shows stored result evidence and saves a new confirmat
   const reader = await handle.getReader();
   const outbox = await reader.getFirstAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
   expect(JSON.parse(outbox.payload)).toEqual(expect.objectContaining({ letter: 'b', language: 'isiXhosa' }));
+});
+
+test.each([['isiXhosa', 'isiXhosa', 'xh']])(
+  'marks made in a %s tracker keep that language after the first selected child changes',
+  async (homeLanguage, label, code) => {
+    mockClass.home_language = homeLanguage;
+    mockClasses = [mockClass, SECOND_CLASS];
+    mockChildren = [mockChild, SECOND_CHILD];
+    await handle.withTransaction(tx => tx.runAsync(
+      'insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)',
+      SECOND_CHILD.id,
+      'Ben',
+      'Smith',
+      EA
+    ));
+    await handle.repositories.mastery.saveLetterMasteryRecord({
+      id: 'stored-k',
+      user_id: EA,
+      child_id: mockChild.id,
+      letter: 'k',
+      language: label,
+      source: 'taught',
+    });
+    await handle.withTransaction(tx => tx.runAsync('delete from sync_outbox'));
+
+    const screen = renderForm();
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+    fireEvent.press(screen.getByLabelText('Ben Smith, Grade 1B'));
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, Update'));
+    expect(await screen.findByLabelText('k, taught by coach')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('a, not mastered'));
+    fireEvent.press(screen.getByLabelText('m, not mastered'));
+    fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, 2 new'));
+    expect(await screen.findByLabelText('k, taught by coach')).toBeTruthy();
+    expect(screen.getByLabelText('a, taught, added this session')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.press(screen.getByLabelText('A, not selected'));
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[0]));
+    fireEvent.press(screen.getByText('Submit session'));
+    await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+
+    const reader = await handle.getReader();
+    expect(await reader.getAllAsync(
+      'select letter, language from letter_mastery where child_id = ? and deleted_at is null order by letter',
+      mockChild.id
+    )).toEqual(['a', 'k', 'm'].map(letter => ({ letter, language: label })));
+    const reloaded = await loadMasteryState({
+      repositories: handle.repositories,
+      userId: EA,
+      childId: mockChild.id,
+      languageCode: code,
+    });
+    expect(reloaded.taughtRecords.map(r => r.letter).sort()).toEqual(['a', 'k', 'm']);
+  }
+);
+
+test('undoing every pending mark in an open tracker keeps that tracker\'s language', async () => {
+  const label = 'isiXhosa';
+  mockClass.home_language = label;
+  mockClasses = [mockClass, SECOND_CLASS];
+  mockChildren = [mockChild, SECOND_CHILD];
+  await handle.withTransaction(tx => tx.runAsync(
+    'insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)',
+    SECOND_CHILD.id,
+    'Ben',
+    'Smith',
+    EA
+  ));
+  await handle.repositories.mastery.saveLetterMasteryRecord({
+    id: 'stored-k',
+    user_id: EA,
+    child_id: mockChild.id,
+    letter: 'k',
+    language: label,
+    source: 'taught',
+  });
+  await handle.withTransaction(tx => tx.runAsync('delete from sync_outbox'));
+
+  const screen = renderForm();
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+  fireEvent.press(screen.getByLabelText('Ben Smith, Grade 1B'));
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, Update'));
+  expect(await screen.findByLabelText('k, taught by coach')).toBeTruthy();
+  fireEvent.press(screen.getByLabelText('a, not mastered'));
+  fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
+  fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, 1 new'));
+  expect(await screen.findByLabelText('k, taught by coach')).toBeTruthy();
+  fireEvent.press(screen.getByLabelText('a, taught, added this session'));
+  expect(screen.getByLabelText('k, taught by coach')).toBeTruthy();
+  fireEvent.press(screen.getByLabelText('e, not mastered'));
+  fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+  fireEvent.press(screen.getByLabelText('A, not selected'));
+  fireEvent.press(screen.getByText('Select a level'));
+  fireEvent.press(screen.getByText(READING_LEVELS[0]));
+  fireEvent.press(screen.getByText('Submit session'));
+  await waitFor(() => expect(mockCompleteMounted).toHaveBeenCalledTimes(1));
+
+  const reader = await handle.getReader();
+  expect(await reader.getAllAsync(
+    'select letter, language from letter_mastery where child_id = ? and deleted_at is null order by letter',
+    mockChild.id
+  )).toEqual(['e', 'k'].map(letter => ({ letter, language: label })));
+  expect(await reader.getFirstAsync(
+    "select count(*) as n from letter_mastery where child_id = ? and language = 'English'",
+    mockChild.id
+  )).toEqual({ n: 0 });
+  const outbox = await reader.getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+  expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([label]);
 });
 
 test.each([null, 'Afrikaans'])('a class with unknown language %s shows no English tracker grid', async (homeLanguage) => {

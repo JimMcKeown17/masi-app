@@ -33,6 +33,8 @@ jest.mock('../src/db/repositories/masteryRepository', () => ({
 }));
 
 const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' };
+const NOW = '2026-10-20T08:15:00.000Z';
+const change = (mastered, languageCode = 'en', madeAt = '2026-10-19T08:00:00.000Z') => ({ mastered, languageCode, madeAt });
 const stored = (letter) => ({ id: `mastery-${letter}`, child_id: child.id, letter, language: 'English', _deleted: false });
 const renderSheet = (props = {}) => render(<PaperProvider settings={{ icon: () => null }}>
   <MotionProvider value={{ motionLevel: 'still', reduceMotion: true, tier: 'static' }}>
@@ -46,11 +48,12 @@ describe('LetterTrackerBottomSheet', () => {
     jest.clearAllMocks();
     masteryRepository.getLetterMastery.mockResolvedValue([]);
   });
+  afterEach(() => jest.useRealTimers());
 
   test('shows existing, new and removed letters with the live count, legend and Done', async () => {
     masteryRepository.getLetterMastery.mockResolvedValue([stored('a'), stored('s')]);
     const onDismiss = jest.fn();
-    const screen = renderSheet({ pendingChanges: { e: true, s: false }, onDismiss });
+    const screen = renderSheet({ pendingChanges: { e: change(true), s: change(false) }, onDismiss });
     await waitFor(() => expect(screen.getByText('Amahle Dlamini · 2/26 letters')).toBeTruthy());
     expect(screen.getByText('Letter tracker')).toBeTruthy();
     expect(StyleSheet.flatten(screen.getByText('2/26').props.style)).toMatchObject({ fontFamily: fontFamilies.textHeavy, color: colors.text });
@@ -80,16 +83,22 @@ describe('LetterTrackerBottomSheet', () => {
   });
 
   test.each([
-    ['a, taught by coach', {}, { a: false }],
-    ['e, taught, added this session', { e: true }, {}],
-    ['s, not mastered', { s: false }, {}],
-    ['e, not mastered', {}, { e: true }],
+    ['a, taught by coach', {}, { a: change(false, 'en', NOW) }],
+    ['e, taught, added this session', { e: change(true) }, {}],
+    ['s, not mastered', { s: change(false) }, {}],
+    ['e, not mastered', {}, { e: change(true, 'en', NOW) }],
   ])('keeps the existing toggle rule for %s', async (label, pendingChanges, expected) => {
+    jest.useFakeTimers({
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+    jest.setSystemTime(new Date(NOW));
     masteryRepository.getLetterMastery.mockResolvedValue([stored('a'), stored('s')]);
     const onChangesUpdate = jest.fn();
     const screen = renderSheet({ pendingChanges, onChangesUpdate });
-    fireEvent.press(await screen.findByLabelText(label));
+    const tile = await screen.findByLabelText(label);
+    fireEvent.press(tile);
     expect(onChangesUpdate).toHaveBeenCalledWith(expected);
+    jest.useRealTimers();
   });
 
   test('keeps the labelled backdrop dismissal', () => {

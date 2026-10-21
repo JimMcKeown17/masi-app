@@ -72,11 +72,10 @@ it('POSITIVE: real capture flows commit through public interfaces with FK ON', a
         activities: { letters_focused: ['a', 'm'] },
         synced: false,
       },
-      trackerLanguageCode: 'en',
       letterTrackerChanges: {
         [childId]: {
-          a: true,
-          m: true,
+          a: { mastered: true, languageCode: 'en', madeAt: '2026-06-16T08:55:00.000Z' },
+          m: { mastered: true, languageCode: 'en', madeAt: '2026-06-16T08:56:00.000Z' },
         },
       },
       nowIso: '2026-06-16T09:00:00.000Z',

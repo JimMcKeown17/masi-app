@@ -1,4 +1,5 @@
-import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS } from '../utils/assessmentRegistry';
+import { LANGUAGE_LABELS } from '../utils/assessmentRegistry';
+import { assertTrackerChanges } from '../utils/masteryState';
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
 import { createChildrenRepository } from '../db/repositories/childrenRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
@@ -18,7 +19,6 @@ export async function persistLiteracySession({
   handle,
   database = handle,
   session,
-  trackerLanguageCode,
   letterTrackerChanges = {},
   nowIso = new Date().toISOString(),
   idFactory,
@@ -26,22 +26,20 @@ export async function persistLiteracySession({
   const sessionsRepository = createSessionsRepository({ database });
   const childrenRepository = createChildrenRepository({ database });
   const masteryRepository = createMasteryRepository({ database });
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[trackerLanguageCode];
-  // Plan 2 re-keys letter_mastery to codes
-  const confirmationLanguage = LANGUAGE_LABELS[trackerLanguageCode];
+  const attendeeIds = new Set(session.children_ids || []);
+  const attendeeTrackerChanges = Object.fromEntries(
+    Object.entries(letterTrackerChanges)
+      .filter(([childId]) => attendeeIds.has(childId))
+  );
+  assertTrackerChanges(attendeeTrackerChanges);
 
   await runRepositoryTransaction(database, async (transaction) => {
     const programmeId = await resolveProgrammeId(transaction, {
       programmeId: session.programme_id,
       userId: session.user_id,
     });
-    const attendeeIds = new Set(session.children_ids || []);
     const childReadingLevels = Object.fromEntries(
       Object.entries(session.activities?.child_reading_levels || {})
-        .filter(([childId]) => attendeeIds.has(childId))
-    );
-    const attendeeTrackerChanges = Object.fromEntries(
-      Object.entries(letterTrackerChanges)
         .filter(([childId]) => attendeeIds.has(childId))
     );
     const programmeScopedSession = {
@@ -72,7 +70,7 @@ export async function persistLiteracySession({
       });
     }
 
-    if (!pedagogicalOrder || Object.keys(attendeeTrackerChanges).length === 0) {
+    if (Object.keys(attendeeTrackerChanges).length === 0) {
       return;
     }
 
@@ -85,8 +83,10 @@ export async function persistLiteracySession({
     });
 
     for (const [childId, changes] of Object.entries(attendeeTrackerChanges)) {
-      for (const [letter, value] of Object.entries(changes)) {
-        if (value === true) {
+      for (const [letter, change] of Object.entries(changes)) {
+        // Plan 2 re-keys letter_mastery to codes
+        const confirmationLanguage = LANGUAGE_LABELS[change.languageCode];
+        if (change.mastered === true) {
           const existingDeleted = findMasteryRecord(allMastery, {
             childId,
             letter,
@@ -120,7 +120,7 @@ export async function persistLiteracySession({
             const savedId = await masteryRepository.saveLetterMasteryRecord(record, { transaction });
             allMastery.push({ ...record, id: savedId });
           }
-        } else if (value === false) {
+        } else if (change.mastered === false) {
           const existing = findMasteryRecord(allMastery, {
             childId,
             letter,

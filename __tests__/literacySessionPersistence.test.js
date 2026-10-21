@@ -9,6 +9,8 @@ import {
   seedCoreData,
 } from '../test-support/sqliteRepositoryTestUtils';
 
+const MADE_AT = '2026-05-20T08:00:00.000Z';
+
 describe('literacySessionPersistence', () => {
   test('persists current child reading levels with the session snapshot in one SQLite transaction', async () => {
     const db = await createMigratedDatabase(runMigrations);
@@ -45,7 +47,6 @@ describe('literacySessionPersistence', () => {
           },
           synced: false,
         },
-        trackerLanguageCode: 'en',
         nowIso: '2026-07-14T09:30:00.000Z',
         idFactory: () => 'unused-id',
       });
@@ -114,7 +115,6 @@ describe('literacySessionPersistence', () => {
           },
           synced: false,
         },
-        trackerLanguageCode: 'en',
         nowIso: '2026-07-14T10:00:00.000Z',
         idFactory: () => 'unused-id',
       });
@@ -166,9 +166,8 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['a'] },
           synced: false,
         },
-        trackerLanguageCode: 'en',
         letterTrackerChanges: {
-          'child-removed': { a: true },
+          'child-removed': { a: { mastered: true, languageCode: null, madeAt: MADE_AT } },
         },
         nowIso: '2026-07-14T10:15:00.000Z',
         idFactory: () => 'non-attendee-mastery',
@@ -181,6 +180,106 @@ describe('literacySessionPersistence', () => {
       expect(await db.getFirstAsync(
         "select id from sync_outbox where table_name = 'letter_mastery'"
       )).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test('saves each tracker change with the language it was made in, stamped with the save time', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      const childrenRepository = createChildrenRepository({ database: db });
+      for (const [id, firstName] of [['child-1', 'Amahle'], ['child-2', 'Ben']]) {
+        await childrenRepository.save({
+          id,
+          first_name: firstName,
+          last_name: 'Dlamini',
+          class_id: 'class-1',
+          created_by: 'user-1',
+          synced: true,
+        }, { actorUserId: 'user-1' });
+      }
+      await db.runAsync('delete from sync_outbox');
+
+      await persistLiteracySession({
+        database: db,
+        session: {
+          id: 'session-mixed',
+          user_id: 'user-1',
+          programme_id: 'programme-a',
+          session_date: '2026-05-21',
+          children_ids: ['child-1', 'child-2'],
+          activities: { letters_focused: ['a'] },
+          synced: false,
+        },
+        letterTrackerChanges: {
+          'child-1': { a: { mastered: true, languageCode: 'xh', madeAt: MADE_AT } },
+          'child-2': { m: { mastered: true, languageCode: 'en', madeAt: MADE_AT } },
+        },
+        nowIso: '2026-05-21T09:30:00.000Z',
+        idFactory: () => 'unused-id',
+      });
+
+      expect(await db.getAllAsync(
+        'select child_id, letter, language, created_at from letter_mastery order by child_id'
+      )).toEqual([
+        { child_id: 'child-1', letter: 'a', language: 'isiXhosa', created_at: '2026-05-21T09:30:00.000Z' },
+        { child_id: 'child-2', letter: 'm', language: 'English', created_at: '2026-05-21T09:30:00.000Z' },
+      ]);
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
+  test.each([
+    ['a code with no tracker order', { a: { mastered: true, languageCode: 'zu', madeAt: MADE_AT } }],
+    ['a stored label instead of a code', { a: { mastered: true, languageCode: 'English', madeAt: MADE_AT } }],
+    ['a missing language', { a: { mastered: true, madeAt: MADE_AT } }],
+    ['the old boolean shape', { a: true }],
+    ['a missing tap time', { a: { mastered: true, languageCode: 'en' } }],
+    ['a letter outside the order', { ch: { mastered: true, languageCode: 'en', madeAt: MADE_AT } }],
+    ['a non-boolean mastered', { a: { mastered: 'yes', languageCode: 'en', madeAt: MADE_AT } }],
+  ])('refuses the whole save for %s and writes nothing', async (_, changes) => {
+    const db = await createMigratedDatabase(runMigrations);
+
+    try {
+      await seedCoreData(db);
+      await createChildrenRepository({ database: db }).save({
+        id: 'child-1',
+        first_name: 'Amahle',
+        last_name: 'Dlamini',
+        class_id: 'class-1',
+        created_by: 'user-1',
+        synced: true,
+      }, { actorUserId: 'user-1' });
+      await db.runAsync('delete from sync_outbox');
+
+      let error;
+      try {
+        await persistLiteracySession({
+          database: db,
+          session: {
+            id: 'session-refused',
+            user_id: 'user-1',
+            programme_id: 'programme-a',
+            session_date: '2026-05-21',
+            children_ids: ['child-1'],
+            activities: { letters_focused: ['a'] },
+            synced: false,
+          },
+          letterTrackerChanges: { 'child-1': changes },
+          nowIso: '2026-05-21T09:30:00.000Z',
+          idFactory: () => 'unused-id',
+        });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error?.code).toBe('TRACKER_CHANGE_INVALID');
+      expect(await db.getAllAsync('select id from sessions')).toEqual([]);
+      expect(await db.getAllAsync('select id from letter_mastery')).toEqual([]);
+      expect(await db.getAllAsync('select id from sync_outbox')).toEqual([]);
     } finally {
       await db.closeAsync();
     }
@@ -236,12 +335,11 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['a', 'm'] },
           synced: false,
         },
-        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-1': {
-            a: true,
-            m: true,
-            s: false,
+            a: { mastered: true, languageCode: 'en', madeAt: MADE_AT },
+            m: { mastered: true, languageCode: 'en', madeAt: MADE_AT },
+            s: { mastered: false, languageCode: 'en', madeAt: MADE_AT },
           },
         },
         nowIso: '2026-05-21T09:30:00.000Z',
@@ -297,10 +395,9 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['m'] },
           synced: false,
         },
-        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-1': {
-            m: true,
+            m: { mastered: true, languageCode: 'en', madeAt: MADE_AT },
           },
         },
         nowIso: '2026-05-21T09:30:00.000Z',
@@ -359,10 +456,9 @@ describe('literacySessionPersistence', () => {
           activities: { letters_focused: ['z'] },
           synced: false,
         },
-        trackerLanguageCode: 'en',
         letterTrackerChanges: {
           'child-1': {
-            z: true,
+            z: { mastered: true, languageCode: 'en', madeAt: MADE_AT },
           },
         },
         nowIso: '2026-05-21T09:30:00.000Z',
