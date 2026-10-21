@@ -1,6 +1,6 @@
 import { createSupabaseMock } from './supabaseSyncMock';
 
-// Stateful FK/C19 boundary only. The disposable PostgreSQL harness proves real policies.
+// Stateful FK/C19 and retry boundary only. The disposable PostgreSQL harness proves real policies.
 export const createSessionGroupServer = ({
   actorId = 'user-1', initialRows = {}, failGroupInserts = 0, failGroupAssignmentInserts = 0,
 } = {}) => {
@@ -14,6 +14,7 @@ export const createSessionGroupServer = ({
   }
   const upsertResults = {};
   const updateResults = {};
+  const lostResponses = new Set();
   const { supabaseClient: base, calls } = createSupabaseMock({ upsertResults, updateResults });
 
   const groupError = (table, row) => {
@@ -45,11 +46,21 @@ export const createSessionGroupServer = ({
     for (const row of proposed) {
       const error = groupError(tableName, row);
       if (error) return { error };
+      if (tableName === 'sessions' && tableRows(tableName).has(row.id) && !options?.ignoreDuplicates
+        && ![...rows.session_attendees.values()].some(attendee => attendee.session_id === row.id)) {
+        return { error: {
+          code: '42501',
+          message: 'new row violates row-level security policy (USING expression) for table "sessions"',
+        } };
+      }
     }
     const stored = tableRows(tableName);
     for (const row of proposed) {
-      if (tableName === 'group_ea_assignments' && options?.ignoreDuplicates && stored.has(row.id)) continue;
+      if (options?.ignoreDuplicates && stored.has(row.id)) continue;
       stored.set(row.id, { ...stored.get(row.id), ...row });
+    }
+    if (proposed.map(row => lostResponses.delete(`${tableName}:${row.id}`)).some(Boolean)) {
+      throw new Error('Network request failed: response lost after commit');
     }
     return { error: null };
   };
@@ -78,5 +89,8 @@ export const createSessionGroupServer = ({
       }
     }
   };
-  return { supabaseClient, rows, calls, endAssignment };
+  return {
+    supabaseClient, rows, calls, endAssignment,
+    loseNextResponse: (tableName, id) => lostResponses.add(`${tableName}:${id}`),
+  };
 };

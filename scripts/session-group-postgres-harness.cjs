@@ -98,6 +98,13 @@ VALUES ${(Array.isArray(values[0]) ? values : [values]).map((row) => `(${row.joi
 ON CONFLICT (id) DO UPDATE SET ${columns.filter((c) => c !== 'id').map((c) => `${c} = EXCLUDED.${c}`).join(', ')}${returning ? ' RETURNING id' : ''};
 `;
 
+// PostgREST's upsert with Prefer: resolution=ignore-duplicates (supabase-js ignoreDuplicates: true).
+const insertOrIgnoreSql = (table, columns, values) => `
+INSERT INTO public.${table} (${columns.join(', ')})
+VALUES (${values.join(', ')})
+ON CONFLICT (id) DO NOTHING RETURNING id;
+`;
+
 // PostgREST's update(...).eq('id', ...).select('id').
 const updateByIdSql = (table, assignments, id) => `
 UPDATE public.${table} SET ${assignments} WHERE id = '${id}' RETURNING id;
@@ -299,6 +306,51 @@ const runSessionGroupCases = (databaseUrl) => {
       `${setupSession({ id: updateSession, group: G1 })}
        ${setupAttendee({ id: attendeeId(13), session: updateSession, group: G1 })}`
     )
+  );
+
+  const S_RETRY = sessionId(20);
+  const retryColumns = ['id', 'user_id', 'programme_id', 'session_date', 'group_id'];
+  const retryValues = [`'${S_RETRY}'`, `'${EA_A}'`, LITERACY, "'2026-10-20'", `'${G1}'`];
+  accepts(
+    'session-insert-retry-before-attendees',
+    asActor(
+      EA_A,
+      `${insertOrIgnoreSql('sessions', retryColumns, retryValues)}
+       SELECT id || '|' || group_id FROM public.sessions WHERE id = '${S_RETRY}';`,
+      `${setupSession({ id: S_RETRY, group: G1 })}
+       ${endG1Assignment}`
+    ),
+    [`${S_RETRY}|${G1}`]
+  );
+  denies(
+    'session-insert-retry-still-checks-the-row',
+    asActor(
+      EA_A,
+      insertOrIgnoreSql('sessions', retryColumns, [
+        `'${S_RETRY}'`, `'${EA_A}'`, LITERACY, "'2026-10-20'", `'${G_UNHELD}'`,
+      ]),
+      setupSession({ id: S_RETRY, group: G1 })
+    )
+  );
+  denies(
+    'session-merge-retry-before-attendees',
+    asActor(
+      EA_A,
+      upsertSql('sessions', retryColumns, retryValues),
+      setupSession({ id: S_RETRY, group: G1 })
+    )
+  );
+  const retryAttendee = attendeeId(20);
+  accepts(
+    'attendee-merge-retry-after-commit',
+    asActor(
+      EA_A,
+      attendeeUpsert({ id: retryAttendee, session: S_RETRY, group: G1 }),
+      `${setupSession({ id: S_RETRY, group: G1 })}
+       ${setupAttendee({ id: retryAttendee, session: S_RETRY, group: G1 })}
+       ${endG1Assignment}`
+    ),
+    [retryAttendee]
   );
 
   const endedAttendeeSession = sessionId(14);

@@ -9,6 +9,40 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## Retrying an insert must not ask for edit rights
+
+A network failure cannot tell the phone whether the server committed a request. In B2's session
+case, the server can store the session while its response disappears. The phone correctly keeps
+the insert in its durable outbox and holds back the attendees for that pass. On the next pass the
+session runs first again. The mistake was sending that retry as a merge upsert: finding the stored
+id turns an insertion attempt into an UPDATE authorization request.
+
+The session UPDATE policy, `sessions_update_active_assignment_after_attendee`, requires a landed
+attendee with active child authority. No attendee has landed yet, so that policy refuses the
+parent retry. With no pending parent or grant to explain the denial, the phone marks it terminal.
+The original insert succeeded, but the phone cannot acknowledge it without manual intervention.
+This is an operation-shape problem, not a reason to loosen the UPDATE policy or add a retry loop.
+
+Sessions are insert-only in this release. Sending their inserts with
+`upsert(payload, { onConflict: 'id', ignoreDuplicates: true })` maps to `ON CONFLICT (id) DO NOTHING`:
+a new row is inserted, while a committed id is left unchanged. INSERT `WITH CHECK` still applies
+to the proposed row; the retry does not get permission to change stored content. As for immutable
+assignment inserts, no error acknowledges the attempt. Sessions do not batch and are outside the
+row-version contract. The real-SQLite regression commits the parent, loses the response, advances
+past backoff, and proves the parent and attendees finish in two ordinary passes without a terminal
+transition. Four disposable PostgreSQL cases cover the SQL/RLS boundary; controller execution is
+a separate gate, including the assertion that an ignored retry with an unheld group is refused.
+
+The unused `updateSession` method had to go with this change. It re-saved edits as `insert`, which
+would now change SQLite but be silently ignored on the server. Saved-session editing is outside
+v1; when it ships it needs a distinct UPDATE-by-id operation, row versions and attendee-removal
+semantics, not a re-sent insert. `saveSession` itself is unchanged.
+
+Attendees differ: their UPDATE policy asks for the same owned session and active child authority
+as their INSERT policy, and B2's group check accepts a historically held assignment for both.
+Their merge upsert therefore remains appropriate. The general lesson is to match the retry's
+database operation to the original intent: retrying a creation must not acquire edit semantics.
+
 ## Numbering writes when they leave, not when they are made
 
 A version is useful only if it measures the order we need to protect. One record can have several

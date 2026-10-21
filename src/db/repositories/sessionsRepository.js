@@ -333,25 +333,6 @@ export const createSessionsRepository = ({ database } = {}) => {
     return { savedFamilies };
   });
 
-  const updateSession = async (id, updates, keysToRemove = [], { transaction } = {}) => runWrite(transaction, async (txn) => {
-    const rows = await hydrateSessions(txn, [await txn.getFirstAsync('select * from sessions where id = ?', id)].filter(Boolean));
-    const existing = rows[0] || null;
-    if (!existing) return false;
-    const next = { ...existing, ...updates };
-    for (const key of keysToRemove) {
-      delete next[key];
-    }
-    await saveSession({
-      ...next,
-      // Local edits own their sync state, after both updates and key removal.
-      // saveSession applies this status to every attendee it rewrites too.
-      sync_status: 'pending',
-      synced: false,
-      last_sync_error: null,
-    }, { transaction: txn });
-    return true;
-  });
-
   const getUnsyncedRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync("select * from sessions where sync_status <> 'synced' order by created_at");
@@ -364,7 +345,6 @@ export const createSessionsRepository = ({ database } = {}) => {
     countSessionsOnDate,
     saveSession,
     saveHistoryPage,
-    updateSession,
     getUnsyncedRecords,
   };
 };

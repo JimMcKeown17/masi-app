@@ -20,6 +20,7 @@ const ALLOWLIST = {
   'src/services/observability.js:operationalErrorTimes': "keys include the actor's user id",
   // These sets contain fixed table/column names, never an EA's runtime data.
   'src/services/offlineSync.js:BATCHABLE_UPSERT_TABLES': 'device-level fixed sync policy',
+  'src/services/offlineSync.js:INSERT_OR_IGNORE_TABLES': 'device-level fixed sync policy',
   'src/db/repositories/rowVersion.js:IMMUTABLE_ASSIGNMENT_TABLES': 'device-level fixed sync policy',
   'src/db/repositories/rowVersion.js:VERSIONED_TABLES': 'device-level fixed sync policy',
   'src/services/offlineSync.js:UPDATE_PATCH_EXCLUDED_COLUMNS': 'device-level fixed sync policy',

@@ -242,6 +242,11 @@ const BATCHABLE_UPSERT_TABLES = new Set([
   'session_attendees',
   'time_entries',
 ]);
+
+// Assignment identity triggers forbid update-capable insert retries. A session's UPDATE policy
+// needs a landed attendee, so its insert retry must never take the UPDATE path either.
+const INSERT_OR_IGNORE_TABLES = new Set([...IMMUTABLE_ASSIGNMENT_TABLES, 'sessions']);
+
 export const SYNC_BATCH_LIMITS = Object.freeze({
   maxBatchRecords: 100,
   maxFallbackRecordsPerPass: 25,
@@ -857,7 +862,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       onConflict: config.onConflict || 'id',
       ignoreDuplicates:
         outboxRecord.operation === 'insert'
-        && IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName),
+        && INSERT_OR_IGNORE_TABLES.has(config.tableName),
     });
 
   return error ? { success: false, error } : { success: true };
@@ -873,7 +878,7 @@ const runBatchServerOperation = async (supabaseClient, config, outboxRecords) =>
     .upsert(payloads, {
       onConflict: config.onConflict || 'id',
       ignoreDuplicates:
-        IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName)
+        INSERT_OR_IGNORE_TABLES.has(config.tableName)
         && outboxRecords.every((record) => record.operation === 'insert'),
     });
 

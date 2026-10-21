@@ -129,6 +129,44 @@ describe('session group sync', () => {
     expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
   });
 
+  test('a session whose response was lost is retried before its attendees, and the family lands in ordinary passes', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-20T08:00:00.000Z'));
+    await createSessionsRepository({ database: db }).saveSession(LESSON);
+    server.loseNextResponse('sessions', 'lesson-1');
+    const terminalCount = async () => (
+      await db.getFirstAsync("select count(*) as count from sync_outbox where status = 'terminal'")
+    ).count;
+
+    await engine.syncAll(); // pass 1: committed on the server, response lost
+    expect(server.rows.sessions.has('lesson-1')).toBe(true);
+    expect(await db.getFirstAsync("select status, retry_count from sync_outbox where table_name = 'sessions'"))
+      .toEqual({ status: 'failed', retry_count: 1 });
+    expect(await db.getAllAsync("select status, retry_count from sync_outbox where table_name = 'session_attendees'"))
+      .toEqual([{ status: 'pending', retry_count: 0 }, { status: 'pending', retry_count: 0 }]);
+    expect(server.rows.session_attendees.size).toBe(0);
+    expect(await terminalCount()).toBe(0);
+
+    jest.setSystemTime(new Date('2026-10-20T08:16:00.000Z'));
+    await engine.syncAll(); // pass 2: the parent is due before its attendees
+    expect(await terminalCount()).toBe(0);
+    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
+    expect(server.rows.sessions.get('lesson-1').group_id).toBe('group-1');
+    expect([...server.rows.session_attendees.values()]
+      .map(({ child_id, group_id }) => ({ child_id, group_id }))
+      .sort((a, b) => a.child_id.localeCompare(b.child_id)))
+      .toEqual([{ child_id: 'child-1', group_id: 'group-1' }, { child_id: 'child-2', group_id: 'group-1' }]);
+    expect(await db.getAllAsync(
+      "select sync_status from sessions where id = 'lesson-1' union all select sync_status from session_attendees where session_id = 'lesson-1'",
+    )).toEqual([{ sync_status: 'synced' }, { sync_status: 'synced' }, { sync_status: 'synced' }]);
+    const sessionCalls = server.calls.filter((call) => call.tableName === 'sessions');
+    expect(sessionCalls).toHaveLength(2);
+    for (const call of sessionCalls) {
+      expect(call.options).toEqual(expect.objectContaining({ onConflict: 'id', ignoreDuplicates: true }));
+    }
+    expect(await db.getAllAsync('select * from terminal_observations')).toEqual([]);
+  });
+
   const endLocalAssignment = async (eaUserId = 'user-1') => {
     await db.runAsync(`update group_ea_assignments set assigned_at = '2026-10-19T12:00:00.000Z',
       unassigned_at = '2026-10-20T12:00:00.000Z',

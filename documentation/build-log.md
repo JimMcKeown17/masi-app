@@ -1202,10 +1202,64 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
   `git diff --check` passed. Only the engine, its two planned test files and the four named
   standing/evidence docs changed; the plan, spec, migrations and package files are unchanged.
 
+- **2026-10-21 — B2 Task 6: an insert retry must not ask for UPDATE rights.** Added the private
+  `INSERT_OR_IGNORE_TABLES` set (immutable assignments plus sessions) and used it in single and
+  batch dispatch. Only inserts use ignore-duplicates; sessions remain unbatched, attendees retain
+  merge upsert, and immutable-assignment classification, batching and version-stamping rules are
+  unchanged. Deleted the unused `sessionsRepository.updateSession`; `saveSession` is unchanged.
+  An edit re-saved as insert would otherwise be acknowledged locally but ignored on the server.
+- Task 6 TDD, all commands prefixed with
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (Node v20.19.4):
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js`
+  RED exited 1: 2 failed suites, 2 failed / 24 passed tests (26 total; 9.621 s). The committed
+  parent lost its response; pass 2 retried a merge before any attendee existed and left one
+  terminal session. The insert-only repository test found the old edit method. Same-command
+  GREEN exited 0: 2 suites / 26 tests passed (16.123 s). The real-SQLite regression now proves
+  first-pass committed parent/failed outbox, untouched pending attendees, then two insert-or-ignore
+  parent calls and an entirely synced family in pass 2, with no terminal transition or manual retry.
+- Extended `sessionGroupServer` with commit-then-lost-response behavior, group checks before
+  conflict handling, ignore-duplicates on every table, and the attendee-dependent session merge
+  refusal. Its scope remains a synthetic boundary, not real RLS. The requested focused command
+  `npx jest offlineSync syncOutboxRepository rowVersionSend activePairDomainIds` passed
+  10 suites / 158 tests (22.957 s), exit 0. Plan Step 4's `npm run test:integration` passed
+  54 suites / 577 tests (140.018 s), exit 0.
+- Added `insertOrIgnoreSql` and the four prescribed PostgreSQL cases:
+  `session-insert-retry-before-attendees`, `session-insert-retry-still-checks-the-row`,
+  `session-merge-retry-before-attendees`, `attendee-merge-retry-after-commit`. Each uses a separate
+  rolled-back actor transaction with setup as postgres. `node --check scripts/session-group-postgres-harness.cjs`
+  passed, exit 0. `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` passed
+  1 suite / 13 tests (0.583 s), exit 0. **Step 6, controller (local Docker PG17, port 65433,
+  `PGTZ=UTC`):** `npm run -s verify:session-group:postgres` exit 0 with 31 cases, the four new ones
+  included; `session-insert-retry-still-checks-the-row` returned `42501` as required. Every other
+  PostgreSQL harness still passes: `history-authorization` 31, `upload-contract` 6 cases plus
+  location 34, rowVersion 22 and timeEntryForward 39, `organisation-label` 23, `support-incident` 18,
+  `assessment-results` 53, `ea-access` 43. PostgREST HTTP and hosted proof remain later gates.
+- Updated the operation/session/B2 contract and added the learning chapter "Retrying an insert
+  must not ask for edit rights". Added the decision row and reconciled the existing lost-response
+  Bug and Gap row rather than duplicating the same gap. Saved-session editing remains out of v1
+  and must add a versioned UPDATE-by-id operation when it ships. No plan/spec checkboxes, schema,
+  migration, package or unrelated application files changed. Step 8's commit, hosted Supabase,
+  EAS, native-device and PR work remain outside this task's implementation authority.
+- Task 6 first full unit run: `npx jest --silent --maxWorkers=25%` exited 1 with
+  1 failed / 349 passed suites, 1 failed / 4,239 passed tests (4,240 total; 72.547 s).
+  `moduleStateAllowlist.test.js` required an actor-lifecycle treatment for the plan's new
+  module-private `INSERT_OR_IGNORE_TABLES`. Isolated `npx jest __tests__/moduleStateAllowlist.test.js`
+  confirmed the same failure (1 suite / 1 test failed; 0.804 s). Added one inventory entry beside
+  the existing fixed sync-policy sets: `device-level fixed sync policy`. This is fixed table-name
+  policy, never EA runtime data; the exact-inventory guard remains unchanged. Same-command GREEN
+  passed 1 suite / 1 test (0.964 s), exit 0. This test-only addition is the plan's one omitted
+  dependency, not an unrelated failure or a change to the signed-in EA handle contract.
+- Task 6 final integration gate (same Node 20 PATH): `npm run test:integration --silent` passed
+  54 suites / 577 tests (67.530 s), exit 0. No unrelated failures or isolated reruns were needed.
+- Task 6 final full unit rerun (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,240 tests (95.826 s), exit 0. `git diff --check` passed. Ten files changed:
+  the nine Task 6 paths plus the one-line actor-lifecycle inventory entry required by its new set.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | **Session inserts are insert-or-ignore by id; `updateSession` deleted** (B2 Task 6). | A committed session whose response is lost retries before its attendees; merge upsert invokes `sessions_update_active_assignment_after_attendee` and can go terminal because no attendee has landed. Insert-or-ignore never changes stored content, still runs INSERT checks and acknowledges no error, as for immutable assignment inserts. Sessions remain unversioned and unbatched. The unused edit method re-saved as insert and would silently lose server edits, so it is removed; attendees retain merge upsert because their UPDATE policy needs no extra authority. Four new PostgreSQL cases retain controller execution as a separate gate. | saved-session editing ships |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |
@@ -1503,8 +1557,7 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 | 2026-10-20 | Assessment Results reviews found stale undo statistics, an old-shape mastery-ranking loader, coverage input-shape sniffing and UTC-day grade attribution. | Fixed in Tasks 2, 10 and 12: recompute maximum streak from kept marks; load typed letter results including other recorders; split `getAssessmentCoverage`/`getCoverageFromCounts`; use SAST `toLocalDateString` for membership edges. Tests/checkpoints are in the Tasks 1–12 verification section. | Verify the real screen loader and date boundary, not only a helper fed ideal fixtures. |
 | 2026-10-20 | Task 6 draft docs still said controller GREEN and phone cutover were pending; programme naming assumed a separate Core Literacy R–3 row. | Reconciled in Task 13: controller reports PG17 53/53 plus five existing harnesses GREEN, Tasks 7–12 are committed, and the read-only preflight identified combined `code = literacy`. Expired shell token was bypassed with stored CLI login (`env -u SUPABASE_ACCESS_TOKEN`) for that read-only probe. Hosted migration remains unapplied. | Source, controller-local PostgreSQL proof, hosted state and device proof remain separate evidence. |
 | 2026-10-20 | Remaining Plan 1 boundaries: SQLite v15 omits the server's stopped-reason and programme-default-pair CHECKs; the existing mastery writer still sends `updated_at`; history pull and native swipe-back are not proven by these tests. | Run status/completion/purpose-window CHECKs match; family validation enforces stopped-reason shape before enqueue. No schema or mastery writer change in Task 13. New server triggers replace mastery timestamps; Plan 2 owns its writer/re-key, Plan 3 owns pull, and Task 14 owns hosted/build/device gates. | Do not describe every SQLite/server constraint or every phone timestamp writer as identical. The omitted CHECKs remain a recorded schema difference, not a claimed fix. |
-
-| 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by the B2 plan writer, confirmed by Codex). The retry is an upsert; when the row exists PostgreSQL takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so 42501 with no pending evidence marks the session terminal. Common, not rare: the first retry is 5 s and passes run every 30 s. Pre-existing since `20260521140331`. | Not fixed yet. B2 plan Task 6 (a release prerequisite) makes session inserts insert-or-ignore by id, like the immutable assignment inserts, and deletes the unused `sessionsRepository.updateSession`; Codex approved the plan in round 2. | A retry must never need more authority than the first attempt. |
+| 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by Codex round 1 of the B2 plan; pre-existing since `20260521140331_masi_rls_review_fixes.sql:89`). Merge upsert takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so `42501` with no pending evidence marks the session terminal. The first retry is 5 s and ordinary passes retry the parent first. | **2026-10-21 — fixed locally by B2 Task 6:** session inserts use insert-or-ignore by id in dispatch, and the unused `sessionsRepository.updateSession` is deleted to prevent silently ignored edits. `sessionGroupSync.test.js` pins commit/lost response/two-pass convergence with no terminal transition; `sessionsRepository.test.js` pins the absence of the edit method. Four new cases in `session-group-postgres-harness.cjs` cover ignored retry before attendees, proposed-row checks, the old merge denial and attendee merge replay; controller PostgreSQL execution remains open, separate from local proof. | A retry must never need more authority than the first attempt. Saved-session editing must add UPDATE-by-id semantics and row versions, not reuse insert. |
 | 2026-10-20 | **The reference refresh cannot switch the active academic year if the new year arrives first** (found by Codex on AR Plan 3). `pullReferenceDataRows` fetches years unordered and `replaceFromServer` upserts them one by one against the unique active-year index, so the transaction fails with `SQLITE_CONSTRAINT_UNIQUE` and the phone keeps the old year. Would hit every phone at a January rollover. | Not fixed yet. AR Plan 3 adds a task making the switch atomic and order-independent, tested with both response orders through the real repository. | A unique index plus row-by-row upserts hides an ordering assumption; apply deactivations before activations in one transaction. |
 
 ---
