@@ -45,6 +45,25 @@ function lintReadablePack(pack, errors) {
   if (!PACK_CHANNELS.includes(source.channel)) {
     errors.push('pack_channel: channel must be release or preview.');
   }
+  const stepPaths = new Map();
+  let maxLetterStep = 0;
+  for (const field of ['letter_steps', 'sound_steps']) {
+    for (const [index, entry] of (Array.isArray(source[field]) ? source[field] : []).entries()) {
+      if (!isRecord(entry)) continue;
+      if (!Number.isSafeInteger(entry.step) || entry.step < 1) {
+        errors.push(`step_id: ${field}[${index}].step must be a positive safe integer.`);
+        continue;
+      }
+      const path = `${field}[${index}].step`;
+      if (stepPaths.has(entry.step)) {
+        errors.push(`step_id_duplicate: ${path} repeats step ${entry.step} from ${stepPaths.get(entry.step)}.`);
+      } else stepPaths.set(entry.step, path);
+      if (field === 'letter_steps') maxLetterStep = Math.max(maxLetterStep, entry.step);
+      else if (entry.step <= maxLetterStep) {
+        errors.push(`sound_step_order: ${path} must be greater than every letter_steps[].step (maximum ${maxLetterStep}).`);
+      }
+    }
+  }
   if (!Array.isArray(source.word_bank)) {
     errors.push('word_bank_shape: word_bank must be an array.');
   } else {

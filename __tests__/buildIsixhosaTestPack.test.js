@@ -208,6 +208,15 @@ test('runCli writes canonical JSON only after validating all source content', ()
   expect(readSource).toHaveBeenCalledWith(booksRepo);
   expect(fs.readFileSync(out, 'utf8')).toBe(`${JSON.stringify(build(input), null, 2)}\n`);
 });
+test('runCli refuses duplicate step ids in its final lint and preserves existing output', () => {
+  const input = fixture();
+  input.languagePack.letterSteps[11].step = 11;
+  const booksRepo = writeFixture(input); const out = path.join(booksRepo, 'output.json');
+  fs.writeFileSync(out, 'existing output');
+  expect(() => runCli(['--books-repo', booksRepo, '--out', out, '--version', '1'], { readSource: () => sourceCommit }))
+    .toThrow(/step_id_duplicate: letter_steps\[11\]\.step/);
+  expect(fs.readFileSync(out, 'utf8')).toBe('existing output');
+});
 test.each(['checker step', 'lint'])('runCli leaves an existing output unchanged on %s failure', failure => {
   const input = fixture();
   if (failure === 'checker step') input.wordbankRows[1].decodable_step = '2';

@@ -19,6 +19,52 @@ test('a valid pack passes', () => {
   expect(lintMasiPack(validPack())).toEqual({ ok: true, errors: [] });
 });
 
+test.each(['letter_steps', 'sound_steps'].flatMap(field =>
+  [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map(step => [field, step])))('%s rejects invalid step id %p', (field, step) => {
+  const pack = validPack();
+  pack[field][1].step = step;
+  const result = lintMasiPack(pack);
+  expect(result.ok).toBe(false);
+  expect(result.errors).toContain(`step_id: ${field}[1].step must be a positive safe integer.`);
+});
+
+test.each([
+  ['letter_steps', 11, 11, 'letter_steps[10].step'],
+  ['sound_steps', 0, 12, 'letter_steps[11].step'],
+  ['sound_steps', 1, 13, 'sound_steps[0].step'],
+])('%s[%i] rejects a duplicate step id %i', (field, index, step, previousPath) => {
+  const pack = validPack();
+  pack[field][index].step = step;
+  const result = lintMasiPack(pack);
+  expect(result.ok).toBe(false);
+  expect(result.errors).toContain(`step_id_duplicate: ${field}[${index}].step repeats step ${step} from ${previousPath}.`);
+});
+
+test('sound steps must follow every letter step', () => {
+  const pack = validPack();
+  pack.letter_steps[11].step = 24;
+  const result = lintMasiPack(pack);
+  expect(result.ok).toBe(false);
+  expect(result.errors).toContain('sound_step_order: sound_steps[0].step must be greater than every letter_steps[].step (maximum 24).');
+});
+
+test('valid step arrays may be listed out of order', () => {
+  const pack = validPack();
+  pack.letter_steps.reverse();
+  pack.sound_steps.reverse();
+  const before = JSON.parse(JSON.stringify(pack));
+  expect(lintMasiPack(deepFreeze(pack))).toEqual({ ok: true, errors: [] });
+  expect(pack).toEqual(before);
+});
+
+test('valid step ids may have gaps and include the maximum safe integer', () => {
+  const pack = validPack();
+  const renumber = step => step === 1 ? 1 : step * 2;
+  for (const entry of [...pack.letter_steps, ...pack.sound_steps, ...pack.word_bank]) entry.step = renumber(entry.step);
+  pack.sound_steps[10].step = Number.MAX_SAFE_INTEGER;
+  expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
+});
+
 test('pack language names map to the Masi codes', () => {
   expect(PACK_LANGUAGE_CODES).toEqual({ isixhosa: 'xh', english: 'en', afrikaans: 'af' });
   expect(Object.isFrozen(PACK_LANGUAGE_CODES)).toBe(true);

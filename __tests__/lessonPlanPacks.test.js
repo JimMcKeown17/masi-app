@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { BUNDLED_PACKS, CURRENT_PACK_IDS, PACK_LANGUAGE_CODES, getPack, getPackById, lintMasiPack }
+import { BUNDLED_PACKS, CURRENT_PACK_IDS, PACK_LANGUAGE_CODES, getPack, getPackById, lintMasiPack, createPackRegistry }
   from '../src/lessonPlan/packs';
 import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../src/utils/assessmentRegistry';
 
@@ -126,8 +126,36 @@ test.each([undefined, null, '', 'isixhosa-integrated-v1', 'integrated-sequence-i
 test('getPackById resolves every bundled release pack', () => {
   for (const pack of BUNDLED_PACKS.filter(p => p.channel === 'release')) {
     expect(getPackById(pack.id)).toBe(pack);
-    expect(getPack(PACK_LANGUAGE_CODES[pack.language])).toBe(pack);
   }
+});
+
+test('getPack resolves the explicitly current release id for each language', () => {
+  for (const [code, id] of Object.entries(CURRENT_PACK_IDS.release)) {
+    expect(getPack(code)).toBe(getPackById(id));
+  }
+});
+
+test('a new current release keeps the old release resolvable and both versions frozen and unchanged', () => {
+  const oldPack = JSON.parse(JSON.stringify(getPack('en')));
+  const newPack = { ...JSON.parse(JSON.stringify(oldPack)), id: 'english-interim-letters-v2' };
+  const before = JSON.parse(JSON.stringify([newPack, oldPack]));
+  const registry = createPackRegistry([newPack, oldPack], {
+    release: { en: newPack.id }, preview: {},
+  });
+
+  expect(registry.getPack('en')).toBe(newPack);
+  expect(registry.getPackById(newPack.id)).toBe(newPack);
+  expect(registry.getPackById(oldPack.id)).toBe(oldPack);
+  expect(registry.BUNDLED_PACKS).toEqual([newPack, oldPack]);
+  for (const pack of registry.BUNDLED_PACKS) {
+    expect(Object.isFrozen(pack)).toBe(true);
+    expect(Object.isFrozen(pack.letter_steps[0].new_letters)).toBe(true);
+    expect(() => pack.letter_steps[0].new_letters.push('q')).toThrow(TypeError);
+    expect(() => pack.word_bank.push({ text: 'am', step: 1 })).toThrow(TypeError);
+  }
+  expect(registry.BUNDLED_PACKS).toEqual(before);
+  expect(registry.getPack('en')).toBe(newPack);
+  expect(registry.getPackById(oldPack.id)).toBe(oldPack);
 });
 
 test('returned packs are deeply frozen', () => {
