@@ -79,12 +79,28 @@ describe('LetterMasteryPanel', () => {
     expect(masteryRepository.updateLetterMasteryRecord).not.toHaveBeenCalled();
   });
 
-  test.each([null, 'Afrikaans', 'isiZulu'])('shows no letter grid for unsupported class language %s', async (homeLanguage) => {
+  test.each([null, 'isiZulu'])('shows no letter grid for unsupported class language %s', async (homeLanguage) => {
     const screen = render(<LetterMasteryPanel child={child} classItem={{ home_language: homeLanguage }} />);
     expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
     expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
     expect(assessmentsRepository.latestLetterResult).not.toHaveBeenCalled();
     expect(masteryRepository.getLetterMastery).not.toHaveBeenCalled();
+  });
+
+  test('an Afrikaans class shows Afrikaans confirmations only and saves new marks as Afrikaans', async () => {
+    masteryRepository.getLetterMastery.mockResolvedValue([
+      { id: 'rec-a', child_id: child.id, letter: 'a', language: 'Afrikaans', _deleted: false },
+      { id: 'rec-s', child_id: child.id, letter: 's', language: 'English', _deleted: false },
+    ]);
+    const screen = render(<LetterMasteryPanel child={child} classItem={{ id: 'class-af', home_language: 'Afrikaans' }} />);
+    expect(await screen.findByLabelText('a, taught by coach')).toBeTruthy();
+    expect(assessmentsRepository.latestLetterResult).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'af' });
+    expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
+    expect(screen.getByText('1 / 26 letters mastered')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('m, not mastered'));
+    await waitFor(() => expect(masteryRepository.saveLetterMasteryRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ letter: 'm', language: 'Afrikaans' })
+    ));
   });
 
   test('reactivates a soft-deleted record on toggle-on instead of creating a duplicate', async () => {

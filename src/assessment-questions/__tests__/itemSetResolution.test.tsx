@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import {
+  CURRENT_ITEM_SETS,
   LetterSoundsQuestion,
   LetterWritingFromPicturesQuestion,
   ListenAndAnswerStoryQuestion,
@@ -31,6 +32,23 @@ const QUESTIONS: Array<[string, React.ComponentType<QuestionProps>]> = [
 ];
 
 describe('item-set resolution', () => {
+  test('the battery path has no Afrikaans default: LetterSoundsQuestion without an item set shows the missing card', () => {
+    const onComplete = jest.fn();
+    const { getByText } = render(<LetterSoundsQuestion language="af" onComplete={onComplete} />);
+    expect(getByText('This test has no card for this language yet.')).toBeTruthy();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  test('the Afrikaans cards the host passes render: Grid A from l, the word card from die', () => {
+    const letters = render(<LetterSoundsQuestion language="af" itemSet={CURRENT_ITEM_SETS.letter_sounds.af} onComplete={jest.fn()} />);
+    fireEvent.press(letters.getByText('Start'));
+    expect(letters.getByLabelText('l, current')).toBeTruthy();
+    expect(letters.getByTestId('letter-row-5')).toBeTruthy();
+    const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} captureMode="sequential" onComplete={jest.fn()} />);
+    fireEvent.press(words.getByText('Start'));
+    expect(words.getByLabelText('die, current')).toBeTruthy();
+  });
+
   test.each(QUESTIONS)(
     '%s shows the missing-card state for isiZulu without completing',
     (_name, Question) => {

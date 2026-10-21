@@ -148,10 +148,20 @@ describe('assessment entry routing', () => {
     },
   );
 
-  test('child results sends unknown languages to child select without a fallback', async () => {
+  test.each(['letter_sounds', 'word_reading'])('child results launches %s for an Afrikaans class in af', async (testCode) => {
     const navigation = makeNavigation();
     const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
       child, classItem: { ...classItem, home_language: 'Afrikaans' },
+    } }} />);
+    fireEvent.press(screen.getAllByText('Run assessment')[testCode === 'letter_sounds' ? 0 : 1]);
+    expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', { testCode, child, languageCode: 'af' });
+    await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
+  });
+
+  test('child results sends unknown languages to child select without a fallback', async () => {
+    const navigation = makeNavigation();
+    const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
+      child, classItem: { ...classItem, home_language: 'isiZulu' },
     } }} />);
     fireEvent.press(screen.getAllByText('Run assessment')[0]);
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', { testCode: 'letter_sounds' });

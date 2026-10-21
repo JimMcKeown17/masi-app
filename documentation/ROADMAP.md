@@ -751,7 +751,9 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   comparison draft was lost with its temporary folder and must be redone.
 - [ ] Yebo (Yeboneer) session form: deferred by Jim on 2026-09-23. Zazi iZandi sessions belong to
   the separate Zazi app, not Masi.
-- [ ] Replace placeholder EGRA word lists with authoritative English and isiXhosa content.
+- [ ] Replace placeholder EGRA word lists with authoritative English, isiXhosa and Afrikaans content
+  (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
+  becomes a new version).
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
   tested synced-table configuration path exists.
@@ -770,6 +772,9 @@ EA's 1–4). Release 1 scope and decisions:
 
 ### Integration and contract work
 
+- [ ] WelaPLUS host (Plan 3): do not offer WelaPLUS to an Afrikaans class until the battery has
+  Afrikaans (`battery/wela_plus_full.ts:49` lists `en`, `xh`). Start shows 'Not available in Afrikaans
+  yet', and the WelaPLUS language picker lists only the battery's languages (lesson-plan spec C22).
 - [ ] Finish design-token, capture-chrome and BottomSheet review for the full Battery Run host.
   The standalone letter/word host, shared sequential capture, family repositories and outbox
   ownership are integrated; this does not close the other Questions' host/device review.

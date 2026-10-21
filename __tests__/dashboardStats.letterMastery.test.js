@@ -77,7 +77,16 @@ describe('getLetterMasteryRanking — stored question items', () => {
       .toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
   });
 
-  test.each([null, undefined, '', 'Afrikaans', 'isiZulu'])(
+  test('an Afrikaans child counts Afrikaans results and confirmations only, out of 26', () => {
+    const afClass = { id: child.class_id, home_language: 'Afrikaans' };
+    const afResult = result({ language: 'af', items: [item('L', true), item('a', true), item('m', false)] });
+    const newerEnglish = result({ id: 'assessment-2', language: 'en', assessment_date: '2026-10-21', items: [item('z', true)] });
+    const confirmations = [{ child_id: child.id, language: 'Afrikaans', letter: 'k' }, { child_id: child.id, language: 'English', letter: 's' }];
+    expect(getLetterMasteryRanking([child], [afResult, newerEnglish], confirmations, [afClass]))
+      .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
+  });
+
+  test.each([null, undefined, '', 'isiZulu'])(
     'keeps the 26-letter scale but no mastery when the class language has no order: %s',
     (homeLanguage) => {
       const englishAssessment = result({ language: 'en' });

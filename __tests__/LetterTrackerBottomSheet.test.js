@@ -8,6 +8,7 @@ import { colors } from '../src/constants/colors';
 import { fontFamilies } from '../src/constants/typography';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
 import { MotionProvider } from '../src/context/MotionContext';
+import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
 import LetterTrackerBottomSheet from '../src/components/session/LetterTrackerBottomSheet';
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -66,6 +67,23 @@ describe('LetterTrackerBottomSheet', () => {
     expect(screen.getAllByText(/^[a-z]$/)).toHaveLength(26);
     fireEvent.press(screen.getByRole('button', { name: 'Done' }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('an Afrikaans tracker shows the Afrikaans order and confirmations and stamps af on new marks', async () => {
+    jest.useFakeTimers({
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+    jest.setSystemTime(new Date(NOW));
+    masteryRepository.getLetterMastery.mockResolvedValue([{ ...stored('a'), language: 'Afrikaans' }, stored('s')]);
+    const onChangesUpdate = jest.fn();
+    const screen = renderSheet({ languageCode: 'af', onChangesUpdate });
+    expect(await screen.findByLabelText('a, taught by coach')).toBeTruthy();
+    expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
+    expect(screen.getAllByText(/^[a-z]$/).map(node => node.props.children)).toEqual(PEDAGOGICAL_ORDERS.af);
+    expect(screen.getByText('Amahle Dlamini · 1/26 letters')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('m, not mastered'));
+    expect(onChangesUpdate).toHaveBeenCalledWith({ m: { mastered: true, languageCode: 'af', madeAt: NOW } });
+    jest.useRealTimers();
   });
 
   test('pending loading keeps the title and subtitle and hides the legend', async () => {
