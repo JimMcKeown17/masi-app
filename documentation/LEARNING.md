@@ -1940,3 +1940,37 @@ constraints for another reason: RETURNS TABLE columns are PL/pgSQL variables. An
 ON CONFLICT (correction_id) can collide with the output variable and raise 42702 under the default
 plpgsql.variable_conflict setting. Named constraints, qualified column references and the
 function-local use_column directive make that name resolution deliberate.
+
+## 2026-10-21 — Mastery history compares accepted states; handover removes coverage atomically
+
+A phone holds two kinds of information about a mastery correction. The visible value may be
+the EA's latest edit, while `server_changed_at` and `server_correction_id` record the last state
+accepted by the server. A history page must compare against that accepted tuple. Comparing it
+with the edit's own timestamp would let a wrong phone clock block convergence. Conversely, a
+page fetched before a newer acknowledgement must not undo the newly accepted value. Exact
+microseconds and a lowercase UUID tie-break preserve the server's ordering without rounding
+different corrections into the same millisecond. An outstanding correction is still owed, so
+the pull leaves its value and outbox slot alone. The existing local writer's ordering is unchanged.
+
+Refusal evidence is different from outstanding work. A terminal outbox row says a correction
+was refused; it does not own the accepted value forever. The merge therefore ignores terminal
+slots as blockers and restores a terminal domain row from an equal or newer accepted tuple.
+The outbox evidence stays visible in needs-attention. Once restored, the domain row follows the
+ordinary strictly-newer rule, even though the refusal record still exists. This separates
+recovering what the child knows from retaining evidence of what failed.
+
+An empty page says nothing about why a row was absent. Only the validated relationship
+acknowledgement authorizes ending a delivery assignment. That reconcile transaction can then
+delete the ended child's synced mastery when no correction is still owed. Pending, failed and
+terminal domain rows remain. The delete sits behind the assignment reconcile's existing
+mass-end breaker; if the breaker stops the handover, it also stops the delete. A failed coverage
+write rolls back both the assignment end and the mastery delete, and per-row fallback performs
+neither reconcile action.
+
+Deleting the rows is only half the handover. A completed timestamp cursor may already have
+passed their old server timestamps, so a later delta cannot recover them when the child returns.
+The same transaction must remove the child from the mastery cursor's covered sets. Regaining
+that child then counts as a gain and starts a full re-walk, even if the intervening run was
+fresh and wrote nothing. Each walk write also bounds coverage using grants read inside its own
+transaction, so a page waiting across the handover cannot restore stale coverage. Assessment
+and run rows are not deleted by a delivery handover, so their cursors need no such drop.

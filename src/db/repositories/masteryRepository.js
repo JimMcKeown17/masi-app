@@ -9,11 +9,39 @@ import {
   mapDomainRow,
 } from './domainRepositoryUtils';
 import { chunkArray, sqlPlaceholders, upsertRecord } from './sqliteRepositoryUtils';
+import { serverTimestampMicros, compareServerTuples } from '../../utils/serverTimestamps';
+import { ensureHistoryReferenceChildren, insertOrIgnoreRows, selectRowsByIds } from './historyPageApply';
+import { removeFromHistoryCoverage, resolveHistoryPullState } from './historyCoverage';
+import { createSyncStateRepository } from './syncStateRepository';
 
 const MASTERY_WRITE_COLUMNS = [
   'id', 'child_id', 'letter', 'language', 'confirmed', 'changed_at', 'correction_id',
   'changed_by', 'programme_id', 'created_at', 'updated_at', 'sync_status', 'last_sync_error',
 ];
+
+export const letterMasteryHistoryScope = (userId) => `letter_mastery_pull:${userId}`;
+
+export const deleteUndeliveredLetterMastery = async (txn, { userId, childIds }) => {
+  if (!childIds.length) return 0;
+  const undelivered = await txn.getAllAsync(`
+    select json_each.value as child_id from json_each(?) where not exists (
+      select 1 from child_ea_assignments a
+      where a.child_id = json_each.value and a.user_id = ? and a.unassigned_at is null
+    )
+  `, JSON.stringify([...new Set(childIds)]), userId);
+  const ids = undelivered.map((row) => row.child_id);
+  if (!ids.length) return 0;
+  const result = await txn.runAsync(`
+    delete from letter_mastery
+    where child_id in (select value from json_each(?)) and sync_status = 'synced'
+      and not exists (
+        select 1 from sync_outbox o where o.table_name = 'letter_mastery'
+          and o.record_id = letter_mastery.id and o.status in ('pending', 'failed', 'in_flight')
+      )
+  `, JSON.stringify(ids));
+  await removeFromHistoryCoverage(txn, { scope: letterMasteryHistoryScope(userId), coverageKey: 'childIds', ids });
+  return result.changes;
+};
 
 const mapMastery = (row) => {
   if (!row) return null;
@@ -163,7 +191,70 @@ export const createMasteryRepository = ({ database } = {}) => {
     return rows.map(mapMastery);
   };
 
-  return { setLetterMastery, getLetterMastery, getUnsyncedRecords };
+  const saveHistoryPage = async (rows, { scope, pullState, admit }) => {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    for (const row of rows) {
+      if (serverTimestampMicros(row?.changed_at) === null
+        || typeof row.correction_id !== 'string' || !uuid.test(row.correction_id)
+        || typeof row.confirmed !== 'boolean'
+        || typeof row.letter !== 'string' || !row.letter.trim()
+        || typeof row.language !== 'string' || !row.language.trim()) {
+        throw Object.assign(new TypeError('Invalid pulled letter mastery'), { kind: 'query' });
+      }
+    }
+    return runRepositoryTransaction(database, async (txn) => {
+      if (admit && !admit()) throw Object.assign(new Error('Letter mastery history run cancelled'), { kind: 'cancelled' });
+      await ensureHistoryReferenceChildren(txn, rows);
+      const ids = rows.map((row) => row.id);
+      const existing = await selectRowsByIds(txn, 'letter_mastery', ids);
+      const outstanding = new Set((await txn.getAllAsync(`
+        select record_id from sync_outbox where table_name = 'letter_mastery'
+          and status in ('pending', 'failed', 'in_flight')
+          and record_id in (select value from json_each(?))
+      `, JSON.stringify(ids))).map((row) => row.record_id));
+      const absent = rows.filter((row) => !existing.has(row.id));
+      await insertOrIgnoreRows(txn, {
+        table: 'letter_mastery',
+        columns: [...MASTERY_WRITE_COLUMNS, 'server_updated_at', 'server_changed_at', 'server_correction_id'],
+        rows: absent.map((row) => ({ ...row, confirmed: row.confirmed ? 1 : 0,
+          sync_status: 'synced', last_sync_error: null, server_updated_at: row.updated_at,
+          server_changed_at: row.changed_at, server_correction_id: row.correction_id })),
+      });
+      let applied = 0;
+      let skipped = 0;
+      for (const row of rows) {
+        const local = existing.get(row.id);
+        if (!local) continue;
+        if (['pending', 'failed'].includes(local.sync_status) || outstanding.has(row.id)) {
+          skipped += 1;
+          continue;
+        }
+        const order = local.server_changed_at == null || local.server_correction_id == null ? null
+          : compareServerTuples([row.changed_at, row.correction_id], [local.server_changed_at, local.server_correction_id]);
+        if (!['synced', 'terminal'].includes(local.sync_status)
+          || !(order === null || order === 1 || (order === 0 && local.sync_status === 'terminal'))) {
+          skipped += 1;
+          continue;
+        }
+        await txn.runAsync(`
+          update letter_mastery set confirmed = ?, changed_at = ?, correction_id = ?, changed_by = ?,
+            programme_id = ?, created_at = ?, updated_at = ?, server_updated_at = ?,
+            server_changed_at = ?, server_correction_id = ?, sync_status = 'synced', last_sync_error = null
+          where id = ?
+        `, row.confirmed ? 1 : 0, row.changed_at, row.correction_id, row.changed_by,
+        row.programme_id ?? null, row.created_at, row.updated_at, row.updated_at,
+        row.changed_at, row.correction_id, row.id);
+        applied += 1;
+      }
+      await createSyncStateRepository({ database }).setPullState(
+        scope, await resolveHistoryPullState(txn, pullState), { transaction: txn }
+      );
+      if (admit && !admit()) throw Object.assign(new Error('Letter mastery history run cancelled'), { kind: 'cancelled' });
+      return { inserted: absent.length, applied, skipped };
+    });
+  };
+
+  return { setLetterMastery, getLetterMastery, getUnsyncedRecords, saveHistoryPage };
 };
 
 export const masteryRepository = createMasteryRepository();

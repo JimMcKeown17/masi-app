@@ -21,6 +21,7 @@ import {
 } from './domainRepositoryUtils';
 import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 import { normalizeGender } from '../../constants/options';
+import { deleteUndeliveredLetterMastery } from './masteryRepository';
 
 const CHILD_COLUMNS = [
   'id',
@@ -152,8 +153,9 @@ export const createChildrenRepository = ({ database } = {}) => {
           acknowledgedIdsJson
         )
       )?.count,
-      apply: async (txn) => (
-        await txn.runAsync(`
+      apply: async (txn) => {
+        const children = await txn.getAllAsync(`select distinct child_id ${absentSql}`, userId, acknowledgedIdsJson);
+        const result = await txn.runAsync(`
           update child_ea_assignments
           set unassigned_at = ?,
               updated_at = ?
@@ -161,8 +163,10 @@ export const createChildrenRepository = ({ database } = {}) => {
             and unassigned_at is null
             and sync_status = 'synced'
             and id not in (select value from json_each(?))
-        `, pulledAt, pulledAt, userId, acknowledgedIdsJson)
-      ).changes,
+        `, pulledAt, pulledAt, userId, acknowledgedIdsJson);
+        await deleteUndeliveredLetterMastery(txn, { userId, childIds: children.map((row) => row.child_id) });
+        return result.changes;
+      },
     });
   };
 

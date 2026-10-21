@@ -1951,10 +1951,79 @@ it is an internal `HistoryRunStop`. Task 5 returns the specified query-classifie
 the walker remains outside this task's files. The Bug And Gap Register records this for the
 history-wiring task. The failure still blocks completeness; the gap is its reported category.
 
+#### Task 6: accepted-tuple mastery page merge and atomic handover delete
+
+**Scope:** `serverTimestamps.js`, mastery page apply/scope/delete exports, the child EA reconcile
+apply callback, the new timestamp and real-SQLite mastery suites, expanded reconcile tests,
+integration registration, contract map and LEARNING. Task 5 is `9bb717a`. Plan 2's correction
+writer, reader and acknowledgement ordering remain byte-for-byte unchanged; panel review fixes
+and accepted risk A3 remain the controller's later merge.
+
+The timestamp helper parses whole seconds separately from 0–6 fractional digits, normalizes
+the explicit offset, and uses integer microseconds with a safe-number check. It rejects invalid
+calendar dates, malformed/offsetless timestamps and unsafe results, including negative-epoch
+and exact-tie coverage. Lowercase UUID ordering breaks time ties as on the server. Incoming
+timestamp strings are stored raw, never rewritten through millisecond precision.
+
+Mastery pages validate before writing and commit references, values and resolved cursor in one
+writer transaction, with entry/final actor admission checks. One current-row lookup and one
+outstanding-slot lookup precede the merge. Pending/failed values and outstanding corrections
+are untouched. Synced values require a strictly newer accepted server tuple; terminal values
+accept an equal tuple too, and null server ordering is lowest. A terminal outbox row never
+blocks recovery or later advancement and remains unchanged as needs-attention evidence.
+Tests run both correction-id orderings through the real MA001 terminal finalizer and apply
+a stale page after the real acknowledgement function. Empty pages delete nothing.
+
+The reconcile now captures the children it will end, runs the existing assignment update,
+then calls `deleteUndeliveredLetterMastery` in the same admitted transaction. The helper checks
+for any remaining active assignment, deletes only synced mastery with no pending/failed/in-flight
+slot, and drops the undelivered ids from all three mastery coverage sets even when it deletes
+no values. It uses at most four statements, preserves the last-pulled stamp and unrelated
+cursors, never creates a missing scope and never changes the outbox. The original assignment
+update's `changes` still defines `ended`. Breaker refusal, same-pair supersede and pending local
+ends preserve values/coverage. A trigger-induced coverage failure proves the assignment end
+and mastery deletion roll back together; per-row fallback does not reconcile.
+
+**Necessary test adaptation:** `masteryRepository.test.js:72-74` asserted the exact three-method
+Plan 2 API. Adding the plan-required fourth method made that single assertion fail in both full
+suites. Its expected list now includes `saveHistoryPage`; every correction-ordering assertion
+is unchanged. No production redesign or schema change was needed. The additional guards cover
+null/tied tuples, page cancellation/resolver rollback, direct-helper active/empty inputs, the
+four-statement ceiling, and coverage removal when every domain value must stay.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 4: `npm run test:integration -- __tests__/letterMasteryHistoryPage.test.js __tests__/pullReconcile.integration.test.js` — RED | Exit 1: 2 failed suites; 13 failed / 29 passed tests (42 total), 6.13 s. Ten page-saver cases lack the new method; three reconcile assertions retain mastery that should be deleted |
+| Step 4: `npx jest __tests__/serverTimestamps.test.js` — RED | Exit 1: 1 failed suite, 0 tests executed, 0.847 s; missing `serverTimestamps` module |
+| Same integration command — GREEN | Exit 0: 2 suites, 42 tests passed, 2.767 s |
+| Same timestamp command — GREEN | Exit 0: 1 suite, 14 tests passed, 1.361 s |
+| Same focused integration command after additional boundary guards | Exit 0: 2 suites, 48 tests passed, 3.638 s |
+| Step 6: `npx jest __tests__/masteryState.test.js __tests__/LetterMasteryPanel.test.js __tests__/productionBindingStatic.test.js` | Exit 0: 3 suites, 41 tests passed, 6.422 s |
+| Step 6: `npm run test:integration -- __tests__/pullReconcileOffline.integration.test.js __tests__/ChildrenContextPull.integration.test.js` | Exit 0: 2 suites, 14 tests passed, 3.218 s |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 355 passed suites; 1 failed / 4,431 passed tests (4,432 total), 68.944 s. Only the exact repository API list failed |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 62 passed suites; 1 failed / 739 passed tests (740 total), 61.812 s. Same API assertion |
+| `npx jest __tests__/masteryRepository.test.js` after updating the API expectation | Exit 0: 1 suite, 30 tests passed, 2.056 s |
+| `npm run test:integration -- __tests__/masteryRepository.test.js` after that adaptation | Exit 0: 1 suite, 30 tests passed, 2.092 s |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 356 suites, 4,432 tests passed, 67.281 s |
+| Final `npm run test:integration --silent` | Exit 0: 63 suites, 740 tests passed, 50.205 s |
+| Read-only comparison of HEAD/current function bodies | PASS: `setLetterMastery`, `getLetterMastery` and `applyCorrectionAcknowledgement` are byte-for-byte unchanged |
+| `git diff --check` | PASS |
+
+No unrelated timeout or suite failure occurred. The contract map records the merge, handover
+delete and coverage rule; LEARNING explains accepted state versus local edits and refusal
+evidence. Plan-accepted late-page/last-writer re-download residuals remain: a hidden row can
+reappear locally, but readers remain current-delivery-scoped and lost coverage makes the child's
+return re-walk. The existing Task 5 query-classification follow-up in `historyWalk` remains
+outside this task. Task 6 implementation is complete. The commit step, hosted Supabase work,
+PostgreSQL execution, EAS, devices and PRs are controller-owned and were not performed.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 Task 6 orders mastery pulls against accepted server tuples and couples handover deletion with coverage removal in the acknowledged assignment transaction. Terminal outbox evidence never owns or blocks the accepted value. | A stale page must not undo a newer acknowledgement, a phone clock must not block accepted-state convergence, and an old timestamp cursor cannot recover locally deleted rows unless the returning child is a coverage gain. The existing breaker admits both assignment ending and deletion together. | Device handover, stale-page or refusal-recovery gates expose convergence or visibility behavior outside the plan's accepted residuals. |
 | 2026-10-21 | AR Plan 3 Task 5 uses multi-row statements with a 999-binding ceiling for assessment-family and run page apply, including set-wise terminal run advancement. | The signed-in facade exposes individual SQL calls rather than native prepare handles. Bounded batched statements preserve one page/cursor transaction while avoiding per-item calls; present immutable families and locally started runs remain untouched. | A03s first-commit timing, production facade compatibility or larger page measurements require tuning within the same atomicity contract. |
 | 2026-10-21 | AR Plan 3 Task 4 shares CAP-004 traversal while retaining sessions as a historical-delivery config. Revocable-grant walks bound all coverage snapshots inside each page/failure write transaction; handover has a db-level removal helper. | Timestamp progress cannot establish authorization coverage. Reading grants in the committing writer prevents an in-flight page from restoring a grant lost while it waited, and preserving the session object contract keeps existing consumers stable. | Assessment/mastery integration, handover or device gates expose coverage restoration, cursor drift or a session regression. |
 | 2026-10-21 | AR Plan 3 Task 3 marks disposable Auth users with an admin-only fixture namespace and never persists fixture credentials. Recovery cleanup discovers that namespace and verifies exact zero residue; only seed-volume prints the gate credentials on a TTY. | A namespace survives a lost create response without a secret-bearing local manifest. Exact target validation and safe stage-only errors keep hosted credentials out of other output paths. Synthetic probe.1 content preserves the prescribed 61-item cap test without mislabelling published card data. | Controller hosted probe, cleanup/failure recovery or seeded device gates expose a fixture ownership or content-contract mismatch. |

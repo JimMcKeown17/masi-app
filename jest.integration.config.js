@@ -10,6 +10,7 @@ module.exports = {
     '<rootDir>/__tests__/masteryState.test.js',
     '<rootDir>/__tests__/LetterMasteryRankingScreen.test.js',
     '<rootDir>/__tests__/letterMasteryCorrectionSync.test.js',
+    '<rootDir>/__tests__/letterMasteryHistoryPage.test.js',
     '<rootDir>/__tests__/masteryRepository.test.js',
     '<rootDir>/__tests__/letterMasteryCurrentStateMigration.test.js',
     '<rootDir>/__tests__/LiteracySessionForm.submit.test.js',

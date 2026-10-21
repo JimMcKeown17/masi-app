@@ -911,7 +911,7 @@ The client validates the schema version, completeness flag, authenticated user i
 
 | Reconciled table and server scope | Acknowledged set | Local rows ended | End column |
 | --- | --- | --- | --- |
-| `child_ea_assignments`, direct active assignments for the EA with children embedded | RPC `child_ea_assignment_ids` | The EA's active synced assignments absent from the set | `unassigned_at` |
+| `child_ea_assignments`, direct active assignments for the EA with children embedded | RPC `child_ea_assignment_ids` | The EA's active synced assignments absent from the set; the same transaction calls `deleteUndeliveredLetterMastery` to delete the ended children's synced mastery with nothing owed and drop their mastery coverage | `unassigned_at` |
 | `child_programme_enrollments`, active rows for the active Programme within acknowledged assigned child ids | RPC `child_programme_enrollment_ids` within `assigned_child_ids` | Active synced enrollments in that exact Programme and child scope whose ids are absent | `ended_at` |
 | `child_class_memberships`, active rows for child ids returned by the children query | RPC `child_class_membership_ids` within `visible_child_ids` | Active synced memberships for acknowledged child ids whose ids are absent | `exited_at` |
 | `group_ea_assignments`, full embedded rows from the active, EA-scoped, Programme-scoped groups query | RPC `group_ids` | The EA's active synced group assignments for the active Programme whose group ids are absent | `unassigned_at`, never `groups.archived_at` |
@@ -925,8 +925,8 @@ The client validates the schema version, completeness flag, authenticated user i
 #### Page apply — assessments and runs
 
 `assessmentsRepository.saveHistoryPage` and `batteryRunsRepository.saveHistoryPage` apply one
-whole page with its cursor in one signed-in handle writer transaction. Traversal/wiring and
-mastery page apply are later Plan 3 tasks; these repository methods do not fetch from the server.
+whole page with its cursor in one signed-in handle writer transaction. Mastery page apply is
+described below. Traversal/wiring remains later Plan 3 work; these methods do not fetch from the server.
 
 - **Validate before writing.** Assessment pages reconstruct each flat family from its parent
   and embedded items and call `assertSubmitShape`, including the exact `total_items` count.
@@ -962,6 +962,50 @@ mastery page apply are later Plan 3 tasks; these repository methods do not fetch
 Real-SQLite coverage: `assessmentHistoryPage.test.js`, `batteryRunHistoryMerge.test.js`, including
 reopen, rollback, bounded statements and the signed-in production facade. Local verification
 does not close the hosted PostgREST, device first-commit or end-to-end hydration gates.
+
+#### Page apply — mastery and handover
+
+`masteryRepository.saveHistoryPage` validates the whole page before writing: parseable
+`changed_at`, UUID `correction_id`, boolean `confirmed` and nonempty letter/language. A malformed
+page throws a `TypeError` with `kind = 'query'`. One writer transaction applies absent history
+reference children, looks up current mastery and outstanding correction slots, merges values,
+resolves/writes the cursor and checks actor admission again with no later await in the callback.
+Empty pages save their cursor and never delete mastery. No page apply changes the outbox.
+
+- Absent rows insert synced with the pulled tuple copied to `server_changed_at` and
+  `server_correction_id`, and raw `updated_at` copied to `server_updated_at`.
+- Pending/failed local rows or any `pending`, `failed` or `in_flight` outbox slot are left alone.
+  These corrections are still owed; their acknowledgement supplies accepted server state.
+- Synced rows take only a strictly newer accepted `(changed_at, correction_id)` tuple. Terminal
+  domain rows take a newer **or equal** tuple, restoring the accepted value without hiding the
+  refusal evidence. A null local server tuple counts as lowest.
+- **A terminal outbox row never blocks the merge.** Its content and needs-attention status stay
+  unchanged, including after the domain row is restored to synced and later advances again.
+- The comparison uses the local **server** tuple, never the local edit's own `changed_at` or
+  `correction_id`. `serverTimestamps.js` parses fractional digits separately from whole seconds,
+  uses exact integer microseconds, rejects unsafe results and compares lowercase UUIDs on ties.
+  It stores server timestamp strings unchanged. Plan 2's local correction ordering and
+  `applyCorrectionAcknowledgement` are unchanged.
+
+`letterMasteryHistoryScope(userId)` is `letter_mastery_pull:<userId>`.
+`deleteUndeliveredLetterMastery(txn, { userId, childIds })` acts only after confirming that the
+given EA has no active direct assignment for each child. In at most four statements it deletes
+only synced rows with no outstanding correction and removes those child ids from all three
+mastery coverage sets in the same transaction, even if every row was kept. It preserves the
+cursor's other fields and `last_pulled_at`, never creates a missing cursor and leaves assessment
+and run cursors alone. Pending, failed and terminal domain rows stay; a restored synced row
+whose sole outbox evidence is terminal can be deleted while that evidence remains.
+
+This helper runs inside the child EA reconcile's admitted `apply`, after ending the assignments,
+behind its existing mass-end breaker. Per-row fallback does not reconcile, a same-pair supersede
+keeps the still-active child's mastery and coverage, and a pending local end does not delete.
+No mastery page uses absence as deletion authority. The plan accepts that a pre-handover page
+saved later, or a backstop read of the EA's own last-written record, can leave a hidden row
+locally; readers remain current-delivery-scoped and lost coverage makes a return re-walk.
+
+Coverage: `serverTimestamps.test.js`, `letterMasteryHistoryPage.test.js` (including real terminal
+finalization and cursor rollback), and `pullReconcile.integration.test.js` (including the
+coverage-write failure, breaker, bypass, outbox evidence and missing-cursor cases).
 
 ### Session history hydration (CAP-004)
 
@@ -1011,6 +1055,11 @@ screen tests.
 
 ### Reconcile invariants and safety rails
 
+- Ending a child EA assignment also deletes that child's `synced` `letter_mastery` rows that
+  have no `pending`, `failed` or `in_flight` outbox row, in the same transaction and behind the
+  same breaker. Nothing is enqueued. Outstanding and refused corrections stay. The same
+  transaction drops the child from the mastery walk's covered sets, so its return re-walks
+  even if no walk ran in between.
 - A relationship reconciles only when its ordinary hydration scope is `ok`, the active Programme exists, and the RPC snapshot is valid and complete for that same Programme and authenticated user. An errored or dependency-skipped hydration scope never persists or reconciles its table.
 - A missing, errored, malformed, wrong-version, wrong-user, or Programme-inconsistent RPC snapshot fails closed: ordinary rows may still hydrate SQLite, but no local relationship is ended and no successful pull stamp is written. The child and class contexts report the condition through operational observability.
 - Candidates are active rows with `sync_status = 'synced'` inside the acknowledged scope. `pending`, `failed`, and `terminal` rows are never ended by pull reconcile.
