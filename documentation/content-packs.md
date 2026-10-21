@@ -30,7 +30,7 @@ Content packs live in `src/lessonPlan/packs/`. App-made packs use an id of `<nam
 
 The file's `language` is the shared catalogue name: `isixhosa`, `english` or `afrikaans`. `PACK_LANGUAGE_CODES` maps those names to the Masi codes `xh`, `en` and `af`. Callers use codes with `getPack(languageCode)`; names are not accepted as lookup keys.
 
-`CURRENT_PACK_IDS` explicitly chooses the current id for each code in its `release` and `preview` maps. Current means the named id, rather than the highest version number: interim and integrated packs are different families. The release map currently names these three interim letters-only packs; the preview map is empty:
+`CURRENT_PACK_IDS` explicitly chooses the current id for each code in its `release` and `preview` maps. Current means the named id, rather than the highest version number: interim and integrated packs are different families. The release map currently names these three interim letters-only packs; the preview map names `isixhosa-candidates-preview-v1` for `xh` only:
 
 | Code | Current release id | Source of the letter order |
 |---|---|---|
@@ -57,6 +57,32 @@ Candidate-word cloud test builds use `--profile preview-content`. This profile u
 ```bash
 npx eas-cli@latest build -p android --profile preview-content
 ```
+
+## isiXhosa test pack
+
+`isixhosa-candidates-preview-v1.json` is a preview-only test pack (lesson-plan J17), not a reviewed books release. It was generated from `early-reader-books` commit `1c301cfddcee061d5d5f915e991d7470a4ba7f37`. Its 3,328 word-bank entries are all candidates; it has 12 letter steps, 11 sound steps and one draft reader, `xh-int-v1-r01`. Decodability checks are not native-speaker review or approval for field use.
+
+The generator reads `languages/xh/pack.yaml`, `languages/xh/wordbank.csv`, `cast/cast.yaml` and every `books/*/book.yaml` with `series: isixhosa-integrated`. YAML is parsed with YAML 1.2 (`yaml@2.8.2`), keeping `y` and `n` as letters. CSV uses the existing shared parser. To regenerate from a clean books checkout:
+
+```bash
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run content:xh-test-pack -- \
+  --books-repo /Users/jimmckeown/Development/early-reader-books \
+  --out src/lessonPlan/packs/isixhosa-candidates-preview-v1.json --version 1
+```
+
+The script records the books HEAD in `generated_from` and refuses uncommitted changes under `languages/xh`, `books` or `cast` before reading source files. The CLI requires all three flags, rejects unknown or duplicate flags, and requires a positive integer version. Its pure builder applies these rules:
+
+- Refuse a language code other than `xh` or a letter order different from the interim isiXhosa pack's J1 order. Copy the letter steps, including `sizeException` as `size_exception`; append the sound steps in step order to the tracker-letter inventory.
+- Keep every word-bank row except `status: rejected`. Compute its first decodable step with the vendored checker; refuse with a list of all words whose step is missing or disagrees with the CSV. Sort by step, then text in code-unit order. Store missing or blank syllables as `null`.
+- For each letter step, generate known consonant + vowel blends with at least one newly taught letter. Consonants are the outer loop and vowels the inner loop, both in teaching order. Step 1 is `mo, ma, lo, la`; step 2 is `mu, lu, ko, ka, ku`.
+- For every letter or sound step, take up to 12 words first decodable at that step with at least three letters, ranked by descending `corpus_2024_count`, then code-unit text order. Use syllables with their hyphens, falling back to the word's text.
+- Convert every integrated-series book, including drafts, into a reader at its declared step; sort reader ids within each step. Join each page's lines with a newline and retain the original speaker/text lines in `reader_details`, with `retired: false`. Resolve speaker names from the cast's `names.xh.name`, refusing missing cast entries; use red for `voices.a`, blue for `voices.b`, grey otherwise.
+
+The CLI writes deterministic two-space JSON with a final newline only after the entire pack passes `lintMasiPack`. Source or validation failures leave an existing output unchanged.
+
+The preview JSON is statically bundled in every binary, but lookup resolves it only with `{ allowPreview: true }` (decision 8). Normal lookup still returns the interim release pack; callers must use the C12 developer-build gate described above to opt in. Bundling is not permission to display candidate content to field users.
+
+Preview packs are deliberately not hash-pinned. For a new regeneration, bump `--version`, replace the old preview JSON and static import, and update `CURRENT_PACK_IDS.preview.xh`. A developer draft or session pinned to a replaced preview id resolves to `null` and displays the C10 "no content yet" state; it is not lost. Keeping all preview versions would grow every field binary for a developer-only case. Release packs remain append-only and hash-pinned, with old versions retained.
 
 ## Adopting a books release
 
