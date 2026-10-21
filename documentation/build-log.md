@@ -1173,6 +1173,79 @@ not expand into those tasks. Hosted/backend, PostgreSQL, device, EAS, PR and com
 outside this task. Schema 16 is this branch's next free version; the controller handles the
 C1/B2 version collision at integration.
 
+**AR Plan 2 Task 3 — mastery repository and acknowledgement write-back.**
+
+Replaced the old create/update/archive/reactivate methods with
+`setLetterMastery({ childId, letter, language, confirmed, changedAt, programmeId, transaction })`.
+Validation names the invalid field before any domain/outbox write. A call samples `Date.now()`
+once, clamps a supplied tap time to that now, takes `changed_by` from the transaction's signed-in
+EA, and mints a UUID v4 correction. A keyed joined read preserves a newer correction while its
+slot is pending, failed or in flight; terminal/synced state and equal-time taps permit replacement.
+A queued time ahead of the corrected phone clock counts as now, so a new immediate tap wins.
+Retained calls return the mapped current record without exposing `outbox_status`.
+
+A new write keeps `created_at` and all server metadata, clears the local error, marks the row
+pending and queues exactly one `letter_mastery:<id>:update` slot with the nine-field payload.
+Programme is supplied context or the caller's active Programme, possibly null, with no legacy
+fallback. Real SQLite verifies one keyed read and two writes plus at most one Programme read;
+a retained save reads once and writes nothing. Caller-transaction rollback and an outbox-trigger
+failure both roll back the domain row and outbox together.
+
+`getLetterMastery` maps `confirmed` to boolean, excludes terminal rows, rejects any `userId` or
+`programmeId` key, supports child/language filters and 500-child chunks, deduplicates child IDs,
+and orders combined rows by child and letter. `getUnsyncedRecords` remains available.
+The named `applyCorrectionAcknowledgement` export implements all table branches. An applied
+or superseded winner is written only after successful outbox deletion with a matching local
+correction; superseded clears unknowable Programme context. A newer local correction keeps all
+its content and slot and receives only server ordering. An acknowledged unreadable record is
+deleted only when the same finalization conditions hold. Server timestamps remain raw strings,
+including microseconds.
+
+The test suite was rewritten using the public repository and real SQLite, registered in the
+integration runner, and expanded to 30 tests covering the specified cases, every acknowledgement
+table cell, the outbox CAS signal, transaction rollback, statement budgets and chunked read order.
+No new dependency, migration, sync dispatch, UI behavior, plan or specification edit.
+
+| Gate / command (Node 20.19.4 PATH prefix) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/masteryRepository.test.js` | Exit 1: 1 suite / all 30 tests failed, 4.893 s. Executed failures include missing `setLetterMastery` and `applyCorrectionAcknowledgement`, old filtered read behavior and integer boolean mapping |
+| GREEN: same command | Exit 0: 1 suite / all 30 tests passed, 2.627 s |
+| GREEN after strengthening the cross-chunk ordering fixture: same command | Exit 0: 1 suite / all 30 tests passed, 2.153 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 339 suites passed / 10 failed (349 total); 4,243 tests passed / 28 failed (4,271 total), 252.956 s. Repository suite turns green; no new failed suite relative to Task 2 |
+| `npm run test:integration --silent` | Exit 1: 49 suites passed / 5 failed (54 total); 580 tests passed / 9 failed (589 total), 201.091 s. Same five old-contract failures as Task 2; repository adds 30 passing tests |
+
+Compared with the Task 2 verification record, `masteryRepository.test.js` is now GREEN
+(30 tests on the new contract), and the full unit failed-suite count drops from 11 to 10.
+The integration run now includes that suite and its 30 passing tests; the five pre-existing
+integration failures remain. No new failed suite and no unrelated timeout was found, so no
+isolated retry was required. Remaining full-unit suites, grouped by the planned next tasks:
+
+- Task 4 sync: `offlineSyncOutbox.test.js`, `letterMasterySync.test.js`,
+  `offlineSyncLifecycleEdits.test.js`, `syncContractCompleteness.test.js`.
+- Task 5 readers: `masteryState.test.js`, `LetterMasteryRankingScreen.test.js`.
+- Task 6 callers/fixtures: `literacySessionPersistence.test.js`,
+  `LiteracySessionForm.submit.test.js`, `foreignKeyEnforcement.test.js`,
+  `completionPathBudget.test.js`.
+
+Reasons are the deliberately removed `saveLetterMasteryRecord` API, the new forbidden-filter
+error, old `user_id` fixture columns and consequent tracker/ranking assertions, plus
+`letter_mastery.confirmed` having classification count 0 instead of 1 until Task 4.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractServerSchema` and
+`designSystemGuard` all pass in the full unit run. `git diff --check` passes.
+
+No implementation-contract deviation was required. The simple cross-chunk read merge deduplicates
+the requested IDs and applies the same child/letter text ordering after each SQL chunk.
+The local TDD skill and approved task order were followed directly; the plan-header superpowers
+execution skills remain unavailable as recorded in Task 1. The build-log entry is required by
+the standing repo rule and the task instructions, although Task 3's file list names only the
+repository, tests and integration registration. The phone contract map's combined acknowledgement
+section remains Task 4's explicit documentation step.
+
+Tasks 4–6 still own RPC dispatch/finalization and migration of readers and write surfaces.
+The new repository's forbidden-filter errors and removed legacy methods deliberately expose
+those remaining old-contract callers. Step 5's commit is controller-owned; hosted/PostgreSQL,
+Supabase CLI, EAS, PR and device gates are outside this task.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

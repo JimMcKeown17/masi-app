@@ -5,6 +5,7 @@ module.exports = {
   setupFiles: ['./jest.integration.setup.js'],
   setupFilesAfterEnv: ['./test-support/defaultTestHandle.js'],
   testMatch: [
+    '<rootDir>/__tests__/masteryRepository.test.js',
     '<rootDir>/__tests__/letterMasteryCurrentStateMigration.test.js',
     '<rootDir>/__tests__/LiteracySessionForm.submit.test.js',
     '<rootDir>/__tests__/outboxIntegrityScan.test.js',
