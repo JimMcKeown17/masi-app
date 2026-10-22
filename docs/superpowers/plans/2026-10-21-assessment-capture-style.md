@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - Work only in the worktree `/Users/jimmckeown/Development/masi-app/.claude/worktrees/assessment-style`, branch `design/assessment-capture-style`. Base and diff against `origin/main`, never local `main` (stale).
+- Every task ends green on both `npx jest src/assessment-questions` and `npm run test:types`; host-touching tasks also run `npm test`. A task's Step 4 lists only what is additional.
 - Node 20 for every jest and tsc run: prefix `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
 - npm only. The one new dependency is `@expo-google-fonts/andika@0.4.1`, installed with `--save-exact`. Published 2025-09-11; licence MIT + OFL-1.1.
 - Import only the Regular face: `import { Andika_400Regular } from '@expo-google-fonts/andika/400Regular'` (647 KB). Never import the package root, which bundles four faces.
@@ -182,7 +183,7 @@ test('every ratchet entry still violates (the ratchet only shrinks)', ...);
     - Panel order: title, confirm `PrimaryButton`, cancel `SecondaryButton` (only when `cancelLabel`), then `children` (for example the stop card's `Undo last mark` link).
   - **`FullScreenSheet`** — `FullScreenSheet(props: { visible: boolean; title?: string; onClose: () => void; children })`. Wraps RN `Modal` (`animationType="slide"`), so it renders nothing when hidden. Closes with a `SecondaryButton` labelled `Close` in a `BottomBar`.
   - **`QuestionIntro`** — `QuestionIntro(props: { testID?: string; instructions?: string; startLabel?: string; onStart: () => void; children?: React.ReactNode })`. `startLabel` defaults to `'Start'`; `children` holds extra intro content such as the story.
-    - Layout: `canvas` background; a white instruction card (radius `card`, padding `lg`, `UiText` body); then children in a `ScrollView`; then a `BottomBar` with a full-width `PrimaryButton`.
+    - Layout: `canvas` background; **one** flexible `ScrollView` (`flex: 1`, testID `${testID}-scroll` when `testID` is given) that holds both the white instruction card (radius `card`, padding `lg`, `UiText` body) and the children; then, outside the scroller, a `BottomBar` with a full-width `PrimaryButton`. Long instructions or large OS text scroll, and Start is always reachable. Children must not add a second scroller.
   - **`ActionBar`** comes in two layouts:
     - **Decision:** `DecisionBar(props: { testIDPrefix: string; onCorrect; onIncorrect; onBack; backDisabled: boolean; onEnd; endLabel?: string; onSkip?: () => void })`.
       - `View testID={`${p}-decisions`}` holds `PrimaryButton tone="marked" icon="check" label="Correct" flex` and `PrimaryButton tone="error" icon="cross" label="Incorrect" flex` side by side, with gap 12.
@@ -208,6 +209,8 @@ test('no safe-area provider pads 16', ...);
 test('the testID is on the scrim overlay and the title is a header', () => { expect(getByTestId('end-confirmation')).toHaveStyle({ justifyContent: 'flex-end', backgroundColor: tokens.color.scrim }); expect(getByRole('header', { name: 'End the test?' })).toBeTruthy(); });
 // FullScreenSheet.test.tsx
 test('hidden sheet renders nothing; visible sheet shows a single Close', ...);
+// QuestionIntro.test.tsx
+test('long instructions and children share one scroller and Start stays outside it', () => { /* 2,000-char instructions: the instruction text and a child are both descendants of the one ScrollView; Start is not */ });
 // ActionBar.test.tsx
 test('decision layout: Correct/Incorrect side by side, Back full width below, End centred last', () => {
   // letter-decisions has flexDirection row; Back is not inside letter-decisions; letter-navigation has justifyContent center; 'End test' is in letter-navigation
@@ -475,8 +478,9 @@ test('Skip question shows beside End test only when allowSkip', ...);
 test('word_reading shows card rows 1–2 as page 1 of 5 in two continuous columns', ...);
 test('long isiXhosa words shrink to fit their tile', ...);   // xh set, 'ibhulukhwe' tile Text adjustsFontSizeToFit
 test('word 20 is current on page 2 after nineteen decisions', ...); // replaces the :70 label check page expectation
-// ReadWordsQuestion.stepByStep.test.tsx:155 ('missing row_lengths uses one row…') counts word-row groups, which words no longer have.
-// Change only that query: the 50-word set with no row_lengths shows 'Card row 1 · page 1 of 5'. Keep its duplicate-key Result assertions.
+// ReadWordsQuestion.stepByStep.test.tsx:150-166 ('missing row_lengths uses one row…') overrides the set with two duplicate words and counts word-row groups, which words no longer have.
+// Change only that query: two word tiles are visible and there is no page indicator. Keep every Result assertion and the two-word fixture.
+test('a 50-word set with no row_lengths pages as one card row: Card row 1 · page 1 of 5', ...); // new, separate fixture
 ```
 
 Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They must pass untouched. In `StandaloneTestScreen.test.js`, add `'the container leaves the bottom inset to the Question'`: the screen root has no `paddingBottom`.
@@ -549,7 +553,7 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 - `pageIndex` is `useState(0)` in `ReadWordsQuestionContent`, so it survives the `mark-last` round trip.
 - The previous and next page controls change `pageIndex`.
 - **Timer:** when `durationSec` is set, render `Countdown`.
-  - `getRemainingMs = useCallback(() => { const d = getDeadlineMs(); return d === null ? durationSec * 1000 : d - (stopTimeMsRef.current ?? monotonicNow()); }, [getDeadlineMs, durationSec])`. Before the active-phase effect sets `startTimeMsRef` (`ReadWordsQuestion/index.tsx:192-196`), the clock has not started, so the full duration is the truthful value. This does not move the frozen start-time boundary.
+  - `getRemainingMs = useCallback(() => { if (durationSec === undefined) return 0; const d = getDeadlineMs(); return d === null ? durationSec * 1000 : d - (stopTimeMsRef.current ?? monotonicNow()); }, [getDeadlineMs, durationSec])`. The explicit `durationSec === undefined` guard is needed for strict TypeScript (TS18048); `Countdown` still renders only when `durationSec` is set. Before the active-phase effect sets `startTimeMsRef` (`ReadWordsQuestion/index.tsx:192-196`), the clock has not started, so the full duration is the truthful value. This does not move the frozen start-time boundary.
   - Wrap `getDeadlineMs` in `useCallback(..., [durationSec])`; it reads only refs. The `Countdown` memo then holds across toggles.
   - `durationMs = durationSec * 1000`.
 - **Tiles:**
@@ -566,13 +570,13 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
     - `'Cancel after End returns to the same page with its marks'`.
     - `'duplicate words on one page toggle independently'`, using the shipped EN page with `there how there how`.
   - In `readingDuration.test.tsx`, change the tap helper so that after each 10 taps it presses `getByLabelText('Next page')` when it exists.
-  - The post-Cancel check at `readingDuration.test.tsx:146` queries `word1`, which is now on page 1 while the screen correctly stays on page 3. Change only that query: assert `'Card row 1 · page 3 of 3'` and `word21, correct`, then press `Previous page` twice and assert `word1, correct`. The timing and callback assertions are unchanged.
+  - The post-Cancel check at `readingDuration.test.tsx:146` queries `word1`. That test runs under `describe.each` for Q6, Q8 and Q1 (`:15-33`). Only for `Component === ReadWordsQuestion` (Q6), which correctly stays on page 3: assert `'Card row 1 · page 3 of 3'` and `word21, correct`, then press `Previous page` twice and assert `word1, correct`. Q1 and Q8 keep the original query. The helper's `Next page` press is likewise skipped when no `Next page` control exists. The timing and callback assertions are unchanged.
 
 - [ ] **Step 2: Run the tests and see them fail.** Run `npx jest src/assessment-questions/questions/ReadWordsQuestion src/assessment-questions/__tests__/readingDuration.test.tsx`. Expected: FAIL.
 
 - [ ] **Step 3: Implement** the behaviour above, then remove ReadWords from the ratchets.
 
-- [ ] **Step 4: Run the tests and see them pass.** Run the same command plus `npx jest src/assessment-questions`. Expected: PASS. The contract test, clockJump, oneTerminalCallback, itemSetIntegrity (`inja, idle` on page 1) and itemSetResolution all stay green with their assertions unchanged.
+- [ ] **Step 4: Run the tests and see them pass.** Run the same command plus `npx jest src/assessment-questions` and `npm run test:types`. Expected: PASS. The contract test, clockJump, oneTerminalCallback, itemSetIntegrity (`inja, idle` on page 1) and itemSetResolution all stay green with their assertions unchanged.
 
 - [ ] **Step 5: Commit.** `git commit -m "feat(assessment): WelaPLUS read-words on paged tiles with a visible timer"`
 
@@ -650,7 +654,7 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
   - Q2 sets `gloss={acceptable_answers.join(', ')}`.
   - There is no italic anywhere.
 - **Finish flow.** It uses the same `ConfirmSheet` and `ToggleBar` as Task 11.
-- **Q2 intro.** It uses `QuestionIntro startLabel="I've finished reading"`. The story renders as `ContentText size="story"` inside `ScrollView testID="intro-story-scroll"`, passed as children.
+- **Q2 intro.** It uses `QuestionIntro testID="intro-story" startLabel="I've finished reading"`, so the intro's single scroller has testID `intro-story-scroll` (the existing tests at `:22` and `:35` keep working). The story renders as `ContentText size="story"`, passed as children, with no scroller of its own.
 - **Q2 active view.** It shows a `SecondaryButton label="Re-read story"`. That opens a `FullScreenSheet` containing the story, which closes with `Close`.
 - **Removed hook.** `useChildReadingFontSize` and `ChildReadingFontSizeProvider` are removed. Its provider was never mounted, so the scale was always 1.0. This follows WelaPLUS spec §5.3 (`:331`).
 
@@ -770,7 +774,7 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
   - A `ListGroup` called **WelaPLUS battery** lists the 11 entries of `WELA_PLUS_FULL_2024_1`, in order. Read that file for its field names: `question_code`, `durationSec`, and the per-language instructions.
   - A **Language** row opens `SelectSheet` with English and isiXhosa.
   - A **Content** row opens `SelectSheet` with `Bundled card` (default) and `Test fixture`. Fixtures come from `testFixtures/index.ts` (English only; export them from the package index under a `testFixtures` namespace). They are needed because the bundled story-writing set has no picture and empty rubric anchors, while `testFixtures/storyWriting.ts` has both. Choosing a fixture with isiXhosa selected uses the English fixture and says so in the row subtitle.
-  - Tapping an entry navigates to `QuestionGalleryRun` with `{ entryKey, languageCode }`.
+  - Tapping an entry navigates to `QuestionGalleryRun` with `{ entryKey, languageCode, contentMode }`, where `contentMode` is `'bundled' | 'fixture'`. The run screen resolves the item set from `contentMode` alone, and `Run again` keeps all three params.
 - **`QuestionGalleryRunScreen` (route `QuestionGalleryRun`, `headerShown: false`):**
   - It renders inside `TestFrame`.
   - It mounts the entry's Component with:
@@ -786,7 +790,7 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
   - `'the gallery build flag is on only for development and preview builds'`: evaluate `app.config.js` under `jest.isolateModules` with `EAS_BUILD_PROFILE` set to `development`, `preview`, `pilot`, `production`, `'something-else'` and unset; expect `extra.questionGallery` to be true, true, false, false, false, false.
   - `'with __DEV__ false and no build flag, there is no gallery route and no Profile row'`: mock `isQuestionGalleryEnabled` to return false; the navigator has no `QuestionGallery` or `QuestionGalleryRun` route, and Profile › Support tools has no `Question gallery` row.
   - `'TestFrame owns the top inset and leaves the bottom to the Question'`: render `StandaloneTestScreen` and `QuestionGalleryRunScreen` with insets `{ top: 47, bottom: 34 }`; the frame root has `paddingTop: 47` and no `paddingBottom`, and the Question's `BottomBar` pads 34 exactly once.
-  - `'Test fixture content runs the story-writing fixture with its picture and anchors'`.
+  - `'choosing Test fixture on the list and opening story writing shows the fixture picture and anchors'`: drive it through the gallery list (select `Test fixture`, tap the story-writing entry) in `renderInTestStack`, not by mounting the run screen with fixture props; then `Run again` still shows the fixture.
   - `'the gallery lists two standalone tests and eleven WelaPLUS Questions'`.
   - `'running a gallery entry mounts its Question and shows its result'`. Use the real `NullQuestion` entry, which completes at once.
   - `AppNavigator.headers.test.js`: add `QuestionGallery: 'Question gallery'` to `TITLES`, and add `QuestionGalleryRun` to the headerShown:false list.
