@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 import { captureOperationalError } from '../services/observability';
+import { nextGroupNumber, sharedClassId } from '../utils/groupHelpers';
 
 const ChildrenContext = createContext({});
 const denyReconcileBreakerAuthorization = () => false;
@@ -573,6 +574,25 @@ export const ChildrenProvider = ({ children }) => {
     }
   }, [user?.id, refreshSyncStatus]);
 
+  const makeGroup = useCallback(async (childIds) => {
+    try {
+      const group = {
+        id: uuidv4(),
+        name: `Group ${nextGroupNumber(groups)}`,
+        class_id: sharedClassId(childIds.map(id => getChildById(id) ?? {})),
+        created_by: user.id,
+      };
+      await groupsRepository.createGroupWithMembers({ group, childIds });
+      await refreshFromCache();
+      await refreshSyncStatus();
+      return { success: true, group };
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      console.error('Error making group:', error);
+      return { success: false, error };
+    }
+  }, [groups, getChildById, user?.id, groupsRepository, refreshFromCache, refreshSyncStatus]);
+
   /**
    * Update a group's information
    */
@@ -735,6 +755,7 @@ export const ChildrenProvider = ({ children }) => {
     deleteChild,
     loadGroups,
     addGroup,
+    makeGroup,
     updateGroup,
     deleteGroup,
     addChildToGroup,
@@ -743,7 +764,7 @@ export const ChildrenProvider = ({ children }) => {
     getGroupsForChild,
   }), [
     visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
-    refreshFromCache, loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup,
+    refreshFromCache, loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup, makeGroup,
     updateGroup, deleteGroup, addChildToGroup, removeChildFromGroup,
     getChildrenInGroup, getGroupsForChild,
   ]);

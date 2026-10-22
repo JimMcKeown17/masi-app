@@ -9,6 +9,9 @@ import {
 } from '../src/db/repositories/groupsRepository';
 import { createGroupingVersionsRepository } from '../src/db/repositories/groupingVersionsRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
+import { createOutboxSyncEngine } from '../src/services/offlineSync';
+import { createSupabaseMock } from '../test-support/supabaseSyncMock';
+import { sharedClassId } from '../src/utils/groupHelpers';
 import {
   createMigratedDatabase,
   seedCoreData,
@@ -17,6 +20,138 @@ import {
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('groupsRepository', () => {
+  describe('createGroupWithMembers', () => {
+    let db, repository;
+    const joinedAt = '2026-05-21T08:00:00.000Z';
+    const group = (id = 'new-group', classId = 'class-1') => ({
+      id, name: 'Group 3', class_id: classId, created_by: 'user-1',
+    });
+    const snapshot = () => Promise.all(['groups', 'group_ea_assignments', 'child_group_memberships', 'sync_outbox']
+      .map(table => db.getAllAsync(`select * from ${table} order by id`)));
+    const priorMembership = async ({
+      removedAt = null, unassignedAt = null, userId = 'user-1', syncStatus = 'synced',
+      archivedAt = null, programmeId = 'programme-a',
+    } = {}) => {
+      await db.runAsync(`insert into groups (id, name, programme_id, created_by, archived_at, sync_status)
+        values ('prior', 'Group 1', ?, 'head-office', ?, 'synced')`, programmeId, archivedAt);
+      await db.runAsync(`insert into group_ea_assignments
+        (id, group_id, ea_user_id, programme_id, assigned_at, unassigned_at, sync_status)
+        values ('prior-ea', 'prior', ?, ?, '2026-01-15', ?, ?)`, userId, programmeId, unassignedAt, syncStatus);
+      await db.runAsync(`insert into child_group_memberships
+        (id, child_id, group_id, joined_at, removed_at, sync_status)
+        values ('prior-member', 'c2', 'prior', '2026-01-15', ?, ?)`, removedAt, syncStatus);
+    };
+    beforeEach(async () => {
+      db = await createMigratedDatabase(runMigrations);
+      await seedCoreData(db);
+      await db.runAsync("insert into classes (id, school_id, name, grade, academic_year_id) values ('class-2', 'school-1', 'Other', '1', 'year-2026')");
+      for (const id of ['c1', 'c2', 'c3', 'c4']) await db.runAsync(
+        "insert into children (id, first_name, last_name, class_id, sync_status) values (?, 'Test', 'Child', ?, 'synced')",
+        id, id === 'c4' ? 'class-2' : 'class-1'
+      );
+      repository = createGroupsRepository({ database: db });
+    });
+    afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
+
+    test('a new group, its assignment and its members commit together with outbox rows in push order', async () => {
+      expect(await repository.createGroupWithMembers({ group: group(), childIds: ['c1', 'c2'], joinedAt })).toBe(true);
+      expect(await repository.getGroups({ userId: 'user-1' })).toEqual([
+        expect.objectContaining({ ...group(), programme_id: 'programme-a', sync_status: 'pending' }),
+      ]);
+      expect(await db.getAllAsync('select group_id, ea_user_id, programme_id from group_ea_assignments')).toEqual([
+        { group_id: 'new-group', ea_user_id: 'user-1', programme_id: 'programme-a' },
+      ]);
+      const members = await repository.getChildrenGroups();
+      expect(members).toHaveLength(2);
+      expect(members.map(row => row.child_id).sort()).toEqual(['c1', 'c2']);
+      expect(new Set(members.map(row => row.id)).size).toBe(2);
+      for (const member of members) expect(member).toMatchObject({
+        id: expect.stringMatching(/^[0-9a-f-]{36}$/i), group_id: 'new-group', created_by: 'user-1',
+        joined_at: joinedAt, sync_status: 'pending',
+      });
+      const outbox = await db.getAllAsync('select table_name, operation, payload, owner_user_id from sync_outbox order by rowid');
+      expect(outbox.map(row => [row.table_name, row.operation])).toEqual([
+        ['groups', 'insert'], ['group_ea_assignments', 'insert'],
+        ['child_group_memberships', 'insert'], ['child_group_memberships', 'insert'],
+      ]);
+      expect(outbox.every(row => row.owner_user_id === 'user-1')).toBe(true);
+      expect(outbox.slice(2).map(row => JSON.parse(row.payload).joined_at)).toEqual([joinedAt, joinedAt]);
+      const { supabaseClient, calls } = createSupabaseMock();
+      const engine = createOutboxSyncEngine({ database: db, supabaseClient, enqueueRequest: task => task(),
+        getAuthSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) });
+      expect(await engine.syncAll()).toMatchObject({ totalSynced: 4, totalFailed: 0 });
+      expect(calls.map(call => call.tableName)).toEqual([
+        'groups', 'group_ea_assignments', 'child_group_memberships', 'child_group_memberships',
+      ]);
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+    });
+
+    test('the shared class is recorded; children in different classes give class_id null', async () => {
+      for (const [id, childIds, expected] of [
+        ['same-class', ['c1', 'c2'], 'class-1'], ['mixed-class', ['c3', 'c4'], null],
+      ]) {
+        const childrenById = await createChildrenRepository({ database: db }).getChildrenByIds(childIds);
+        await repository.createGroupWithMembers({ group: group(id, sharedClassId(Object.values(childrenById))), childIds });
+        expect(await db.getFirstAsync('select class_id from groups where id = ?', id)).toEqual({ class_id: expected });
+      }
+    });
+
+    test('a failure on the second member rolls back the group and the first member', async () => {
+      await db.execAsync(`create temp trigger fail_second_member before insert on child_group_memberships
+        when new.child_id = 'c2' begin select raise(abort, 'second member refused'); end;`);
+      const before = await snapshot();
+      await expect(repository.createGroupWithMembers({ group: group(), childIds: ['c1', 'c2'] }))
+        .rejects.toMatchObject({ message: 'second member refused', code: 'SQLITE_CONSTRAINT_TRIGGER' });
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test('a child already in another of my groups is refused and nothing is written', async () => {
+      await priorMembership();
+      const before = await snapshot();
+      const writes = jest.spyOn(db, 'runAsync');
+      await expect(repository.createGroupWithMembers({ group: group(), childIds: ['c1', 'c2'] }))
+        .rejects.toThrow('Child already in one of your groups');
+      expect(writes).not.toHaveBeenCalled();
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test('a pending active membership also refuses a second group before writing', async () => {
+      await priorMembership({ syncStatus: 'pending' });
+      const before = await snapshot();
+      await expect(repository.createGroupWithMembers({ group: group(), childIds: ['c2'] })).rejects.toThrow();
+      expect(await snapshot()).toEqual(before);
+    });
+
+    test.each([
+      ['removed membership', { removedAt: joinedAt }],
+      ['ended group assignment', { unassignedAt: joinedAt }],
+      ['another EA\'s group', { userId: 'user-2' }],
+      ['an archived group still assigned', { archivedAt: joinedAt }],
+      ['another programme\'s group', { programmeId: 'programme-b' }],
+    ])('%s does not refuse a new group', async (_name, options) => {
+      await priorMembership(options);
+      // The picker offers exactly the children this accepts.
+      const visible = await repository.getVisibleChildrenGroups({ userId: 'user-1' });
+      expect(visible.map(row => row.child_id)).not.toContain('c2');
+      expect(await repository.createGroupWithMembers({ group: group(), childIds: ['c2'] })).toBe(true);
+      expect(await repository.getGroups({ userId: 'user-1' })).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'new-group' }),
+      ]));
+    });
+
+    test('concurrent group creations check membership under the same writer lock', async () => {
+      const outcomes = await Promise.allSettled([
+        repository.createGroupWithMembers({ group: group('first'), childIds: ['c1'] }),
+        repository.createGroupWithMembers({ group: group('second'), childIds: ['c1'] }),
+      ]);
+      expect(outcomes.filter(outcome => outcome.status === 'fulfilled')).toEqual([{ status: 'fulfilled', value: true }]);
+      expect(outcomes.filter(outcome => outcome.status === 'rejected')).toHaveLength(1);
+      expect(await db.getAllAsync('select id from groups')).toHaveLength(1);
+      expect(await db.getAllAsync('select id from child_group_memberships')).toHaveLength(1);
+      expect(await db.getAllAsync('select id from sync_outbox')).toHaveLength(3);
+    });
+  });
+
   describe('authoritative group programme convergence', () => {
     test.each(['synced', 'terminal'])('a %s cached group converges to the server programme, returns to the roster and takes its session', async (status) => {
       const db = await createMigratedDatabase(runMigrations);
