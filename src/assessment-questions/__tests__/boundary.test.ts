@@ -3,6 +3,11 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 
 describe('findForbiddenImports (scanner)', () => {
+  test('catches a Google font face import', () => {
+    const code = `import { X } from '@expo-google-fonts/andika/400Regular';`;
+    expect(findForbiddenImports(code)).toEqual(['@expo-google-fonts/andika/400Regular']);
+  });
+
   test('catches a Supabase client import', () => {
     const code = `import { createClient } from '@supabase/supabase-js';`;
     expect(findForbiddenImports(code)).toEqual(['@supabase/supabase-js']);

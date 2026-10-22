@@ -25,6 +25,8 @@ export {
 } from './itemsets';
 export type { Result, ResultItem, ResultDerived, StoppedReason } from './types/Result';
 export { tokens } from './theme/tokens';
+export { AssessmentThemeProvider } from './theme/AssessmentTheme';
+export type { AssessmentFonts } from './theme/AssessmentTheme';
 export { evaluateBatteryState } from './battery/evaluateBatteryState';
 export { WELA_PLUS_FULL_2024_1 } from './battery/wela_plus_full';
 export type { BatteryConfig, BatteryQuestion, BatteryState, DecidedResult, Materials, MaterialItem, PrerequisiteRule } from './types/BatteryConfig';

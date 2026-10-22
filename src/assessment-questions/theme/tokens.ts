@@ -1,7 +1,8 @@
 /**
  * Package design tokens. The ONLY file in the package allowed to contain colour literals
- * (enforced by __tests__/rawHexGuard.test.ts). Values mirror the Masi host palette in
- * src/constants/colors.js; they are copied because the OSS boundary forbids importing host code.
+ * (enforced by __tests__/rawHexGuard.test.ts). Shared colours copy the Masi host palette in
+ * src/constants/colors.js and are checked by the host's assessmentTokensParity.test.js.
+ * The OSS boundary forbids importing host code. Marked is the package-only AA green.
  */
 export const tokens = {
   color: {
@@ -10,20 +11,21 @@ export const tokens = {
     line: '#ECE5E4',
     canvas: '#F8F5F4',
     surface: '#FFFFFF',
-    primary: '#E72D4D',
-    primaryPressed: '#C81F3E',
+    primary: '#C81F3E',
     onPrimary: '#FFFFFF',
     marked: '#2E7D27',
     onMarked: '#FFFFFF',
     markedSoft: '#E7F3E5',
     error: '#B3261E',
     errorSoft: '#FCEAE8',
+    warning: '#B26A00',
     notReached: '#B3A8A8',
     scrim: 'rgba(34, 26, 27, 0.45)',
   },
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
-  radius: { pill: 999, card: 12, cell: 8 },
-  font: { markingItem: 28, markingWord: 22, prompt: 32, body: 16, caption: 13, heading: 20 },
+  radius: { pill: 999, card: 12, cell: 8, tile: 10 },
+  font: { markingItem: 28, markingWord: 22, prompt: 32, body: 16, caption: 13, heading: 20,
+    tileLetter: 30, tileWord: 21, promptCard: 28, label: 17, story: 18 },
 } as const;
 
 export type Tokens = typeof tokens;

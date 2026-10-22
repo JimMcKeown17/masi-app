@@ -6,6 +6,7 @@ const IMPORT_PATTERNS: RegExp[] = [
 ];
 
 const FORBIDDEN_PATTERNS: RegExp[] = [
+  /^@expo-google-fonts\//,
   /^@supabase\//,
   /^@react-native-community\//,
   /^@react-native-async-storage\//,

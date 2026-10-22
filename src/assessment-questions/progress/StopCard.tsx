@@ -31,8 +31,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: tokens.radius.card, borderTopRightRadius: tokens.radius.card },
   title: { fontSize: tokens.font.heading, fontWeight: '600', color: tokens.color.ink },
   primary: { minHeight: 56, padding: tokens.space.md, borderRadius: tokens.radius.pill,
-    backgroundColor: tokens.color.primaryPressed, alignItems: 'center', justifyContent: 'center' },
+    backgroundColor: tokens.color.primary, alignItems: 'center', justifyContent: 'center' },
   primaryText: { fontSize: tokens.font.body, fontWeight: '600', color: tokens.color.onPrimary },
   secondary: { minHeight: 44, padding: tokens.space.md, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { fontSize: tokens.font.body, fontWeight: '600', color: tokens.color.primaryPressed },
+  secondaryText: { fontSize: tokens.font.body, fontWeight: '600', color: tokens.color.primary },
 });
