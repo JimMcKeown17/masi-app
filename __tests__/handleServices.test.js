@@ -325,6 +325,11 @@ test("close during an in-flight assessment history pull writes no failure marker
 test('the complete repository graph, composite onboarding and profile cache are bound to one handle', async () => {
   const a = await open(A, async () => response());
   expect(a.services.repositories).toBe(a.repositories);
+  expect(Object.keys(a.services).sort()).toEqual([
+    'repositories', 'homeAttention', 'syncEngine', 'referenceDataReady', 'pullReferenceData',
+    'pullRoster', 'pullClasses', 'pullLookups', 'fetchAndCacheSchools', 'sessionHistory',
+    'assessmentHistory', 'deviceProfile', 'lessonDraft',
+  ].sort());
   expect(Object.keys(a.repositories).sort()).toEqual([
     'children', 'classes', 'groups', 'classEaAssignments', 'groupEaAssignments',
     'childClassMemberships', 'classOnboarding', 'classGroupingState', 'groupingVersions',
