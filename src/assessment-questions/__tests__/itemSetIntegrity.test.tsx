@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import * as S from '../itemsets/index';
 import { CONTENT_PENDING } from '../itemsets/contentStatus';
 import { render, fireEvent } from '@testing-library/react-native';
@@ -45,7 +46,8 @@ test('fixed-size Questions', () => {
     expect((S as any)[`WELA_PLUS_STORY_WRITING_${l}`].dimensions.map((d: any) => d.code)).toEqual(['meaning_making', 'spelling', 'length', 'vocabulary']);
     const lw = (S as any)[`WELA_PLUS_LETTER_WRITING_${l}`];
     expect(lw.prompts.map((p: any) => p.expected_letter).join('')).toBe('afkoswbglptxchmquydinrvzej');
-    expect(lw.columns).toBe(6);
+    expect(lw.columns).toBe(3);
+    expect(lw.itemsPerPage).toBe(12);
   }
 });
 
@@ -111,3 +113,13 @@ test('pending content lists exactly the remaining picture, rubric, language-revi
     { item_set_id: 'word_reading@2026.1.af', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists. Provisional, unreviewed list copied from Zazi afrikaans_words_50.' },
   ]);
 });
+
+
+test.each([S.WELA_PLUS_LETTER_WRITING_EN, S.WELA_PLUS_LETTER_WRITING_XH])(
+  '$language Q5 ships text-only picture prompts until an image layout is designed', itemSet => {
+    assert.ok(
+      itemSet.prompts.every(prompt => prompt.picture.source == null),
+      'Q5 picture images need their own tile layout (88dp tiles cannot fit an image, caption and letter) — design it before shipping images',
+    );
+  },
+);

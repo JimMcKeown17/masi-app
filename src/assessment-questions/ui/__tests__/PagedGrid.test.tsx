@@ -207,3 +207,21 @@ test('tiles stop shrinking at 40dp and gaps at 6dp even when that must overflow'
   expect(total).toBe(224);
   expect(total).toBeGreaterThan(100);
 });
+
+
+test('picture pages fit measured height with an 88dp nominal row and a 72dp floor', () => {
+  const layout = { columns: 3, capacity: 12, breakAtCardRow: false };
+  const page = paginate([Array.from({ length: 26 }, (_, i) => i)], layout)[0];
+  const r = render(<PagedGrid page={page} variant="picture" layout={layout} testID="picture-grid"
+    renderTile={(position, size) => <MarkTile variant="picture" state="idle" text="a" caption="apple" accessibilityLabel={`item ${position}`} {...size} />} />);
+  for (const [height, expectedHeight, expectedGap] of [[400, 88, 10], [330, 78, 6], [280, 72, 6], [400, 88, 10]]) {
+    fireEvent(r.getByTestId('picture-grid'), 'layout', { nativeEvent: { layout: { width: 360, height } } });
+    const geometry = pageGeometry(r);
+    expect(geometry.tiles).toHaveLength(12);
+    expect(geometry.rows).toHaveLength(4);
+    expect(geometry.gap).toBe(expectedGap);
+    expect(geometry.heights).toEqual([expectedHeight, expectedHeight, expectedHeight, expectedHeight]);
+    if (height >= 330) expect(geometry.total).toBeLessThanOrEqual(height);
+    expect(r.UNSAFE_queryByType(ScrollView)).toBeNull();
+  }
+});

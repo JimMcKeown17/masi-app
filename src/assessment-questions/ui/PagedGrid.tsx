@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
 
 export function PagedGrid({ page, testID, groupTestID, renderTile, layout, variant }: {
   page: Page;
-  variant: 'letter' | 'word';
+  variant: 'letter' | 'word' | 'picture';
   testID?: string;
   groupTestID?: (cardRow: number) => string;
   // Unmeasured dimensions stay undefined: equal-flex widths and natural tile heights
@@ -44,9 +44,9 @@ export function PagedGrid({ page, testID, groupTestID, renderTile, layout, varia
   const gap = height === undefined || gapCount === 0 ? GAP
     : Math.max(MIN_GAP, Math.min(GAP, (height - rowCount * nominalHeight - dividerCount) / gapCount));
   const tileHeight = height === undefined || rowCount === 0 ? undefined
-    : Math.max(MIN_TILE_HEIGHT, Math.min(nominalHeight, (height - gapCount * gap - dividerCount) / rowCount));
+    : Math.max(variant === 'picture' ? 72 : MIN_TILE_HEIGHT, Math.min(nominalHeight, (height - gapCount * gap - dividerCount) / rowCount));
   const tileWidth = contentWidth === undefined ? undefined : (contentWidth - gap * (layout.columns - 1)) / layout.columns;
-  // Below the 40dp tile / 6dp gap floor, overflow is intentional: pagination
+  // Below the tile floor (72dp picture, 40dp letter/word) / 6dp gap, overflow is intentional: pagination
   // and minimum usable tile height stay fixed, rather than silently scrolling.
   return (
     <View testID={testID} style={styles.grid} onLayout={event => {

@@ -68,10 +68,10 @@ test('picture tiles show the caption above the content letter using the supplied
       <MarkTile variant="picture" state="idle" text="b" caption="ball" accessibilityLabel="ball → b, idle" />
     </AssessmentThemeProvider>,
   );
-  expect(r.getByLabelText('ball → b, idle')).toHaveStyle({ minHeight: 88 });
+  expect(r.getByLabelText('ball → b, idle')).toHaveStyle({ height: 88 });
   const texts = r.UNSAFE_getByType(MarkTile).findAll((node: { type: unknown }) => node.type === UiText || node.type === ContentText);
   expect(texts.map((node: { props: { children?: React.ReactNode } }) => node.props.children)).toEqual(['ball', 'b']);
-  expect(r.getByText('ball').props.numberOfLines).toBe(2);
+  expect(r.getByText('ball').props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.2, ellipsizeMode: 'clip' });
   expect(r.getByText('ball')).toHaveStyle({ fontFamily: 'Figtree_400Regular', fontSize: tokens.font.caption });
   expect(r.getByText('b')).toHaveStyle({ fontFamily: 'Andika_400Regular', fontSize: tokens.font.tileWord });
 });
@@ -85,4 +85,12 @@ test.each(['letter', 'word'] as const)('%s tile accepts a fitted height without 
 test('a height override does not alter non-grid variants', () => {
   const r = render(<MarkTile variant="pill" state="idle" text="a" accessibilityLabel="pill" height={45} />);
   expect(StyleSheet.flatten(r.getByLabelText('pill').props.style).height).toBeUndefined();
+});
+
+
+test('picture tiles accept the fitted row height without a nominal minimum overriding it', () => {
+  const r = render(<MarkTile variant="picture" state="idle" text="r" caption="iroboti (traffic light)" accessibilityLabel="picture" width={103} height={72} />);
+  expect(r.getByLabelText('picture')).toHaveStyle({ width: 103, height: 72 });
+  expect(StyleSheet.flatten(r.getByLabelText('picture').props.style).minHeight).toBeUndefined();
+  expect(r.getByText('iroboti (traffic light)').props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.2, ellipsizeMode: 'clip' });
 });
