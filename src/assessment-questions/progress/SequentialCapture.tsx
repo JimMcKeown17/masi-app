@@ -178,7 +178,7 @@ export function SequentialCapture({
       <View style={styles.root} pointerEvents={covered ? 'none' : 'auto'}
         accessibilityElementsHidden={covered} importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
         <View style={styles.statusRow}>
-          {durationSec === undefined ? null : <Countdown getRemainingMs={getRemainingMs} />}
+          {durationSec === undefined ? null : <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />}
           <Text style={styles.progress}>{state.cursor} / {cardItems.length}</Text>
         </View>
         <ScrollView ref={scrollRef} style={styles.root}

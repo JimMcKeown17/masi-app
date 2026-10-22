@@ -6,7 +6,6 @@ const ROOT = path.resolve(__dirname, '..');
 
 // Delete entries as shared typography/primitives replace each file's styling.
 export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
-  'progress/Countdown.tsx',
   'progress/LastAttemptedSheet.tsx',
   'progress/SequentialCapture.tsx',
   'progress/StopCard.tsx',
@@ -23,7 +22,6 @@ export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
   'skip/SkipReasonPicker.tsx',
 ]);
 export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
-  'progress/Countdown.tsx',
   'progress/LastAttemptedSheet.tsx',
   'progress/MissingItemSet.tsx',
   'progress/SequentialCapture.tsx',

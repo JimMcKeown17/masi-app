@@ -41,7 +41,7 @@ describe('SequentialCapture countdown isolation', () => {
 
     act(() => jest.advanceTimersByTime(1000));
 
-    expect(screen.getByText('0:59')).toBeTruthy();
+    expect(screen.getByText('59s')).toBeTruthy();
     expect(promptRenderCount).toBe(0);
   });
 });

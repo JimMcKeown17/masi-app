@@ -67,13 +67,13 @@ test('intro uses a padded full-height layout with instructions above a bottom-pi
 test('active capture shows the timed status row and updates its countdown', () => {
   const { r } = startQ();
 
-  expect(r.getByText('1:00')).toBeTruthy();
+  expect(r.getByText('60s')).toBeTruthy();
   expect(r.getByLabelText('Time left, 60 seconds')).toBeTruthy();
   expect(r.getByText('0 / 60')).toBeTruthy();
 
   act(() => jest.advanceTimersByTime(10000));
 
-  expect(r.getByText('0:50')).toBeTruthy();
+  expect(r.getByText('50s')).toBeTruthy();
   expect(r.getByLabelText('Time left, 50 seconds')).toBeTruthy();
   decide(r, true, 13);
   expect(r.getByText('13 / 60')).toBeTruthy();
@@ -156,14 +156,14 @@ test('countdown freezes on the stop card and resumes after Undo', () => {
   const { r } = startQ();
   act(() => jest.advanceTimersByTime(10000));
   decide(r, false, 10);
-  expect(r.getByText('0:50', { includeHiddenElements: true })).toBeTruthy();
+  expect(r.getByText('50s', { includeHiddenElements: true })).toBeTruthy();
 
   act(() => jest.advanceTimersByTime(5000));
-  expect(r.getByText('0:50', { includeHiddenElements: true })).toBeTruthy();
+  expect(r.getByText('50s', { includeHiddenElements: true })).toBeTruthy();
 
   fireEvent.press(r.getByText('Undo last mark'));
   act(() => jest.advanceTimersByTime(1000));
-  expect(r.getByText('0:49')).toBeTruthy();
+  expect(r.getByText('49s')).toBeTruthy();
 });
 
 test('same-tick tenth and eleventh Incorrect taps stop once; all queued marking controls are ignored', () => {

@@ -11,3 +11,4 @@ export { PageIndicator } from './PageIndicator';
 export { MarkTile, type TileState, type TileVariant } from './MarkTile';
 export { PagedGrid } from './PagedGrid';
 export { TileGroups } from './TileGroups';
+export { TimerBar } from './TimerBar';
