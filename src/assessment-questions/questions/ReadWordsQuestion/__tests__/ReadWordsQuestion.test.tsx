@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ReadWordsQuestion } from '..';
 import { FIXTURE_READ_WORDS_EN } from '../../../testFixtures';
+import { WELA_PLUS_READ_WORDS_EN } from '../../../itemsets/wela_plus_read_words.en';
 
 const SET = {
   item_set_id: 'wela_plus_read_words@fixture.en', question_code: 'wela_plus_read_words',
@@ -9,10 +10,87 @@ const SET = {
   words: ['there', 'how', 'there', 'how', 'come', 'with'].map((w) => ({ item_key: w, word: w })),
 };
 
-test('renders rows from row_lengths', () => {
+test('renders pages of whole card rows', () => {
   const r = render(<ReadWordsQuestion language="en" itemSet={SET} instructions="." onComplete={jest.fn()} />);
   fireEvent.press(r.getByText('Start'));
-  expect(r.getAllByTestId(/^word-row-/)).toHaveLength(2);
+  expect(r.getAllByLabelText(/, idle$/)).toHaveLength(6);
+  expect(r.queryByTestId('page-indicator')).toBeNull();
+  expect(r.queryByLabelText('Next page')).toBeNull();
+  expect(r.queryByLabelText('Previous page')).toBeNull();
+  r.unmount();
+
+  const shipped = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} onComplete={jest.fn()} />);
+  fireEvent.press(shipped.getByText('Start'));
+  expect(shipped.getByLabelText('Card row 1 · page 1 of 6')).toBeTruthy();
+  expect(shipped.getAllByLabelText(/, idle$/)).toHaveLength(7);
+  expect(shipped.getByLabelText('bus, idle')).toBeTruthy();
+  expect(shipped.queryByLabelText('not, idle')).toBeNull();
+  expect(shipped.getByLabelText('Previous page')).toBeDisabled();
+});
+
+test('Next page shows card row 2 and keeps page-1 marks', () => {
+  const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('the, idle'));
+  expect(r.getByLabelText('Card row 1 · page 1 of 6')).toBeTruthy();
+  fireEvent.press(r.getByLabelText('Next page'));
+  expect(r.getByLabelText('Card row 2 · page 2 of 6')).toBeTruthy();
+  expect(r.getByLabelText('not, idle')).toBeTruthy();
+  expect(r.queryByLabelText('the, correct')).toBeNull();
+  fireEvent.press(r.getByLabelText('Previous page'));
+  expect(r.getByLabelText('Card row 1 · page 1 of 6')).toBeTruthy();
+  expect(r.getByLabelText('the, correct')).toBeTruthy();
+});
+
+test('Cancel after End returns to the same page with its marks', () => {
+  const onComplete = jest.fn();
+  const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('Next page'));
+  fireEvent.press(r.getByLabelText('Next page'));
+  fireEvent.press(r.getByLabelText('have, idle'));
+  expect(r.getByLabelText('Card row 3 · page 3 of 6')).toBeTruthy();
+  fireEvent.press(r.getByText('End'));
+  expect(r.getByText('Last item attempted')).toBeTruthy();
+  fireEvent.press(r.getByText('Cancel'));
+  expect(r.queryByText('Last item attempted')).toBeNull();
+  expect(r.getByLabelText('Card row 3 · page 3 of 6')).toBeTruthy();
+  expect(r.getByLabelText('have, correct')).toBeTruthy();
+  expect(onComplete).not.toHaveBeenCalled();
+});
+
+test('duplicate words on one page toggle independently', () => {
+  const onComplete = jest.fn();
+  const errors = jest.spyOn(console, 'error');
+  try {
+    const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} onComplete={onComplete} />);
+    fireEvent.press(r.getByText('Start'));
+    for (let page = 0; page < 3; page += 1) fireEvent.press(r.getByLabelText('Next page'));
+    expect(r.getByLabelText('Card row 4 · page 4 of 6')).toBeTruthy();
+    fireEvent.press(r.getAllByLabelText('there, idle')[1]);
+    fireEvent.press(r.getAllByLabelText('how, idle')[0]);
+    expect(r.getAllByLabelText('there, correct')).toHaveLength(1);
+    expect(r.getAllByLabelText('there, idle')).toHaveLength(1);
+    expect(r.getAllByLabelText('how, correct')).toHaveLength(1);
+    expect(r.getAllByLabelText('how, idle')).toHaveLength(1);
+    fireEvent.press(r.getByLabelText('there, correct'));
+    expect(r.getAllByLabelText('there, idle')).toHaveLength(2);
+    expect(r.getByLabelText('how, correct')).toBeTruthy();
+    fireEvent.press(r.getAllByLabelText('there, idle')[1]);
+    fireEvent.press(r.getByLabelText('Previous page'));
+    fireEvent.press(r.getByLabelText('Next page'));
+    expect(r.getByLabelText('there, correct')).toBeTruthy();
+    expect(r.getByLabelText('how, correct')).toBeTruthy();
+    fireEvent.press(r.getByText('End'));
+    fireEvent.press(r.getByText('Reached the end'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0].items.slice(21, 25).map(
+      (item: { position: number; is_correct: boolean }) => [item.position, item.is_correct],
+    )).toEqual([[21, false], [22, true], [23, true], [24, false]]);
+    expect(errors).not.toHaveBeenCalled();
+  } finally {
+    errors.mockRestore();
+  }
 });
 
 test('duplicate words are marked independently', () => {
@@ -128,6 +206,34 @@ describe('ReadWordsQuestion — timer', () => {
   });
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  test('the 60 s timer shows 60s and a full bar immediately after Start, then counts down', () => {
+    const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} durationSec={60} onComplete={jest.fn()} />);
+    fireEvent.press(r.getByText('Start'));
+    expect(r.getByText('60s')).toBeTruthy();
+    expect(r.getByTestId('countdown-fill')).toHaveStyle({ width: '100%' });
+    act(() => jest.advanceTimersByTime(10000));
+    expect(r.getByText('50s')).toBeTruthy();
+  });
+
+  test('timer expiry on page 3 opens the last-attempted sheet without Cancel', () => {
+    const onComplete = jest.fn();
+    const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} durationSec={60} onComplete={onComplete} />);
+    fireEvent.press(r.getByText('Start'));
+    fireEvent.press(r.getByLabelText('Next page'));
+    fireEvent.press(r.getByLabelText('Next page'));
+    fireEvent.press(r.getByLabelText('have, idle'));
+    expect(r.getByLabelText('Card row 3 · page 3 of 6')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(60000));
+    expect(r.getByText('Last item attempted')).toBeTruthy();
+    expect(r.queryByText('Cancel')).toBeNull();
+    expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.press(r.getByText('Confirm'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0].stopped_reason).toBe('timer');
+    expect(onComplete.mock.calls[0][0].duration_ms).toBe(60000);
+    expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBe(14);
   });
 
   test('timer expiry fires onComplete with stopped_reason=timer', () => {
