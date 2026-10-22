@@ -6,7 +6,7 @@
  * come from the itemSet. Timed runs report correct words per minute.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -17,11 +17,12 @@ import type { ReadPassageItemSet, ReadPassageWord } from './types';
 import { WELA_PLUS_READ_PASSAGE_EN } from '../../itemsets/wela_plus_read_passage.en';
 import { WELA_PLUS_READ_PASSAGE_XH } from '../../itemsets/wela_plus_read_passage.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
 import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
+import { Canvas, MarkTile, QuestionIntro, TileGroups, ToggleBar } from '../../ui';
+import { Countdown } from '../../progress/Countdown';
 
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
 type MarkReason = 'ea_ended' | 'timer';
@@ -122,6 +123,12 @@ function ReadPassageQuestionContent(
     if (startTimeMsRef.current === null || durationSec === undefined) return null;
     return startTimeMsRef.current + durationSec * 1000;
   }, [durationSec]);
+
+  const getRemainingMs = useCallback(() => {
+    if (durationSec === undefined) return 0;
+    const d = getDeadlineMs();
+    return d === null ? durationSec * 1000 : d - (stopTimeMsRef.current ?? monotonicNow());
+  }, [getDeadlineMs, durationSec]);
 
   const words = effectiveItemSet.words;
   const indexedWords = words.map((word, idx) => ({ word, idx }));
@@ -249,12 +256,7 @@ function ReadPassageQuestionContent(
 
   if (phase === 'intro') {
     return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
+      <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />
     );
   }
 
@@ -295,52 +297,32 @@ function ReadPassageQuestionContent(
     const marked = isMarked(key);
     const labelState = marked ? 'correct' : 'idle';
     return (
-      <Pressable
-        key={key}
+      <MarkTile
+        key={idx}
+        variant="pill"
+        state={labelState}
+        text={w.word}
         testID={`pill-${w.item_key}`}
-        accessibilityRole="button"
         accessibilityLabel={`${w.word}, ${labelState}`}
         onPress={() => handleToggle(idx, w)}
-        style={[
-          styles.pill,
-          {
-            backgroundColor: marked
-              ? tokens.color.marked
-              : tokens.color.surface,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.word,
-            {
-              color: marked ? tokens.color.onMarked : tokens.color.ink,
-            },
-          ]}
-        >
-          {w.word}
-        </Text>
-      </Pressable>
+      />
     );
   };
 
   return (
-    <View style={styles.root}>
-      <ScrollView
+    <Canvas>
+      {durationSec !== undefined && <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />}
+      <TileGroups
         testID="passage-scroll"
-        style={styles.scroll}
-        contentContainerStyle={styles.paragraphs}
-      >
-        {paragraphs.map((paragraph, p) => (
-          <View key={p} testID={`paragraph-${p}`} style={styles.paragraph}>
-            {paragraph.map(renderWord)}
-          </View>
-        ))}
-      </ScrollView>
-      <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
+        groups={paragraphs.map((paragraph, p) => ({
+          key: String(p), testID: `paragraph-${p}`, items: paragraph,
+        }))}
+        renderTile={renderWord}
+      />
+      <ToggleBar
+        primary={{
+          label: 'End',
+          onPress: () => {
             const nowMs = monotonicNow();
             const deadlineMs = getDeadlineMs();
             const deadlineReached = deadlineMs !== null && nowMs >= deadlineMs;
@@ -350,44 +332,10 @@ function ReadPassageQuestionContent(
             }
             setMarkReason(deadlineReached ? 'timer' : 'ea_ended');
             setPhase('mark-last');
-          }}
-        >
-          <Text>End</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setPhase('skip-picker')}
-        >
-          <Text>Skip question</Text>
-        </Pressable>
-      </View>
-    </View>
+          },
+        }}
+        onSkip={() => setPhase('skip-picker')}
+      />
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  paragraphs: {
-    gap: tokens.space.lg,
-    padding: tokens.space.md,
-  },
-  paragraph: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.sm,
-  },
-  pill: {
-    paddingHorizontal: tokens.space.md,
-    paddingVertical: tokens.space.sm,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.pill,
-  },
-  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
-  nav: {
-    flexDirection: 'row',
-    gap: tokens.space.lg,
-    padding: tokens.space.md,
-  },
-});

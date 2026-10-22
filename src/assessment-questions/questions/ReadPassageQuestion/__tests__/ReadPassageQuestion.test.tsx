@@ -1,7 +1,54 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, within } from '@testing-library/react-native';
 import { ReadPassageQuestion } from '..';
 import { FIXTURE_READ_PASSAGE_EN } from '../../../testFixtures';
+import { tokens } from '../../../theme/tokens';
+
+test('the timer shows only when durationSec is given', () => {
+  const r = render(
+    <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} onComplete={jest.fn()} />,
+  );
+  expect(r.queryByTestId('countdown-track')).toBeNull();
+  fireEvent.press(r.getByText('Start'));
+  expect(r.queryByTestId('countdown-track')).toBeNull();
+  r.unmount();
+
+  const timed = render(
+    <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} durationSec={60} onComplete={jest.fn()} />,
+  );
+  expect(timed.queryByTestId('countdown-track')).toBeNull();
+  fireEvent.press(timed.getByText('Start'));
+  expect(timed.getByTestId('countdown-track')).toBeTruthy();
+  expect(within(timed.getByTestId('passage-scroll')).queryByTestId('countdown-track')).toBeNull();
+});
+
+test('with durationSec it shows 60s immediately after Start', () => {
+  jest.useFakeTimers();
+  try {
+    const r = render(
+      <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} durationSec={60} onComplete={jest.fn()} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.getByText('60s')).toBeTruthy();
+    expect(r.getByTestId('countdown-fill')).toHaveStyle({ width: '100%' });
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(r.getByText('59s')).toBeTruthy();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('paragraphs render as wrapped word pills', () => {
+  const r = render(
+    <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} onComplete={jest.fn()} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  const pill = within(r.getByTestId('paragraph-0')).getByTestId('pill-p1.w1');
+  let row = pill.parent;
+  while (row && typeof row.type !== 'string') row = row.parent;
+  expect(row).toHaveStyle({ flexWrap: 'wrap' });
+  expect(pill).toHaveStyle({ borderRadius: tokens.radius.tile });
+});
 
 test('untimed by default: no timer fires and no correct_words_per_minute', () => {
   jest.useFakeTimers();
