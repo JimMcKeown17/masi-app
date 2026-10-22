@@ -12,10 +12,10 @@ import { draftStart, holdDraftWrite, observe } from '../test-support/lessonDraft
 import { getPack } from '../src/lessonPlan/packs';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { saveLesson } from '../src/services/lessonSave';
-import { buildLessonRecord } from '../src/lessonPlan/lessonRecord';
 import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
 import BrandButton from '../src/components/common/BrandButton';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
+import { useLessonDraft } from '../src/hooks/useLessonDraft';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('expo-updates', () => ({ channel: null }));
@@ -400,7 +400,7 @@ testLesson('Show 3-letter switches tiers and stores blendTierShown', async () =>
   fireEvent.press(resumed.getByRole('button', { name: 'Show 2-letter' }));
   await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBe('2 Letter Blends'));
 });
-testLesson('a ticked blend stays visible and correctable after its tier\'s only child is marked absent', async () => {
+testLesson('a ticked blend stays visible and correctable when its tier\'s only child is absent, and the chosen tier returns with them', async () => {
   await previewLesson(['2 Letter Blends', '3 Letter Blends']);
   const view = mount();
   fireEvent.press(await view.findByRole('button', { name: 'Show 3-letter (Lulu is ahead)' }));
@@ -411,38 +411,59 @@ testLesson('a ticked blend stays visible and correctable after its tier\'s only 
   await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blends).toHaveLength(1));
   fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
   await view.findByText('2 · Blending · 15 min · 2-letter');
-  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBeNull());
-  const stored = await handle.repositories.lessonDrafts.getActive();
-  expect(buildLessonRecord({ draft: stored, userId: handle.userId, currentLevels: {}, sessionTypeFields: {},
-    nowIso: '2026-10-22T09:00:00.000Z' }).session.activities.lesson.blend_tier_shown).toBe('2 Letter Blends');
+  expect(within(view.getByTestId('lesson-blends')).getByRole('button', { name: `${spoken}, ticked` })).toBeTruthy();
+  expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBe('3 Letter Blends');
+  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, absent' }));
+  await view.findByText('2 · Blending · 15 min · 3-letter');
   fireEvent.press(within(view.getByTestId('lesson-blends')).getByRole('button', { name: `${spoken}, ticked` }));
   await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blends).toEqual([]));
 });
-testLesson('a tier reset that fails is not retried until the attendance changes again', async () => {
+function HookSave({ route }) {
+  const lesson = useLessonDraft({ draftId: route.params.draftId });
+  const [result, setResult] = useState('not saved');
+  const save = async () => {
+    try {
+      const draft = await lesson.beginSave();
+      await saveLesson({ handle, draft, sessionTypeFields: buildSessionTypeFields({ jobTitlesCache: [] }) });
+      lesson.endSave({ saved: true });
+      setResult('saved');
+    } catch (error) { setResult(error.name); }
+  };
+  return <><Text>{result}</Text>{lesson.choices ? <BrandButton label="Hook save" onPress={save} /> : null}</>;
+}
+testLesson('Save records the tier on screen when the chosen tier has gone; a failed correction stops the save until it succeeds', async () => {
   await previewLesson(['2 Letter Blends', '3 Letter Blends']);
-  const view = mount();
+  const view = renderInTestStack({ wrapper, keepMounted: true, initialIndex: 1,
+    motion: { tier: 'static', motionLevel: 'still', reduceMotion: true },
+    routes: [{ name: 'MainTabs', component: Home },
+      { name: 'Lesson', component: LessonRoute, params: { groupId: 'group-1', upNextGroupId: 'group-1' } },
+      { name: 'LessonWrapUp', component: HookSave }, { name: 'SessionComplete', component: Complete }] });
   fireEvent.press(await view.findByRole('button', { name: 'Show 3-letter (Lulu is ahead)' }));
+  await view.findByText('2 · Blending · 15 min · 3-letter');
+  const [first] = within(view.getByTestId('lesson-blends')).getAllByRole('button', { name: /, not ticked$/ });
+  fireEvent.press(first);
   const drafts = handle.repositories.lessonDrafts;
-  await waitFor(async () => expect((await drafts.getActive()).ticks.blendTierShown).toBe('3 Letter Blends'));
+  await waitFor(async () => expect((await drafts.getActive()).ticks.blends).toHaveLength(1));
+  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
+  await view.findByText('2 · Blending · 15 min · 2-letter');
+  const { session_id: sessionId, ticks } = await drafts.getActive();
   const original = drafts.update.bind(drafts);
-  const resets = [];
   let failing = true;
   jest.spyOn(drafts, 'update').mockImplementation(async (id, patch, ...rest) => {
-    if (patch.ticks && patch.ticks.blendTierShown === null) {
-      resets.push(patch);
-      if (failing) throw new Error('database or disk is full');
-    }
+    if (failing && patch.ticks && patch.ticks.blendTierShown === null) throw new Error('database or disk is full');
     return original(id, patch, ...rest);
   });
-  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
-  await view.findByText("Couldn't save your last change.");
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
-  expect(resets).toHaveLength(1);
+  fireEvent.press(view.getByRole('button', { name: 'Wrap up →' }));
+  fireEvent.press(await view.findByRole('button', { name: 'Hook save' }));
+  expect(await view.findByText('LessonDraftWriteError')).toBeTruthy();
+  const saved = () => handle.repositories.sessions.getSessions({ userId: handle.userId });
+  expect((await saved()).some(row => row.id === sessionId)).toBe(false);
   failing = false;
-  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, absent' }));
-  fireEvent.press(await view.findByRole('checkbox', { name: 'Lulu, here' }));
-  await waitFor(async () => expect((await drafts.getActive()).ticks.blendTierShown).toBeNull());
-  expect(resets).toHaveLength(2);
+  fireEvent.press(view.getByRole('button', { name: 'Hook save' }));
+  await waitFor(async () => expect((await saved()).some(row => row.id === sessionId)).toBe(true));
+  const lessonRecord = (await saved()).find(row => row.id === sessionId).activities.lesson;
+  expect(lessonRecord.blend_tier_shown).toBe('2 Letter Blends');
+  expect(lessonRecord.blends_done).toEqual(ticks.blends);
 });
 testLesson('the higher-tier switch names all children who are ahead', async () => {
   await previewLesson(['2 Letter Blends', '3 Letter Blends']);
