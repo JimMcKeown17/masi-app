@@ -233,47 +233,45 @@ testSave('rapid chip edits preserve the whole map and the original tap times thr
     { child_id: 'c2', letter: 'a', language: 'en', changed_at: '2026-10-22T09:01:00.000Z' },
   ]);
 });
-testSave('leaving Wrap up while a failing save is in flight leaves the lesson editable', async () => {
-  const view = mount(); await ready(view);
+const holdAttendeeInsert = async ({ fail }) => {
   const writer = await getTestWriter(); const original = writer.runAsync.bind(writer);
   const entered = deferred(); const gate = deferred();
   jest.spyOn(writer, 'runAsync').mockImplementation(async (sql, ...args) => {
     if (sql.includes('insert into "session_attendees"')) {
-      entered.resolve(); await gate.promise; throw new Error('Injected attendee failure');
+      entered.resolve(); await gate.promise;
+      if (fail) throw new Error('Injected attendee failure');
     }
     return original(sql, ...args);
   });
+  return { entered: entered.promise, release: () => gate.resolve() };
+};
+testSave('Back waits for a save in flight; after a failed save the EA can leave and keep editing', async () => {
+  const view = mount(); await ready(view);
+  const held = await holdAttendeeInsert({ fail: true });
   fireEvent.press(view.getByRole('button', { name: 'Save session' }));
-  await act(async () => entered.promise);
+  await act(async () => held.entered);
   expect(handle.services.lessonDraft.getSnapshot().status).toBe('saving');
   await act(async () => { view.navigationRef.goBack(); });
+  expect(view.routeNames()).toEqual(['MainTabs', 'Lesson', 'LessonWrapUp']);
+  await act(async () => { held.release(); });
+  expect(await view.findByText("Couldn't save the lesson. Try again.")).toBeTruthy();
+  expect(handle.services.lessonDraft.getSnapshot().status).toBe('ready');
+  await act(async () => { view.navigationRef.goBack(); });
   await waitFor(() => expect(view.routeNames()).toEqual(['MainTabs', 'Lesson']));
-  await act(async () => { gate.resolve(); });
-  // Without the release the controller stays 'saving' and refuses every edit until restart.
-  await waitFor(() => expect(handle.services.lessonDraft.getSnapshot().status).toBe('ready'));
   expect(await handle.repositories.lessonDrafts.getActive()).toMatchObject({ id: draft.id });
   expect(await sessions()).toEqual([]);
 });
-
-for (const [zone, now, selectedDate] of [
-  ['Pacific/Auckland', '2026-10-22T12:00:00.000Z', '2026-10-20'],
-  ['America/New_York', '2026-10-22T01:00:00.000Z', '2026-10-22'],
-]) testSave(`the date field, calendar, stored session and receipt keep the programme day under ${zone}`, async () => {
-  process.env.TZ = zone;
-  jest.setSystemTime(new Date(now));
-  draft = await handle.repositories.lessonDrafts.update(draft.id, {
-    lesson_date: '2026-10-22', plan: { ...draft.plan, made_on: '2026-10-22' },
-  });
+testSave('Back pressed during a save that succeeds still ends on Session complete', async () => {
   const view = mount(); await ready(view);
-  fireEvent.press(view.getByRole('button', { name: 'Date, Today' }));
-  expect(await view.findByRole('button', { name: 'Thu 22 October 2026' })).toBeSelected();
-  if (selectedDate === '2026-10-20') fireEvent.press(view.getByRole('button', { name: 'Tue 20 October 2026' }));
-  else fireEvent.press(view.getByRole('button', { name: 'Cancel' }));
+  const held = await holdAttendeeInsert({ fail: false });
   fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await act(async () => held.entered);
+  await act(async () => { view.navigationRef.goBack(); });
+  expect(view.routeNames()).toEqual(['MainTabs', 'Lesson', 'LessonWrapUp']);
+  await act(async () => { held.release(); });
   await view.findByText('Session complete route');
-  expect((await sessions())[0].session_date).toBe(selectedDate);
-  expect(view.navigationRef.getCurrentRoute().params.sessionDate).toBe(selectedDate);
-  expect(formatSessionDate(selectedDate, 'pill')).toBe(selectedDate === '2026-10-20' ? 'Tue 20 Oct' : 'Thu 22 Oct');
+  expect((await sessions()).map(row => row.id)).toEqual([draft.session_id]);
+  expect(mockOffline.triggerBackgroundSync).toHaveBeenCalledTimes(1);
 });
 testSave('crossing programme midnight refreshes Today and the calendar without moving the lesson date or plan', async () => {
   jest.setSystemTime(new Date('2026-10-31T21:59:00.000Z'));

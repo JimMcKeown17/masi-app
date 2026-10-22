@@ -11,6 +11,7 @@ import { saveLesson, LessonSaveError } from '../src/services/lessonSave';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'),
   useFocusEffect: callback => require('react').useEffect(callback, [callback]),
+  usePreventRemove: () => {},
 }));
 jest.mock('../src/hooks/useProgrammeTodayKey', () => ({ useProgrammeTodayKey: () => '2026-10-22' }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ profile: {} }) }));

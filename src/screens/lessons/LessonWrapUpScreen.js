@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
@@ -74,6 +74,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [completion, setCompletion] = useState(null);
+  // A save in flight decides what comes next (Session complete or its error), so Back waits for it.
+  usePreventRemove(saving && !completion, () => {});
   const savingRef = useRef(false);
   const active = useRef(true);
   useEffect(() => () => { active.current = false; }, []);
