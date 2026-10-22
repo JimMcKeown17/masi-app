@@ -1,7 +1,7 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import React from 'react';
 import * as ReactNative from 'react-native';
-import { Keyboard, Platform, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Keyboard, Platform, ScrollView, StyleSheet } from 'react-native';
 import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { draftStart, deferred } from '../test-support/lessonDraftTestUtils';
@@ -16,7 +16,11 @@ jest.mock('../src/hooks/useProgrammeTodayKey', () => ({ useProgrammeTodayKey: ()
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ profile: {} }) }));
 jest.mock('../src/context/LookupsContext', () => ({ useLookupsContext: () => ({ jobTitles: [] }) }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => ({ refreshFromCache: jest.fn() }) }));
-jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => ({ refreshSyncStatus: jest.fn() }) }));
+const mockRefreshSyncStatus = jest.fn();
+const mockTriggerBackgroundSync = jest.fn();
+jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => ({
+  refreshSyncStatus: mockRefreshSyncStatus, triggerBackgroundSync: mockTriggerBackgroundSync,
+}) }));
 jest.mock('../src/context/SignedInEAContext', () => ({ useSignedInEA: () => ({ handle: mockHandle, repositories: mockHandle.repositories }) }));
 jest.mock('../src/hooks/useLessonDraft', () => ({ useLessonDraft: options => mockUseLessonDraft(options) }));
 jest.mock('../src/services/lessonSave', () => ({ ...jest.requireActual('../src/services/lessonSave'), saveLesson: jest.fn() }));
@@ -49,6 +53,7 @@ beforeEach(() => {
   mockBeginSave = jest.fn(async () => mockDraft);
   mockEndSave = jest.fn();
   saveLesson.mockResolvedValue({ sessionId: 'session-1' });
+  mockRefreshSyncStatus.mockReset().mockResolvedValue({});
   mockHandle.repositories.children.getWriteAuthority.mockImplementation(async () => ({
     c1: { attend: true, deliver: true, level: true }, c2: { attend: true, deliver: true, level: true },
   }));
@@ -128,6 +133,8 @@ test('a double press saves once', async () => {
   const button = view.getByRole('button', { name: 'Save session' });
   fireEvent.press(button); fireEvent.press(button);
   expect(mockBeginSave).toHaveBeenCalledTimes(1);
+  expect(view.getByRole('button', { name: 'Saving…' }).props.accessibilityState).toMatchObject({ busy: true, disabled: true });
+  expect(navigation.replace).not.toHaveBeenCalled();
   await act(async () => held.resolve(mockDraft));
   await waitFor(() => expect(saveLesson).toHaveBeenCalledTimes(1));
   expect(mockEndSave).toHaveBeenCalledWith({ saved: true });
@@ -223,4 +230,94 @@ test('blend and book ticks supplied as data bypass the empty confirm and keep th
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SessionComplete', expect.objectContaining({ readingLevel: '3 Letter Blends' })));
   expect(view.queryByText('Save without letters, blends or a book?')).toBeNull();
   expect(saveLesson.mock.calls[0][0].draft.ticks).toEqual(mockInitial.ticks);
+});
+
+test('two immediately rejected saves each announce an assertive footer error', async () => {
+  jest.replaceProperty(Platform, 'OS', 'ios');
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  saveLesson.mockRejectedValue(new Error('Disk full'));
+  const view = mount(); await ready(view);
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await view.findByText("Couldn't save the lesson. Try again.");
+  await act(async () => fireEvent.press(view.getByRole('button', { name: 'Save session' })));
+  await waitFor(() => expect(saveLesson).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(announce.mock.calls.filter(([message]) => message === "Couldn't save the lesson. Try again.")).toHaveLength(2));
+  expect(view.getByRole('alert').props.accessibilityLiveRegion).toBe('assertive');
+  let parent = view.getByRole('alert').parent;
+  let inFooter = false;
+  while (parent) {
+    expect(parent.type).not.toBe(ScrollView);
+    if (parent.props.testID === 'sticky-action-footer') inFooter = true;
+    parent = parent.parent;
+  }
+  expect(inFooter).toBe(true);
+});
+test.each(['pending', 'rejected'])('completion does not wait for a %s sync-status refresh', async mode => {
+  mockRefreshSyncStatus.mockImplementation(() => mode === 'pending'
+    ? new Promise(() => {}) : Promise.reject(new Error('Status unavailable')));
+  const view = mount(); await ready(view);
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SessionComplete', expect.anything()));
+  expect(mockRefreshSyncStatus).toHaveBeenCalledTimes(1);
+  expect(mockTriggerBackgroundSync).toHaveBeenCalledTimes(1);
+  expect(view.queryByText("Couldn't save the lesson. Try again.")).toBeNull();
+});
+test('typing several notes characters keeps the focused input mounted and its text intact', async () => {
+  const view = mount(); await ready(view);
+  const input = view.getByLabelText('Notes (optional)');
+  fireEvent(input, 'focus');
+  let text = '';
+  for (const character of 'focus') {
+    text += character;
+    fireEvent.changeText(input, text);
+    expect(view.getByLabelText('Notes (optional)')).toBe(input);
+  }
+  expect(input.props.value).toBe('focus');
+  expect(mockDraft.notes).toBe('focus');
+});
+test('reading levels show stored values; Cancel keeps them and selection changes only the opened child', async () => {
+  const view = mount(); await ready(view);
+  expect(view.getAllByTestId(/^wrap-up-child-/).map(child => child.props.testID)).toEqual(['wrap-up-child-c1', 'wrap-up-child-c2']);
+  expect(row(view).getByRole('button', { name: 'Amahle, reading level, Cannot blend' })).toBeTruthy();
+  fireEvent.press(row(view, 'c2').getByRole('button', { name: 'Lulu, reading level, 2 Letter Blends' }));
+  fireEvent.press(await view.findByRole('button', { name: 'Cancel' }));
+  expect(mockDraft.reading_level_changes).toEqual({});
+  fireEvent.press(row(view, 'c2').getByRole('button', { name: /reading level/ }));
+  fireEvent.press(await view.findByRole('button', { name: '3 Letter Blends' }));
+  await waitFor(() => expect(mockDraft.reading_level_changes).toEqual({ c2: '3 Letter Blends' }));
+});
+test.each(['ios', 'android'])('the notes scroll keeps the %s keyboard inset policy', async platform => {
+  jest.replaceProperty(Platform, 'OS', platform);
+  const view = mount(); await ready(view);
+  expect(view.UNSAFE_getByType(ScrollView).props.automaticallyAdjustKeyboardInsets).toBe(platform === 'ios');
+});
+test('cancelling date browsing keeps the selected day and reopening resets the month', async () => {
+  const view = mount(); await ready(view);
+  fireEvent.press(view.getByRole('button', { name: 'Date, Started Mon 19 Oct' }));
+  fireEvent.press(await view.findByRole('button', { name: 'Previous month' }));
+  expect(view.getByRole('header', { name: 'September 2026' })).toBeTruthy();
+  fireEvent.press(view.getByRole('button', { name: 'Cancel' }));
+  expect(mockDraft.lesson_date).toBe('2026-10-19');
+  fireEvent.press(view.getByRole('button', { name: 'Date, Started Mon 19 Oct' }));
+  expect(await view.findByRole('header', { name: 'October 2026' })).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Mon 19 October 2026' })).toBeSelected();
+});
+test('completion waits for the lesson transaction to commit', async () => {
+  const held = deferred(); saveLesson.mockReturnValue(held.promise);
+  const view = mount(); await ready(view);
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await waitFor(() => expect(saveLesson).toHaveBeenCalledTimes(1));
+  expect(navigation.replace).not.toHaveBeenCalled();
+  await act(async () => held.resolve({ sessionId: 'session-1' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SessionComplete', expect.anything()));
+});
+test('the Save action stays outside the scroll and scrolling updates the navigator hairline', async () => {
+  const view = mount(); await ready(view);
+  let parent = view.getByRole('button', { name: 'Save session' }).parent;
+  while (parent) { expect(parent.type).not.toBe(ScrollView); parent = parent.parent; }
+  const scroll = view.UNSAFE_getByType(ScrollView);
+  fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 12 } } });
+  expect(navigation.setOptions).toHaveBeenLastCalledWith({ headerScrolled: true });
+  fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 0 } } });
+  expect(navigation.setOptions).toHaveBeenLastCalledWith({ headerScrolled: false });
 });

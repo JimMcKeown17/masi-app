@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useAuth } from '../../context/AuthContext';
@@ -185,7 +185,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   };
   const displayedError = error?.message ?? (typeof lesson.error === 'string' ? lesson.error : null);
   return <View style={styles.screen}>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}
+      keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
       {letters.length ? <View style={styles.heading}>
         <Text accessibilityRole="header" style={styles.title}>{`Who knows ${letters.join(' ')} without help?`}</Text>
         <Text style={styles.note}>Teaching it today doesn't count.</Text>
@@ -213,7 +214,9 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     </StickyActionFooter>
     <ConfirmSheet visible={emptyConfirm} title="Save without letters, blends or a book?"
       confirmLabel="Save session" confirmVariant="primary" cancelLabel="Go back" onConfirm={() => void save()} onCancel={() => setEmptyConfirm(false)} />
-    <BottomSheet visible={dateVisible} title="Date" onDismiss={() => setDateVisible(false)} keyboardAvoiding={false}>
+    <BottomSheet visible={dateVisible} title="Date" onDismiss={() => setDateVisible(false)} keyboardAvoiding={false}
+      dismissLabel="Dismiss session date picker"
+      footer={<BrandButton variant="tertiary" tone="ink" label="Cancel" onPress={() => setDateVisible(false)} />}>
       {dateVisible && draft ? <MonthCalendar selectedKey={draft.lesson_date} todayKey={today}
         onSelect={key => { edit(transitions.setLessonDate, key); setDateVisible(false); }} /> : null}
     </BottomSheet>

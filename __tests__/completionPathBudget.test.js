@@ -7,7 +7,6 @@ import { runMigrations } from '../src/db/migrations';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
-import { persistLiteracySession } from '../src/services/literacySessionPersistence';
 import { createCountingSqliteTestDatabase } from '../test-support/countingSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { saveLesson } from '../src/services/lessonSave';
@@ -104,7 +103,7 @@ describe('completion-path statement budgets', () => {
     expect(owners).toEqual([{ owner_user_id: 'user-1' }]);
   });
 
-  test('literacy persistence writes each tracker change with one keyed read, one record and one outbox upsert', async () => {
+  test('lesson persistence writes each tracker change with one keyed read, one record and one outbox upsert', async () => {
     db = await createDatabase();
     await seedChildren(db, 2);
     const mastery = createMasteryRepository({ database: db });
@@ -114,22 +113,22 @@ describe('completion-path statement budgets', () => {
         confirmed, changedAt: '2026-07-11T09:00:00.000Z',
       });
     }
-    db.resetQueryLog();
-    const writes = jest.spyOn(db, 'runAsync');
-
-    await persistLiteracySession({
-      database: db,
-      session: {
-        id: 'session-mastery', user_id: 'user-1', programme_id: 'programme-a',
-        session_date: '2026-07-12', children_ids: ['child-0'], synced: false,
-      },
-      letterTrackerChanges: { 'child-0': {
+    await db.runAsync("insert into child_ea_assignments (id, user_id, child_id, assigned_at) values ('direct', 'user-1', 'child-0', '2026-01-15')");
+    await createGroupsRepository({ database: db }).saveGroup({ id: 'group-1', name: 'Group 1', class_id: 'class-1', created_by: 'user-1' });
+    const draft = await createLessonDraftsRepository({ database: db }).create(lessonDraftInput({
+      attendance: { childIds: ['child-0'], absentChildIds: [], addedChildIds: [] }, reading_level_changes: {},
+      tracker_changes: { 'child-0': {
         a: { mastered: true, languageCode: 'en', madeAt: '2026-07-12T09:55:00.000Z' },
         m: { mastered: true, languageCode: 'en', madeAt: '2026-07-12T09:56:00.000Z' },
         s: { mastered: false, languageCode: 'en', madeAt: '2026-07-12T09:57:00.000Z' },
       } },
-      nowIso: '2026-07-12T10:00:00.000Z',
-      idFactory: () => 'unused',
+    }));
+    db.resetQueryLog();
+    const writes = jest.spyOn(db, 'runAsync');
+
+    await saveLesson({
+      handle: { userId: 'user-1', withTransaction: task => runRepositoryTransaction(db, task) },
+      draft, sessionTypeFields: {}, nowIso: '2026-07-12T10:00:00.000Z',
     });
 
     const log = db.getQueryLog();
@@ -138,7 +137,9 @@ describe('completion-path statement budgets', () => {
     ));
     expect(masteryReads).toHaveLength(3);
     for (const query of masteryReads) expect(compactSql(query.sql)).toContain('where lm.id = ?');
-    expect(log.filter(query => query.method === 'getAllAsync' && compactSql(query.sql).includes('from letter_mastery'))).toHaveLength(0);
+    const correctionReads = log.filter(query => query.method === 'getAllAsync' && compactSql(query.sql).includes('from letter_mastery'));
+    expect(correctionReads).toHaveLength(1);
+    expect(compactSql(correctionReads[0].sql)).toContain('union all');
     const masteryWrites = writes.mock.calls.filter(([sql, ...params]) =>
       /(?:into|update) "letter_mastery"/i.test(sql) || (sql.includes('sync_outbox') && params.includes('letter_mastery')));
     expect(masteryWrites.length).toBeLessThanOrEqual(6);
