@@ -1,5 +1,23 @@
 # Assessment results, one letter test, and WelaPLUS data — Design
 
+> **Status note — 2026-10-22 (capture presentation):** The approved
+> [Assessment capture style design, §4–5](./2026-10-21-assessment-capture-style-design.md)
+> amends §1's “row for row”, §6.1's row-layout rule and typeface discussion, and §6.2's
+> Grid and Marking rows. Card rows retain their content order and saved row metadata, but
+> the phone packs whole card rows into pages: letters use 5 columns / 20 items, words
+> 2 columns / 10 items, with an oversized card row spanning labelled pages. Letter card
+> rows re-flow with dividers; words flow continuously within a page. The page follows
+> the cursor, including Back, and stays on the last marked page at a stop or completion;
+> there is no row auto-scroll (`src/assessment-questions/ui/paginate.ts:2`,
+> `src/assessment-questions/ui/paginate.ts:21`,
+> `src/assessment-questions/progress/SequentialCapture.tsx:47`,
+> `src/assessment-questions/progress/SequentialCapture.tsx:177`).
+> Test content now uses Andika Regular and controls use Figtree through the package theme
+> (`src/constants/assessmentFonts.js:3`, `App.js:139`, `App.js:170`,
+> `src/assessment-questions/ui/Text.tsx:21`). Native I/l verification remains a separate gate
+> (`src/assessment-questions/itemsets/contentStatus.ts:7`). The original body below is
+> preserved as the dated design record; verification belongs in `documentation/build-log.md`.
+
 **Date:** 2026-10-19
 **Status:** Draft for Jim's approval.
 - Codex adversarial review: three rounds (11 → 6 → 2 findings), all verified and addressed

@@ -122,7 +122,9 @@ All x offsets are zero. Shared `SurfaceCard` and `ListGroup` have no shadow. The
 
 Import `{ fontFamilies, typeRoles }` from `src/constants/typography`. The legacy `typography`
 export is retired. `App.js` loads Bricolage Grotesque 700/800 and Figtree 500/600/700/800 while the
-splash is held; a load error is logged and releases the splash with system-font fallback.
+splash is held; it also loads Andika Regular for assessment content. A load error is logged and
+releases the splash with system-font fallback (`App.js:138`, `App.js:139`, `App.js:153`,
+`App.js:170`).
 
 | Family key | Registered face |
 |---|---|
@@ -132,11 +134,13 @@ splash is held; a load error is logged and releases the splash with system-font 
 | `textSemi` | `Figtree_600SemiBold` |
 | `textBold` | `Figtree_700Bold` |
 | `textHeavy` | `Figtree_800ExtraBold` |
+| `content` | `Andika_400Regular` (assessment test content; `src/constants/typography.js:5`, `src/constants/assessmentFonts.js:4`) |
 
 Choose the face for the weight; never add `fontWeight` to a custom-family style, because Android
 can fall back to the system font. Bricolage is for display headings/numerals at 18 or above;
-Figtree carries UI copy, letters and row data. Roles carry geometry/family, not colour: add a
-semantic `color` at the call site. The eight original Home roles remain unchanged.
+Figtree carries UI copy and row data; Andika Regular carries assessment test content
+(`src/constants/assessmentFonts.js:3`, `src/assessment-questions/ui/Text.tsx:30`). Roles carry
+geometry/family, not colour: add a semantic `color` at the call site. The eight original Home roles remain unchanged.
 
 The table lists all 45 roles. A dash means tracking is not set in the role (Paper explicitly uses
 zero). **Addition** marks the seven shared-look plan additions beyond the overview's role table;
@@ -591,8 +595,10 @@ returns `insets.bottom + extra`. Preserve the existing bottom gap as `extra` and
 horizontal padding unchanged. Time tracking keeps its inner content padding and passes zero;
 Profile keeps its 40dp gap. Do not add this inset to tab-owned screens or scroll content above
 an inset-aware sibling footer: Record, Session complete, assessment capture and Assessment
-results already have one. Reset password uses the helper only on its form; its sent-state footer
-and Login's panel already handle the inset. BottomSheet owns its own inset independently.
+results already have one. In assessment capture, the package `BottomBar` owns the bottom inset;
+`TestFrame` owns only the top inset (`src/assessment-questions/ui/BottomBar.tsx:6`,
+`src/components/assessments/TestFrame.js:11`). Reset password uses the helper only on its form;
+its sent-state footer and Login's panel already handle the inset. BottomSheet owns its own inset independently.
 
 **`SyncIndicator({ onPress, variant='default' })`** uses `useOffline()` and the shared sync
 presenter. The default is the canvas header pill; there is no variant='pill' API. Its outer
@@ -839,6 +845,113 @@ The spinner uses `tints.spinnerTrack`, stroke 2.6, radius 7.7 and a 1000ms linea
 Message changes cross-fade old/new layers for 150ms, stopping on cleanup. The line is neither
 pressable nor a live region.
 
+## Assessment capture
+
+All eleven Questions use the package [shared primitives](../src/assessment-questions/ui/)
+and [theme](../src/assessment-questions/theme/). Keep presentation at this boundary rather
+than styling each Question independently. `Canvas` supplies the screen surface; the style
+and font ratchets are empty and enforced (`src/assessment-questions/ui/Canvas.tsx:6`,
+`src/assessment-questions/__tests__/styleGuard.test.ts:270`).
+
+| Surface or state | Package rule | Current source |
+|---|---|---|
+| Palette | `canvas` #F8F5F4, `surface` #FFFFFF, `line` #ECE5E4, `ink` #221A1B; correct `marked` #2E7D27, incorrect `error` #B3261E, warning #B26A00; destructive `primary` #C81F3E | `src/assessment-questions/theme/tokens.ts:9` |
+| Tiles | 10dp radius; idle white with 1dp line border; current white with 3dp ink outline; correct/incorrect solid green/red with white text; not reached uses muted #B3A8A8 | `src/assessment-questions/ui/MarkTile.tsx:9`, `src/assessment-questions/ui/MarkTile.tsx:45` |
+| Selection | Page dots and selected rubric chips use ink; free-toggle tiles are idle/correct. Red identifies incorrect marks or destructive End controls | `src/assessment-questions/ui/PageIndicator.tsx:28`, `src/assessment-questions/ui/RubricRow.tsx:21`, `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:310`, `src/assessment-questions/ui/ActionBar.tsx:20`, `src/assessment-questions/ui/ActionBar.tsx:26` |
+| Content | Andika Regular via `ContentText`; letters 30sp, words 21sp, prompt cards 28sp, story 18sp. Scaling caps at 1.2; fitted grid text shrinks to 0.6 of its base size without ellipsis | `src/assessment-questions/theme/tokens.ts:28`, `src/assessment-questions/ui/Text.tsx:30`, `src/assessment-questions/ui/MarkTile.tsx:52` |
+| UI type | Figtree for controls, labels, timer and headings; choose weight by family name. Without registered families, only the theme supplies system-font weights | `src/constants/assessmentFonts.js:3`, `src/assessment-questions/theme/typography.ts:13`, `src/assessment-questions/theme/typography.ts:23` |
+
+The host imports only `@expo-google-fonts/andika/400Regular`, registers it in `useFonts`, and
+passes the font map only after a successful load; an error passes `{}` for the system fallback
+(`App.js:36`, `App.js:139`, `App.js:170`). The package imports neither Expo nor host font
+packages (`src/assessment-questions/__tests__/boundary.test.ts:108`). The old child-reading
+font-size hook/provider is removed; scaling lives in `ContentText` instead
+(`src/assessment-questions/ui/Text.tsx:30`).
+
+**Paging and layout.** `paginate` packs whole card rows; only a row larger than the capacity
+spans pages. Letters use 5 columns / 20 items, start each card row on a display row and show a
+divider. Words use 2 columns / 10 items and flow continuously within a page. Grid A (6 × 10)
+has three pages; the historical 5 × 12 letter cards have five
+(`src/assessment-questions/ui/__tests__/paginate.test.ts:24`). Page labels name card rows;
+controls read “Previous page” / “Next page” (`src/assessment-questions/ui/paginate.ts:2`,
+`src/assessment-questions/ui/paginate.ts:21`, `src/assessment-questions/ui/PageIndicator.tsx:14`,
+`src/assessment-questions/ui/__tests__/paginate.test.ts:17`). Sequential capture follows the
+cursor, including Back; a stop or completion stays on the last marked page. Back clears the
+returned-to decision, so it gets the current outline while earlier marks keep their fills
+(`src/assessment-questions/progress/SequentialCapture.tsx:47`,
+`src/assessment-questions/progress/SequentialCapture.tsx:183`,
+`src/assessment-questions/progress/stepByStep.ts:54`). Q6 owns its page index across the
+last-attempted round trip (`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:125`).
+
+`PagedGrid`, `TileGroups` and `TimerBar` each own their full-width 16dp gutters; Questions
+must not add another gutter. Paged grids measure width and height, reduce gaps from 10 to 6dp,
+then reduce letter/word tiles toward a 40dp floor (nominal heights 60/58dp). Picture tiles
+use 88dp nominal / 72dp minimum. They never scroll or change capacity; below the minimum
+geometry they can overflow, so native device fit remains a gate
+(`src/assessment-questions/ui/PagedGrid.tsx:8`, `src/assessment-questions/ui/PagedGrid.tsx:43`,
+`src/assessment-questions/ui/MarkTile.tsx:17`, `src/assessment-questions/ui/TileGroups.tsx:7`,
+`src/assessment-questions/ui/TimerBar.tsx:30`). Q5 uses three columns / twelve items per page,
+requires positive-integer layout hints, and ships text-only picture prompts pending a separate
+image layout (`src/assessment-questions/itemsets/wela_plus_letter_writing.en.ts:39`,
+`src/assessment-questions/itemsets/wela_plus_letter_writing.xh.ts:39`,
+`src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:48`,
+`src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119`). Sentence, passage and
+dictation items wrap in groups; Q9 uses 52dp letter tiles
+(`src/assessment-questions/ui/TileGroups.tsx:7`,
+`src/assessment-questions/questions/WriteCvcsQuestion/index.tsx:266`).
+
+**Timer and actions.** Primary/secondary pill buttons are at least 52dp high, with SVG icons
+beside their labels (`src/assessment-questions/ui/Button.tsx:19`,
+`src/assessment-questions/ui/Button.tsx:57`). The memoised `Countdown` owns its 250ms tick, with `TimerBar` as the
+presentation leaf: a 12dp track, tabular “57s” label (`src/assessment-questions/theme/typography.ts:18`), green above ten seconds and amber at ten
+or fewer. Q6 and Q8 show it whenever `durationSec` is supplied
+(`src/assessment-questions/progress/Countdown.tsx:9`, `src/assessment-questions/ui/TimerBar.tsx:7`,
+`src/assessment-questions/ui/TimerBar.tsx:33`,
+`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:294`,
+`src/assessment-questions/questions/ReadPassageQuestion/index.tsx:314`).
+
+`DecisionBar` owns one `BottomBar`: Correct/Incorrect side by side, full-width Back, then a
+wrapping row of the optional Skip question link and destructive End test link. `ToggleBar`
+owns its `BottomBar` too, with an ink primary (End on Q6/Q8, Finish elsewhere), Skip question
+as a link, and an optional header carrying Q11's total. Never wrap either bar in another
+`BottomBar` (`src/assessment-questions/ui/ActionBar.tsx:7`,
+`src/assessment-questions/ui/ActionBar.tsx:32`, `src/assessment-questions/ui/Button.tsx:63`,
+`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:320`,
+`src/assessment-questions/questions/ReadPassageQuestion/index.tsx:322`,
+`src/assessment-questions/questions/StoryWritingRubricQuestion/index.tsx:337`). The white panel
+has a 1dp top border; bottom padding is `max(insets.bottom + 11, 16)` on Android and
+`max(insets.bottom, 16)` on iOS. The host `TestFrame` owns only the top inset
+(`src/assessment-questions/ui/BottomBar.tsx:6`, `src/components/assessments/TestFrame.js:11`).
+
+Use the shared intro, bottom confirmation sheets and full-screen sheets. FullScreenSheet owns
+the modal top inset. LastAttemptedSheet scrolls its header with the cells; its footer has
+Reached the end / Nothing attempted / optional Cancel links above Confirm, leaving space for
+the list at large text (`src/assessment-questions/ui/QuestionIntro.tsx:8`,
+`src/assessment-questions/ui/ConfirmSheet.tsx:18`, `src/assessment-questions/ui/FullScreenSheet.tsx:12`,
+`src/assessment-questions/progress/LastAttemptedSheet.tsx:31`).
+
+**Guards and gallery.** The package's AST guards, theme allowlist and empty ratchets are
+specified below (`src/assessment-questions/__tests__/styleGuard.test.ts:11`,
+`src/assessment-questions/__tests__/styleGuard.test.ts:260`). For native inspection, open
+Profile → Support tools → Question gallery: two standalone tests plus eleven WelaPLUS
+Questions, English/isiXhosa and bundled-card/test-fixture pickers. Runs use `TestFrame`, show
+a Result sheet, and keep the result only in screen state
+(`src/screens/main/ProfileScreen.js:190`, `src/screens/dev/QuestionGalleryScreen.js:12`, `src/screens/dev/QuestionGalleryScreen.js:32`,
+`src/screens/dev/QuestionGalleryRunScreen.js:16`, `src/screens/dev/QuestionGalleryRunScreen.js:25`).
+
+The exact runtime gate is `__DEV__ || (Updates.isEmbeddedLaunch === true && !Updates.channel &&
+Constants.expoConfig?.extra?.questionGallery === true)` (`src/utils/questionGallery.js:6`).
+`extra.questionGallery` is true only for EAS profiles `development` and `preview`; Jim's iPhone
+uses preview. TestFlight's `pilot` profile and production are excluded. Their native update
+channels (`preview` and `production`) keep an OTA manifest from enabling the gallery, and an
+OTA on a preview binary hides it because it is no longer an embedded launch. Reinstall an
+eligible preview binary to restore gallery access after an OTA
+(`app.config.js:4`, `app.config.js:78`, `eas.json:8`, `eas.json:19`, `eas.json:54`,
+`eas.json:69`, `src/utils/questionGallery.js:6`; controller profile ruling in
+`.superpowers/sdd/2026-10-21-assessment-capture-style/progress.md`).
+The A03/iPhone visual and large-text checks remain Task 17; typeface content gates are still
+pending (`src/assessment-questions/itemsets/contentStatus.ts:7`).
+
 ## Guard rules and the completed board ratchet
 
 `designSystemGuard.test.js` strips comments and scans `App.js` plus `src/**/*.js`, excluding
@@ -858,14 +971,30 @@ temporary test/filter are deleted: every included source file is checked.
 - No Paper Snackbar named import anywhere. No new named Paper TextInput, Searchbar,
   SegmentedButtons, Card, Chip, FAB, Banner, Menu, Button or HelperText imports
   anywhere in the scanned sources. Button and HelperText are plan additions to the guard.
-- No fontWeight, fontFamily or fontStyle in `src/assessment-questions/**/*.ts` or `.tsx`
-  outside `__tests__/` and `theme/`. `styleGuard.test.ts` owns `FONT_RATCHET` for existing
-  offenders; remove an entry when its file no longer violates.
-- No fontSize, lineHeight, color, backgroundColor, borderColor, borderWidth or borderRadius
-  keys, or React Native Text, Pressable, TouchableOpacity, TouchableHighlight,
-  TouchableWithoutFeedback or Modal imports, in the same package outside `__tests__/`,
-  `theme/` and `ui/`. `STYLE_RATCHET` covers existing offenders. Both package guards strip
-  comments and ignore interface/type declarations; stale or missing ratchet entries fail.
+- Package font guard: no object-literal `fontWeight`, `fontFamily` or `fontStyle` keys in
+  `src/assessment-questions/**/*.ts` / `.tsx` outside `__tests__/` and `theme/` (including `ui/`).
+  `FONT_RATCHET` is empty (`src/assessment-questions/__tests__/styleGuard.test.ts:8`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:43`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:80`).
+- Package style guard: outside `__tests__/`, `theme/` and `ui/`, no object-literal `fontSize`,
+  `lineHeight`, `color`, `backgroundColor`, `borderColor`, `borderWidth` or `borderRadius` keys,
+  or named React Native Text, Pressable, TouchableOpacity, TouchableHighlight,
+  TouchableWithoutFeedback or Modal imports. Namespace/default React Native imports and
+  `require('react-native')` are also forbidden there. `STYLE_RATCHET` is empty
+  (`src/assessment-questions/__tests__/styleGuard.test.ts:47`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:90`).
+- Both package guards parse TypeScript ASTs: bare, quoted, computed literal and shorthand
+  object keys are checked; comments and type/interface shapes are ignored. Exact offender
+  membership and stale/deleted entries are checked, and both ratchets must remain empty.
+  `theme/` permits only `tokens.ts`, `typography.ts`, `AssessmentTheme.tsx` and `__tests__/`;
+  put visual surfaces in `ui/Canvas`, not a new exempt theme file
+  (`src/assessment-questions/__tests__/styleGuard.test.ts:11`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:214`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:248`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:260`).
+- Package colour literals stay in `theme/tokens.ts`; the raw-hex and import-boundary guards
+  complement the AST rules (`src/assessment-questions/__tests__/rawHexGuard.test.ts:16`,
+  `src/assessment-questions/__tests__/boundary.test.ts:108`).
 
 `BOARD_RATCHET` is empty after Login Tasks 6 and 8 removed its final two entries. The guard
 explicitly requires it to stay empty, and every scanned file now meets the same type/control

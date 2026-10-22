@@ -4714,3 +4714,133 @@ That root defect was fixed by emitting a positional string key and keeping the p
 Local Jest, real test-SQLite and TypeScript evidence only. No device, visual/typeface, printed-card,
 Supabase/PostgreSQL, hosted, release or field verification was run. The capital-I/l typeface and
 designer recreation of the printed card remain explicitly pending in `contentStatus.ts`.
+
+### 2026-10-22 — Assessment capture style
+
+Spec approved 2026-10-21; build and documentation session 2026-10-22. Tasks 1–15 and the
+Afrikaans rebase follow-up are committed on `design/assessment-capture-style`, rebased onto
+`origin/main` at `ef56edc`. Task 16 reconciles the standing docs and adds dated amendments to
+historical specs. Task 17 remains open: these are local automated checks, not native visual,
+printed-card, hosted, release or field acceptance.
+
+The package now supplies shared capture primitives and theme typography, cursor-driven letter/
+word pages, visible timed Q6/Q8 bars, grouped/prompt/picture/rubric layouts, shared sheets and
+empty font/style ratchets (`src/assessment-questions/ui/index.ts:1`,
+`src/assessment-questions/progress/SequentialCapture.tsx:47`,
+`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:294`,
+`src/assessment-questions/questions/ReadPassageQuestion/index.tsx:314`,
+`src/assessment-questions/__tests__/styleGuard.test.ts:270`). The gallery mounts Questions in
+the host frame and displays Results in local screen state
+(`src/screens/dev/QuestionGalleryRunScreen.js:16`, `src/screens/dev/QuestionGalleryRunScreen.js:25`).
+
+#### Decision Register
+
+Each spec §12 call, plan call and controller ruling is recorded below. Process rows record
+controller decisions, rather than claiming device or execution evidence. Ruling provenance is
+`.superpowers/sdd/2026-10-21-assessment-capture-style/progress.md` (the controller's task ledger).
+
+| Call | Decision and reason | Current-tree evidence / provenance |
+|---|---|---|
+| Spec §12.1 — End copy | Keep **End test**, rather than the mockup's End Assessment; preserve the Masi step-by-step copy | `src/assessment-questions/ui/ActionBar.tsx:7` |
+| Spec §12.2 — Urgency | Timer uses amber at ten seconds or fewer; red remains an incorrect/destructive signal | `src/assessment-questions/ui/TimerBar.tsx:8` |
+| Spec §12.3 — Rubric selection | Selected chips use ink with white labels | `src/assessment-questions/ui/RubricRow.tsx:21` |
+| Spec §12.4 — Back | Clear the returned-to decision and show its current ink outline; keep earlier marks | `src/assessment-questions/progress/stepByStep.ts:54`, `src/assessment-questions/progress/SequentialCapture.tsx:183`, `src/assessment-questions/ui/MarkTile.tsx:12` |
+| Spec §12.5 — OS text | Cap item-content scaling at 1.2 and fit grid text; capacity stays fixed | `src/assessment-questions/ui/Text.tsx:39`, `src/assessment-questions/ui/paginate.ts:2` |
+| Spec §12.6 — Q5 content | No new picture assets; ship text prompts | `src/assessment-questions/ui/MarkTile.tsx:50`, `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119` |
+| Spec §12 — Jim's font split | Andika Regular for content, Figtree for controls, across the shared typography layer | `src/constants/assessmentFonts.js:3`, `src/assessment-questions/ui/Text.tsx:21` |
+| Spec §12 — Jim's gallery approval | Supply the Question gallery in this tranche so Questions can be inspected before the Battery Run host | `src/screens/dev/QuestionGalleryScreen.js:32`, `src/screens/dev/QuestionGalleryRunScreen.js:25` |
+| Spec §12 — Jim's visible timers | Q6 and Q8 show Countdown when durationSec is supplied | `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:294`, `src/assessment-questions/questions/ReadPassageQuestion/index.tsx:314` |
+| Plan — Q5 columns | Three columns / twelve items per page replace six / twenty-six; this is display configuration | `src/assessment-questions/itemsets/wela_plus_letter_writing.en.ts:39`, `src/assessment-questions/itemsets/wela_plus_letter_writing.xh.ts:39` |
+| Plan — Q6/Q8 End | Keep End as their ink primary action | `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:320`, `src/assessment-questions/questions/ReadPassageQuestion/index.tsx:322`, `src/assessment-questions/ui/ActionBar.tsx:38` |
+| Plan — Skip | Skip question is a link, including the wrapping step-by-step navigation row | `src/assessment-questions/ui/ActionBar.tsx:24`, `src/assessment-questions/ui/ActionBar.tsx:39` |
+| Plan — Child font hook | Remove the unmounted childReadingFontScale hook/provider; shared content scaling owns that responsibility | `src/assessment-questions/ui/Text.tsx:30`, `App.js:170`; removal recorded in commit `3b298c9` |
+| Plan — Preview flag | Gallery flag includes development and preview, excludes pilot/production | `app.config.js:4`, `app.config.js:78` |
+| Controller — Build orchestration | Claude invokes the Codex companion directly; fresh task threads, resumed fix threads; no Workflow/Claude subagents | `progress.md:21` in the task ledger; controller-owned process |
+| Controller — Review and commit | Claude inspects the diff/evidence, obtains a fresh Codex gpt-6-astra adversarial review, then commits. The implementer leaves changes uncommitted; sandbox Git lock failures are expected | `progress.md:22`; Task 16 dispatch reserves review/commit for the controller |
+| Controller — Dependency preparation | Controller ran npm ci and the Andika install before dispatch; implementers perform no network installs | `progress.md:23`; registered subpath import in `App.js:36` |
+| Controller — Gallery profiles | Keep development/preview: Jim's iPhone uses internal preview; development iOS is simulator-only, TestFlight pilot excluded | `progress.md:24`, `app.config.js:4`, `eas.json:8`, `eas.json:15`, `eas.json:19`, `eas.json:50` |
+| Controller — One action panel | DecisionBar and ToggleBar own BottomBar; callers never wrap them. ToggleBar's header carries the rubric total in the same panel | `progress.md:35`, `src/assessment-questions/ui/ActionBar.tsx:18`, `src/assessment-questions/ui/ActionBar.tsx:36`, `src/assessment-questions/questions/StoryWritingRubricQuestion/index.tsx:337` |
+| Controller — One gutter owner | Full-width PagedGrid, TileGroups and TimerBar own 16dp horizontal gutters | `progress.md:46`, `src/assessment-questions/ui/PagedGrid.tsx:14`, `src/assessment-questions/ui/TileGroups.tsx:7`, `src/assessment-questions/ui/TimerBar.tsx:30` |
+| Controller — Fit height as well as width | PagedGrid measures height, reduces gap 10→6 and letter/word tile height to a 40dp floor; fixed capacity, no scrolling. Below the floor, source permits overflow; device fit is still unproven | `progress.md:51`, `src/assessment-questions/ui/PagedGrid.tsx:8`, `src/assessment-questions/ui/PagedGrid.tsx:43` |
+| Controller — Close the theme escape | Replace theme/surfaces with ui/Canvas; allow only tokens.ts, typography.ts, AssessmentTheme.tsx and tests under theme | `progress.md:52`, `src/assessment-questions/ui/Canvas.tsx:6`, `src/assessment-questions/__tests__/styleGuard.test.ts:260` |
+| Controller — Last-attempted space | Header scrolls with the cells; footer has one wrapping row of shortcut/Cancel links above full-width Confirm, rather than several secondary buttons | `progress.md:57`, `src/assessment-questions/progress/LastAttemptedSheet.tsx:31`, `src/assessment-questions/progress/LastAttemptedSheet.tsx:49` |
+| Controller — Q5 validator | Require positive-integer itemsPerPage/columns; invalid hints show MissingItemSet before paginate can throw | `progress.md:60`, `src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:48`, `src/assessment-questions/ui/paginate.ts:22` |
+| Controller — Picture geometry | Picture variant nominal height 88dp, floor 72dp; caption caps scaling at 1.2 | `progress.md:61`, `src/assessment-questions/ui/MarkTile.tsx:17`, `src/assessment-questions/ui/MarkTile.tsx:51`, `src/assessment-questions/ui/PagedGrid.tsx:47` |
+| Controller — Q9 width | Use 52dp instead of 56dp: five letters and four 8dp gaps occupy 292dp within a 296dp card at 360dp | `progress.md:66`, `src/assessment-questions/questions/WriteCvcsQuestion/index.tsx:266`, `src/assessment-questions/ui/TileGroups.tsx:7` |
+| Controller — No speculative image path | Remove pictureSource/Image from MarkTile; an integrity assertion prevents shipped Q5 assets until their layout is designed. A 48dp image plus caption/letter would clip in 88/72dp | `progress.md:71`, `src/assessment-questions/ui/MarkTile.tsx:33`, `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119` |
+| Controller — Rebase and AF regression | Rebase onto origin/main after Task 15; cover Afrikaans paging and complete Results before docs. A03s uses a branch preview; iPhone uses peer's combined post-merge main preview | `progress.md:77`, commit `a3d4274`, `src/assessment-questions/__tests__/itemSetResolution.test.tsx:53`; native checks remain open |
+| Controller — Final gallery gate | `__DEV__ \|\| (Updates.isEmbeddedLaunch === true && !Updates.channel && Constants.expoConfig?.extra?.questionGallery === true)`. Embedded launch plus no native update channel prevents OTA manifests enabling gallery on pilot/production. An OTA on preview hides gallery; reinstall preview for access | `progress.md:79`, `src/utils/questionGallery.js:6`, `app.config.js:4`, `app.config.js:78`, `eas.json:54`, `eas.json:69` |
+| Controller — Test-only follow-up review | Controller reviewed the Afrikaans test/query-only follow-up without a separate Codex review because production code did not change | `progress.md:83`, commit `a3d4274`; this is a narrow historical review exception |
+| Controller — Task 17 build split | Build only Android preview from the branch for A03s; Jim's iPhone check uses peer's combined iOS preview from main after merge, avoiding a duplicate build. An iPhone-only defect found later is fixed forward | `progress.md:84`; device execution remains controller-owned and open |
+
+`progress.md:N` above refers to
+`.superpowers/sdd/2026-10-21-assessment-capture-style/progress.md:N` at this session.
+
+#### Review findings, dead ends and surprises
+
+- The initial regex guard admitted quoted/shorthand style keys and namespace imports. The final
+  guard parses TypeScript ASTs, covers computed literal keys, aliases/default/namespace/require
+  imports, and ignores comments/type shapes; both ratchets are now explicitly empty
+  (`src/assessment-questions/__tests__/styleGuard.test.ts:11`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:139`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:164`,
+  `src/assessment-questions/__tests__/styleGuard.test.ts:270`).
+- FullScreenSheet initially missed the modal's top safe area. It now reads the context inside
+  the primitive and pads the modal root (`src/assessment-questions/ui/FullScreenSheet.tsx:12`).
+- paginate initially could loop forever with zero columns/capacity. Positive-integer validation
+  now fails immediately (`src/assessment-questions/ui/paginate.ts:21`). Q5 rejects invalid hints
+  as a missing card (`src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:65`).
+- Host Jest tests are timing-sensitive under parallel load (controller's Task 5 review recorded
+  thirteen host failures that passed serially). Full-suite gates use `--runInBand`; no timeout
+  increase or assertion weakening is part of this docs task. The current serial gate passed.
+- The rebased Afrikaans render test queried `letter-row-5` on page 1; that sixth card row now
+  appears on page 3. Commit `a3d4274` intentionally changed only that query to
+  `getByText('Card rows 1–2 · page 1 of 3')`, retaining the initial `l` and `die` checks
+  (`src/assessment-questions/__tests__/itemSetResolution.test.tsx:43`). Four adjacent tests pin
+  the AF word card's five-page label, the twentieth letter's transition, and complete all-Correct
+  Results for 60 letters / 50 words; completion uses fake timers and the host's 60-second letter
+  duration (`src/assessment-questions/__tests__/itemSetResolution.test.tsx:53`). The follow-up's
+  recorded RED was 1 failed / 13 passed at the stale query, then query-only GREEN 14 passed;
+  package 61/761, types exit 0 and serial full 399/5617 (182.12s). Those are prior-run evidence
+  from the folded draft; fresh Task 16 gate numbers are below.
+- PagedGrid's fixed tile/gap floors intentionally allow overflow below minimum geometry, and its
+  group testID derives the row number from group order when empty card rows are skipped
+  (`src/assessment-questions/ui/PagedGrid.tsx:31`, `src/assessment-questions/ui/PagedGrid.tsx:49`).
+  No shipped letter grid has empty rows (the content validator rejects them:
+  `src/assessment-questions/questions/LetterSoundsQuestion/index.tsx:16`). Neither limitation is a
+  native fit pass. The deferred Q8-specific repeated-word/Countdown-isolation regression is also
+  still noted in controller progress; Q6 coverage and source review do not become a Q8 test.
+
+#### Verification Register
+
+Node 20.19.4 for every Jest/TypeScript command. Task 16 names no failing tests; no
+`__tests__/docs` directory or doc-named tests exist. Per the brief, verification is a read of
+each changed document against source plus the required regression gates. No Task 16 test-query
+changes or source edits were made. Historical bodies are preserved; amendments are dated notes.
+
+| Gate | Command | Result |
+|---|---|---|
+| Documentation audit | Read each changed doc against cited current source; inspect own diff | PASS: package/host/device boundaries and historical amendments checked; no docs test target exists |
+| Package | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions` | PASS: 61 suites / 761 tests, 0 snapshots; exit 0 (9.642s) |
+| TypeScript | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:types` | PASS: tsc --noEmit, 0 errors; exit 0 |
+| Full suite, serial | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --runInBand` | PASS: 399 suites / 5,617 tests, 0 snapshots; exit 0 (180.76s) |
+| Whitespace/scope | `git diff --check`; `git diff --name-only` | Checked at Task 16 hand-off; only the eight allowed docs changed, plus the ignored task report |
+| Native device gate (Task 17) | A03s branch Android preview; Jim's iPhone combined post-merge preview; include large text | OPEN — no device result claimed; I/l content-status entries remain pending (`src/assessment-questions/itemsets/contentStatus.ts:7`) |
+
+The Jest runs emitted non-failing React test-renderer/deprecation and intentional error-path
+diagnostics. No dependencies were installed and no Git mutation, hosted write, build, release or
+publication was performed by Task 16. The controller owns adversarial review and commit.
+
+#### Open hand-offs
+
+- Task 17: pixel-level A03/iPhone, one large-text setting, page/stop/Back/last-attempted/sheet
+  inspection and glyph checks. Keep the current typeface content-status entries open until the
+  native evidence exists (`src/assessment-questions/itemsets/contentStatus.ts:7`).
+- Battery Run host (Plan 3): package conformance does not close host create/resume/finalize,
+  sequencing, persistence or host/device design gates; tracked in ROADMAP §8.
+- On `design/welaplus-plan-3-screens`, update that branch's mockup README when next touched:
+  Q1's frame is superseded and its open question 1 (twelve-column phone layout) is answered by
+  capture-style spec §4. That branch is outside this task's worktree/scope.
+- Jim/content owner: the recreated printed card should use **Andika Regular** too, matching
+  the phone's content face (capture-style spec §5;
+  `src/constants/assessmentFonts.js:4`). This is a content-owner hand-off, not a reprint in this task.

@@ -2121,3 +2121,63 @@ Programme, including an archived group for a lesson already captured. That repos
 replaces the group FK for local writes; this schema task alone does not install it. If a future
 screen needs a session's group name offline, revisit the historical display data required rather
 than promoting a historical id into a working group.
+
+## A look nobody tested is a look you can lose (assessment capture, 2026-10-22)
+
+A behaviour test can prove that sixty taps produce the right result while saying very little
+about the screen the EA has to use. The capture-style spec records the failure: the package
+port preserved marking behaviour while losing the separated, coloured tiles. A flush grid
+could pass result assertions and still be too cramped on a phone. The lesson is to give
+presentation a concrete owner and an observable contract, alongside the result contract.
+
+That owner is the package's `ui/` layer. A Question assembles `MarkTile`, `PagedGrid`, action
+bars and sheets instead of inventing its own typography and coloured controls. The AST guard
+rejects those styling keys and direct controls outside the primitive layer; empty ratchets
+make that a standing rule rather than a migration wish. A theme allowlist closes the tempting
+escape of moving screen styles into an exempt directory
+(`src/assessment-questions/ui/MarkTile.tsx:9`,
+`src/assessment-questions/__tests__/styleGuard.test.ts:47`,
+`src/assessment-questions/__tests__/styleGuard.test.ts:260`). This is a dependency boundary:
+Questions own assessment behaviour, primitives own the visual language.
+
+The useful distinction in paging is **content identity versus display grouping**. A card row
+belongs to the item set; a page is a temporary grouping of whole card rows that fits the phone.
+Re-flowing a ten-letter card row into two five-letter display rows does not create a new item
+set or change its saved row. Oversized card rows span labelled pages in order. Sequential
+capture uses positions to find the page, including the last marked page after a stop, while
+saved marks retain their original row (`src/assessment-questions/ui/paginate.ts:21`,
+`src/assessment-questions/progress/SequentialCapture.tsx:19`,
+`src/assessment-questions/progress/SequentialCapture.tsx:47`,
+`src/assessment-questions/progress/SequentialCapture.tsx:143`). This distinction also explains
+why the rebased Afrikaans test had to query a page label instead of an off-screen sixth row;
+the new tests exercise the twentieth mark and full 60-letter/50-word completion
+(`src/assessment-questions/__tests__/itemSetResolution.test.tsx:43`,
+`src/assessment-questions/__tests__/itemSetResolution.test.tsx:57`).
+
+Andika Regular carries the test content; Figtree carries the controls. The host registers the
+faces and passes their names through a theme, so the reusable package has no Expo font-loading
+dependency. When loading fails the host passes no family names, letting the package use system
+weights rather than naming an unregistered font. With a custom face, the family selects the
+weight: a separate `fontWeight` can trigger an Android fallback
+(`App.js:36`, `App.js:170`, `src/constants/assessmentFonts.js:3`,
+`src/assessment-questions/theme/typography.ts:23`). A typeface choice in code still cannot prove
+that I and l are distinct at tile size on both phones; the content gate stays open
+(`src/assessment-questions/itemsets/contentStatus.ts:7`).
+
+Layout has ownership too. Action bars own their bottom inset; the host owns the top inset;
+full-width primitives own their horizontal gutters. Repeating an inset at two layers wastes
+the same scarce space twice (`src/assessment-questions/ui/ActionBar.tsx:18`,
+`src/assessment-questions/ui/BottomBar.tsx:6`, `src/components/assessments/TestFrame.js:11`,
+`src/assessment-questions/ui/PagedGrid.tsx:14`). Height fitting shrinks gaps and tiles only down
+to usable floors. The source explicitly permits overflow below those floors, so Jest geometry
+checks must be followed by actual A03/iPhone and large-text inspection
+(`src/assessment-questions/ui/PagedGrid.tsx:43`).
+
+The gallery makes that inspection possible before the Battery Run host exists: it mounts the
+real Questions and shows a Result in local state (`src/screens/dev/QuestionGalleryRunScreen.js:16`).
+Its runtime gate combines development mode, embedded launch, native update channel and an exact
+build flag. A manifest flag alone would be mutable by OTA; the final gate keeps pilot and
+production excluded and hides the gallery after an OTA even on preview
+(`src/utils/questionGallery.js:6`, `app.config.js:4`, `eas.json:54`, `eas.json:69`). Shared
+primitives, guard tests, behaviour tests and device inspection each cover a different failure
+mode. None substitutes for the other three.
