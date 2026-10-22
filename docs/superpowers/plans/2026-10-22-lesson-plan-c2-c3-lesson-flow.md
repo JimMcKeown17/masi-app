@@ -16,7 +16,7 @@
 
 - [ ] **Branch from current `main`** and confirm three things are there:
   - wave 1 (`git log --oneline | grep '(#91)'`);
-  - the assessment capture redesign: `grep -n "content: 'Andika_400Regular'" src/constants/typography.js` prints one line. **Stop if it doesn't**: Task 8 needs the reading font;
+  - the assessment capture redesign: `grep -n "content: 'Andika_400Regular'" src/constants/typography.js` prints one line. Only Task 8 needs this reading font: Tasks 1–7 may be built first, then the branch is rebased onto `main` once the redesign merges and **before** Task 8 starts;
   - `src/db/migrations.js` ends at version 18 (`lesson_drafts` is 17).
 - [ ] Run every test command with Node 20: prefix `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (better-sqlite3 is built for Node 20).
 - [ ] Real-SQLite suites you add must also be listed in `jest.integration.config.js` `testMatch` (an explicit list). `npm run test:integration` runs `--runInBand`.
@@ -39,7 +39,7 @@ The spec leaves these to the builder (§12) or is silent. Each is marked **(plan
 | P1 | The picker keeps the standard white stack header, titled "Who are you teaching?", with the Close button. | Every stack screen in the app uses it; the mockup's red band was rough. Keeps C17's route and gates unchanged. |
 | P2 | **Wrap up is its own screen.** Back returns to the Lesson screen. | Matches flow B; gives Wrap up its own Save footer and back behaviour. |
 | P3 | The draft is created on the first change on the Lesson screen, or when the EA taps **Wrap up →**, whichever comes first. Opening a lesson writes nothing. | Spec §7.2 ("created on the first change"); Wrap up needs a draft to edit. |
-| P4 | Leaving the Lesson screen keeps the lesson without asking; Home shows **Lesson in progress · Resume**. Deleting it is an explicit **Discard lesson** action at the bottom of the Lesson screen, behind a confirm. | Every change is already saved, so "Leaving will discard it" would be false. |
+| P4 | Leaving the Lesson screen (Close, Back, Android back, iOS swipe) **asks first** once a draft exists: "Leave this lesson?" / "It's saved on this phone. You can finish it later from Home." / **Leave lesson** / **Keep teaching** (Jim, 2026-10-22). Leaving keeps the lesson; Home shows **Lesson in progress · Resume**. Deleting it is a separate **Discard lesson** action at the bottom of the Lesson screen, behind its own confirm. No warning before the first change (nothing to keep), after a save, or after a discard. | Guards against a stray back-swipe mid-session. The copy says the lesson is kept, because it is. |
 | P5 | Home's **Resume** opens the lesson directly, without the clock-in check. "+ Record" still runs both gates first. | The clock-in nudge already ran when the lesson started; asking again on every resume would nag. |
 | P6 | A class with **no language** set: the Lesson screen asks once, "Which language is this lesson in?" (English, isiXhosa, Afrikaans), and stores it in the draft. An **isiZulu** class gets no letter suggestions or tracker (there is no isiZulu letter order yet) but can still be saved. | Matches the assessment picker, which asks when a class has no language. The draft repository already allows setting the language once. |
 | P7 | **Make a group** lists only children who are in no group. The group is named "Group N" (next number) and records the children's class when they share one. **Put in a group** adds an ungrouped child to an existing group or a new one. | Nothing else stops a child being in two groups (the rule is UI-only, `groupsRepository.addChildToGroup` has no check), so offering grouped children would double-book them. |
@@ -429,7 +429,7 @@ Screen behaviour (spec §5.2):
 - "Still downloading past lessons…" / "Still downloading what children know…" notes when `plan.history_complete` / `plan.mastery_complete` is false.
 - **Discard lesson** (tertiary, bottom of the scroll) opens `ConfirmSheet` "Discard this lesson?" / "Its ticks and notes will be deleted." / **Discard lesson** / **Keep lesson** (P4). Shown only once a draft exists.
 - `corrupt`: `EmptyState` "This lesson can't be opened" with **Discard lesson**. `exists`: `InProgressSheet` "You have a lesson in progress" with **Go to that lesson** (replace with its `draftId`) and **Discard it and start this one**. `missing` (draft id no longer stored): go back.
-- Leaving needs no confirm (P4). Every change goes through `apply`.
+- **Leave warning (P4):** `usePreventRemove(guard, ...)` with `guard = status === 'ready'` (a stored draft exists and is not being saved, discarded or closed; `'unsaved'` means no change yet, so nothing to keep). It stores the blocked action and opens `ConfirmSheet` "Leave this lesson?" / "It's saved on this phone. You can finish it later from Home." / **Leave lesson** (`confirmVariant="secondary"`) / **Keep teaching**; **Leave lesson** dispatches the stored action. Pushing `LessonWrapUp` does not trigger it (nothing is removed). A successful save clears the controller **before** Wrap up replaces itself with Session complete, so Session complete's `popTo('MainTabs')` removes the Lesson screen without the sheet (the old form's effect-order rule, `LiteracySessionForm.js:241-254`). Every change goes through `apply`.
 
 - [ ] **Step 1: Write the failing tests** (`renderInTestStack` with routes `[Home stub, Lesson, LessonWrapUp stub]`, default real handle, seeded group and pack fixture via the real `getPack`):
 
@@ -443,6 +443,11 @@ test('a handed-over child can be removed from the lesson', ...); // resumed draf
 test('a mixed-class group asks for the class before suggestions', ...);
 test('a class with no language asks for the language', ...);
 test('Discard lesson asks first, then deletes the draft and goes back', ...);
+test('leaving after a change asks first; Keep teaching stays; Leave lesson leaves and keeps the draft', ...); // header Close and Android back (BackHandler) both
+test('leaving before any change asks nothing', ...);
+test('going to Wrap up and back never asks', ...);
+test('after a save, Done on Session complete returns Home without the leave sheet', ...);
+test('after Discard lesson, no leave sheet', ...);
 test('a corrupt draft shows the cannot-open state with Discard', ...);
 test('an existing draft on a new start offers Go to that lesson', ...);
 test('one engine evaluation per attendance change', ...);
@@ -605,7 +610,7 @@ test('the sync card still navigates with no params', ...);
 - [ ] **Step 3: Device check V (needs Jim's yes for the EAS builds).** Builds: `preview` (letters only) and `preview-content` (isiXhosa blends and a reader) for Android and iOS, from this branch. On the Galaxy A03s (360 dp: `wm density 320`) and an iPhone, at 1.0x and 1.3x text:
   - V1 picker: Up next, other groups, last seen, "Today ✓" after a lesson; rows within 500 ms (screen recording).
   - V2 Make a group and Put in a group; the new group's class; both upload.
-  - V3 Lesson screen: attendance toggles within 300 ms; ticks freeze the plan; Add a child; mixed-class and no-language asks; ECD hides pair reading.
+  - V3 Lesson screen: attendance toggles within 300 ms; ticks freeze the plan; Add a child; mixed-class and no-language asks; ECD hides pair reading; the leave warning on Close, Android back and the iOS swipe (the native swipe is not covered by Jest).
   - V4 Blends and book on the preview-content build; "No blends/books yet" on `preview`.
   - V5 Wrap up: chips, locked letters, tracker sheet in the lesson language, reading levels, date, notes, empty-lesson confirm.
   - V6 Save offline, then online: one session with the group, attendees, marks; server rows match.
