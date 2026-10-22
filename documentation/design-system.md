@@ -457,6 +457,32 @@ signed-in EA settles; later refreshes keep the current rows mounted and visible.
 Child-row results, group, letter-tracker and edit actions are separate controls: retain the 8dp
 gap above the meta row so GroupChip's negative margins cannot overlap the results target.
 
+### Lesson capture components (C2–C3, 2026-10-22)
+
+The stack uses its standard white header: **Who are you teaching?**, the children's names on
+**Lesson**, and **Wrap up**. Controls compose the existing Bold Red primitives; no separate modal
+or dialog system is introduced. The Save/Wrap-up footer is a sibling after the scroll, and Wrap
+up's footer hides for the notes keyboard. Native visual acceptance is [device section V](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10),
+including 360 dp and 1.0x/1.3x text (`src/screens/lessons/LessonWrapUpScreen.js:189`).
+
+| Piece (`src/components/lessons/`) | Contract |
+|---|---|
+| `UpNextCard`, `GroupLessonRow` | Receive `row, today, onStart`; render group colour, members, last seen and optional letters. `lessonRowDetail` avoids a dangling "letters" when there are none (`src/utils/lessonDates.js:19`). |
+| `MakeGroupSheet`, `PutInGroupSheet` | Bottom-sheet group actions with inline errors. Creation receives only ungrouped children; the signed-in handle fences completion. |
+| `AttendanceChips`, `AddChildSheet` | Here/absent state, explicit removal for revoked access, and additions for today. The offered roster uses the shared visibility rule; attendance never edits membership. |
+| `LessonChoiceSheet`, `InProgressSheet` | Explicit class/language choice; Resume/Discard when another draft exists. |
+| `LessonLettersSection`, `OtherLetterSheet` | Suggested/review letters through `LetterToggleGrid`/tiles, plus the other-letter sheet. Selection records teaching, not mastery. |
+| `BlendTile`, `LessonBlendSection`, `BlendPoolSheet` | `BlendTile({ text, display, tone='rest', onPress, accessibilityLabel })`; min-height 56, selected ink, motion disabled under Reduce Motion, text capped at 1.3x. Suggested display may use hyphens; saved `text` is the pack item. All ticked blends remain visible and correctable when attendance removes a tier (`BlendTile.js:8`, `LessonBlendSection.js:18`). |
+| `LessonBookSection` | Hidden for ECD; a selectable printed-book Read row, or the language's no-books message. Reader links belong to C4 (`LessonBookSection.js:9`). |
+| `WrapUpChildRow` | Letter chips distinguish locked assessment evidence from pending corrections; No one new yet, full tracker and changed reading-level controls respect separate delivery/level authority (`WrapUpChildRow.js:10`). |
+
+`typeRoles.lessonItem` uses the content face **Andika 400**, 20/26, zero tracking, for blend text.
+Use the role rather than raw sizes (`src/constants/typography.js:21`). Tier labels are **2-letter**,
+**3-letter**, **4-letter**, **words**. The old literacy Record form is retired. Until A2 aligns
+teaching order, the Wrap-up tracker retains its existing order while the lesson uses the pack's;
+both plans must merge before a field build. Static guards remain the automated token/purity gate,
+not proof of iOS swipe behaviour or A03s timing.
+
 ### Sheets
 
 **`BottomSheet`** — `visible, onDismiss, dismissible=true, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
@@ -1141,6 +1167,10 @@ explicitly requires it to stay empty, and every scanned file now meets the same 
 rules without per-screen allowances.
 
 ## Remaining delivery boundaries
+
+**2026-10-22 status note:** the following is the earlier Bold Red delivery record. C2–C3 now
+retires LiteracySessionForm and ChildSelector (`de32276`); current lesson components are described
+above, and their native acceptance is device section V. LetterTrackerBottomSheet remains in Wrap up.
 
 Children list and Class detail are built on `feat/bold-red-children`; Record Tasks 1–12 are built
 on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBottomSheet and

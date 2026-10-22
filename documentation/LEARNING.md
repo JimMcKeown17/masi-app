@@ -9,6 +9,59 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## One lesson draft needs one writer, even across two screens (2026-10-22)
+
+A lesson feels like one activity to the EA, but its edits come from two screens: teaching on
+Lesson and confirming knowledge on Wrap up. Both edit the same SQLite row. Its JSON fields are
+replaced whole, so two independent screen copies are dangerous: Lesson can save a new letter tick,
+then Wrap up can replace `ticks` using an older copy and erase it. A SQLite transaction around each
+write prevents partial writes; it cannot make an old copy current.
+
+The ownership boundary is therefore the signed-in EA handle, not either screen. It creates one
+`lessonDraft` controller (`src/session/handleServices.js:99`). Every screen subscribes to that
+controller through `useLessonDraft`. The controller has one serial queue; each operation stores a
+transition and captured arguments, then computes its patch **at write time from the last confirmed
+row** (`src/services/lessonDraftController.js:114`). Pending transitions give an optimistic view,
+but they are not the persisted baseline. If one write fails, remove only that transition and
+reapply the remaining transitions to the confirmed row. Later edits still land without silently
+smuggling the failed edit back in. A failure barrier makes Save report the lost edit even if a
+later write succeeds (`lessonDraftController.js:151`).
+
+Going to Wrap up and back must **attach, not reload**. Opening the same draft returns the current
+controller view, including queued edits (`lessonDraftController.js:76`). A generation fence stops
+late work from an old load, discarded draft or closed handle from publishing into the current
+lesson (`lessonDraftController.js:28`, `:46`, `:197`). Closing the handle also rejects waiting
+callers. Save first locks out edits and drains that queue, then commits session, attendees,
+corrections, changed levels, outbox work and draft deletion together (`src/services/lessonSave.js:32`).
+The controller is the owner of editing intent; the transaction is the owner of the final commit.
+Neither boundary replaces the other.
+
+One smaller version of this bug appeared in the tracker: the sheet returns a child's **whole**
+pending map, omitting a letter when its mark is undone. Merging the map kept that omitted mark.
+`setTrackerChanges` now replaces that child's map (`src/lessonPlan/lessonDraftState.js:42`);
+`lessonDraftState.test.js:58` proves an undone mark disappears. Representation matters: absence in
+a replacement map means deletion, whereas absence in a patch means leave unchanged.
+
+The repeated review lesson was that a rule kept in two places drifts. The picker and lesson start
+disagreed about hidden or handed-over children; `visibleRosterChildren` now serves ChildrenContext,
+the hook and Add a child (`src/utils/childVisibility.js:3`, `src/hooks/useLessonDraft.js:39`,
+`src/screens/lessons/LessonScreen.js:80`). Last-seen calculations now share the pure recency helpers:
+`rankGroups` and the exported `groupLastSeenOn` use `attendedBy`/`newestDate`, with an agreement test
+(`src/lessonPlan/engine/groups.js:18`, `__tests__/lessonPlanGroupLastSeen.test.js:8`). They share the
+calculation rather than merely matching formatting. An untouched screen crossing midnight also
+needs the plan and lesson date to agree: `datedOnFirstChange` is used for every first-change path,
+including Wrap up and Save (`src/hooks/useLessonDraft.js:15`, `:142`, `:150`, `:157`, `:167`).
+Once persisted, the date stays the lesson's date. Reuse the rule itself, then test the consumers'
+agreement; two separately correct-looking implementations are not a durable contract.
+
+The vanished-blend-tier correction illustrates where automatic repair belongs. The screen may show
+the default while the chosen tier's child is absent, preserving that choice if the child returns.
+At Save, `beginSave` settles the vanished tier through the same queue and failure barrier; a failed
+correction stops Save (`src/hooks/useLessonDraft.js:169`, `__tests__/LessonScreen.test.js:434`).
+Doing that write in a render-driven effect caused repeated writes on persistent failure. The final
+boundary needs no background repair loop. These local regressions prove storage/navigation rules;
+native iOS swipe, force-quit and A03s timing still need device section V.
+
 ## Retrying an insert must not ask for edit rights
 
 A network failure cannot tell the phone whether the server committed a request. In B2's session
@@ -2089,6 +2142,10 @@ survives an offline reopen unchanged, and remains separate across EA switches. A
 on Expo SQLite is still a device gate. C1 supplies storage; C3 supplies the user-facing lifecycle.
 
 ## A foreign key states the present; a session's group is history
+
+**2026-10-22 status note:** after the wave-1 integration rebase, the migration described below is
+SQLite **v18**, not the original v16. Current source: `src/db/migrations.js:895`; current capture
+is described in [the lesson draft chapter](#one-lesson-draft-needs-one-writer-even-across-two-screens-2026-10-22).
 
 A session records a past group block, while the phone's group roster records the EA's current
 assignments. Those sets need not match. After a handover, an incoming EA can read a child's old

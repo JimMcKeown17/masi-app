@@ -5,6 +5,21 @@
 > `ROADMAP.md`; this file contains product choices that require Jim or pedagogy input. When one is
 > resolved, record the outcome in `CONTEXT.md` and/or an ADR, then remove it from here.
 
+## Lesson flow C2–C3: Jim's pass before merge (2026-10-22)
+
+The implementation is on `feat/lesson-flow`; P1–P12 are the plan calls recorded in the build-log
+Decision Register. Jim's final wording/decision pass covers: **P1** standard picker header;
+**P2** separate Wrap up screen; **P3** first-change/Wrap-up draft creation; **P4** leave-and-keep
+warning with separate Discard (Jim's 2026-10-22 instruction); **P5** Home Resume without clock-in;
+**P6** explicit missing-language choice and isiZulu manual capture; **P7** ungrouped-only group
+creation/placement; **P8** per-child No one new yet, aggregated tracker check; **P9** last-seen
+labels; **P10** old form retired; **P11** letters-only release packs and preview-content device
+coverage; **P12** completion gains language code, blend/book receipt deferred. The build log
+links each decision to source. These are implemented calls, not twelve unbuilt features.
+
+**ADR open:** "advice from the children, record with the group" (lesson-plan spec §11). Draft it
+with Jim through `grill-with-docs` before the PR merges. This task does not draft or ratify it.
+
 ## Deferred to next academic year
 
 - **Gap UX at the start of a new academic year, before office grouping data exists.** For ECD the

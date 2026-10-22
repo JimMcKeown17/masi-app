@@ -75,8 +75,8 @@ children, groups, sessions, assessments, and reporting.
   EA's group composition. See [ADR-0005](docs/adr/0005-assessment-delivery-scope-two-tier-access.md).
 - A group is the delivery unit within a class.
 - One completed session represents one group block of work.
-- The current app still has a transitional child-oriented capture contract. The required
-  group-centred end state is specified in
+- Literacy capture chooses a group, teaches on the Lesson screen, and saves through Wrap up.
+  The wider group-centred requirements are specified in
   [`documentation/group-session-workflow.md`](documentation/group-session-workflow.md).
 - Session attendees are a historical snapshot. Later group membership changes must not rewrite
   who attended an earlier session.
@@ -130,7 +130,8 @@ The current SQLite schema is defined by `src/db/migrations.js`. It includes:
   `class_grouping_state`, `child_group_memberships`;
 - work records: `time_entries`, `sessions`, `session_attendees`, `assessments`,
   `assessment_items`, `letter_mastery`;
-- device and sync: `local_state`, `sync_state`, `sync_outbox`, `schema_migrations`.
+- device and sync: `local_state`, `sync_state`, `sync_outbox`, `schema_migrations`, and local-only
+  `lesson_drafts` (v17; group-history references are v18).
 
 `documentation/DATABASE_SCHEMA_GUIDE.md` is a relational-modelling primer, not a current schema
 reference. The RLS and synchronization behavior is authoritative only in
@@ -208,10 +209,13 @@ Home is the primary daily-use surface (Bold Red Home, spec
 - an attention area that is blank by default and shows at most two cards: items needing sync
   attention, an automatic clock-out (for 24 hours after it is detected, dismissible), and children
   still to assess (dismissible until the next day);
+- a **Lesson in progress** card first when a draft exists, with names, a chevron and **Resume**;
+  it is not dismissible and opens the Lesson screen without a clock-in check;
 - correct zero-class onboarding routing.
 
 Home reloads its statistics on focus and when the app returns to the foreground. Session history
-is reached from Insights. "Who to see next" moves into the session flow (separate work).
+is reached from Insights. **Up next** is in the lesson picker. Attention priority and the two-card
+cap come from `src/utils/homeAttention.js:101`; draft resume is wired in `src/screens/main/HomeScreen.js:91`.
 
 All Home domain data comes from SQLite. Network activity may refresh SQLite, but must not be a
 render-time dependency.
@@ -250,36 +254,45 @@ render-time dependency.
 
 ### 6.5 Groups
 
-Current group management supports normalized groups and memberships. The target group-centred
-workflow must additionally provide group cards, Group Detail, durable group identity on sessions,
-group-first capture, and historical membership correctness. See the dedicated active specification.
+Current group management supports normalized groups and memberships, durable session group identity,
+and group-first literacy capture. The picker can make a group from ungrouped children or put an
+ungrouped child in an existing group. Creation writes the group, assignment, memberships and outbox
+work together (`src/db/repositories/groupsRepository.js:394`). Group Detail and the wider composition
+editor remain separate work. See the dedicated active specification.
 
 ### 6.6 Literacy sessions
 
-The current Literacy form records:
+The Literacy route is **Who are you teaching? → Lesson → Wrap up → Session complete**.
+"+ Record" retains the programme and clock-in gates; an existing draft opens directly after them.
+The picker ranks groups with **Up next**, last-seen labels, suggested letters, and group-creation
+actions. Missing programme or school-year inputs show an actionable notice instead of a spinner
+(`src/screens/lessons/LessonPickerScreen.js:48`).
 
-- South African Programme session date;
-- selected children and the resolved roster source;
-- letters focused on, in the paper-tracker teaching order;
-- one session reading level;
-- optional per-child current reading levels;
-- comments;
-- current letter-mastery changes.
+The Lesson screen starts with visible group members present. Attendance toggles and **+ Add a child**
+change today's attendees only. Class/language choices are explicit when missing; the fixed lesson
+class gives its language and ECD behaviour. Letters, blends and a printed book are tickable; ECD
+hides pair reading. Release packs carry letters only; blends and a reader currently require the
+isiXhosa developer pack on `preview-content` (`src/hooks/useLessonDraft.js:39`,
+`src/components/lessons/LessonBlendSection.js:15`, `src/lessonPlan/inputs/lessonInputs.js:114`).
 
-The form shows a live summary above Submit of what is still missing (children, letters, reading
-level); tapping a missing item scrolls to its step. The summary and Submit's validation come from
-one function, so they always agree. A failed save stays on the form with an inline note above
-Submit; the retry writes the same session id. Leaving a form with unsaved changes (Close, iOS
-swipe-back, Android back) asks first in a bottom sheet: Discard or Keep editing.
+Opening writes nothing. The first change (or Wrap up) persists one draft per EA; the first content
+tick fixes the advice. A later-day resume keeps the dated plan. Changing the session date so it
+differs from the plan's `made_on` saves `plan: null, plan_reason: 'past_date'`. Leaving a persisted
+lesson asks **Leave lesson** / **Keep teaching** and keeps it; deletion is a separate confirmed
+**Discard lesson** action (`src/hooks/useLessonDraft.js:15`, `src/lessonPlan/lessonDraftState.js:31`,
+`src/screens/lessons/LessonScreen.js:52`, `src/lessonPlan/lessonRecord.js:10`).
 
-The same transaction persists:
+Wrap up records independent letter knowledge in the lesson language, changed reading levels, date
+and notes. Empty letters/blends/books require confirmation; at least one child must be present.
+Save holds Back while in flight, drains the shared controller, then atomically writes the session,
+attendees, current-level snapshots, changed-only child levels, tracker corrections with original tap
+times, all outbox work, and draft deletion. Authority is checked again inside the transaction.
+A failed save keeps the draft and stable session id for retry
+(`src/screens/lessons/LessonWrapUpScreen.js:78`, `src/services/lessonDraftController.js:151`,
+`src/services/lessonSave.js:32`, `src/lessonPlan/lessonRecord.js:4`).
 
-- the session;
-- its attendee rows;
-- the historical per-session reading-level snapshot;
-- changed durable `children.reading_level` values for final attendees only;
-- letter-mastery changes for final attendees only;
-- all corresponding outbox operations.
+Native back swipe, force-quit recovery, A03s timing and server convergence remain device gates
+[V1–V8](documentation/device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10).
 
 Submitted history is currently view-only. Saved-session editing may not ship until attendee removal
 is correct.
