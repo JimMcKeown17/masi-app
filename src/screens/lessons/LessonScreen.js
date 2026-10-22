@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -106,11 +106,20 @@ export default function LessonScreen({ navigation, route }) {
   const showTier = useCallback(tier => attempt(() => apply(transitions.setBlendTierShown, tier)), [attempt, apply]);
   // A higher tier whose children have all gone falls back to the default tier, and the draft
   // records that, so the saved blend_tier_shown is the tier on screen.
+  // One attempt per lesson, tier and attendance: a failed write (a full disk, say) shows the
+  // controller's error and is not retried until the attendance changes again.
   const shownTier = draft?.ticks.blendTierShown ?? null;
-  const tierGone = !!(shownTier && choices && !choices.tiers.some(item => item.tier === shownTier));
+  const tierVisible = !!(shownTier && choices?.tiers.some(item => item.tier === shownTier));
+  const tierGone = !!(shownTier && choices && !tierVisible);
+  const resetKey = tierGone ? JSON.stringify([draft.id, shownTier, draft.attendance.absentChildIds, childKey]) : null;
+  const resetTried = useRef(null);
   useEffect(() => {
-    if (tierGone && status === 'ready') attempt(() => apply(transitions.setBlendTierShown, null));
-  }, [tierGone, status, attempt, apply]);
+    // Forget an attempt only once the tier is truly back, not during the optimistic cleared view.
+    if (tierVisible) { resetTried.current = null; return; }
+    if (!resetKey || status !== 'ready' || resetTried.current === resetKey) return;
+    resetTried.current = resetKey;
+    attempt(() => apply(transitions.setBlendTierShown, null));
+  }, [tierVisible, resetKey, status, attempt, apply]);
   const wrapUp = () => attempt(async () => {
     const row = await ensureDraft();
     navigation.navigate('LessonWrapUp', { draftId: row.id });
