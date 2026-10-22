@@ -36,6 +36,7 @@ import ClassOnboardingScreen from '../screens/onboarding/ClassOnboardingScreen';
 import ChildOnboardingScreen from '../screens/onboarding/ChildOnboardingScreen';
 
 // Session screens
+import LessonScreen from '../screens/lessons/LessonScreen';
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
 import SessionCompleteScreen from '../screens/sessions/SessionCompleteScreen';
 import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
@@ -249,6 +250,11 @@ export function MainNavigator() {
           title: 'Who are you teaching?',
           headerLeftIcon: 'close',
         }}
+      />
+      <Stack.Screen
+        name="Lesson"
+        component={LessonScreen}
+        options={{ title: '', headerLeftIcon: 'back' }}
       />
       <Stack.Screen
         name="SessionComplete"

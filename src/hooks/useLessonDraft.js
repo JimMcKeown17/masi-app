@@ -68,10 +68,13 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
         repositories.classes.getClasses(),
       ]);
       if (base.missing) throw new Error(`Lesson inputs missing: ${base.missing}`);
+      // A resumed draft keeps its class even after the class is archived.
+      const lessonClass = classes.find(row => row.id === draft.class_id)
+        ?? await repositories.classes.getClassById(draft.class_id);
       const input = await loadLessonInput({ handle, repositories, services, base, lesson: {
         groupId: draft.group_id, upNextGroupId: draft.plan?.up_next_group_id ?? start?.upNextGroupId ?? null,
         languageCode: draft.language_code, packId: draft.pack_id,
-        isEcd: classes.find(row => row.id === draft.class_id)?.grade === 'ECD',
+        isEcd: lessonClass?.grade === 'ECD',
         presentChildIds: JSON.parse(presentKey),
       } });
       if (active) { setLoaded({ key: inputKey, input, classes }); setLoadError(null); }

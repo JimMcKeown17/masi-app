@@ -59,6 +59,6 @@ export {
 } from './constants';
 export { teachingOrderFromPack } from './letters';
 export { computeLessonPlan, computeLessonChoices, planForSave, isPlanRecomputable } from './lessonPlan';
-export { rankGroups } from './groups';
+export { rankGroups, groupLastSeenOn } from './groups';
 export { resolveLessonClass } from './lessonClass';
 export { blendTierForReadingLevel, deriveSessionReadingLevel } from './blends';

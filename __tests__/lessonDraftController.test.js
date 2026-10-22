@@ -131,7 +131,7 @@ test('a failed write drops only that change; later queued changes still land', a
   expect((await lost).error.message).toBe('Disk full');
   await kept;
   expect((await stored()).ticks.letters).toEqual(['m']);
-  expect(controller.getSnapshot()).toMatchObject({ draft: { ticks: { letters: ['m'] } }, error: "Couldn't save your last change." });
+  expect(controller.getSnapshot()).toMatchObject({ draft: { ticks: { letters: ['m'] } }, error: null });
 });
 test('an edit that fails after Save is pressed stops the save: no session, no attendees, draft kept', async () => {
   await start();
@@ -236,4 +236,31 @@ test('an earlier failed edit is reported even when a later queued edit succeeded
   await kept;
   await expectError(controller.beginSave(), 'LessonDraftWriteError');
   expect((await controller.beginSave()).ticks.letters).toEqual(['m']);
+});
+
+test('a successful draft write clears the visible error but preserves the failed-write save barrier', async () => {
+  await start();
+  await controller.ensureDraft();
+  const held = await holdDraftWrite({ fail: true });
+  const lost = observe(tick('a'));
+  await held.entered;
+  held.release();
+  await lost;
+  expect(controller.getSnapshot().error).toBe("Couldn't save your last change.");
+  await controller.apply(state.setNotes, 'Recovered');
+  expect(controller.getSnapshot().error).toBeNull();
+  await expectError(controller.beginSave(), 'LessonDraftWriteError');
+  expect(controller.getSnapshot().status).toBe('ready');
+});
+test('a successful create through ensureDraft clears the visible error without acknowledging a failed edit', async () => {
+  await start();
+  const held = await holdDraftWrite({ fail: true });
+  const lost = observe(tick('a'));
+  await held.entered;
+  held.release();
+  await lost;
+  expect(controller.getSnapshot().error).toBe("Couldn't save your last change.");
+  await controller.ensureDraft();
+  expect(controller.getSnapshot().error).toBeNull();
+  await expectError(controller.beginSave(), 'LessonDraftWriteError');
 });

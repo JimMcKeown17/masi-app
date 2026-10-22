@@ -60,6 +60,7 @@ export const createLessonDraftController = ({ repositories, onClose }) => {
     const row = await drafts.create(context.persisted);
     context.persisted = row;
     if (isCurrent(context)) context.generation = ++generation;
+    refresh(context, { error: null });
     return row;
   };
   const open = options => {
@@ -108,6 +109,7 @@ export const createLessonDraftController = ({ repositories, onClose }) => {
       context.pending.push(entry);
       refresh(context);
       return enqueue(async () => {
+        let succeeded = false;
         try {
           const patch = transition(context.persisted, ...entry.args);
           const row = context.persisted.id
@@ -115,6 +117,7 @@ export const createLessonDraftController = ({ repositories, onClose }) => {
             : await drafts.create({ ...context.persisted, ...patch });
           if (!context.persisted.id && isCurrent(context)) context.generation = ++generation;
           context.persisted = row;
+          succeeded = true;
           return row;
         } catch (error) {
           context.failed = true;
@@ -123,7 +126,7 @@ export const createLessonDraftController = ({ repositories, onClose }) => {
         } finally {
           context.pending = context.pending.filter(item => item !== entry);
           // Rebase every remaining transition on the confirmed row, including after failure.
-          if (!['exists', 'corrupt'].includes(snapshot.status)) refresh(context);
+          if (succeeded || !['exists', 'corrupt'].includes(snapshot.status)) refresh(context, succeeded ? { error: null } : {});
           else if (isCurrent(context)) publish({ draft: view(context) });
         }
       });
