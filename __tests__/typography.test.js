@@ -18,6 +18,7 @@ test('Bricolage only at 18px and above', () => {
   }
 });
 test.each([
+  ['lessonItem', 'Andika_400Regular', 20, 26, 0, {}],
   ['display3XL', 'BricolageGrotesque_800ExtraBold', 44, 46, -1.54, {}],
   ['display2XL', 'BricolageGrotesque_800ExtraBold', 38, 42, -1.14, {}],
   ['displayNumeralXL', 'BricolageGrotesque_800ExtraBold', 64, 64, -1.28, {}],

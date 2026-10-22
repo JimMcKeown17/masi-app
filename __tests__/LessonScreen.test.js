@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as ReactNative from 'react-native';
 import { BackHandler, StyleSheet, Text, View } from 'react-native';
-import { act, cleanupAsync, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, cleanupAsync, fireEvent, waitFor, within } from '@testing-library/react-native';
+import Constants from 'expo-constants';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
 import { AllProviders } from '../test-support/renderWithProviders';
@@ -16,6 +17,7 @@ import BrandButton from '../src/components/common/BrandButton';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
+jest.mock('expo-updates', () => ({ channel: null }));
 let handle, titles, backListeners;
 const testLesson = (name, run) => test(name, async () => {
   try { await run(); } finally { await cleanupAsync(); }
@@ -61,6 +63,7 @@ const tick = async view => {
 const memberships = async () => (await handle.getReader()).getAllAsync('select * from child_group_memberships order by id');
 
 beforeEach(async () => {
+  Constants.expoConfig.extra.previewContent = false;
   jest.useFakeTimers({ doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
     'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'performance'] });
   jest.setSystemTime(new Date('2026-10-22T09:00:00.000Z'));
@@ -95,7 +98,7 @@ beforeEach(async () => {
     cursor: JSON.stringify({ complete: true, lastFailureAt: null, windowStart: '2026-01-15', rescanChildIds: ['c1', 'c2'] }),
   });
 });
-afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+afterEach(() => { Constants.expoConfig.extra.previewContent = false; jest.restoreAllMocks(); jest.useRealTimers(); });
 
 testLesson("header shows grade, language and last seen; the title is the children's names", async () => {
   const view = mount();
@@ -333,4 +336,120 @@ testLesson('a resumed lesson keeps its grade when its class is archived', async 
   const view = mount({ draftId: row.id });
   await ready(view);
   expect(view.getByText('Gr 1 · English · last seen Mon')).toBeTruthy();
+});
+
+const previewLesson = async (levels = ['4 Letter Blends', '4 Letter Blends']) => {
+  Constants.expoConfig.extra.previewContent = true;
+  await handle.withTransaction(async db => {
+    await db.runAsync("update classes set home_language = 'isiXhosa' where id = 'class-1'");
+    for (const [index, id] of ['c1', 'c2'].entries()) {
+      await db.runAsync('update children set reading_level = ? where id = ?', levels[index], id);
+    }
+  });
+  for (const childId of ['c1', 'c2']) for (const letter of ['o', 'm', 'l', 'a', 'k', 'u', 'e', 'n', 'i', 't', 's', 'd']) {
+    await handle.repositories.mastery.setLetterMastery({ childId, letter, language: 'xh', confirmed: true, programmeId: 'programme-a' });
+  }
+};
+const blendSection = view => within(view.getByTestId('lesson-blends'));
+testLesson('six suggested blends show with hyphens and are not pre-ticked', async () => {
+  await previewLesson();
+  const choices = jest.spyOn(engine, 'computeLessonChoices');
+  const view = mount();
+  await view.findByText('2 · Blending · 15 min · 4-letter');
+  const suggested = choices.mock.results[0].value.tiers[0].suggested;
+  expect(suggested).toHaveLength(6);
+  expect(suggested.some(item => item.display.includes('-'))).toBe(true);
+  for (const item of suggested) {
+    expect(blendSection(view).getByText(item.display)).toBeTruthy();
+    expect(blendSection(view).getByRole('button', { name: `${item.text.replace(/-/g, '')}, not ticked` })
+      .props.accessibilityState.selected).toBe(false);
+  }
+  expect(await handle.repositories.lessonDrafts.getActive()).toBeNull();
+});
+testLesson('ticking a blend from + more stores its pack text', async () => {
+  await previewLesson();
+  const choices = jest.spyOn(engine, 'computeLessonChoices');
+  const view = mount();
+  fireEvent.press(await view.findByRole('button', { name: '+ more' }));
+  const tier = choices.mock.results[0].value.tiers[0];
+  const item = tier.pool.find(candidate => !tier.suggested.some(suggested => suggested.text === candidate.text)
+    && candidate.display.includes('-'));
+  expect(item).toBeTruthy();
+  const pool = within(view.getByTestId('blend-pool'));
+  expect(pool.getAllByRole('button')).toHaveLength(tier.pool.length);
+  fireEvent.press(pool.getByRole('button', { name: `${item.text}, not ticked` }));
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blends).toEqual([item.text]));
+  const row = await handle.repositories.lessonDrafts.getActive();
+  expect(row.plan_fixed_at).toBe('2026-10-22T09:00:00.000Z');
+  expect(pool.getAllByRole('button')[0].props.accessibilityLabel).toBe(`${item.text}, ticked`);
+  fireEvent.press(view.getByRole('button', { name: 'Done' }));
+  await waitFor(() => expect(view.queryByTestId('blend-pool')).toBeNull());
+  expect(blendSection(view).getByRole('button', { name: `${item.text}, ticked` })).toBeTruthy();
+  expect(choices).toHaveBeenCalledTimes(1);
+});
+testLesson('Show 3-letter switches tiers and stores blendTierShown', async () => {
+  await previewLesson(['2 Letter Blends', '3 Letter Blends']);
+  const view = mount();
+  fireEvent.press(await view.findByRole('button', { name: 'Show 3-letter (Lulu is ahead)' }));
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBe('3 Letter Blends'));
+  expect(view.getByText('2 · Blending · 15 min · 3-letter')).toBeTruthy();
+  await cleanupAsync();
+  const resumed = mount({ draftId: (await handle.repositories.lessonDrafts.getActive()).id });
+  await resumed.findByText('2 · Blending · 15 min · 3-letter');
+  fireEvent.press(resumed.getByRole('button', { name: 'Show 2-letter' }));
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBe('2 Letter Blends'));
+});
+testLesson('the higher-tier switch names all children who are ahead', async () => {
+  await previewLesson(['2 Letter Blends', '3 Letter Blends']);
+  await handle.withTransaction(async db => {
+    await db.runAsync("update children set reading_level = '3 Letter Blends' where id = 'c3'");
+    await db.runAsync("insert into child_group_memberships (id, child_id, group_id, joined_at) values ('c3', 'c3', 'group-1', '2026-01-15')");
+  });
+  const view = mount();
+  expect(await view.findByRole('button', { name: 'Show 3-letter (Buhle & Lulu are ahead)' })).toBeTruthy();
+});
+testLesson('the Read tick stores the book as printed', async () => {
+  await previewLesson();
+  const view = mount();
+  expect(await view.findByText('Molo, Lolo!')).toBeTruthy();
+  expect(view.getByText('Step 1')).toBeTruthy();
+  const read = view.getByRole('checkbox', { name: 'Read' });
+  expect(read).not.toBeChecked();
+  fireEvent.press(read);
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.books)
+    .toEqual([{ id: 'xh-int-v1-r01', how: 'printed' }]));
+  expect(view.getByRole('checkbox', { name: 'Read' })).toBeChecked();
+  expect((await handle.repositories.lessonDrafts.getActive()).plan_fixed_at).toBeTruthy();
+  fireEvent.press(view.getByRole('checkbox', { name: 'Read' }));
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.books).toEqual([]));
+});
+testLesson('an ECD class has no pair-reading section', async () => {
+  await previewLesson();
+  await handle.withTransaction(db => db.runAsync("update classes set grade = 'ECD' where id = 'class-1'"));
+  const view = mount();
+  await view.findByText('2 · Blending · 15 min · 4-letter');
+  expect(view.queryByText('3 · Pair reading · 5 min')).toBeNull();
+});
+testLesson('a resumed archived ECD class has no pair-reading section', async () => {
+  await previewLesson();
+  const row = await handle.repositories.lessonDrafts.create({ ...draftStart(), language_code: 'xh',
+    pack_id: 'isixhosa-candidates-preview-v1', plan: null });
+  await handle.withTransaction(db => db.runAsync("update classes set grade = 'ECD', archived_at = '2026-10-21' where id = 'class-1'"));
+  const view = mount({ draftId: row.id });
+  await view.findByText('2 · Blending · 15 min · 4-letter');
+  expect(view.queryByText('3 · Pair reading · 5 min')).toBeNull();
+});
+testLesson('a letters-only release pack says no blends and no books yet', async () => {
+  const view = mount();
+  await ready(view);
+  expect(view.getByText('No blends for English yet.')).toBeTruthy();
+  expect(view.getByText('No books for English yet.')).toBeTruthy();
+});
+testLesson('Wrap up creates the draft if needed and opens Wrap up', async () => {
+  const view = mount();
+  await ready(view);
+  expect(await handle.repositories.lessonDrafts.getActive()).toBeNull();
+  fireEvent.press(view.getByRole('button', { name: 'Wrap up →' }));
+  await waitFor(() => expect(view.routeNames()).toEqual(['MainTabs', 'Lesson', 'LessonWrapUp']));
+  expect(view.navigationRef.getCurrentRoute().params).toEqual({ draftId: (await handle.repositories.lessonDrafts.getActive()).id });
 });
