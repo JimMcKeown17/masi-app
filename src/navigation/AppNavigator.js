@@ -246,7 +246,7 @@ export function MainNavigator() {
         name="SessionForm"
         component={SessionFormScreen}
         options={{
-          title: 'New session',
+          title: 'Who are you teaching?',
           headerLeftIcon: 'close',
         }}
       />
