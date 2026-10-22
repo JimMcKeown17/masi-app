@@ -5,7 +5,7 @@
  * marks each written word independently. Words are grouped by sentence.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -20,7 +20,7 @@ import type {
 import { WELA_PLUS_WRITE_SENTENCES_DICTATION_EN } from '../../itemsets/wela_plus_write_sentences_dictation.en';
 import { WELA_PLUS_WRITE_SENTENCES_DICTATION_XH } from '../../itemsets/wela_plus_write_sentences_dictation.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { tokens } from '../../theme/tokens';
+import { Canvas, ConfirmSheet, MarkTile, QuestionIntro, TileGroups, ToggleBar } from '../../ui';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
@@ -123,7 +123,7 @@ function WriteSentencesFromDictationQuestionContent(
   const sentences = effectiveItemSet.sentences;
   const flatWords = React.useMemo(() => flattenWords(sentences), [sentences]);
   const unmarkedCount = flatWords.reduce(
-    (acc, word) => acc + (isMarked(word.item_key) ? 0 : 1),
+    (acc, word) => acc + (isMarked(String(word.position)) ? 0 : 1),
     0,
   );
 
@@ -146,7 +146,7 @@ function WriteSentencesFromDictationQuestionContent(
             position: word.position,
             item_key: word.item_key,
             prompt: word.word,
-            is_correct: isMarkedRef.current(word.item_key),
+            is_correct: isMarkedRef.current(String(word.position)),
             metadata: {
               sentence_index: word.sentenceIndex,
               word_index: word.wordIndex,
@@ -166,7 +166,7 @@ function WriteSentencesFromDictationQuestionContent(
             );
             return {
               correct: sentenceWords.filter((word) =>
-                isMarkedRef.current(word.item_key),
+                isMarkedRef.current(String(word.position)),
               ).length,
               total: sentence.words.length,
             };
@@ -199,8 +199,8 @@ function WriteSentencesFromDictationQuestionContent(
 
   const handleToggle = useCallback(
     (word: FlatWord) => {
-      const willBeMarked = !isMarkedRef.current(word.item_key);
-      toggle(word.item_key);
+      const willBeMarked = !isMarkedRef.current(String(word.position));
+      toggle(String(word.position));
       if (onItemMarked) {
         const item: ResultItem = {
           position: word.position,
@@ -232,32 +232,11 @@ function WriteSentencesFromDictationQuestionContent(
   );
 
   if (phase === 'intro') {
-    return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
-    );
+    return <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />;
   }
 
   if (phase === 'finished') {
     return <View />;
-  }
-
-  if (phase === 'confirm-finish') {
-    return (
-      <View>
-        <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable onPress={() => finish('completed')}>
-          <Text>Yes, finish</Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
-    );
   }
 
   if (phase === 'skip-picker') {
@@ -269,111 +248,49 @@ function WriteSentencesFromDictationQuestionContent(
     );
   }
 
+  const confirming = phase === 'confirm-finish';
   return (
-    <View style={styles.root}>
-      <ScrollView
-        testID="prompt-scroll"
-        style={styles.scroll}
-        contentContainerStyle={styles.list}
+    <Canvas>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={confirming}
+        importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        pointerEvents={confirming ? 'none' : 'auto'}
       >
-        {sentences.map((sentence, sentenceIndex) => (
-          <View key={sentence.item_key} style={styles.sentenceGroup}>
-            <Text style={styles.sentenceLabel}>{`${sentenceIndex + 1}.`}</Text>
-            <View style={styles.sentenceRow}>
-              {sentence.words.map((word, wordIndex) => {
-                const flatWord = flatWords.find(
-                  (candidate) =>
-                    candidate.sentenceIndex === sentenceIndex &&
-                    candidate.wordIndex === wordIndex,
-                );
-                if (!flatWord) return null;
-                const marked = isMarked(word.item_key);
-                const labelState = marked ? 'correct' : 'idle';
-                return (
-                  <Pressable
-                    key={word.item_key}
-                    testID={`word-${word.item_key}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${word.word}, ${labelState}`}
-                    onPress={() => handleToggle(flatWord)}
-                    style={[
-                      styles.pill,
-                      {
-                        backgroundColor: marked
-                          ? tokens.color.marked
-                          : tokens.color.surface,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.word,
-                        {
-                          color: marked
-                            ? tokens.color.onMarked
-                            : tokens.color.ink,
-                        },
-                      ]}
-                    >
-                      {word.word}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-      <View style={styles.nav}>
-        <Pressable accessibilityRole="button" onPress={handleFinish}>
-          <Text>Finish</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setPhase('skip-picker')}
-        >
-          <Text>Skip question</Text>
-        </Pressable>
+        <TileGroups
+          card
+          testID="prompt-scroll"
+          groups={sentences.map((sentence, sentenceIndex) => ({
+            key: String(sentenceIndex),
+            heading: `${sentenceIndex + 1}.`,
+            items: flatWords.filter(word => word.sentenceIndex === sentenceIndex),
+          }))}
+          renderTile={word => {
+            const state = isMarked(String(word.position)) ? 'correct' : 'idle';
+            return (
+              <MarkTile
+                variant="pill"
+                state={state}
+                text={word.word}
+                testID={`word-${word.item_key}`}
+                accessibilityLabel={`${word.word}, ${state}`}
+                onPress={() => handleToggle(word)}
+              />
+            );
+          }}
+        />
+        <ToggleBar primary={{ label: 'Finish', onPress: handleFinish }} onSkip={() => setPhase('skip-picker')} />
       </View>
-    </View>
+      {confirming && (
+        <ConfirmSheet
+          testID="confirm-finish"
+          title={`${unmarkedCount} items unmarked — finish anyway?`}
+          confirmLabel="Yes, finish"
+          onConfirm={() => finish('completed')}
+          cancelLabel="Cancel"
+          onCancel={() => setPhase('active')}
+        />
+      )}
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  list: {
-    gap: tokens.space.md,
-    paddingBottom: tokens.space.lg,
-  },
-  sentenceGroup: {
-    gap: tokens.space.xs,
-  },
-  sentenceLabel: {
-    paddingHorizontal: tokens.space.md,
-    fontSize: tokens.font.body,
-    fontWeight: '600',
-    color: tokens.color.ink,
-  },
-  sentenceRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.sm,
-    padding: tokens.space.md,
-    backgroundColor: tokens.color.canvas,
-    borderRadius: tokens.radius.cell,
-  },
-  pill: {
-    paddingHorizontal: tokens.space.md,
-    paddingVertical: tokens.space.sm,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.pill,
-  },
-  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
-  nav: {
-    flexDirection: 'row',
-    gap: tokens.space.lg,
-    padding: tokens.space.md,
-  },
-});

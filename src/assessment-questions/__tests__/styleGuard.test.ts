@@ -10,20 +10,14 @@ export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
   'questions/ListenAndAnswerStoryQuestion/index.tsx',
   'questions/ListenFirstSoundQuestion/index.tsx',
   'questions/ListenPhonemeBlendQuestion/index.tsx',
-  'questions/ReadSentencesQuestion/index.tsx',
   'questions/StoryWritingRubricQuestion/index.tsx',
-  'questions/WriteCvcsQuestion/index.tsx',
-  'questions/WriteSentencesFromDictationQuestion/index.tsx',
 ]);
 export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
   'questions/ListenAndAnswerStoryQuestion/index.tsx',
   'questions/ListenFirstSoundQuestion/index.tsx',
   'questions/ListenPhonemeBlendQuestion/index.tsx',
-  'questions/ReadSentencesQuestion/index.tsx',
   'questions/StoryWritingRubricQuestion/index.tsx',
-  'questions/WriteCvcsQuestion/index.tsx',
-  'questions/WriteSentencesFromDictationQuestion/index.tsx',
 ]);
 
 function parseCode(code: string): ts.SourceFile {
