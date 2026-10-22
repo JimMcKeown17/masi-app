@@ -5,12 +5,8 @@ import ts from 'typescript';
 const ROOT = path.resolve(__dirname, '..');
 
 // Delete entries as shared typography/primitives replace each file's styling.
-export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
-  'questions/StoryWritingRubricQuestion/index.tsx',
-]);
-export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
-  'questions/StoryWritingRubricQuestion/index.tsx',
-]);
+export const FONT_RATCHET: ReadonlySet<string> = new Set<string>();
+export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>();
 
 function parseCode(code: string): ts.SourceFile {
   const parse = (text: string) =>
@@ -269,4 +265,9 @@ test('theme contains only its canonical files and their tests', () => {
   for (const entry of entries) {
     expect(entry.name === '__tests__' ? entry.isDirectory() : entry.isFile()).toBe(true);
   }
+});
+
+test('both ratchets are empty', () => {
+  expect([...FONT_RATCHET]).toEqual([]);
+  expect([...STYLE_RATCHET]).toEqual([]);
 });
