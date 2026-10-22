@@ -1,7 +1,7 @@
-import React, { useContext } from 'react';
-import { Modal, Platform, StyleSheet, View } from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import React from 'react';
+import { Modal, StyleSheet, View } from 'react-native';
 import { tokens } from '../theme/tokens';
+import { useBottomInset } from './BottomBar';
 import { PrimaryButton, SecondaryButton } from './Button';
 import { UiText } from './Text';
 
@@ -15,10 +15,9 @@ export function ConfirmSheet({ testID, title, confirmLabel, onConfirm, cancelLab
   confirmTone?: 'ink' | 'danger';
   children?: React.ReactNode;
 }) {
-  // Android's Modal viewport already excludes the navigation bar. The host's
-  // bottom inset must not be added again; iOS still needs its home-indicator inset.
-  const inset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
-  const bottom = Math.max(Platform.OS === 'android' ? 0 : inset, tokens.space.xl);
+  // The Modal draws edge-to-edge (SDK 54), under Android's navigation bar too, so it
+  // needs the same bottom inset as BottomBar. Device-verified on the A03s (build 30).
+  const bottom = Math.max(useBottomInset(), tokens.space.xl);
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => onCancel?.()}>
       <View testID={testID} accessibilityViewIsModal style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', backgroundColor: tokens.color.scrim }]}>

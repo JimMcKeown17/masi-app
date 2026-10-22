@@ -41,7 +41,7 @@ test('default confirm is ink and cancelLabel alone safely renders a cancel butto
 });
 
 
-test.each([['android', 0, 24], ['android', 24, 24], ['android', 48, 24], ['ios', 0, 24], ['ios', 34, 34]] as const)(
+test.each([['android', 0, 24], ['android', 24, 35], ['android', 48, 59], ['ios', 0, 24], ['ios', 34, 34]] as const)(
   'confirmation panel on %s with inset %s keeps bottom padding %s', (os, inset, paddingBottom) => {
     jest.replaceProperty(Platform, 'OS', os);
     const r = render(

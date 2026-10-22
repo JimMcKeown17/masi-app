@@ -937,9 +937,10 @@ Use the shared intro, bottom confirmation sheets and full-screen sheets. FullScr
 the modal top inset. `ConfirmSheet` uses a transparent, fading React Native `Modal` while
 mounted, with a status-bar-translucent scrim that covers the host header. Hardware Back invokes
 `onCancel` when supplied; on the stop card it does nothing. Keep the covered Question's
-pointer-event and accessibility hiding in place. The panel uses 24dp minimum bottom padding;
-iOS increases it for the home indicator, while Android's Modal already excludes the navigation
-bar and must not add the host bottom inset again. LastAttemptedSheet scrolls its header with the cells; its footer has
+pointer-event and accessibility hiding in place. The panel's bottom padding is
+`max(useBottomInset(), 24dp)` on both platforms: under Expo SDK 54 the Modal draws edge-to-edge,
+including under Android's navigation bar (device-verified on the A03s, build 30, where an
+inset-free panel put Cancel under the 3-button bar). LastAttemptedSheet scrolls its header with the cells; its footer has
 Reached the end / Nothing attempted / optional Cancel links above Confirm, leaving space for
 the list at large text (`src/assessment-questions/ui/QuestionIntro.tsx:8`,
 `src/assessment-questions/ui/ConfirmSheet.tsx:18`, `src/assessment-questions/ui/FullScreenSheet.tsx:12`,
