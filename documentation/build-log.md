@@ -3443,6 +3443,47 @@ on port 65433, `PGTZ=UTC`):
 `20261021160000`, Plan 3 `20261022120000`); the Android EAS build of this branch; and every plan's
 device checks on the Galaxy A03s.
 
+### 2026-10-22 — Lesson plan wave 1: hosted rollout of B2 and Assessment Results Plans 2–3 (Jim's yes)
+
+Jim approved the whole rollout in one answer (2026-10-22): sync check, `letter_mastery` wipe, then
+the three migrations one at a time with read-only checks between them. Every command went through
+the isolated staging helper with the stored CLI login (the inherited `SUPABASE_ACCESS_TOKEN` is
+stale), and every output named `project_ref=segygjzpujphwvrubusm`. The migrations were pushed from
+this branch's worktree, with `.env.local` linked from the main checkout only for the duration (its
+values are never printed) and `supabase/.temp` copied for the link; the link was removed afterwards.
+To push one file at a time, the later files were held outside `supabase/migrations` and restored
+before the next push.
+
+1. **Sync check: not possible.** The Galaxy A03s was no longer connected over adb, and no iPhone was
+   available. `masi-app-sqlite` holds only test data, so the only exposure is unsynced test
+   confirmations on a test phone, which Plan 2's local re-key clears anyway.
+2. **Preflight (read-only):** newest applied migration `20261021120000_assessment_results_contract`;
+   `letter_mastery` 47 rows, all `isiXhosa`.
+3. **Wipe (Assessment Results Plan 2, Task 7 Step 4):** `delete from public.letter_mastery` →
+   0 rows remain.
+4. **B2 `20261021140000_session_group_authorization`.** Dry run listed only this file; pushed.
+   Verified: ledger row; the four B2 policies RESTRICTIVE; no `sessions_forward_prep_pin_defaults_%`;
+   the held-group helper executable by `authenticated`, not `anon`; `authenticated` has no DELETE on
+   `groups` and `groups_delete_created_by` is gone; both identity triggers present.
+5. **Assessment Results Plan 2 `20261021160000_letter_mastery_current_state`.** Dry run listed only
+   this file; pushed. Verified: ledger row; `set_letter_mastery` security definer, executable by
+   `authenticated`, not `anon`; `authenticated` has no INSERT, UPDATE or DELETE on `letter_mastery`
+   and keeps SELECT; no `authenticated` privilege on `letter_mastery_corrections`; the only policy is
+   `letter_mastery_select_writer_or_deliverer`; 0 rows. Old builds' tracker saves now fail with
+   `42501`, as the plan states; install the new build before field use.
+6. **Assessment Results Plan 3 `20261022120000_assessment_history_pull`.** Baseline counts first
+   (read-only, no wipe): assessments 42, assessment_items 2,480, battery_runs 0, letter_mastery 0,
+   letter_mastery_corrections 0. Dry run listed only this file; pushed. Verified: ledger row; the
+   three page RPCs and `private.can_read_assessment` are security definer with an empty search path;
+   RPCs executable by `authenticated`, not `anon`; the three new SELECT policies present and the three
+   old ones gone; `private.history_pull_rollout` holds three enabled everyone rows, RLS on, no
+   policies.
+7. A final dry run reported the remote database up to date.
+
+**Not run (each needs Jim's yes):** B2's rollback-only actor probe (Task 8 Step 4), Plan 2's
+rollback-only `set_letter_mastery` smoke, Plan 3's rollback-only hosted matrix (Task 13 Step 4) and
+Plan 3's authenticated HTTP probe (Task 13 Step 5, which Jim runs interactively).
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -3630,6 +3671,7 @@ device checks on the Galaxy A03s.
 | 2026-10-21 | Lesson plan A3: books exclude retired readers; catalogue order is step, position within that step, then ID. Readability excludes normalized tricky words and requires unlocked sounds. Choose highest-step readable non-recent book; otherwise oldest latest read by date/timestamp/ID, then higher step/catalogue ties. ECD has no book row. | The whole-window latest read supplies Read dates, independently of the five-session recent set. Multi-letter sounds stay locked in v1. | Sound-step or book-selection pedagogy changes. |
 | 2026-10-21 | Lesson plan A3: save retains a plan exactly when lesson date equals `made_on`, however late; an unfrozen plan recomputes only on its own day. Class resolution uses the group's class or its current members, never children added for the day. | C14 preserves dated advice as evidence; C18 prevents attendance from switching language. Missing plans are programmer errors, not invented advice. | Lesson-date, class or language ownership changes. |
 | 2026-10-21 | Historical group reference: rebuild local `sessions` without the group FK (v 16); rejected a history-reference `groups` row. | Authorized session history can name a group the EA never held or no longer holds, while the roster pull downloads only currently assigned groups. A synthetic group needs a name the history API lacks and makes group readers, edits, archive, reconcile and ownership repair reason about a new access-bearing row kind. A plain id preserves history without creating a group or assignment, matching `battery_runs.class_id` in #90; local capture validation belongs in `saveSession` (B2 Task 4). | A screen needs a session's group name offline. |
+| 2026-10-22 | **Accepted risk A3 stays accepted (Jim).** A letter correction made on a phone whose clock is slow, after it has observed another phone's newer correction, loses to that winner. | Rare: it needs two phones correcting the same child and letter and a clock slow beyond the gap; fast clocks are already clamped. The root fix (a causal base carried in `set_letter_mastery`) changes the approved server contract. | A field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. |
 
 ---
 
