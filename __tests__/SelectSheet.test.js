@@ -22,6 +22,7 @@ import React from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
+import BrandButton from '../src/components/common/BrandButton';
 import SelectSheet from '../src/components/common/SelectSheet';
 import { colors } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
@@ -243,4 +244,24 @@ test('flat options have a divider only between rows', () => {
   const last = StyleSheet.flatten(sheet.getByRole('button', { name: 'Hilltop School' }).props.style);
   expect(first).toMatchObject({ minHeight: 56, paddingHorizontal: 0, borderBottomWidth: 1, borderBottomColor: colors.border });
   expect(last.borderBottomWidth ?? 0).toBe(0);
+});
+
+test.each([null, undefined])('Start stays disabled without a draft key (%p), then confirms a tapped option', (selectedKey) => {
+  const onSelect = jest.fn();
+  const onDismiss = jest.fn();
+  const sheet = renderSheet({ selectedKey, confirmLabel: 'Start', onSelect, onDismiss });
+  const start = sheet.getByRole('button', { name: 'Start' });
+  expect(start).toBeDisabled();
+  fireEvent.press(start);
+  // Also guard the callback itself against a programmatic or already queued press.
+  sheet.UNSAFE_getByType(BrandButton).props.onPress();
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(onDismiss).not.toHaveBeenCalled();
+
+  fireEvent.press(sheet.getByRole('button', { name: 'Hilltop School' }));
+  expect(sheet.getByRole('button', { name: 'Start' })).toBeEnabled();
+  fireEvent.press(sheet.getByRole('button', { name: 'Start' }));
+  expect(onSelect).toHaveBeenCalledTimes(1);
+  expect(onSelect).toHaveBeenCalledWith('school-2');
+  expect(onDismiss).toHaveBeenCalledTimes(1);
 });

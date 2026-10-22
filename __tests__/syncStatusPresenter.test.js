@@ -1,6 +1,7 @@
 import {
   deriveSyncState,
   describeCombinedHistoryState,
+  describeHistoryState,
   describeReconcileBreakerNote,
   describeSyncState,
   describeWaitingDetail,
@@ -213,12 +214,41 @@ describe('combined History status', () => {
   test('two incomplete walks failed at 08:00 and 09:00 give a label with 08:00 time', () => {
     const early = '2026-10-21T08:00:00Z', late = '2026-10-21T09:00:00Z';
     const failed = at => ({ ...complete(), cursor: JSON.stringify({ complete: true, lastFailureAt: at }) });
-    const time = new Date(early).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-    expect(describeCombinedHistoryState({ running: false, pullStates: [complete(), failed(late), failed(early), complete()] }))
-      .toEqual({ label: 'Incomplete since ' + time, detail: 'History not fully downloaded yet' });
+    const format = jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function () {
+      return this.toISOString();
+    });
+    try {
+      expect(describeCombinedHistoryState({ running: false, pullStates: [complete(), failed(late), failed(early), complete()] }))
+        .toEqual({ label: 'Incomplete since 2026-10-21T08:00:00.000Z', detail: 'History not fully downloaded yet' });
+    } finally {
+      format.mockRestore();
+    }
   });
   test('running wins', () => {
     expect(describeCombinedHistoryState({ running: true, pullStates: [null, null] }))
       .toEqual({ label: 'Downloading', detail: 'Downloading history from Head Office…' });
+  });
+});
+
+describe.each([
+  ['session', pullState => describeHistoryState({ pullState })],
+  ['combined', pullState => describeCombinedHistoryState({ pullStates: [pullState] })],
+])('%s incomplete timestamp', (_name, describe) => {
+  test.each([
+    ['22 Oct, 9:41 AM', '22 Oct, 9:41\u00a0AM'],
+    ['22 Oct, 9:41\u202fPM', '22 Oct, 9:41\u00a0PM'],
+    ['22 Oct, 9:41\t  a.m.', '22 Oct, 9:41\u00a0a.m.'],
+    ['22 Oct, 9:41\nP.M.', '22 Oct, 9:41\u00a0P.M.'],
+    ['22 Oct, 9:41\u00a0pm', '22 Oct, 9:41\u00a0pm'],
+    ['22 Oct, 21:41', '22 Oct, 21:41'],
+  ])('keeps meridiem with the time: %p', (localized, expected) => {
+    const format = jest.spyOn(Date.prototype, 'toLocaleString').mockReturnValue(localized);
+    try {
+      const pullState = { cursor: JSON.stringify({ lastFailureAt: '2026-10-22T09:41:00Z' }) };
+      expect(describe(pullState).label).toBe('Incomplete since ' + expected);
+      expect(format).toHaveBeenCalledWith([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    } finally {
+      format.mockRestore();
+    }
   });
 });

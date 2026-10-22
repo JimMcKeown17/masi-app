@@ -22,7 +22,7 @@ export default function ClassRow({
           {unsynced ? <StatusBadge label="Unsynced" tone="warning" /> : null}
         </View>
         <Text style={styles.school}>{schoolName}</Text>
-        <Text style={styles.meta}>{[grade, teacher, language].join(' • ')}</Text>
+        <Text style={styles.meta}>{[grade, teacher, language].filter(part => part?.trim()).join(' • ')}</Text>
         <View style={styles.countRow}>
           <AvatarStack initials={rosterInitials} />
           <Text style={styles.countLine}>

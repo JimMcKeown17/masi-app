@@ -1,5 +1,5 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
-import SurfaceCard from '../../components/common/SurfaceCard';
+import AssessmentStatCards from '../../components/assessment/AssessmentStatCards';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
@@ -20,15 +20,6 @@ function formatDate(dateString) {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function StatCard({ value, label, accentColor }) {
-  return (
-    <SurfaceCard style={[styles.statCard, { borderTopColor: accentColor }]}>
-      <Text style={[styles.statValue, { color: accentColor === colors.emphasis ? colors.primary : accentColor }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </SurfaceCard>
-  );
 }
 
 export default function AssessmentDetailScreen({ route }) {
@@ -85,12 +76,11 @@ export default function AssessmentDetailScreen({ route }) {
         )}
       </View>
 
-      {/* Stats row */}
-      <View style={styles.statsRow}>
-        <StatCard value={attempted} label="Attempted" accentColor={colors.primary} />
-        <StatCard value={assessment.score} label="Correct" accentColor={colors.success} />
-        <StatCard value={incorrect} label="Incorrect" accentColor={colors.emphasis} />
-      </View>
+      <AssessmentStatCards stats={[
+        { key: 'attempted', value: attempted, label: 'Attempted', accentColor: colors.primary },
+        { key: 'correct', value: assessment.score, label: 'Correct', accentColor: colors.success },
+        { key: 'incorrect', value: incorrect, label: 'Incorrect', accentColor: colors.emphasis },
+      ]} />
 
       <View style={styles.gridSection}><AssessmentDetailGrid assessment={assessment} /></View>
     </ScrollView>
@@ -142,26 +132,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   timeText: {
-    color: colors.textSecondary,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    width: '100%',
-  },
-  statCard: {
-    flex: 1,
-    borderTopWidth: 3,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  statValue: {
-    ...typeRoles.displayTitle,
-    fontVariant: ['tabular-nums'],
-    marginBottom: spacing.xs,
-  },
-  statLabel: {
-    ...typeRoles.textLabel,
     color: colors.textSecondary,
   },
   gridSection: {

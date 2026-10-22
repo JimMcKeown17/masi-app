@@ -69,3 +69,20 @@ test('the class name wraps when font scale grows', () => {
   ui.rerender(<ClassRow {...base} />);
   expect(ui.getByText(base.name).props.numberOfLines).toBeUndefined();
 });
+
+test.each([
+  ...[null, undefined, '', '  \t '].flatMap(empty => [
+    [{ grade: empty }, 'Ms Nolang • isiXhosa', 'Ms Nolang, isiXhosa'],
+    [{ teacher: empty }, 'Grade 1 • isiXhosa', 'Grade 1, isiXhosa'],
+    [{ language: empty }, 'Grade 1 • Ms Nolang', 'Grade 1, Ms Nolang'],
+  ]),
+  [{ grade: null, teacher: ' ', language: undefined }, '', ''],
+])('empty metadata %p leaves no separator or accessibility slot', (missing, meta, spokenMeta) => {
+  const props = { ...base, teacher: 'Ms Nolang', ...missing };
+  const ui = render(<ClassRow {...props} />);
+  if (meta) expect(ui.getByText(meta)).toBeTruthy();
+  else expect(ui.queryByText(/•/)).toBeNull();
+  const expectedLabel = ['Grade 1A', 'Charles Duna Primary', spokenMeta, '18 children', '4 groups']
+    .filter(Boolean).join(', ') + '. Open class';
+  expect(ui.getByRole('button', { name: expectedLabel })).toBeTruthy();
+});

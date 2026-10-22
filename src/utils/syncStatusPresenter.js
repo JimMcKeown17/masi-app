@@ -103,6 +103,12 @@ export const describeReconcileBreakerNote = ({ scope } = {}) => ({
   accessibilityLabel: 'Large roster change from Head Office is waiting. Apply',
 });
 
+// Figtree supports U+00A0; keep the meridiem attached without relying on U+202F.
+const formatHistoryTime = since => since
+  ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    .replace(/\s+(?=[ap]\.?m\b)/gi, '\u00a0')
+  : 'the last attempt';
+
 export const describeHistoryState = ({ running, pullState } = {}) => {
   if (running) return { label: 'Downloading', detail: 'Downloading history from Head Office…' };
   if (!pullState) return { label: 'Not downloaded yet', detail: null };
@@ -110,7 +116,7 @@ export const describeHistoryState = ({ running, pullState } = {}) => {
   const failedSinceSuccess = Boolean(cursor.lastFailureAt);
   if (cursor.complete && pullState.lastPulledAt && !failedSinceSuccess) return { label: 'Up to date', detail: null };
   const since = cursor.lastFailureAt || pullState.updatedAt || pullState.lastPulledAt;
-  const time = since ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the last attempt';
+  const time = formatHistoryTime(since);
   return { label: `Incomplete since ${time}`, detail: 'History not fully downloaded yet' };
 };
 
@@ -130,6 +136,6 @@ export const describeCombinedHistoryState = ({ running, pullStates = [] } = {}) 
     try { cursor = JSON.parse(state.cursor || '{}'); } catch { cursor = {}; }
     return cursor.lastFailureAt || state.updatedAt || state.lastPulledAt;
   }).filter(Boolean).sort((a, b) => Date.parse(a) - Date.parse(b))[0];
-  const time = since ? new Date(since).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'the last attempt';
+  const time = formatHistoryTime(since);
   return { label: `Incomplete since ${time}`, detail: 'History not fully downloaded yet' };
 };

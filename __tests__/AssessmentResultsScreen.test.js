@@ -5,10 +5,12 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import * as ReactNative from 'react-native';
 import { cleanup, fireEvent, within } from '@testing-library/react-native';
 import { v4 as uuid } from 'uuid';
 import { colors } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
+import AssessmentStatCards from '../src/components/assessment/AssessmentStatCards';
 import SurfaceCard from '../src/components/common/SurfaceCard';
 import AssessmentDetailScreen from '../src/screens/assessments/AssessmentDetailScreen';
 import AssessmentResultsScreen from '../src/screens/assessments/AssessmentResultsScreen';
@@ -92,9 +94,8 @@ test('low-score results keep action red text, a secondary Try again button and s
   const label = within(screen.UNSAFE_getAllByType(SurfaceCard)[2]).getByText('Incorrect');
   expect(StyleSheet.flatten(label.props.style)).toMatchObject(typeRoles.textLabel);
   for (const statLabel of ['Attempted', 'Correct', 'Incorrect']) {
-    expect(screen.getByText(statLabel).props).toMatchObject({
-      numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75,
-    });
+    expect(screen.getByText(statLabel).props.adjustsFontSizeToFit).toBeUndefined();
+    expect(screen.getByText(statLabel).props.minimumFontScale).toBeUndefined();
   }
 });
 
@@ -132,4 +133,33 @@ test('Detail shows an honest missing-result state for an unknown id', async () =
     <AssessmentDetailScreen route={{ params: { assessmentId: uuid() } }} />
   </SignedInEAContext.Provider>);
   expect(await screen.findByText('Result not found.')).toBeTruthy();
+});
+
+test.each([
+  ['detail', 1], ['detail', 1.3], ['results', 1], ['results', 1.3],
+])('%s stat labels retain full font size at 360dp and %sx text', async (kind, fontScale) => {
+  jest.spyOn(ReactNative, 'useWindowDimensions').mockReturnValue({ width: 360, height: 800, scale: 1, fontScale });
+  const { id: assessmentId } = await fixture.save(5);
+  const Screen = kind === 'detail' ? AssessmentDetailScreen : AssessmentResultsScreen;
+  const screen = renderWithProviders(
+    <SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
+      <Screen navigation={{ replace: jest.fn(), navigate: jest.fn() }}
+        route={{ params: { assessmentId, childName: 'A Child', testCode: 'letter_sounds',
+          child: { id: fixture.childId }, languageCode: 'en' } }} />
+    </SignedInEAContext.Provider>,
+  );
+  await screen.findByText('Attempted');
+  expect(screen.UNSAFE_getByType(AssessmentStatCards).props.stats).toEqual([
+    { key: 'attempted', value: 5, label: 'Attempted', accentColor: colors.primary },
+    { key: 'correct', value: 3, label: 'Correct', accentColor: colors.success },
+    { key: 'incorrect', value: 2, label: 'Incorrect', accentColor: colors.emphasis },
+  ]);
+  for (const [index, label] of ['Attempted', 'Correct', 'Incorrect'].entries()) {
+    const text = within(screen.UNSAFE_getAllByType(SurfaceCard)[index]).getByText(label);
+    expect(text.props.adjustsFontSizeToFit).toBeUndefined();
+    expect(text.props.minimumFontScale).toBeUndefined();
+    expect(text.props.allowFontScaling).not.toBe(false);
+    expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+    expect(StyleSheet.flatten(text.props.style)).toMatchObject({ ...typeRoles.textLabel, color: colors.textSecondary });
+  }
 });
