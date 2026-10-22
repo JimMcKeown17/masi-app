@@ -317,6 +317,34 @@ export const createChildrenRepository = ({ database } = {}) => {
     return Object.fromEntries(rows.map(row => [row.id, row]));
   };
 
+  const getWriteAuthority = async ({ userId, childIds, transaction }) => {
+    if (!childIds.length) return {};
+    const db = transaction || await resolveDatabase(database);
+    const rows = await db.getAllAsync(`
+      select requested.value as id, child.created_by = ? as creator,
+        exists (
+          select 1 from child_ea_assignments a
+          where a.child_id = requested.value and a.user_id = ? and a.unassigned_at is null
+        ) as deliver,
+        (exists (
+          select 1 from class_ea_assignments a
+          join child_class_memberships m on m.class_id = a.class_id and m.exited_at is null
+          where m.child_id = requested.value and a.ea_user_id = ? and a.unassigned_at is null
+        ) or exists (
+          select 1 from group_ea_assignments a
+          join child_group_memberships m on m.group_id = a.group_id and m.removed_at is null
+          where m.child_id = requested.value and a.ea_user_id = ? and a.unassigned_at is null
+        )) as indirect
+      from json_each(?) requested
+      left join children child on child.id = requested.value
+    `, userId, userId, userId, userId, JSON.stringify([...new Set(childIds)]));
+    return Object.fromEntries(rows.map(row => {
+      const deliver = Boolean(row.deliver);
+      const attend = deliver || Boolean(row.indirect);
+      return [row.id, { attend, deliver, level: Boolean(row.creator) || attend }];
+    }));
+  };
+
   const getChildren = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(
@@ -895,6 +923,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     getChildren,
     getChildNamesByIds,
     getChildrenByIds,
+    getWriteAuthority,
     getMyChildren,
     save,
     saveChild: save,
