@@ -10,14 +10,16 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm },
 });
 
-export function TileGroups<T>({ groups, card = false, renderTile, testID }: {
+export function TileGroups<T>({ groups, card = false, renderTile, testID, header }: {
   groups: ReadonlyArray<{ key: string; testID?: string; heading?: string; items: ReadonlyArray<T> }>;
   card?: boolean;
   renderTile: (item: T) => React.ReactNode;
   testID?: string;
+  header?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <ScrollView testID={testID} contentContainerStyle={styles.content}>
+      {header}
       {groups.map(group => <View key={group.key} testID={group.testID} style={[styles.group, card && styles.card]}>
         {group.heading !== undefined && <UiText variant="label" tone="muted">{group.heading}</UiText>}
         <View style={styles.row}>

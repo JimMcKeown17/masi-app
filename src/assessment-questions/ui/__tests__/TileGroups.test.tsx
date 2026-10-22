@@ -12,6 +12,19 @@ const groups = [
 ];
 const renderTile = (item: { position: number; text: string }) => <MarkTile key={item.position} variant="pill" state="idle" text={item.text} accessibilityLabel={`item ${item.position}`} />;
 
+test('TileGroups renders its optional header first inside the scroll content gutters', () => {
+  const header = <UiText>Choose the last item</UiText>;
+  const r = render(<TileGroups header={header} groups={groups} testID="groups" renderTile={renderTile} />);
+  expect(within(r.getByTestId('groups')).getByText('Choose the last item')).toBeTruthy();
+  const scroller = r.UNSAFE_getByType(ScrollView);
+  expect(scroller.props.children[0]).toBe(header);
+  expect(scroller.findAllByType(UiText).map((text: { props: { children?: React.ReactNode } }) => text.props.children))
+    .toEqual(['Choose the last item', 'Sentence 1', 'Sentence 2']);
+  expect(StyleSheet.flatten(scroller.props.contentContainerStyle)).toMatchObject({
+    paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.lg,
+  });
+});
+
 test.each([false, true])('TileGroups owns 16dp horizontal and vertical content gutters with card=%s', card => {
   const r = render(<TileGroups groups={groups} card={card} renderTile={renderTile} />);
   expect(StyleSheet.flatten(r.UNSAFE_getByType(ScrollView).props.contentContainerStyle)).toMatchObject({

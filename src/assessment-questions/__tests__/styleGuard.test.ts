@@ -6,7 +6,6 @@ const ROOT = path.resolve(__dirname, '..');
 
 // Delete entries as shared typography/primitives replace each file's styling.
 export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
-  'progress/LastAttemptedSheet.tsx',
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
   'questions/ListenAndAnswerStoryQuestion/index.tsx',
   'questions/ListenFirstSoundQuestion/index.tsx',
@@ -17,11 +16,8 @@ export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
   'questions/StoryWritingRubricQuestion/index.tsx',
   'questions/WriteCvcsQuestion/index.tsx',
   'questions/WriteSentencesFromDictationQuestion/index.tsx',
-  'skip/SkipReasonPicker.tsx',
 ]);
 export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
-  'progress/LastAttemptedSheet.tsx',
-  'progress/MissingItemSet.tsx',
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
   'questions/ListenAndAnswerStoryQuestion/index.tsx',
   'questions/ListenFirstSoundQuestion/index.tsx',
@@ -32,7 +28,6 @@ export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
   'questions/StoryWritingRubricQuestion/index.tsx',
   'questions/WriteCvcsQuestion/index.tsx',
   'questions/WriteSentencesFromDictationQuestion/index.tsx',
-  'skip/SkipReasonPicker.tsx',
 ]);
 
 function parseCode(code: string): ts.SourceFile {
