@@ -12,17 +12,7 @@ export { StoryWritingRubricQuestion } from './questions/StoryWritingRubricQuesti
 export type { QuestionProps } from './types/QuestionProps';
 export type { LetterSoundsItemSet } from './questions/LetterSoundsQuestion/types';
 export type { StopRule } from './progress/stepByStep';
-export {
-  LETTER_SOUNDS_2026_1_EN,
-  LETTER_SOUNDS_2026_1_XH,
-  LETTER_SOUNDS_2026_2_EN,
-  LETTER_SOUNDS_2026_2_XH,
-  LETTER_SOUNDS_2026_2_AF,
-  WORD_READING_2026_1_EN,
-  WORD_READING_2026_1_XH,
-  WORD_READING_2026_1_AF,
-  CURRENT_ITEM_SETS,
-} from './itemsets';
+export * from './itemsets';
 export type { Result, ResultItem, ResultDerived, StoppedReason } from './types/Result';
 export { tokens } from './theme/tokens';
 export { AssessmentThemeProvider } from './theme/AssessmentTheme';
@@ -32,3 +22,8 @@ export { WELA_PLUS_FULL_2024_1 } from './battery/wela_plus_full';
 export type { BatteryConfig, BatteryQuestion, BatteryState, DecidedResult, Materials, MaterialItem, PrerequisiteRule } from './types/BatteryConfig';
 export { MANUAL_SKIP_REASONS } from './skip/skipReasons';
 export type { ManualSkipReason } from './skip/skipReasons';
+
+export { questionComponentFor } from './battery/questionComponents';
+export type { QuestionEntry } from './battery/questionComponents';
+export { NullQuestion } from './questions/NullQuestion';
+export * as testFixtures from './testFixtures';

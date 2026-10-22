@@ -16,6 +16,8 @@ const deferred = () => {
 };
 import { NavigationContext } from '@react-navigation/native';
 import { ToastActorScope } from '../src/context/ToastContext';
+let mockGalleryEnabled = false;
+jest.mock('../src/utils/questionGallery', () => ({ isQuestionGalleryEnabled: () => mockGalleryEnabled }));
 let mockProfile;
 let mockSignOutFlowOverride;
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -118,6 +120,7 @@ const fillPassword = (screen) => {
 };
 beforeEach(() => {
   jest.clearAllMocks();
+  mockGalleryEnabled = false;
   mockProfile = { first_name: 'Test', last_name: 'User', jobTitleName: 'Education Assistant', schoolName: 'Masi Primary' };
   mockSignOutFlowOverride = null;
 });
@@ -250,4 +253,20 @@ test('scroll updates the header hairline only when navigation context is present
   screen.rerender(<NavigationContext.Provider value={navigation}><ProfileScreen navigation={navigation} /></NavigationContext.Provider>);
   fireEvent.scroll(screen.UNSAFE_getByType(ScrollView), { nativeEvent: { contentOffset: { y: 20 } } });
   expect(navigation.setOptions).toHaveBeenCalledWith({ headerScrolled: true });
+});
+
+test('Support tools shows Question gallery when the gallery is enabled', () => {
+  mockGalleryEnabled = true;
+  const navigation = { navigate: jest.fn() };
+  const screen = render(<ProfileScreen navigation={navigation} />);
+  expect(screen.queryByText('Question gallery')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Question gallery' }));
+  expect(navigation.navigate).toHaveBeenCalledWith('QuestionGallery');
+});
+
+test('with __DEV__ false and no build flag, there is no Profile row', () => {
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  expect(screen.queryByText('Question gallery')).toBeNull();
 });

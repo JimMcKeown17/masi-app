@@ -23,6 +23,7 @@ import ExportDatabaseSheet from '../../components/profile/ExportDatabaseSheet';
 import SignOutSheets from '../../components/profile/SignOutSheets';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
+import { isQuestionGalleryEnabled } from '../../utils/questionGallery';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
 import { getRuntimeDiagnostics } from '../../utils/runtimeDiagnostics';
@@ -43,6 +44,7 @@ export default function ProfileScreen({ navigation }) {
   const runtimeDiagnostics = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
 
+  const galleryEnabled = isQuestionGalleryEnabled();
   const paddingBottom = useScrollBottomPadding(40);
   const onScroll = useHeaderHairline();
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -197,7 +199,10 @@ export default function ProfileScreen({ navigation }) {
                   trailing="share" busy={databaseExportLoading} accessibilityLabel="Share database, sensitive"
                   onPress={handleShareDatabase} showDivider />
                 <ListRow variant="nested" title="Test crash reporting" lead={<Ionicons name="bug-outline" size={20} color={colors.text} />}
-                  trailing="send" busy={reportTestLoading} onPress={handleSendObservabilityTest} />
+                  trailing="send" busy={reportTestLoading} onPress={handleSendObservabilityTest} showDivider={galleryEnabled} />
+                {galleryEnabled ? <ListRow variant="nested" title="Question gallery"
+                  lead={<Ionicons name="grid-outline" size={20} color={colors.text} />}
+                  trailing="chevron" onPress={() => navigation.navigate('QuestionGallery')} /> : null}
               </View> : null}
             </View>
           </ListGroup>

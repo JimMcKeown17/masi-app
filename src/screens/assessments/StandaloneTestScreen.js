@@ -1,15 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { usePreventRemove } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { v4 as uuid } from 'uuid';
 import { CURRENT_ITEM_SETS, LetterSoundsQuestion, ReadWordsQuestion } from '../../assessment-questions';
 import { MissingItemSet } from '../../assessment-questions/progress/MissingItemSet';
 import BottomSheet from '../../components/common/BottomSheet';
 import BrandButton from '../../components/common/BrandButton';
 import ConfirmSheet from '../../components/common/ConfirmSheet';
-import IconCircleButton from '../../components/common/IconCircleButton';
-import { colors, spacing } from '../../constants/colors';
+import TestFrame from '../../components/assessments/TestFrame';
+import { colors } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
@@ -23,7 +22,6 @@ export default function StandaloneTestScreen({ navigation, route }) {
   const { repositories } = useSignedInEA();
   const { user } = useAuth();
   const { triggerBackgroundSync } = useOffline();
-  const insets = useSafeAreaInsets();
   const definition = STANDALONE_TESTS.find(test => test.code === testCode);
   const Question = definition && COMPONENTS[definition.component];
   const itemSet = CURRENT_ITEM_SETS[testCode]?.[languageCode];
@@ -116,16 +114,9 @@ export default function StandaloneTestScreen({ navigation, route }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <IconCircleButton icon="close" accessibilityLabel="Close test" onPress={() => navigation.goBack()} />
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>{definition?.title}</Text>
-          <Text style={styles.subtitle}>
-            {[child.first_name, child.last_name].filter(Boolean).join(' ')} · {LANGUAGE_LABELS[languageCode] ?? languageCode}
-          </Text>
-        </View>
-      </View>
+    <TestFrame title={definition?.title}
+      subtitle={`${[child.first_name, child.last_name].filter(Boolean).join(' ')} · ${LANGUAGE_LABELS[languageCode] ?? languageCode}`}
+      onClose={() => navigation.goBack()}>
       <View style={styles.question}>
         {Question && itemSet ? (
           <Question
@@ -159,17 +150,11 @@ export default function StandaloneTestScreen({ navigation, route }) {
         onConfirm={discard}
         onCancel={keepTesting}
       />
-    </View>
+    </TestFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm, gap: spacing.ms },
-  headerCopy: { flex: 1 },
-  title: { ...typeRoles.displayHeading, color: colors.text },
-  subtitle: { ...typeRoles.textCaption, color: colors.textSecondary },
   question: { flex: 1 },
   message: { ...typeRoles.textParagraph, color: colors.textSecondary },
 });
