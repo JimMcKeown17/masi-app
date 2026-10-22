@@ -53,7 +53,7 @@ The spec leaves these to the builder (§12) or is silent. Each is marked **(plan
 
 - **Copy, exactly as the spec writes it:** "Who are you teaching?", "Up next", "Start lesson", "Other groups", "+ Make a group", "Not in a group yet", "Put in a group", "Who's here", "+ Add a child", "1 · Letters · 15 min", "2 · Blending · 15 min · {tier}", "3 · Pair reading · 5 min", "Wrap up →", "Who knows {letters} without help?", "Teaching it today doesn't count.", "No one new yet", "Save session", "Save without letters, blends or a book?", "Still downloading past lessons. Suggestions may repeat.", "Still downloading what children know. Suggestions may repeat.", "All letters known", "Choose the letters you teach", "Lesson in progress". Tier labels on screen: `2 Letter Blends` → "2-letter", `3 Letter Blends` → "3-letter", `4 Letter Blends` → "4-letter", `Word Reading` → "words". New copy not quoted here follows `documentation/design-system.md` and is listed in the PR for Jim's wording pass.
 - **Bold Red only:** `StepHeader`, `SelectableRow`, `LetterToggleGrid`/`LetterToggleTile`, `StickyActionFooter` (a sibling after the list), `ConfirmSheet`, `BottomSheet`, `SelectSheet`, `ListRow`/`ListGroup`, `BrandButton`, `InlineNote`, `EmptyState`, `TextField`, `MonthCalendar`. **Bottom sheets only**: no `Alert.alert`, `Modal` or Paper `Dialog` in new code. `designSystemGuard.test.js` passes with `BOARD_RATCHET` still empty: tokens and `typeRoles` only, no raw hex, no `fontWeight`, no numeric `fontSize`/`lineHeight`/`letterSpacing`.
-- **Data access through the signed-in EA only:** repositories and services come from `useSignedInEA()` or an explicit handle (`productionBindingStatic.test.js`). `handle.withTransaction` is not re-entrant: pass the `transaction` facade down; only `lessonDrafts.discard` accepts one.
+- **Data access through the signed-in EA only:** repositories and services come from `useSignedInEA()` or an explicit handle (`productionBindingStatic.test.js`). `handle.withTransaction` is not re-entrant: pass the `transaction` facade down; only `lessonDrafts.discard` accepts one. **Only the draft controller (Task 5) and `saveLesson` (inside its transaction) write `lesson_drafts`**; screens never call `create`/`update`/`discard` directly.
 - **Static guards:** engine files stay pure (`lessonPlanEnginePurity.test.js`), so all I/O lives outside `src/lessonPlan/engine/`. No file under `src/components/` or `src/hooks/` may mention the identifier `assessmentHistory` (`historyPullTriggerBudget.test.js`); completeness reads live in `src/lessonPlan/inputs/`. No new module-scope `let`/`Map`/`Set` in `src/services`, `src/db`, `src/session` (`moduleStateAllowlist.test.js`).
 - **No server change, no local migration, no new synced table.** Everything new is in `sessions.activities.lesson` (spec §6) and the existing `lesson_drafts` row. Two extra keys live inside `ticks` (the repository keeps extra keys): `ticks.noOneNew: string[]` (child ids) and `ticks.blendTierShown: string|null`.
 - **Saved shape = spec §6, key for key.** `activities.lesson.plan_reason` is written only when it is `'past_date'` (omit the key otherwise). `letters_focused` may be `[]`; `session_reading_level` may be `null` (C11).
@@ -65,11 +65,13 @@ The spec leaves these to the builder (§12) or is silent. Each is marked **(plan
 
 Failure modes the spec implies that are easy to miss. Each has a test in the task named.
 
-1. **Rapid taps while draft writes are slow** (A03s): ten ticks and attendance taps in quick succession must all persist, in order, with no second draft row. Test: Task 5, "rapid changes persist in order".
+1. **Slow draft writes across two screens** (A03s): ticks on the Lesson screen, an edit on Wrap up, Back, more ticks, then Save, all in quick succession, must persist every change in order, with no stale copy overwriting a newer one and no second draft row. One controller per EA serialises every write, and Save drains it first. Tests: Task 5 "cross-screen edits persist in order" and "save waits for queued edits".
 2. **A resumed lesson whose group is no longer on the phone** (archived groups are fine; a group row that is gone is not): Save shows "This group is no longer on this phone. Discard this lesson to start again." and writes nothing; Discard works. Tests: Task 4 `GROUP_MISSING`, Task 9 screen test.
 3. **A lesson left open past midnight, or resumed days later:** the plan is not recomputed, the lesson keeps its date ("Started Mon 19 Oct"), and saving keeps Monday's plan. Tests: Task 5 "a different day never recomputes", Task 9 "resumed lesson shows its start date".
-4. **A child on the lesson who has since left the EA's roster**, or is now a history-reference child: they still show by name if their row is on the phone and are saved as an attendee; a reading-level change for a history-reference child is skipped, never a crash that rolls back the save. Test: Task 4 "history-reference child".
-5. **A full roster on the A03s with the preview pack:** the engine runs once per change, not once per render. Tests: Task 6 and Task 7 assert engine call counts; Task 12 measures on device.
+4. **A child on a resumed lesson who is no longer one of the EA's children** (handed over, or now a history reference): the server would refuse their attendee row, so Save refuses locally **before** the transaction, keeps the draft, and the Lesson screen shows the child with "No longer one of your children" and **Remove from lesson** (marks them absent). Names come from SQLite, not the roster in memory. Tests: Task 4 `CHILD_NOT_WRITABLE`, Task 7 "a handed-over child can be removed".
+5. **A full roster on the A03s with the preview pack:** the engine runs once per change, not once per render, and reads do not grow per child. Tests: Task 2 statement-count test, Tasks 6 and 7 engine call counts; Task 12 measures on device.
+
+**Known risk, not changed here:** if a child's grant ends after the session row uploads but before its attendee rows do, those attendee rows are refused (existing sync behaviour for every family; `rls-sync-contract-map.md`). This plan narrows the window to upload time; it does not add server authorization for ended grants.
 
 ---
 
@@ -86,8 +88,10 @@ Failure modes the spec implies that are easy to miss. Each has a test in the tas
 | `src/context/ChildrenContext.js` (modify) | `makeGroup(childIds)` |
 | `src/lessonPlan/lessonRecord.js` (new) | Pure: draft → session row and `activities` |
 | `src/services/lessonSave.js` (new) | One-transaction save, draft deleted inside it |
+| `src/db/repositories/childrenRepository.js` (modify) | `getChildrenByIds` for lesson participants, history references included |
 | `src/lessonPlan/lessonDraftState.js` (new) | Pure draft transitions and freeze rules |
-| `src/hooks/useLessonDraft.js` (new) | Load, create-on-first-change, serialised writes, plan recompute |
+| `src/services/lessonDraftController.js` (new) | One per signed-in EA: the only writer of the draft; serialised writes, subscribers, save hand-off |
+| `src/hooks/useLessonDraft.js` (new) | Subscribes a screen to the controller; plan and choices for that screen |
 | `src/utils/lessonDates.js` (new) | `lastSeenLabel`, `startedLabel` |
 | `src/screens/lessons/LessonPickerScreen.js` (new) | Who are you teaching? |
 | `src/screens/lessons/LessonScreen.js` (new) | Lesson screen |
@@ -143,25 +147,32 @@ In `handleServices.test.js`, copy the `masteryInputsComplete` test at :65-90 for
 
 **Files:**
 - Create: `src/lessonPlan/inputs/knownLetters.js`, `src/lessonPlan/inputs/lessonInputs.js`
-- Modify: `src/utils/groupHelpers.js` (export helpers)
+- Modify: `src/utils/groupHelpers.js` (export helpers), `src/db/repositories/childrenRepository.js` (`getChildrenByIds`)
 - Test: `__tests__/lessonInputs.test.js` (real SQLite; add to `jest.integration.config.js`), `__tests__/lessonInputsShape.test.js` (unit), `__tests__/groupHelpers.test.js`
 
 **Interfaces:**
 - Consumes: Task 1 accessors; engine `rankGroups`, `resolveLessonClass`; `getPack`, `getPackById`, `isPreviewContentEnabled`; `PEDAGOGICAL_ORDERS`, `languageCodeForHomeLanguage`; `pickLatestLetterResult`, `computeAssessmentMastery`.
 - Produces:
   - `groupNumber(group) -> number|null` (`display_number`, else N from "Group N", else null); `ungroupedChildren({ children, childrenGroups }) -> child[]`; `sharedClassId(children) -> string|null` (the one class all share, else null). In `groupHelpers.js`.
-  - `loadKnownLetters({ repositories, userId, childIds, languageCode }) -> Promise<Record<string, string[]>>`: lower-case letters known from the latest current-year letter result **union** confirmed tracker marks, in `PEDAGOGICAL_ORDERS[languageCode]` order. Exactly two queries for any number of children: `assessments.getLetterEvidenceResults({ userId, childIds })` and `mastery.getLetterMastery({ childIds, language })`. A language with no order (`zu`, `null`) gives `[]` per child and no queries.
+  - `children.getChildrenByIds(ids) -> Promise<Record<string, { id, first_name, last_name, reading_level, class_id, history_reference, hidden_at }>>` (new in `childrenRepository.js`, chunked like `getChildNamesByIds`, history references included): the source of lesson participants' names, classes and **current** reading levels. The in-memory roster is used only to offer children to add.
+  - `loadKnownLetters({ repositories, userId, childIds, languageCode }) -> Promise<Record<string, string[]>>`: lower-case letters known from the latest current-year letter result **union** confirmed tracker marks, in `PEDAGOGICAL_ORDERS[languageCode]` order, **for that one language**. Two batched repository calls for any number of children, `assessments.getLetterEvidenceResults({ userId, childIds })` and `mastery.getLetterMastery({ childIds, language })`, and no per-child loop. A language with no order (`zu`, `null`) gives `[]` per child and no calls.
   - `loadLessonBase({ handle, repositories, today, programmeId? }) -> Promise<{ today, academicYearStart, programmeId, sessions } | { missing: 'programme'|'academic_year' }>`: `sessions = repositories.sessions.getSessions({ userId: handle.userId, programmeId, sinceDate: academicYearStart })` (no `recordedByUserId`: other EAs' sessions for these children count).
   - `loadPickerModel({ handle, repositories, services, base, groups, getChildrenInGroup, children, childrenGroups }) -> Promise<PickerModel>`, where `PickerModel = { upNextGroupId, rows: PickerRow[], ungrouped: child[], historyComplete: boolean }` and `PickerRow = { groupId, name, number, dotColor, members: [{ id, firstName }], classId, languageCode, isEcd, lastSeenOn, taughtToday, nextLetters, lettersReason }` in `rankGroups` order. Classes come from `repositories.classes.getClasses()` **unscoped** (a child's class may not be one the EA holds). `historyComplete` is false if any member of any group is incomplete.
   - `shapePickerModel({...plain data}) -> PickerModel`: the pure half of the above, for unit tests.
-  - `loadLessonInput({ handle, repositories, services, base, lesson }) -> Promise<LessonInput>`, where `lesson = { groupId, upNextGroupId, languageCode, packId, isEcd, presentChildIds, readingLevels }` and `readingLevels` is each present child's `reading_level` from the roster rows (`useChildren().allChildren`, which also holds children added for the day). Pack: `getPackById(packId, { allowPreview: isPreviewContentEnabled() })` when `packId` is set, else `getPack(languageCode, sameOptions)`. `alphabet = PEDAGOGICAL_ORDERS[languageCode] ?? null`. Each present child gets `knownLetters`, `historyComplete`, `masteryComplete` from Task 1 and `loadKnownLetters`.
+  - `loadLessonInput({ handle, repositories, services, base, lesson }) -> Promise<LessonInput>`, where `lesson = { groupId, upNextGroupId, languageCode, packId, isEcd, presentChildIds }`; each present child's `readingLevel` comes from `children.getChildrenByIds` at load time (never the roster in memory, which is stale after an offline save).
+  - Picker letters per language: `rankGroups` takes one `children` map, but a child can be in groups of two languages. Call `rankGroups` once over all groups for the **order** (ranking ignores known letters), then once per language over that language's groups with that language's `children` map, and take each row's `nextLetters`/`lettersReason` from its own language's call. No engine change. Pack: `getPackById(packId, { allowPreview: isPreviewContentEnabled() })` when `packId` is set, else `getPack(languageCode, sameOptions)`. `alphabet = PEDAGOGICAL_ORDERS[languageCode] ?? null`. Each present child gets `knownLetters`, `historyComplete`, `masteryComplete` from Task 1 and `loadKnownLetters`.
 
 - [ ] **Step 1: Write the failing tests.** `lessonInputs.test.js` seeds the roster with the raw-SQL seed from `__tests__/contextRowShape.test.js:41-118` (children, assignments, enrolments, class memberships, groups, group assignments, memberships) and sets `classes.home_language`:
 
 ```js
-test('known letters come from the current-year result and confirmations, two queries in all', ...);
-// assert loadKnownLetters(...) toEqual({ c1: ['o','m','l','a'], c2: ['o','m'] }) and the counting adapter saw 2 reads
-test('isZulu or no language gives no letters and no queries', ...);
+test('known letters come from the current-year result and confirmations', ...);
+// assert loadKnownLetters(...) toEqual({ c1: ['o','m','l','a'], c2: ['o','m'] })
+test('reads do not grow with the number of children', ...);
+// counting adapter: the statement count for 2 children equals the count for 20 (same fixture shape)
+test('isZulu or no language gives no letters and no reads', ...);
+test('a child in an English group and an isiXhosa group gets each group\'s own letters', ...);
+// different confirmed letters per language; each picker row's nextLetters equals the plan its Lesson screen computes
+test('participants come from SQLite, including a handed-over child and a fresh reading level saved offline', ...);
 test('engine sessions include another EA\'s session for my child and my pending lesson, not another programme or last year', ...);
 test('picker rows follow rankGroups order; a never-seen group is Up next; a group taught today is not', ...);
 test('a child in a class the EA does not hold still resolves its class and language', ...);
@@ -171,7 +182,7 @@ test('a mixed-class group has classId null and no letters until the class is cho
 `lessonInputsShape.test.js` covers `shapePickerModel` with plain data: dot colour = index in `[...groups].sort(compareGroups)`, `number` from `groupNumber`, "Group 10" after "Group 2". `groupHelpers.test.js` adds `groupNumber`, `ungroupedChildren` (a removed membership counts as ungrouped), `sharedClassId`.
 
 - [ ] **Step 2:** Run `npx jest __tests__/lessonInputsShape.test.js __tests__/groupHelpers.test.js` and `npm run test:integration -- __tests__/lessonInputs.test.js`. Expected: FAIL, missing modules.
-- [ ] **Step 3:** Implement. For the picker's single `children` map, give a child in two groups of different languages the letters of the first group in `compareGroups` order (rare; note it in a code comment).
+- [ ] **Step 3:** Implement, including `getChildrenByIds` (add a case to `__tests__/childrenRepository.test.js` or the nearest existing children-repository suite).
 - [ ] **Step 4:** Rerun Step 2 plus `npx jest __tests__/lessonPlanEnginePurity.test.js __tests__/productionBindingStatic.test.js`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(lesson): read lesson inputs from the phone`.
 
@@ -216,8 +227,12 @@ test('a child already in another of my groups is refused and nothing is written'
 **Interfaces:**
 - Consumes: `planForSave`, `deriveSessionReadingLevel` (engine); `presentChildIds` (drafts repository); `buildSessionTypeFields`.
 - Produces:
-  - `buildLessonRecord({ draft, userId, currentLevels, sessionTypeFields, nowIso }) -> { session, trackerChanges, readingLevelChanges }` (pure). `session = { id: draft.session_id, user_id: userId, programme_id, group_id, class_id, session_date: draft.lesson_date, children_ids: presentChildIds(draft.attendance), activities, notes: draft.notes ?? '', ...sessionTypeFields, synced: false, created_at: nowIso, updated_at: nowIso }`. `activities = { letters_focused: ticks.letters, session_reading_level: deriveSessionReadingLevel(ticks.blends), child_reading_levels: { [presentId]: readingLevelChanges[id] ?? currentLevels[id] ?? null }, comments: draft.notes ?? '', lesson: { version: 1, pack_id, language: draft.language_code, plan, [plan_reason], blend_tier_shown: ticks.blendTierShown ?? plan?.blend_tier ?? null, blends_done: ticks.blends, books_read: ticks.books, tracker_check } }`. `{ plan, plan_reason } = planForSave({ plan: draft.plan, lessonDate: draft.lesson_date })`. `trackerChanges` and `readingLevelChanges` are limited to present children. `tracker_check` per P8.
-  - `saveLesson({ handle, draft, sessionTypeFields, nowIso = new Date().toISOString() }) -> Promise<{ sessionId }>`. Throws `LessonSaveError` with `code`: `NO_CHILDREN` (checked before the transaction), `NO_PLAN` (`draft.plan === null`; the Lesson screen never lets this happen), `GROUP_MISSING` (wraps `saveSession`'s "must reference a group on this phone"), `ALREADY_SAVED` (`discard` resolved `false`). Inside **one** `handle.withTransaction(txn => ...)`: read `reading_level` for the present children; `buildLessonRecord`; `sessions.saveSession(session, { transaction })`; `children.updateChild` only for `readingLevelChanges` whose value differs from the stored one and whose child is not a history reference; `mastery.setLetterMastery({ childId, letter, language: change.languageCode, confirmed: change.mastered, changedAt: change.madeAt, programmeId: draft.programme_id, transaction })` per change; `lessonDrafts.discard(draft.id, { transaction })` last.
+  - `buildLessonRecord({ draft, userId, currentLevels, sessionTypeFields, nowIso }) -> { session, trackerChanges, readingLevelChanges }` (pure). `session = { id: draft.session_id, user_id: userId, programme_id, group_id, class_id, session_date: draft.lesson_date, children_ids: presentChildIds(draft.attendance), activities, notes: draft.notes ?? '', ...sessionTypeFields, synced: false, created_at: nowIso, updated_at: nowIso }`. `activities = { letters_focused: ticks.letters, session_reading_level: deriveSessionReadingLevel(ticks.blends), child_reading_levels: { [presentId]: readingLevelChanges[id] ?? currentLevels[id] ?? null }, comments: draft.notes ?? '', lesson: { version: 1, pack_id, language: draft.language_code, plan, [plan_reason], blend_tier_shown, blends_done: ticks.blends, books_read: ticks.books, tracker_check } }`. `blend_tier_shown = ticks.blendTierShown ?? draft.plan.blend_tier ?? null` is resolved from the **draft's** plan **before** `{ plan, plan_reason } = planForSave({ plan: draft.plan, lessonDate: draft.lesson_date })`, so a backdated lesson keeps the tier that was on screen. `trackerChanges` and `readingLevelChanges` are limited to present children. `tracker_check` per P8.
+  - `saveLesson({ handle, draft, sessionTypeFields, nowIso = new Date().toISOString() }) -> Promise<{ sessionId }>`. `draft` must be the controller's drained snapshot (Task 5), never a screen's copy. Throws `LessonSaveError` with `code`:
+    - before the transaction: `NO_CHILDREN`; `NO_PLAN` (`draft.plan === null`; the controller never lets a draft reach Save without one); `CHILD_NOT_WRITABLE` with `childIds`, when a present child is not in `children.getMyChildren(handle.userId)` (handed over, history reference, or no longer delivered). The server's attendee policy requires an active grant for each child, so saving them would strand the family after the draft is gone;
+    - in the transaction: `GROUP_MISSING` (wraps `saveSession`'s "must reference a group on this phone"), `ALREADY_SAVED` (`discard` resolved `false`).
+
+    Inside **one** `handle.withTransaction(txn => ...)`: read `reading_level` for the present children; `buildLessonRecord`; `sessions.saveSession(session, { transaction })`; `children.updateChild` only for `readingLevelChanges` whose value differs from the stored one; `mastery.setLetterMastery({ childId, letter, language: change.languageCode, confirmed: change.mastered, changedAt: change.madeAt, programmeId: draft.programme_id, transaction })` per change; `lessonDrafts.discard(draft.id, { transaction })` last.
 
 - [ ] **Step 1: Write the failing tests.** `lessonRecord.test.js` (pure):
 
@@ -229,6 +244,8 @@ test('activities match spec §6 key for key', () => {
   expect(session.activities.lesson.plan.made_on).toBe('2026-10-19');
 });
 test('a changed date drops the plan with plan_reason past_date', ...);
+test('a backdated lesson keeps the default tier that was on screen', ...);      // blend_tier_shown === draft.plan.blend_tier, plan null
+test('a backdated lesson keeps an explicitly chosen higher tier', ...);
 test('only present children are attendees and get levels, marks and reading-level changes', ...);
 test('no letters and no blends: letters_focused [] and session_reading_level null', ...);
 test('session_reading_level is the highest tier among blends ticked, top-up items at their own tier', ...);
@@ -245,7 +262,8 @@ test('a Monday mark saved on Wednesday keeps its tap time and loses to a Tuesday
 test('no present children: NO_CHILDREN and nothing written', ...);
 test('group row gone from the phone: GROUP_MISSING, nothing written, draft kept', ...);
 test('an archived group still takes the lesson', ...);
-test('a history-reference child: reading-level change skipped, attendee saved, no rollback', ...);
+test('a present child no longer mine (ended assignment, or history reference): CHILD_NOT_WRITABLE, nothing written, draft kept', ...);
+test('the same child marked absent: the lesson saves without them', ...);
 test('discard finds no draft: ALREADY_SAVED and nothing written', ...);
 ```
 
@@ -257,17 +275,28 @@ Add a `saveLesson` case to `completionPathBudget.test.js` (10 attendees, group s
 
 ---
 
-### Task 5: Lesson draft state
+### Task 5: Lesson draft state and the draft controller
 
 **Files:**
-- Create: `src/lessonPlan/lessonDraftState.js`, `src/hooks/useLessonDraft.js`
-- Test: `__tests__/lessonDraftState.test.js` (unit), `__tests__/useLessonDraft.test.js` (renderHook on the default real test handle)
+- Create: `src/lessonPlan/lessonDraftState.js`, `src/services/lessonDraftController.js`, `src/hooks/useLessonDraft.js`
+- Modify: `src/session/handleServices.js` (create one controller per handle, `handle.services.lessonDraft`)
+- Test: `__tests__/lessonDraftState.test.js` (unit), `__tests__/lessonDraftController.test.js` (real SQLite with a delaying adapter; add to integration config), `__tests__/useLessonDraft.test.js` (renderHook on the default real test handle), `__tests__/handleServices.test.js` (service key list)
+
+**Why a controller:** the Lesson screen and Wrap up both edit the same draft, and `lessonDrafts.update` replaces whole JSON fields with no revision check (`lessonDraftsRepository.js:206-218`). A queue per screen lets one screen write a stale copy over the other's newer edit. So exactly one object per signed-in EA writes the draft, and both screens and Save go through it.
 
 **Interfaces:**
 - Consumes: Task 2 `loadLessonBase`, `loadLessonInput`; engine `computeLessonPlan`, `computeLessonChoices`, `isPlanRecomputable`, `resolveLessonClass`; `lessonDrafts` repository and its errors.
 - Produces:
-  - Pure, in `lessonDraftState.js`: `newLessonDraftInput({ group, members, programmeId, classId, languageCode, packId, lessonDate }) -> createInput`, with `programmeId = group.programme_id ?? base.programmeId` and `lessonDate = useProgrammeTodayKey()` at start; and transitions returning a draft **patch**: `toggleAbsent(draft, childId)`, `addChildForToday(draft, childId)`, `removeChildForToday(draft, childId)`, `toggleTick(draft, kind /* 'letters'|'blends' */, value, { plan, nowIso })`, `toggleBookRead(draft, bookId, { plan, nowIso })`, `setBlendTierShown(draft, tier)`, `setTrackerChanges(draft, childId, changes)`, `toggleNoOneNew(draft, childId)` (clears that child's marks for today's letters), `setReadingLevel(draft, childId, level, currentLevel)` (equal to the current level removes the change), `setLessonDate(draft, dateKey)`, `setNotes(draft, text)`. A first tick of a letter, blend or book adds `{ plan, plan_fixed_at: nowIso }` to its patch when `plan_fixed_at` is null.
-  - `useLessonDraft({ draftId, start }) -> { status, draft, plan, choices, lessonInput, apply(transition, ...args), ensureDraft(), discard(), error }`. `start = { groupId, upNextGroupId }` for a new lesson. `status`: `'loading' | 'ready' | 'needs_class' | 'needs_language' | 'corrupt' | 'exists' | 'missing'`. A new lesson keeps an in-memory draft until the first `apply` or `ensureDraft`, which calls `create` (on `LessonDraftExistsError`: `status 'exists'` with `existingDraftId`). Writes go through one promise chain per hook instance, each `update(id, patch)` built from the latest in-memory draft; on a write error the in-memory draft reverts to the last stored one and `error` is set. The plan is recomputed, and stored with the attendance patch, only while `isPlanRecomputable({ lessonDate: draft.lesson_date, today, frozen: !!draft.plan_fixed_at })`. Choosing the class or language stores the plan in the same patch, so a draft past `needs_class`/`needs_language` always has one; ticks and `ensureDraft()` are refused while either choice is pending. Re-reads the draft on screen focus. Engine calls are memoised on `(pack id, present ids, plan)`.
+  - Pure, in `lessonDraftState.js`: `newLessonDraftInput({ group, members, programmeId, classId, languageCode, packId, lessonDate }) -> createInput`, with `programmeId = group.programme_id ?? base.programmeId` and `lessonDate = useProgrammeTodayKey()` at start; and transitions `(draft, ...args) -> patch`: `toggleAbsent(draft, childId)`, `addChildForToday(draft, childId)`, `removeChildForToday(draft, childId)`, `toggleTick(draft, kind /* 'letters'|'blends' */, value, { plan, nowIso })`, `toggleBookRead(draft, bookId, { plan, nowIso })`, `setBlendTierShown(draft, tier)`, `setTrackerChanges(draft, childId, changes)`, `toggleNoOneNew(draft, childId)` (clears that child's marks for today's letters), `setReadingLevel(draft, childId, level, currentLevel)` (equal to the current level removes the change), `setLessonDate(draft, dateKey)`, `setNotes(draft, text)`, `chooseClass(draft, { classId, languageCode, packId, plan })`, `chooseLanguage(draft, { languageCode, packId, plan })`, `setPlan(draft, plan)`. A first tick of a letter, blend or book adds `{ plan, plan_fixed_at: nowIso }` to its patch when `plan_fixed_at` is null.
+  - `createLessonDraftController({ repositories }) -> controller` (state in the closure, never module scope), built once per handle in `createHandleServices` and exposed as `handle.services.lessonDraft`:
+    - `open({ draftId } | { start: { group, members, programmeId, classId, languageCode, packId, lessonDate } })`: loads the stored draft or holds an unsaved one in memory. Opening writes nothing.
+    - `apply(transition, ...args) -> Promise<Draft>`: computes the patch from the **latest** draft (in memory, including queued edits), publishes the optimistic draft to subscribers at once, and appends one write to the controller's single queue. The first `apply` on an unsaved draft calls `create` with the patch folded into the input. On a write failure the controller re-reads the stored draft, publishes it with `error`, and rejects.
+    - `subscribe(listener) -> unsubscribe`; `getSnapshot() -> { status, draft, error, existingDraftId }`.
+    - `ensureDraft() -> Promise<Draft>` (creates the unsaved draft, for **Wrap up →**).
+    - `beginSave() -> Promise<Draft>`: refuses new `apply` calls (they reject with `LessonDraftBusyError`), waits for the queue to drain, and resolves the stored draft as last written. `endSave({ saved })`: on `saved: true` clears the controller; otherwise reopens edits.
+    - `discard() -> Promise<void>`: drains, then `lessonDrafts.discard(id)`, then clears.
+    - `status`: `'empty' | 'loading' | 'unsaved' | 'ready' | 'corrupt' | 'exists' | 'missing' | 'saving'`. `LessonDraftExistsError` on create gives `'exists'` with `existingDraftId`; `LessonDraftCorruptError` gives `'corrupt'` with the id.
+  - `useLessonDraft({ draftId, start }) -> { status, draft, plan, choices, lessonInput, needs: null|'class'|'language', apply, ensureDraft, beginSave, endSave, discard, error }`: subscribes to `handle.services.lessonDraft` (both screens see the same draft), loads inputs with Task 2, and computes `plan`/`choices` memoised on `(pack id, present ids, plan)`. It recomputes the plan, and applies `setPlan`, only while `isPlanRecomputable({ lessonDate: draft.lesson_date, today, frozen: !!draft.plan_fixed_at })` and the present children changed. `needs` is `'class'` for a mixed-class group with no class chosen and `'language'` for a class with no language (P6); `chooseClass`/`chooseLanguage` store the plan in the same patch, and ticks and `ensureDraft()` are refused while `needs` is set, so a draft never reaches Save without a plan.
 
 - [ ] **Step 1: Write the failing tests.** `lessonDraftState.test.js` (pure, one test per transition, plus):
 
@@ -278,25 +307,35 @@ test('No one new yet clears that child\'s marks for today\'s letters, and a late
 test('choosing the current level removes the reading-level change', ...);
 ```
 
-`useLessonDraft.test.js`:
+`lessonDraftController.test.js` (real SQLite; wrap the database so every `runAsync` waits on a test-controlled promise, to model a slow A03s):
 
 ```js
 test('opening a new lesson writes nothing', ...);              // lesson_drafts count stays 0
-test('the first change creates the draft with the plan', ...);
-test('rapid changes persist in order', ...);                   // 10 applies without awaiting; final row has all 10, one row
-test('attendance before the first tick recomputes the plan; after it, it does not', ...);
-test('a different day never recomputes, frozen or not', ...);  // jest.setSystemTime
-test('a corrupt draft gives status corrupt and discard deletes it', ...);
-test('a second start while a draft exists gives status exists with its id', ...);
-test('a mixed-class group gives needs_class; choosing stores class, language and pack once', ...);
-test('a class with no language gives needs_language (P6)', ...);
-test('engine functions run once per change', ...);             // jest.spyOn on the engine module
+test('the first change creates the draft', ...);
+test('rapid changes persist in order', ...);                   // 10 applies without awaiting; one row holding all 10
+test('cross-screen edits persist in order', ...);              // two subscribers: Lesson ticks, Wrap-up noOneNew, Lesson tick again, all queued while writes are held; final row has all of them
+test('save waits for queued edits and refuses new ones', ...); // beginSave resolves only after held writes land; apply during saving rejects LessonDraftBusyError
+test('a failed write reverts to the stored draft and reports the error', ...);
+test('a failed save reopens edits; a successful save clears the controller', ...);
+test('a corrupt draft gives corrupt and discard deletes it', ...);
+test('a second start while a draft exists gives exists with its id', ...);
 ```
 
-- [ ] **Step 2:** Run `npx jest __tests__/lessonDraftState.test.js __tests__/useLessonDraft.test.js`. Expected: FAIL.
+`useLessonDraft.test.js`:
+
+```js
+test('attendance before the first tick recomputes the plan; after it, it does not', ...);
+test('a different day never recomputes, frozen or not', ...);  // jest.setSystemTime
+test('a mixed-class group needs a class; choosing stores class, language, pack and plan', ...);
+test('a class with no language needs a language (P6)', ...);
+test('engine functions run once per change', ...);             // jest.spyOn on the engine module
+test('two screens on one draft see the same draft', ...);
+```
+
+- [ ] **Step 2:** Run `npx jest __tests__/lessonDraftState.test.js __tests__/useLessonDraft.test.js` and `npm run test:integration -- __tests__/lessonDraftController.test.js __tests__/handleServices.test.js`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Rerun Step 2 plus `npx jest __tests__/historyPullTriggerBudget.test.js __tests__/productionBindingStatic.test.js`. Expected: PASS.
-- [ ] **Step 5: Commit** `feat(lesson): draft state and the lesson hook`.
+- [ ] **Step 4:** Rerun Step 2 plus `npx jest __tests__/historyPullTriggerBudget.test.js __tests__/productionBindingStatic.test.js __tests__/moduleStateAllowlist.test.js`. Expected: PASS.
+- [ ] **Step 5: Commit** `feat(lesson): one draft controller per EA and the lesson hook`.
 
 ---
 
@@ -359,7 +398,7 @@ test('no groups: only Make a group and the ungrouped list', ...);
 
 Screen behaviour (spec §5.2):
 - **Header** (in the scroll, under the stack title): "Gr {grade} · {Language} · last seen {label}". `needs_class`: `LessonChoiceSheet` asks "Which class is this lesson for?" with the group's classes, before suggestions show (C18). `needs_language`: the same sheet asks "Which language is this lesson in?" (P6).
-- **Who's here**: one `AttendanceChips` chip per child, present by default, tap to mark absent ("{name}, here" / "{name}, absent"). **+ Add a child** opens `AddChildSheet`: roster children not in this lesson; a pick adds them for today.
+- **Who's here**: one `AttendanceChips` chip per child, present by default, tap to mark absent ("{name}, here" / "{name}, absent"). Names come from `children.getChildrenByIds`. A present child who is no longer one of the EA's children (not in `getMyChildren`) shows "No longer one of your children" and **Remove from lesson** (marks them absent), so Save never meets `CHILD_NOT_WRITABLE` by surprise. **+ Add a child** opens `AddChildSheet`: roster children not in this lesson; a pick adds them for today.
 - **1 · Letters · 15 min**: suggested letters as `LetterToggleTile`s, **not** pre-ticked; letters ticked from elsewhere appear after them; **+** opens `OtherLetterSheet` (a `LetterToggleGrid` of `choices.letterChoices`). "Review: {review letters}" below. Reasons: `first_session` adds "First lesson: start with these letters."; `all_letters_known` shows "All letters known"; `no_pack` shows "Choose the letters you teach" and the grid inline; `no_children` shows "Mark at least one child as here." An isiZulu lesson shows "No isiZulu letters yet." (P6).
 - "Still downloading past lessons…" / "Still downloading what children know…" notes when `plan.history_complete` / `plan.mastery_complete` is false.
 - **Discard lesson** (tertiary, bottom of the scroll) opens `ConfirmSheet` "Discard this lesson?" / "Its ticks and notes will be deleted." / **Discard lesson** / **Keep lesson** (P4). Shown only once a draft exists.
@@ -374,6 +413,7 @@ test('suggested letters are not pre-ticked; ticking one stores it and freezes th
 test('marking a child absent before any tick changes the suggestions', ...);
 test('after a tick, marking a child absent keeps the plan', ...);
 test('+ Add a child adds a roster child for today only', ...);  // membership rows unchanged
+test('a handed-over child can be removed from the lesson', ...); // resumed draft; child's assignment ended; Remove marks them absent
 test('a mixed-class group asks for the class before suggestions', ...);
 test('a class with no language asks for the language', ...);
 test('Discard lesson asks first, then deletes the draft and goes back', ...);
@@ -436,7 +476,7 @@ test('Wrap up creates the draft if needed and opens Wrap up', ...);
 
 **Interfaces:**
 - Consumes: Task 4 `saveLesson`, `LessonSaveError`; Task 5 `useLessonDraft`; `loadMasteryState`; `LetterTrackerBottomSheet`; `countMastered`; `buildSessionCompleteParams`; `buildSessionTypeFields` with `useLookupsContext().jobTitles`.
-- Produces: `navigation.replace('SessionComplete', { ...buildSessionCompleteParams({ selectedChildren: presentChildren, selectedLetters: ticks.letters, sessionReadingLevel, sessionDateKey: draft.lesson_date }), languageCode: draft.language_code })` (P12), then `triggerBackgroundSync?.()` and `refreshSyncStatus()` from `useOffline()`.
+- Produces: the save sequence `snapshot = await beginSave()` → `saveLesson({ handle, draft: snapshot, sessionTypeFields })` → `endSave({ saved })`; on success `refreshFromCache()` from `useChildren()` (so the next lesson sees today's reading-level changes, even offline), then `navigation.replace('SessionComplete', { ...buildSessionCompleteParams({ selectedChildren: presentChildren, selectedLetters: snapshot.ticks.letters, sessionReadingLevel, sessionDateKey: snapshot.lesson_date }), languageCode: snapshot.language_code })` (P12), then `triggerBackgroundSync?.()` and `refreshSyncStatus()` from `useOffline()`.
 
 Screen behaviour (spec §5.3):
 - "Who knows **{ticked letters}** without help?" and "Teaching it today doesn't count." Skipped when no letter was ticked.
@@ -444,7 +484,7 @@ Screen behaviour (spec §5.3):
 - **Date**: `SelectField` showing "Today" or `startedLabel` ("Started Mon 19 Oct"); the sheet is `MonthCalendar` (no future dates). A change calls `setLessonDate`.
 - **Notes (optional)**: `TextField multiline` with placeholder "Add session notes…" and `{...NO_TEXT_SUGGESTIONS}`.
 - **Save session** in `StickyActionFooter hideOnKeyboard`. Disabled only when no child is present ("Mark at least one child as here."). With no letters, blends or book ticked, a `ConfirmSheet` (`confirmVariant="primary"`) asks "Save without letters, blends or a book?" / **Save session** / **Go back**. A second press while saving does nothing (ref guard).
-- Errors, in an assertive `InlineNote` above the button, draft and session id kept: `GROUP_MISSING` → "This group is no longer on this phone. Discard this lesson to start again."; `ALREADY_SAVED` → "This lesson was already saved." and a **Done** button to Home; anything else → "Couldn't save the lesson. Try again."
+- Errors, in an assertive `InlineNote` above the button, draft and session id kept: `GROUP_MISSING` → "This group is no longer on this phone. Discard this lesson to start again."; `CHILD_NOT_WRITABLE` → "{names} {is|are} no longer one of your children. Go back and remove them from the lesson."; `ALREADY_SAVED` → "This lesson was already saved." and a **Done** button to Home; anything else → "Couldn't save the lesson. Try again."
 
 - [ ] **Step 1: Write the failing tests.** `LessonWrapUpScreen.test.js`:
 
@@ -467,6 +507,8 @@ test('a double press saves once', ...);
 test('Save writes one session for the group and opens Session complete with the language', ...);
 test('a failed save keeps the draft; the retry saves with the same session id', ...); // jest.spyOn(writer, 'runAsync') throwing on attendees
 test('group gone from the phone shows the discard message and keeps the draft', ...);
+test('an edit made just before Save is in the saved session', ...);   // held write, then Save: beginSave drains it first
+test('after an offline save, the next lesson sees the new reading level', ...);
 ```
 
 - [ ] **Step 2:** Run `npx jest __tests__/LessonWrapUpScreen.test.js __tests__/AppNavigator.headers.test.js __tests__/domainTextInputAudit.test.js` and `npm run test:integration -- __tests__/LessonWrapUp.save.test.js`. Expected: FAIL.
