@@ -6,7 +6,7 @@ import { textStyle, type TextRole } from '../typography';
 import { tokens } from '../tokens';
 
 const FULL = { content: 'Andika_400Regular', text: 'Figtree_500Medium', textSemi: 'Figtree_600SemiBold', textBold: 'Figtree_700Bold' };
-const ROLES: TextRole[] = ['content', 'body', 'caption', 'label', 'heading', 'timer'];
+const ROLES: TextRole[] = ['content', 'body', 'caption', 'captionStrong', 'label', 'heading', 'timer'];
 
 test.each(ROLES)('%s uses a family and never a weight when fonts are provided', (role) => {
   const s = textStyle(role, FULL);
@@ -19,6 +19,7 @@ test.each([
   ['content', FULL.content, undefined, undefined],
   ['body', FULL.text, 16, 24],
   ['caption', FULL.text, 13, 18],
+  ['captionStrong', FULL.textSemi, 13, 18],
   ['label', FULL.textSemi, 17, 22],
   ['heading', FULL.textBold, 20, 26],
   ['timer', FULL.textBold, 20, undefined],
@@ -37,7 +38,7 @@ test('without fonts every role falls back to the system face and its role weight
   for (const role of ROLES) {
     const s = textStyle(role, {});
     expect(s.fontFamily).toBeUndefined();
-    expect(s.fontWeight).toBe({ content: '400', body: '400', caption: '400', label: '600', heading: '700', timer: '700' }[role]);
+    expect(s.fontWeight).toBe({ content: '400', body: '400', caption: '400', captionStrong: '600', label: '600', heading: '700', timer: '700' }[role]);
     expect(s.fontStyle).toBeUndefined();
   }
 });
