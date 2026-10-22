@@ -4844,3 +4844,57 @@ publication was performed by Task 16. The controller owns adversarial review and
 - Jim/content owner: the recreated printed card should use **Andika Regular** too, matching
   the phone's content face (capture-style spec §5;
   `src/constants/assessmentFonts.js:4`). This is a content-owner hand-off, not a reprint in this task.
+
+#### Task 17 device gate and final fix round (2026-10-22)
+
+Final whole-branch adversarial review (Codex gpt-6-astra, `--base origin/main`, 21 commits):
+one Important finding — Q6's Previous/Next page updates were unclamped, so two queued taps could
+leave the pages array and blank the grid while the timer ran. Frozen engine files
+(`stepByStep.ts`, `clock.ts`, `applyProgress.ts`, `Result.ts`) were unchanged and 22
+Result-equivalence scenarios (all 11 Questions, en + xh) matched origin/main.
+
+Device: Samsung A03s SM-A037U, Android 13, `wm density 320` (360dp wide), 3-button navigation,
+EAS preview APKs. Build 29 (`a3d4274`) for the first pass; build 30 (`76d6289`) and build 31
+(`19fea62`) to re-verify the fixes. Screenshots stayed in the controller's scratchpad.
+
+Passed on build 29 and still passing: letter pages of 5 × 20 with the dashed card-row divider;
+ink ring on the current tile; green/red marks; Back across a page edge (page 2 → page 1 with `v`
+refocused and unmarked); a stop on page 2's last tile keeps page 2; timer amber at 9s; End sheet;
+bottom bars clear the 3-button bar; font scale 1.3 (grid fits, intro/sheets reflow); the gallery
+appears on the embedded preview build; all nine WelaPLUS Questions in English and isiXhosa,
+including the fixture rubric sheet, Q5 picture tiles and the Q2 re-read sheet; Q5 Next clamp.
+**I/l:** Andika draws capital `I` with serifs and lowercase `l` as a plain stem — clearly distinct —
+so the three `typeface` content items (letter_sounds@2026.2 en/xh/af) are closed.
+
+Found on device (none visible to Jest) and fixed in `76d6289`:
+
+| Finding | Root cause | Fix |
+|---|---|---|
+| The focused letter/word shrank (`ibhulukhwe`, `umnqwazi`, even `l`), then grew back once marked | `current` used a 3dp border vs 1dp elsewhere; the 4dp lost from the content box tipped Android's `adjustsFontSizeToFit` with Andika's tall line box | Every state keeps a 1dp border; the 3dp ring is a decorative overlay outset over it (`ui/MarkTile.tsx`) |
+| Q8 timer label "59s" clipped (en + xh) | `TimerBar` row had `flexShrink: 1`; a long passage squashed it. Q6's short content hid it | `flexShrink: 0` (`ui/TimerBar.tsx`) |
+| Short pages floated mid-screen; tiles jumped ~150dp between pages (Q5 page 3, every Q6 page) | `PagedGrid` sized tiles from the visible page's own row count | One frame from the Question's largest page; short pages fill it from the top (`ui/PagedGrid.tsx`) |
+| Q5 isiXhosa letters misaligned when a caption wrapped ("ufudo (tortoise)") | Caption height followed its line count | Two-line caption box × min(OS font scale, 1.2) |
+| Stop card / End sheet left the host header and ✕ bright and tappable; no hardware Back | ConfirmSheet was an in-tree overlay (same on main) | ConfirmSheet renders in a transparent Modal; Back cancels, or does nothing on the stop card |
+| A stopped test still ringed the next tile | Tile state ignored `stopped` (same on main) | No current tile while stopped; Undo restores it |
+| Q6 pager at the top, Q5's in the bottom bar; Q2 started 8dp below the header | Placement left to the builder | Q6 controls move into the bottom bar; Q2 gets the standard top padding |
+
+Build 30 then showed a new defect: the Modal ConfirmSheet's panel sat under the 3-button bar,
+because the implementer dropped the Android bottom inset on the assumption that an Android Modal
+excludes the navigation bar. Under Expo SDK 54 the Modal is edge-to-edge. `19fea62` restores
+`max(useBottomInset(), 24dp)` on both platforms; build 31 shows Save result / Undo last mark and
+End test / Cancel clear of the bar. Hardware Back verified: it cancels the End sheet and leaves the
+stop card in place.
+
+| Gate | Command / evidence | Result |
+|---|---|---|
+| Scoped re-review of the fix round | Codex gpt-6-astra, working tree | Approve: F1–F11 addressed, no new Critical/Important |
+| Package | `npx jest src/assessment-questions` (Node 20.19.4) | PASS 61 suites / 785 tests |
+| TypeScript | `npm run test:types` | PASS, 0 errors |
+| Full suite, serial | `npx jest --runInBand` (at `76d6289`) | PASS 399 suites / 5,641 tests |
+| A03s device gate | Builds 29 → 30 → 31 | PASS on build 31 (`19fea62`) |
+| iPhone | Jim's pass on the combined post-merge preview from main | OPEN |
+
+Out of scope, noted for later: at font scale 1.3 the Home clock card wraps "Not clocked in" onto
+three lines. After a runtime font-scale change Android keeps stale text measurements until the app
+restarts (host-wide, not an app bug). Q11's isiXhosa rubric labels are still English
+(already listed in `CONTENT_PENDING`).
