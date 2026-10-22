@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
 import { useAssessableChildren } from '../../hooks/useAssessableChildren';
+import { useChildren } from '../../context/ChildrenContext';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
@@ -22,8 +23,9 @@ import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { isStaleActorError } from '../../session/staleActor';
+import { LessonDraftCorruptError } from '../../db/repositories/lessonDraftsRepository';
 import { getCoverageFromCounts, getWeekSessionCounts } from '../../utils/dashboardStats';
-import { deriveHomeAttentionItems } from '../../utils/homeAttention';
+import { deriveHomeAttentionItems, lessonInProgressFromDraft } from '../../utils/homeAttention';
 import { getGoalCopy } from '../../utils/sessionGoalPresentation';
 import { toLocalDateString } from '../../utils/localDate';
 import { colors, shadows } from '../../constants/colors';
@@ -36,7 +38,7 @@ const RING = { stroke: 50, r: 236, dxFromRight: 170, cy: 40 };
 
 export default function HomeScreen({ navigation }) {
   const { handle, repositories, services } = useSignedInEA();
-  const { sessions: sessionsRepository, assessments: assessmentsRepository } = repositories;
+  const { sessions: sessionsRepository, assessments: assessmentsRepository, lessonDrafts } = repositories;
   const { homeAttention } = services;
   const { pageVersion, runVersion } = useSessionHistoryStatus();
   const assessmentHistory = useAssessmentHistoryStatus();
@@ -44,6 +46,7 @@ export default function HomeScreen({ navigation }) {
   const { width, fontScale } = useWindowDimensions();
   const { user, profile } = useAuth();
   const { all: assessableChildren } = useAssessableChildren();
+  const { children: childrenList } = useChildren();
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
   const { needsAttentionCount = 0 } = useOffline();
   const {
@@ -61,6 +64,7 @@ export default function HomeScreen({ navigation }) {
   const [statsFailed, setStatsFailed] = useState(false); // the latest load rejected
   const [assessmentDismissedOn, setAssessmentDismissedOn] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [lessonDraft, setLessonDraft] = useState(null);
   const [now, setNow] = useState(() => new Date());
 
   // Unchanged onboarding routing.
@@ -83,6 +87,17 @@ export default function HomeScreen({ navigation }) {
   const loadStats = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setNow(new Date());
+    // Draft availability is independent of statistics, including their failures and timing.
+    void (async () => {
+      try {
+        const draft = await lessonDrafts.getActive();
+        if (seq === loadSeqRef.current) setLessonDraft(draft);
+      } catch (error) {
+        if (seq !== loadSeqRef.current || isStaleActorError(error)) return;
+        if (error instanceof LessonDraftCorruptError) setLessonDraft(error);
+        else console.error('Error loading lesson in progress:', error);
+      }
+    })();
     // The initial load owns the skeleton; later loads update existing content in place.
     try {
       const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
@@ -113,7 +128,7 @@ export default function HomeScreen({ navigation }) {
     } finally {
       if (seq === loadSeqRef.current) setStatsLoading(false);
     }
-  }, [handle, sessionsRepository, assessmentsRepository, homeAttention, assessableChildren, user.id, pageVersion, runVersion, assessmentHistory.pageVersion, assessmentHistory.runVersion]);
+  }, [handle, sessionsRepository, assessmentsRepository, lessonDrafts, homeAttention, assessableChildren, user.id, pageVersion, runVersion, assessmentHistory.pageVersion, assessmentHistory.runVersion]);
 
   // Load on focus, roster or history changes; reload on foreground.
   useFocusEffect(
@@ -126,14 +141,18 @@ export default function HomeScreen({ navigation }) {
     }, [loadStats])
   );
   const attentionItems = useMemo(() => deriveHomeAttentionItems({
+    lessonInProgress: lessonDraft instanceof LessonDraftCorruptError
+      ? { draftId: lessonDraft.draftId, childNames: [] }
+      : lessonInProgressFromDraft(lessonDraft, childrenList),
     needsAttentionCount,
     autoClockOut: autoClockOutNotice,
     coverage,
     assessmentDismissedOn,
     now,
-  }), [needsAttentionCount, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
+  }), [lessonDraft, childrenList, needsAttentionCount, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
 
-  const openItem = useCallback((item) => navigation.navigate(item.route), [navigation]);
+  const openItem = useCallback((item) => item.params
+    ? navigation.navigate(item.route, item.params) : navigation.navigate(item.route), [navigation]);
   const dismissItem = useCallback(async (item) => {
     if (item.kind === 'auto_clock_out') {
       await dismissAutoClockOutNotice(item.entryId);

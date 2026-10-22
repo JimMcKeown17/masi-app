@@ -1,6 +1,4 @@
 // __tests__/homeAttention.test.js
-import fs from 'fs';
-import path from 'path';
 import { deriveHomeAttentionItems, lessonInProgressFromDraft, MAX_ATTENTION_ITEMS } from '../src/utils/homeAttention';
 
 const NOW = new Date('2026-10-15T08:00:00.000Z'); // Thu 15 Oct, 10:00 SAST
@@ -50,10 +48,6 @@ test('lessonInProgressFromDraft names the present children this phone knows', ()
   expect(lessonInProgressFromDraft({ ...draft, attendance: { childIds: ['c2'], absentChildIds: ['c2'], addedChildIds: [] } }, children))
     .toEqual({ draftId: 'draft-1', childNames: [] }); // everyone absent: still a lesson in progress
   expect(lessonInProgressFromDraft(null, children)).toBeNull();
-});
-test('Home does not read lesson drafts until the Lesson route ships', () => {
-  const home = fs.readFileSync(path.join(__dirname, '../src/screens/main/HomeScreen.js'), 'utf8');
-  expect(home).not.toMatch(/lessonDrafts|lessonInProgress/); // C3 removes this test when it registers Lesson
 });
 
 describe('deriveHomeAttentionItems', () => {
