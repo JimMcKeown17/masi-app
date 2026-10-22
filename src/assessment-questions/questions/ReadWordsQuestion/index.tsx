@@ -292,14 +292,9 @@ function ReadWordsQuestionContent(
   return (
     <Canvas>
       {durationSec !== undefined && <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />}
-      <PageIndicator
-        pages={pages}
-        current={pageIndex}
-        onPrevious={() => setPageIndex((index) => index - 1)}
-        onNext={() => setPageIndex((index) => index + 1)}
-      />
       {pages[pageIndex] && <PagedGrid
-        page={pages[pageIndex]}
+        pages={pages}
+        pageIndex={pageIndex}
         layout={WORD_PAGE_LAYOUT}
         variant="word"
         renderTile={(position, { width, height }) => {
@@ -318,6 +313,12 @@ function ReadWordsQuestionContent(
         }}
       />}
       <ToggleBar
+        header={<PageIndicator
+          pages={pages}
+          current={pageIndex}
+          onPrevious={() => setPageIndex((index) => Math.max(0, index - 1))}
+          onNext={() => setPageIndex((index) => Math.min(pages.length - 1, index + 1))}
+        />}
         primary={{
           label: 'End',
           onPress: () => {

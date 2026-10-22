@@ -215,7 +215,7 @@ function ListenAndAnswerStoryQuestionContent(
         importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
         pointerEvents={confirming ? 'none' : 'auto'}
       >
-        <View style={{ paddingHorizontal: tokens.space.lg }}>
+        <View style={{ paddingHorizontal: tokens.space.lg, paddingTop: tokens.space.lg }}>
           <SecondaryButton label="Re-read story" onPress={() => setShowReread(true)} />
         </View>
         <FullScreenSheet visible={showReread} onClose={() => setShowReread(false)}>

@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, within } from '@testing-library/react-native';
+import { BottomBar } from '../../../ui';
 import { ReadWordsQuestion } from '..';
 import { FIXTURE_READ_WORDS_EN } from '../../../testFixtures';
 import { WELA_PLUS_READ_WORDS_EN } from '../../../itemsets/wela_plus_read_words.en';
@@ -442,4 +443,44 @@ describe('ReadWordsQuestion — markingPolarity', () => {
     expect(r.derived.total_attempted).toBe(1);
     expect(r.derived.total_correct).toBe(1);
   });
+});
+
+
+test('batched Next actions stay on the final page and retain marks', () => {
+  const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  for (let page = 0; page < 4; page += 1) fireEvent.press(r.getByLabelText('Next page'));
+  fireEvent.press(r.getByLabelText('up, idle'));
+  act(() => {
+    fireEvent.press(r.getByLabelText('Next page'));
+    fireEvent.press(r.getByLabelText('Next page'));
+  });
+  expect(r.getByLabelText('Card row 6 · page 6 of 6')).toBeTruthy();
+  expect(r.getAllByLabelText(/, idle$/)).toHaveLength(5);
+  fireEvent.press(r.getByLabelText('Previous page'));
+  expect(r.getByLabelText('up, correct')).toBeTruthy();
+});
+
+test('batched Previous actions from page 2 stay on page 1', () => {
+  const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('Next page'));
+  act(() => {
+    fireEvent.press(r.getByLabelText('Previous page'));
+    fireEvent.press(r.getByLabelText('Previous page'));
+  });
+  expect(r.getByLabelText('Card row 1 · page 1 of 6')).toBeTruthy();
+  expect(r.getByLabelText('bus, idle')).toBeTruthy();
+});
+
+
+test('page controls live in the bottom bar while the timer stays above the grid', () => {
+  const r = render(<ReadWordsQuestion language="en" itemSet={WELA_PLUS_READ_WORDS_EN} durationSec={60} onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  const bar = within(r.UNSAFE_getByType(BottomBar));
+  expect(bar.getByLabelText('Next page')).toBeTruthy();
+  expect(bar.getByLabelText('Previous page')).toBeTruthy();
+  expect(bar.getByLabelText('Card row 1 · page 1 of 6')).toBeTruthy();
+  expect(bar.queryByLabelText('Time left, 60 seconds')).toBeNull();
+  expect(r.getByLabelText('Time left, 60 seconds')).toBeTruthy();
 });

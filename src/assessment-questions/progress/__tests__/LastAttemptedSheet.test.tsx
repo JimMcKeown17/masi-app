@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, within } from '@testing-library/react-native';
 import { LastAttemptedSheet } from '../LastAttemptedSheet';
 import { tokens } from '../../theme/tokens';
 import { BottomBar, PrimaryButton, SecondaryButton, TextLink, TileGroups, UiText } from '../../ui';
@@ -37,9 +37,11 @@ test('Cancel appears only when onCancel is given', () => {
 
 test('the selected cell is outlined in ink, never red', () => {
   const r = render(<LastAttemptedSheet labels={labels} defaultIndex={0} onConfirm={jest.fn()} />);
-  expect(r.getByLabelText('a, item 1')).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 3 });
+  expect(r.getByLabelText('a, item 1')).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 1 });
+  expect(within(r.getByLabelText('a, item 1')).getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 3 });
   fireEvent.press(r.getByLabelText('i, item 3'));
-  expect(r.getByLabelText('i, item 3')).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 3 });
+  expect(r.getByLabelText('i, item 3')).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 1 });
+  expect(within(r.getByLabelText('i, item 3')).getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 3 });
   expect(r.getByLabelText('i, item 3').props.accessibilityState).toMatchObject({ selected: true });
   expect(r.getByLabelText('a, item 1').props.accessibilityState).toMatchObject({ selected: false });
   for (const element of r.UNSAFE_root.findAll((node: { type: unknown }) => typeof node.type === 'string')) {

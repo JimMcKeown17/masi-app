@@ -23,7 +23,7 @@ export function TimerBar({ remainingMs, durationMs }: { remainingMs: number; dur
 const styles = StyleSheet.create({
   row: {
     width: '100%',
-    flexShrink: 1,
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: tokens.space.sm,

@@ -647,3 +647,12 @@ test('repeated item keys keep independent positional marks and result identities
     .toEqual([[0, 'same', false], [1, 'same', true]]);
   expect(onComplete.mock.calls[0][0].derived.total_correct).toBe(1);
 });
+
+
+test('the answer screen starts the Re-read story control 16dp below the header', () => {
+  const r = render(<ListenAndAnswerStoryQuestion language="en" onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText("I've finished reading"));
+  let wrapper = r.getByRole('button', { name: 'Re-read story' }).parent;
+  while (wrapper && typeof wrapper.type !== 'string') wrapper = wrapper.parent;
+  expect(wrapper).toHaveStyle({ paddingHorizontal: tokens.space.lg, paddingTop: tokens.space.lg });
+});

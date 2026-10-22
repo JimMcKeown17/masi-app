@@ -332,7 +332,8 @@ test('unequal rows stay intact, highlight the current letter, and preserve dupli
   expect(rows.map((row) => within(row).getAllByLabelText(/, (current|not reached)$/).length)).toEqual([2, 3, 1]);
   const current = r.getByLabelText('a, current');
   expect(current.props.accessibilityState.selected).toBe(true);
-  expect(current).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 3, borderColor: tokens.color.ink });
+  expect(current).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.ink });
+  expect(r.getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
   expect(r.getAllByText('a')[0].props).toMatchObject({
     numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6, maxFontSizeMultiplier: 1.2,
   });
@@ -396,7 +397,8 @@ test('Grid A shows card rows 1–2 as page 1 of 3, twenty letter tiles in rows o
       expect(within(displayRow as typeof row).getAllByLabelText(/, (current|not reached)$/)).toHaveLength(5);
     }
   }
-  expect(r.getByLabelText('l, current')).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
+  expect(r.getByLabelText('l, current')).toHaveStyle({ borderWidth: 1, borderColor: tokens.color.ink });
+  expect(r.getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
   expect(r.queryByRole('button', { name: 'Previous page' })).toBeNull();
   expect(r.queryByRole('button', { name: 'Next page' })).toBeNull();
   fireEvent(r.getByTestId('letter-grid'), 'layout', { nativeEvent: { layout: { width: 360 } } });
@@ -412,7 +414,8 @@ test('marking the twentieth letter moves to page 2; Back from its first letter r
   expect(r.getByLabelText(`${SET.rows[2][0]}, current`)).toBeTruthy();
   fireEvent.press(r.getByRole('button', { name: 'Back' }));
   expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
-  expect(r.getByLabelText(`${SET.rows[1][9]}, current`)).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 3 });
+  expect(r.getByLabelText(`${SET.rows[1][9]}, current`)).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 1 });
+  expect(r.getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
   expect(r.getAllByLabelText(/, correct$/)).toHaveLength(19);
 });
 
@@ -424,7 +427,8 @@ test('earlier marks stay visible after Back', () => {
   fireEvent.press(r.getByRole('button', { name: 'Back' }));
   expect(r.getByLabelText('l, correct')).toHaveStyle({ backgroundColor: tokens.color.marked });
   expect(r.getByLabelText('a, incorrect')).toHaveStyle({ backgroundColor: tokens.color.error });
-  expect(r.getByLabelText('m, current')).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 3 });
+  expect(r.getByLabelText('m, current')).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 1 });
+  expect(r.getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
 });
 
 test('a stop on the last letter of a page leaves that page showing under the stop card', () => {
@@ -466,4 +470,14 @@ test('fixture item_set_id is clearly marked as fixture', () => {
   const { r, onComplete } = startQ({ itemSet: FIXTURE_LETTER_SOUNDS_EN });
   end(r);
   expect(onComplete.mock.calls[0][0].item_set_id).toBe('letter_sounds@fixture.en');
+});
+
+
+test('a stop clears the current tile selection and Undo restores it', () => {
+  const { r } = startQ();
+  decide(r, false, 10);
+  expect(r.getByTestId('stop-card')).toBeTruthy();
+  expect(r.getAllByRole('text', { includeHiddenElements: true }).filter(tile => tile.props.accessibilityState?.selected === true)).toHaveLength(0);
+  fireEvent.press(r.getByText('Undo last mark'));
+  expect(r.getByLabelText(`${SET.rows.flat()[9]}, current`).props.accessibilityState.selected).toBe(true);
 });

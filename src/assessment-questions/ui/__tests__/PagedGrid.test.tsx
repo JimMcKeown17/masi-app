@@ -20,7 +20,7 @@ function parentView(node: { parent: any }) {
 
 test('PagedGrid renders only page positions in display rows with a divider before a new card row', () => {
   const page = paginate(rowsFromLengths([10, 10, 10, 10]), LETTER_PAGE_LAYOUT)[1];
-  const r = render(<PagedGrid page={page} variant="letter" layout={LETTER_PAGE_LAYOUT} testID="grid" groupTestID={row => `row-${row}`} renderTile={renderLetter} />);
+  const r = render(<PagedGrid pages={[page]} pageIndex={0} variant="letter" layout={LETTER_PAGE_LAYOUT} testID="grid" groupTestID={row => `row-${row}`} renderTile={renderLetter} />);
   expect(r.getByTestId('grid')).toHaveStyle({ flex: 1, justifyContent: 'center', paddingHorizontal: tokens.space.lg });
   expect(r.UNSAFE_queryByType(ScrollView)).toBeNull();
   expect(r.getAllByLabelText(/^item \d+$/).map(tile => tile.props.accessibilityLabel)).toEqual(page.positions.map(position => `item ${position}`));
@@ -46,7 +46,7 @@ test('PagedGrid renders only page positions in display rows with a divider befor
 test('every tile renders with flex before layout, then receives the measured column width on resize', () => {
   const page = paginate(rowsFromLengths([12]), LETTER_PAGE_LAYOUT)[0];
   const renderTile = jest.fn(renderLetter);
-  const r = render(<PagedGrid page={page} variant="letter" layout={LETTER_PAGE_LAYOUT} testID="grid" renderTile={renderTile} />);
+  const r = render(<PagedGrid pages={[page]} pageIndex={0} variant="letter" layout={LETTER_PAGE_LAYOUT} testID="grid" renderTile={renderTile} />);
   expect(r.getAllByLabelText(/^item \d+$/)).toHaveLength(12);
   expect(renderTile.mock.calls).toEqual(page.positions.map(position => [position, { width: undefined, height: undefined }]));
   for (const tile of r.getAllByLabelText(/^item \d+$/)) expect(parentView(tile)).toHaveStyle({ flex: 1 });
@@ -62,7 +62,7 @@ test('every tile renders with flex before layout, then receives the measured col
 
 test('continuous word pages have no dividers and use the word column count', () => {
   const page = paginate(rowsFromLengths([5, 5]), WORD_PAGE_LAYOUT)[0];
-  const r = render(<PagedGrid page={page} variant="word" layout={WORD_PAGE_LAYOUT} testID="grid"
+  const r = render(<PagedGrid pages={[page]} pageIndex={0} variant="word" layout={WORD_PAGE_LAYOUT} testID="grid"
     renderTile={(position, size) => <MarkTile variant="word" state="idle" text={String(position)} accessibilityLabel={`item ${position}`} {...size} />} />);
   fireEvent(r.getByTestId('grid'), 'layout', { nativeEvent: { layout: { width: 360 } } });
   expect(r.getAllByLabelText(/^item \d+$/)).toHaveLength(10);
@@ -79,7 +79,7 @@ test.each([
   const renderTile = jest.fn((position: number, size: TileSize) => (
     <MarkTile variant={name} state="idle" text={String(position)} accessibilityLabel={`item ${position}`} {...size} />
   ));
-  const r = render(<PagedGrid page={page} variant={name} layout={layout} testID="grid" renderTile={renderTile} />);
+  const r = render(<PagedGrid pages={[page]} pageIndex={0} variant={name} layout={layout} testID="grid" renderTile={renderTile} />);
   renderTile.mockClear();
   fireEvent(r.getByTestId('grid'), 'layout', { nativeEvent: { layout: { width: 360 } } });
   expect(r.getByTestId('grid')).toHaveStyle({ paddingHorizontal: 16 });
@@ -98,7 +98,7 @@ test('duplicate words render distinct keyed tiles and toggle independently', () 
   const words = ['there', 'how', 'there', 'how'];
   function RepeatedWords() {
     const [correct, setCorrect] = useState<number[]>([]);
-    return <PagedGrid page={paginate([[0, 1, 2, 3]], WORD_PAGE_LAYOUT)[0]} variant="word" layout={WORD_PAGE_LAYOUT}
+    return <PagedGrid pages={paginate([[0, 1, 2, 3]], WORD_PAGE_LAYOUT)} pageIndex={0} variant="word" layout={WORD_PAGE_LAYOUT}
       renderTile={(position, size) => <MarkTile variant="word" {...size} text={words[position]}
         state={correct.includes(position) ? 'correct' : 'idle'} accessibilityLabel={`word ${position}`}
         onPress={() => setCorrect(previous => previous.includes(position) ? previous.filter(value => value !== position) : [...previous, position])} />} />;
@@ -124,7 +124,7 @@ test('duplicate words render distinct keyed tiles and toggle independently', () 
 function sizedPage(variant: 'letter' | 'word', height: number) {
   const layout = variant === 'letter' ? LETTER_PAGE_LAYOUT : WORD_PAGE_LAYOUT;
   const page = paginate(rowsFromLengths(variant === 'letter' ? [10, 10] : [5, 5]), layout)[0];
-  const r = render(<PagedGrid page={page} variant={variant} layout={layout} testID="sized-grid"
+  const r = render(<PagedGrid pages={[page]} pageIndex={0} variant={variant} layout={layout} testID="sized-grid"
     renderTile={(position: number, size: { width?: number; height?: number }) => (
       <MarkTile variant={variant} state="idle" text={String(position)} accessibilityLabel={`item ${position}`} {...size} />
     )} />);
@@ -212,7 +212,7 @@ test('tiles stop shrinking at 40dp and gaps at 6dp even when that must overflow'
 test('picture pages fit measured height with an 88dp nominal row and a 72dp floor', () => {
   const layout = { columns: 3, capacity: 12, breakAtCardRow: false };
   const page = paginate([Array.from({ length: 26 }, (_, i) => i)], layout)[0];
-  const r = render(<PagedGrid page={page} variant="picture" layout={layout} testID="picture-grid"
+  const r = render(<PagedGrid pages={[page]} pageIndex={0} variant="picture" layout={layout} testID="picture-grid"
     renderTile={(position, size) => <MarkTile variant="picture" state="idle" text="a" caption="apple" accessibilityLabel={`item ${position}`} {...size} />} />);
   for (const [height, expectedHeight, expectedGap] of [[400, 88, 10], [330, 78, 6], [280, 72, 6], [400, 88, 10]]) {
     fireEvent(r.getByTestId('picture-grid'), 'layout', { nativeEvent: { layout: { width: 360, height } } });
@@ -224,4 +224,23 @@ test('picture pages fit measured height with an 88dp nominal row and a 72dp floo
     if (height >= 330) expect(geometry.total).toBeLessThanOrEqual(height);
     expect(r.UNSAFE_queryByType(ScrollView)).toBeNull();
   }
+});
+
+
+test.each([[250, 250], [400, 281]])('a two-tile page shares full page geometry in %s dp and starts at the top of its centred frame', (height, frameHeight) => {
+  const pages = paginate(rowsFromLengths([10, 10, 2]), LETTER_PAGE_LAYOUT);
+  const grid = (pageIndex: number) => <PagedGrid pages={pages} pageIndex={pageIndex}
+    variant="letter" layout={LETTER_PAGE_LAYOUT} testID="grid" renderTile={renderLetter} />;
+  const r = render(grid(0));
+  fireEvent(r.getByTestId('grid'), 'layout', { nativeEvent: { layout: { width: 360, height } } });
+  const fullTileStyle = StyleSheet.flatten(r.getByLabelText('item 0').props.style);
+  const fullGap = pageGeometry(r).gap;
+  r.rerender(grid(1));
+  const short = pageGeometry(r);
+  expect(short.tiles).toHaveLength(2);
+  expect(short.tiles[0]).toHaveStyle({ height: fullTileStyle.height, width: fullTileStyle.width });
+  expect(short.gap).toBe(fullGap);
+  const frame = parentView(parentView(short.rows[0]));
+  expect(frame).toHaveStyle({ height: frameHeight, justifyContent: 'flex-start' });
+  expect(r.getByTestId('grid')).toHaveStyle({ justifyContent: 'center' });
 });

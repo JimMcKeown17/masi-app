@@ -8,7 +8,7 @@ import { TimerBar } from '../TimerBar';
 test('owns the full-width row gutter, rounded track and right-aligned seconds label', () => {
   const screen = render(<TimerBar remainingMs={30000} durationMs={60000} />);
   expect(screen.getByLabelText('Time left, 30 seconds')).toHaveStyle({
-    flexDirection: 'row', alignItems: 'center', width: '100%', flexShrink: 1,
+    flexDirection: 'row', alignItems: 'center', width: '100%', flexShrink: 0,
     paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.sm,
   });
   expect(screen.getByTestId('countdown-track')).toHaveStyle({

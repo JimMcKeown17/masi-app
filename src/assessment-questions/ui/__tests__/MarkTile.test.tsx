@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { AssessmentThemeProvider } from '../../theme/AssessmentTheme';
 import { tokens } from '../../theme/tokens';
@@ -7,7 +7,7 @@ import { MarkTile, type TileState } from '../MarkTile';
 import { ContentText, UiText, toneColor } from '../Text';
 
 test.each([
-  ['current', { borderWidth: 3, borderColor: tokens.color.ink, backgroundColor: tokens.color.surface }, 'ink'],
+  ['current', { borderWidth: 1, borderColor: tokens.color.ink, backgroundColor: tokens.color.surface }, 'ink'],
   ['correct', { backgroundColor: tokens.color.marked, borderColor: tokens.color.marked }, 'onInk'],
   ['incorrect', { backgroundColor: tokens.color.error, borderColor: tokens.color.error }, 'onInk'],
   ['idle', { backgroundColor: tokens.color.surface, borderColor: tokens.color.line, borderWidth: 1 }, 'ink'],
@@ -94,3 +94,48 @@ test('picture tiles accept the fitted row height without a nominal minimum overr
   expect(StyleSheet.flatten(r.getByLabelText('picture').props.style).minHeight).toBeUndefined();
   expect(r.getByText('iroboti (traffic light)').props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.2, ellipsizeMode: 'clip' });
 });
+
+
+test.each(['letter', 'word', 'pill', 'promptCard', 'picture'] as const)(
+  '%s tile keeps content geometry in every state and only current draws a decorative ring', variant => {
+    const states: TileState[] = ['idle', 'current', 'correct', 'incorrect', 'notReached'];
+    const r = render(<MarkTile variant={variant} state="idle" text="a" accessibilityLabel="tile" onPress={jest.fn()} />);
+    const geometry = () => {
+      const style = StyleSheet.flatten(r.getByLabelText('tile').props.style);
+      return [style.borderWidth, style.padding, style.paddingHorizontal, style.paddingVertical];
+    };
+    const idleGeometry = geometry();
+    for (const state of states) {
+      r.rerender(<MarkTile variant={variant} state={state} text="a" accessibilityLabel="tile" onPress={jest.fn()} />);
+      expect(geometry()).toEqual(idleGeometry);
+      if (state === 'current') {
+        const ring = r.getByTestId('current-ring', { includeHiddenElements: true });
+        expect(ring).toHaveStyle({ position: 'absolute', top: -1, left: -1, right: -1, bottom: -1,
+          borderWidth: 3, borderColor: tokens.color.ink, borderRadius: tokens.radius.tile });
+        expect(ring.props).toMatchObject({ pointerEvents: 'none', accessible: false,
+          accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' });
+      } else {
+        expect(r.queryByTestId('current-ring', { includeHiddenElements: true })).toBeNull();
+      }
+    }
+  },
+);
+
+
+test.each(['ball', 'ufudo (tortoise)', 'i-orenji (orange)'])(
+  'picture caption %s reserves the same two scaled lines before its letter', caption => {
+    const r = render(<MarkTile variant="picture" state="idle" text="b" caption={caption} accessibilityLabel="picture" />);
+    expect(r.getByTestId('picture-caption')).toHaveStyle({ height: 2 * 18 * 1.2, flexShrink: 0 });
+    expect(r.getByText(caption).props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.2 });
+  },
+);
+
+test.each([[1, 2 * 18], [1.15, 2 * 18 * 1.15], [2, 2 * 18 * 1.2]])(
+  'picture caption box follows OS font scale %s, capped at the caption multiplier', (fontScale, height) => {
+    const spy = jest.spyOn(Dimensions, 'get').mockReturnValue({ width: 360, height: 800, scale: 2, fontScale });
+    try {
+      const r = render(<MarkTile variant="picture" state="idle" text="b" caption="ball" accessibilityLabel="picture" />);
+      expect(r.getByTestId('picture-caption')).toHaveStyle({ height });
+    } finally { spy.mockRestore(); }
+  },
+);

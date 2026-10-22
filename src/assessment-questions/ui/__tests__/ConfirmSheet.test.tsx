@@ -1,7 +1,7 @@
 import React from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Modal, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { tokens } from '../../theme/tokens';
 import { ConfirmSheet } from '../ConfirmSheet';
 import { TextLink } from '../Button';
@@ -41,7 +41,7 @@ test('default confirm is ink and cancelLabel alone safely renders a cancel butto
 });
 
 
-test.each([['android', 0, 24], ['ios', 0, 24], ['ios', 34, 34]] as const)(
+test.each([['android', 0, 24], ['android', 24, 24], ['android', 48, 24], ['ios', 0, 24], ['ios', 34, 34]] as const)(
   'confirmation panel on %s with inset %s keeps bottom padding %s', (os, inset, paddingBottom) => {
     jest.replaceProperty(Platform, 'OS', os);
     const r = render(
@@ -54,3 +54,24 @@ test.each([['android', 0, 24], ['ios', 0, 24], ['ios', 34, 34]] as const)(
     expect(StyleSheet.flatten(panel!.props.style)).toMatchObject({ padding: tokens.space.xl, paddingBottom });
   },
 );
+
+
+test('confirmation owns a full-screen transparent Modal and hardware Back cancels once', () => {
+  const onCancel = jest.fn();
+  const r = render(<ConfirmSheet testID="sheet" title="End the test?" confirmLabel="End test"
+    onConfirm={jest.fn()} onCancel={onCancel} cancelLabel="Cancel" />);
+  const modal = r.UNSAFE_getByType(Modal);
+  expect(modal.props).toMatchObject({ visible: true, transparent: true, animationType: 'fade', statusBarTranslucent: true });
+  expect(modal.props.navigationBarTranslucent ?? false).toBe(false);
+  expect(modal.findByProps({ testID: 'sheet' })).toBeTruthy();
+  act(() => modal.props.onRequestClose());
+  expect(onCancel).toHaveBeenCalledTimes(1);
+});
+
+test('hardware Back on a stop card without onCancel does nothing', () => {
+  const onConfirm = jest.fn();
+  const r = render(<ConfirmSheet testID="stop-card" title="Stopped" confirmLabel="Save result" onConfirm={onConfirm} />);
+  act(() => r.UNSAFE_getByType(Modal).props.onRequestClose());
+  expect(onConfirm).not.toHaveBeenCalled();
+  expect(r.getByTestId('stop-card')).toBeTruthy();
+});

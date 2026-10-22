@@ -235,7 +235,8 @@ function LetterWritingFromPicturesQuestionContent(
       >
         {page && <PagedGrid
           testID="picture-grid"
-          page={page}
+          pages={pages}
+          pageIndex={currentPage}
           variant="picture"
           layout={layout}
           renderTile={(position, size) => {

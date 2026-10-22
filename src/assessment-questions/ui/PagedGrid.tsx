@@ -16,8 +16,9 @@ const styles = StyleSheet.create({
   unmeasuredTile: { flex: 1 },
 });
 
-export function PagedGrid({ page, testID, groupTestID, renderTile, layout, variant }: {
-  page: Page;
+export function PagedGrid({ pages, pageIndex, testID, groupTestID, renderTile, layout, variant }: {
+  pages: ReadonlyArray<Page>;
+  pageIndex: number;
   variant: 'letter' | 'word' | 'picture';
   testID?: string;
   groupTestID?: (cardRow: number) => string;
@@ -28,23 +29,26 @@ export function PagedGrid({ page, testID, groupTestID, renderTile, layout, varia
 }): React.JSX.Element {
   const [{ width, height }, setSize] = useState<TileSize>({});
   const contentWidth = width === undefined ? undefined : width - 2 * tokens.space.lg;
+  const page = pages[pageIndex];
   const groups: { cardRow: number; rows: DisplayRow[] }[] = [];
-  for (const row of page.displayRows) {
+  for (const row of page?.displayRows ?? []) {
     if (groups.length === 0 || row.startsCardRow) {
-      groups.push({ cardRow: page.firstCardRow + groups.length, rows: [] });
+      groups.push({ cardRow: page!.firstCardRow + groups.length, rows: [] });
     }
     groups[groups.length - 1].rows.push(row);
   }
-  const rowCount = page.displayRows.length;
-  const dividerCount = groups.filter(group => group.rows[0].startsCardRow).length;
+  // Size from the whole Question, never from the currently visible partial page.
+  const rowCount = Math.max(0, ...pages.map(value => value.displayRows.length));
+  const dividerCount = Math.max(0, ...pages.map(value => value.displayRows.filter(row => row.startsCardRow).length));
   // Each divider contributes two gap-sized margins and a 1dp line. Groups
   // contribute gaps only between their own display rows.
-  const gapCount = rowCount - groups.length + 2 * dividerCount;
+  const gapCount = Math.max(0, rowCount - 1) + dividerCount;
   const nominalHeight = GRID_TILE_HEIGHTS[variant];
   const gap = height === undefined || gapCount === 0 ? GAP
     : Math.max(MIN_GAP, Math.min(GAP, (height - rowCount * nominalHeight - dividerCount) / gapCount));
   const tileHeight = height === undefined || rowCount === 0 ? undefined
     : Math.max(variant === 'picture' ? 72 : MIN_TILE_HEIGHT, Math.min(nominalHeight, (height - gapCount * gap - dividerCount) / rowCount));
+  const frameHeight = rowCount * (tileHeight ?? nominalHeight) + gapCount * gap + dividerCount;
   const tileWidth = contentWidth === undefined ? undefined : (contentWidth - gap * (layout.columns - 1)) / layout.columns;
   // Below the tile floor (72dp picture, 40dp letter/word) / 6dp gap, overflow is intentional: pagination
   // and minimum usable tile height stay fixed, rather than silently scrolling.
@@ -56,18 +60,20 @@ export function PagedGrid({ page, testID, groupTestID, renderTile, layout, varia
         height: measured.height > 0 ? measured.height : undefined,
       });
     }}>
-      {groups.map(group => <React.Fragment key={group.rows[0].positions[0]}>
-        {group.rows[0].startsCardRow && <Svg testID="card-row-divider" accessible={false} width={contentWidth ?? '100%'} height={1} style={{ marginVertical: gap }}>
-          <Line x1={0} y1={0.5} x2="100%" y2={0.5} stroke={tokens.color.line} strokeWidth={1} strokeDasharray="4 4" />
-        </Svg>}
-        <View testID={groupTestID?.(group.cardRow)} style={{ gap }}>
-          {group.rows.map(row => <View key={row.positions[0]} style={[styles.row, { gap }]}>
-            {row.positions.map(position => <View key={position} style={tileWidth === undefined ? styles.unmeasuredTile : { width: tileWidth }}>
-              {renderTile(position, { width: tileWidth, height: tileHeight })}
+      <View style={{ height: frameHeight, flexShrink: 0, justifyContent: 'flex-start' }}>
+        {groups.map(group => <React.Fragment key={group.rows[0].positions[0]}>
+          {group.rows[0].startsCardRow && <Svg testID="card-row-divider" accessible={false} width={contentWidth ?? '100%'} height={1} style={{ marginVertical: gap }}>
+            <Line x1={0} y1={0.5} x2="100%" y2={0.5} stroke={tokens.color.line} strokeWidth={1} strokeDasharray="4 4" />
+          </Svg>}
+          <View testID={groupTestID?.(group.cardRow)} style={{ gap }}>
+            {group.rows.map(row => <View key={row.positions[0]} style={[styles.row, { gap }]}>
+              {row.positions.map(position => <View key={position} style={tileWidth === undefined ? styles.unmeasuredTile : { width: tileWidth }}>
+                {renderTile(position, { width: tileWidth, height: tileHeight })}
+              </View>)}
             </View>)}
-          </View>)}
-        </View>
-      </React.Fragment>)}
+          </View>
+        </React.Fragment>)}
+      </View>
     </View>
   );
 }

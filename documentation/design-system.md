@@ -856,7 +856,7 @@ and font ratchets are empty and enforced (`src/assessment-questions/ui/Canvas.ts
 | Surface or state | Package rule | Current source |
 |---|---|---|
 | Palette | `canvas` #F8F5F4, `surface` #FFFFFF, `line` #ECE5E4, `ink` #221A1B; correct `marked` #2E7D27, incorrect `error` #B3261E, warning #B26A00; destructive `primary` #C81F3E | `src/assessment-questions/theme/tokens.ts:9` |
-| Tiles | 10dp radius; idle white with 1dp line border; current white with 3dp ink outline; correct/incorrect solid green/red with white text; not reached uses muted #B3A8A8 | `src/assessment-questions/ui/MarkTile.tsx:9`, `src/assessment-questions/ui/MarkTile.tsx:45` |
+| Tiles | 10dp radius; idle white with 1dp line border; current white with a decorative absolute 3dp ink ring overlay (outset 1dp to cover the tile's own 1dp border, same radius, no pointer events or accessibility); all states keep the same 1dp border and padding so focus never resizes content; correct/incorrect solid green/red with white text; not reached uses muted #B3A8A8 | `src/assessment-questions/ui/MarkTile.tsx:9`, `src/assessment-questions/ui/MarkTile.tsx:45` |
 | Selection | Page dots and selected rubric chips use ink; free-toggle tiles are idle/correct. Red identifies incorrect marks or destructive End controls | `src/assessment-questions/ui/PageIndicator.tsx:28`, `src/assessment-questions/ui/RubricRow.tsx:21`, `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:310`, `src/assessment-questions/ui/ActionBar.tsx:20`, `src/assessment-questions/ui/ActionBar.tsx:26` |
 | Content | Andika Regular via `ContentText`; letters 30sp, words 21sp, prompt cards 28sp, story 18sp. Scaling caps at 1.2; fitted grid text shrinks to 0.6 of its base size without ellipsis | `src/assessment-questions/theme/tokens.ts:28`, `src/assessment-questions/ui/Text.tsx:30`, `src/assessment-questions/ui/MarkTile.tsx:52` |
 | UI type | Figtree for controls, labels, timer and headings; choose weight by family name. Without registered families, only the theme supplies system-font weights | `src/constants/assessmentFonts.js:3`, `src/assessment-questions/theme/typography.ts:13`, `src/assessment-questions/theme/typography.ts:23` |
@@ -881,10 +881,16 @@ returned-to decision, so it gets the current outline while earlier marks keep th
 (`src/assessment-questions/progress/SequentialCapture.tsx:47`,
 `src/assessment-questions/progress/SequentialCapture.tsx:183`,
 `src/assessment-questions/progress/stepByStep.ts:54`). Q6 owns its page index across the
-last-attempted round trip (`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:125`).
+last-attempted round trip, clamps queued Previous/Next actions to the available pages, and puts
+its page controls in the bottom `ToggleBar` header (`src/assessment-questions/questions/ReadWordsQuestion/index.tsx`).
+A stopped sequential test has no current tile; Undo restores the current tile without changing the Result contract
+(`src/assessment-questions/progress/SequentialCapture.tsx`).
 
 `PagedGrid`, `TileGroups` and `TimerBar` each own their full-width 16dp gutters; Questions
-must not add another gutter. Paged grids measure width and height, reduce gaps from 10 to 6dp,
+must not add another gutter. `PagedGrid` receives all pages and the current page index, then
+sizes every page from one shared frame using the maximum display-row and divider counts.
+That full-page frame is vertically centred; short pages fill it from the top, keeping tile
+width, height, gaps and first-row position identical across pages. Paged grids measure width and height, reduce gaps from 10 to 6dp,
 then reduce letter/word tiles toward a 40dp floor (nominal heights 60/58dp). Picture tiles
 use 88dp nominal / 72dp minimum. They never scroll or change capacity; below the minimum
 geometry they can overflow, so native device fit remains a gate
@@ -892,7 +898,10 @@ geometry they can overflow, so native device fit remains a gate
 `src/assessment-questions/ui/MarkTile.tsx:17`, `src/assessment-questions/ui/TileGroups.tsx:7`,
 `src/assessment-questions/ui/TimerBar.tsx:30`). Q5 uses three columns / twelve items per page,
 requires positive-integer layout hints, and ships text-only picture prompts pending a separate
-image layout (`src/assessment-questions/itemsets/wela_plus_letter_writing.en.ts:39`,
+image layout. Picture captions reserve a two-line box of 2 × the caption role's 18dp line height × the OS
+font scale capped at 1.2 (36dp at default text, 43.2dp at the cap), so one- and two-line captions
+leave letters aligned
+(`src/assessment-questions/ui/MarkTile.tsx`, `src/assessment-questions/itemsets/wela_plus_letter_writing.en.ts:39`,
 `src/assessment-questions/itemsets/wela_plus_letter_writing.xh.ts:39`,
 `src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:48`,
 `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119`). Sentence, passage and
@@ -904,7 +913,8 @@ dictation items wrap in groups; Q9 uses 52dp letter tiles
 beside their labels (`src/assessment-questions/ui/Button.tsx:19`,
 `src/assessment-questions/ui/Button.tsx:57`). The memoised `Countdown` owns its 250ms tick, with `TimerBar` as the
 presentation leaf: a 12dp track, tabular “57s” label (`src/assessment-questions/theme/typography.ts:18`), green above ten seconds and amber at ten
-or fewer. Q6 and Q8 show it whenever `durationSec` is supplied
+or fewer. The timer row has `flexShrink: 0`, so long passages cannot squash the label;
+`Countdown` adds no layout wrapper. Q6 and Q8 show it whenever `durationSec` is supplied
 (`src/assessment-questions/progress/Countdown.tsx:9`, `src/assessment-questions/ui/TimerBar.tsx:7`,
 `src/assessment-questions/ui/TimerBar.tsx:33`,
 `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:294`,
@@ -913,7 +923,7 @@ or fewer. Q6 and Q8 show it whenever `durationSec` is supplied
 `DecisionBar` owns one `BottomBar`: Correct/Incorrect side by side, full-width Back, then a
 wrapping row of the optional Skip question link and destructive End test link. `ToggleBar`
 owns its `BottomBar` too, with an ink primary (End on Q6/Q8, Finish elsewhere), Skip question
-as a link, and an optional header carrying Q11's total. Never wrap either bar in another
+as a link, and an optional header carrying Q5/Q6 page controls or Q11's total. Never wrap either bar in another
 `BottomBar` (`src/assessment-questions/ui/ActionBar.tsx:7`,
 `src/assessment-questions/ui/ActionBar.tsx:32`, `src/assessment-questions/ui/Button.tsx:63`,
 `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:320`,
@@ -924,7 +934,12 @@ has a 1dp top border; bottom padding is `max(insets.bottom + 11, 16)` on Android
 (`src/assessment-questions/ui/BottomBar.tsx:6`, `src/components/assessments/TestFrame.js:11`).
 
 Use the shared intro, bottom confirmation sheets and full-screen sheets. FullScreenSheet owns
-the modal top inset. LastAttemptedSheet scrolls its header with the cells; its footer has
+the modal top inset. `ConfirmSheet` uses a transparent, fading React Native `Modal` while
+mounted, with a status-bar-translucent scrim that covers the host header. Hardware Back invokes
+`onCancel` when supplied; on the stop card it does nothing. Keep the covered Question's
+pointer-event and accessibility hiding in place. The panel uses 24dp minimum bottom padding;
+iOS increases it for the home indicator, while Android's Modal already excludes the navigation
+bar and must not add the host bottom inset again. LastAttemptedSheet scrolls its header with the cells; its footer has
 Reached the end / Nothing attempted / optional Cancel links above Confirm, leaving space for
 the list at large text (`src/assessment-questions/ui/QuestionIntro.tsx:8`,
 `src/assessment-questions/ui/ConfirmSheet.tsx:18`, `src/assessment-questions/ui/FullScreenSheet.tsx:12`,
@@ -949,8 +964,10 @@ eligible preview binary to restore gallery access after an OTA
 (`app.config.js:4`, `app.config.js:78`, `eas.json:8`, `eas.json:19`, `eas.json:54`,
 `eas.json:69`, `src/utils/questionGallery.js:6`; controller profile ruling in
 `.superpowers/sdd/2026-10-21-assessment-capture-style/progress.md`).
-The A03/iPhone visual and large-text checks remain Task 17; typeface content gates are still
-pending (`src/assessment-questions/itemsets/contentStatus.ts:7`).
+The A03/iPhone visual and large-text checks remain native device gates. The A03s build-29
+inspection confirmed Andika's serifed capital I and plain-stem lowercase l are distinct;
+the three letter-card typeface content entries are closed. Picture, rubric, language review
+and word-list work remains in `src/assessment-questions/itemsets/contentStatus.ts`.
 
 ## Guard rules and the completed board ratchet
 

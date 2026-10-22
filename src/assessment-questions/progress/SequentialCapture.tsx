@@ -175,12 +175,12 @@ export function SequentialCapture({
           <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />
         </View>}
         <PageIndicator pages={pages} current={pageIndex} />
-        {pages[pageIndex] ? <PagedGrid page={pages[pageIndex]} layout={layout} variant={testIDPrefix} testID={`${testIDPrefix}-grid`}
+        {pages[pageIndex] ? <PagedGrid pages={pages} pageIndex={pageIndex} layout={layout} variant={testIDPrefix} testID={`${testIDPrefix}-grid`}
           groupTestID={testIDPrefix === 'letter' ? (row) => `letter-row-${row}` : undefined}
           renderTile={(position, size) => {
             const { prompt } = cardItems[position];
             const decision = state.decisions[position];
-            const tileState = position === state.cursor ? 'current'
+            const tileState = !state.stopped && position === state.cursor ? 'current'
               : decision === true ? 'correct' : decision === false ? 'incorrect' : 'idle';
             const label = tileState === 'idle' ? 'not reached' : tileState;
             return <MarkTile variant={testIDPrefix} state={tileState} text={prompt} {...size}
