@@ -303,6 +303,20 @@ export const createChildrenRepository = ({ database } = {}) => {
     }]));
   };
 
+  const getChildrenByIds = async (ids = []) => {
+    if (!ids.length) return {};
+    const db = await resolveDatabase(database);
+    const rows = [];
+    for (const batch of chunkArray([...new Set(ids)])) {
+      rows.push(...await db.getAllAsync(
+        `select id, first_name, last_name, reading_level, class_id, history_reference, hidden_at
+         from children where id in (${sqlPlaceholders(batch.length)})`,
+        ...batch
+      ));
+    }
+    return Object.fromEntries(rows.map(row => [row.id, row]));
+  };
+
   const getChildren = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(
@@ -880,6 +894,7 @@ export const createChildrenRepository = ({ database } = {}) => {
   return {
     getChildren,
     getChildNamesByIds,
+    getChildrenByIds,
     getMyChildren,
     save,
     saveChild: save,

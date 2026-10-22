@@ -27,6 +27,31 @@ const makeChild = (overrides = {}) => ({
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('childrenRepository', () => {
+  test('getChildrenByIds batches participants including hidden history references and current levels', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      await db.runAsync(`insert into children (id, first_name, last_name, class_id, reading_level, history_reference, hidden_at)
+        values ('c1', 'Amahle', 'Dlamini', 'class-1', '3 Letter Blends', 0, null),
+          ('c2', 'Lulu', 'Zulu', null, null, 1, '2026-10-21')`);
+      const repository = createChildrenRepository({ database: db });
+      const read = jest.spyOn(db, 'getAllAsync');
+      expect(await repository.getChildrenByIds([])).toEqual({});
+      expect(read).not.toHaveBeenCalled();
+      const ids = ['c1', 'c2', ...Array.from({ length: 399 }, (_, i) => `missing-${i}`), 'c1'];
+      expect(await repository.getChildrenByIds(ids)).toEqual({
+        c1: { id: 'c1', first_name: 'Amahle', last_name: 'Dlamini', reading_level: '3 Letter Blends',
+          class_id: 'class-1', history_reference: 0, hidden_at: null },
+        c2: { id: 'c2', first_name: 'Lulu', last_name: 'Zulu', reading_level: null,
+          class_id: null, history_reference: 1, hidden_at: '2026-10-21' },
+      });
+      expect(read.mock.calls.filter(([sql]) => /from children where id in/.test(sql))).toHaveLength(3);
+    } finally {
+      jest.restoreAllMocks();
+      await db.closeAsync();
+    }
+  });
+
   test('editing a full mapped synced child ignores caller sync bookkeeping and queues one update', async () => {
     const db = await createMigratedDatabase(runMigrations);
 
