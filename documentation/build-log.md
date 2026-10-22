@@ -3469,8 +3469,10 @@ before the next push.
    this file; pushed. Verified: ledger row; `set_letter_mastery` security definer, executable by
    `authenticated`, not `anon`; `authenticated` has no INSERT, UPDATE or DELETE on `letter_mastery`
    and keeps SELECT; no `authenticated` privilege on `letter_mastery_corrections`; the only policy is
-   `letter_mastery_select_writer_or_deliverer`; 0 rows. Old builds' tracker saves now fail with
-   `42501`, as the plan states; install the new build before field use.
+   `letter_mastery_select_writer_or_deliverer`; 0 rows. Old builds' tracker saves now fail; install
+   the new build before field use. (Corrected after the device run below: build 26's save fails with
+   `PGRST204`, "Could not find the 'deleted_at' column", not the `42501` the plan predicted, because
+   the old payload still names a dropped column.)
 6. **Assessment Results Plan 3 `20261022120000_assessment_history_pull`.** Baseline counts first
    (read-only, no wipe): assessments 42, assessment_items 2,480, battery_runs 0, letter_mastery 0,
    letter_mastery_corrections 0. Dry run listed only this file; pushed. Verified: ledger row; the
@@ -3483,6 +3485,72 @@ before the next push.
 **Not run (each needs Jim's yes):** B2's rollback-only actor probe (Task 8 Step 4), Plan 2's
 rollback-only `set_letter_mastery` smoke, Plan 3's rollback-only hosted matrix (Task 13 Step 4) and
 Plan 3's authenticated HTTP probe (Task 13 Step 5, which Jim runs interactively).
+
+### 2026-10-22 — Lesson plan wave 1: Galaxy A03s device run on the integration build
+
+Build: EAS `ea9d2099-5932-4558-a39f-ecdafade982c`, Android `preview-content`, versionCode 27, from
+`c25eace`; the APK's bundle carries every plan's markers. Phone: Galaxy A03s at 360 dp
+(`wm density 320`), text 1.0x and 1.3x, signed in as the staging Test User on `masi-app-sqlite`.
+Jim unlocked the phone and approved "test everything", which covered the disposable staging
+fixtures below. The auto-mode classifier refused Claude driving the export share sheet, so Jim
+emailed each export. Screenshots and the per-step log are in the session scratchpad
+(`scratchpad/device/`, `scratchpad/evidence.md`).
+
+**Upgrade over build 26 (C1 Step 3, B2 G1, AR2 G0).** Build 26 first recorded a session online (synced),
+a letter tap (`k`, Asanda), and a session offline. Jim's email needed Wi-Fi, which synced that first
+offline session before the install. Build 27 had been installed but not yet opened, so the phone went back to build 26
+(`adb install -r -d`), recorded a fresh offline session (two attendees) and took build 27 over it
+offline.
+
+| Check | Result |
+| --- | --- |
+| Opens past the database gate, no update or error screen, no new card | PASS |
+| Home before/after, 1.0x and 1.3x | PASS: pixel diff differs only in the sync badge digit (4 → 3) |
+| Waiting work across migrations 16 and 18 | PASS: 4 waiting → 3. Migration 16 dropped the refused letter row; the pending session and both attendees survived the `sessions` rebuild, then synced (server: 2 attendees, `group_id` null) |
+| Session history lists earlier sessions | PASS |
+| Export after reconnect | PASS: `schemaVersion` 18; migrations 16 `letter_mastery_current_state`, 17 `lesson_drafts`, 18 `sessions_group_history_reference`; `lesson_drafts` 0; sessions 31 / attendees 61 (= before + the offline session); outbox 0; `failedOutboxRows` [] |
+| AR2 G0 re-key of a stored confirmation | Not exercisable: the phone held no synced confirmation, and build 26 can no longer create one (its save fails with `PGRST204`). The re-key is covered by the migration tests |
+| Old build after the hosted change | Build 26 keeps the refused tap as "1 waiting" with a backoff and no failure card; the upgrade clears it |
+
+**A1 T1 PASS:** `content_diagnostics.decodabilitySelfCheck` = `{ vectorVersion: 1, passed: 72,
+failed: [] }`, `previewContentAllowed` true, `currentPacks.xh` `isixhosa-candidates-preview-v1`.
+**A1 T3 PASS** (Mac): `MASI_PREVIEW_CONTENT=1` refused for `pilot` and `production` with the C12
+message; `preview-content` loads.
+
+**AF (class AF1 Afrikaans, class NL1 with its language cleared on staging).**
+
+| Row | Result |
+| --- | --- |
+| Afrikaans letter test | PASS: no picker; "Anke Afrika · Afrikaans"; first row `l a m E p n L s o e`; 1 right then 10 wrong in a row stops the test, saved as "Stopped: 10 in a row wrong" |
+| Afrikaans word test | PASS: no picker; first row `die en is in op` |
+| Capital I vs lower-case l | FAIL, as expected (non-blocking; Bug and Gap row) |
+| Figtree ê ë ô | PASS: "Ênê Ëlô ôë Toets" in the Assess list, AF1 roster (bold), avatar and session selector, with no box or fallback face. The name was set on staging, because adb cannot type non-ASCII |
+| Afrikaans tracker | PASS: sheet order `a s m e k i r o n t …`; two marks; panel "2 / 26 letters mastered"; server rows `a`, `s` with `language = 'af'` (the AR2 code; the AF plan's `'Afrikaans'` predates AR2, its stated revisit trigger) |
+| Mixed-language session (review fix `ca1ec6b`) | PASS: in one session the Afrikaans child's sheet shows the Afrikaans order, the isiXhosa child's the isiXhosa order with her locks |
+| No-language class | PASS with a UX note: picker lists English, isiXhosa, Afrikaans, none ticked; Start without a choice starts nothing but closes the sheet; tracker and sheet show "No letter set for this class language." without clipping at 1.3x |
+
+**AR2 G3 PASS:** panel and session sheet at 1.0x and 1.3x, no clipping, count matches the green
+tiles, locked tiles unchanged.
+
+**AR3.** Gate 8 (Jim's yes): a per-EA `assessments` off row → forced refresh keeps the local list,
+Sync status "Incomplete since …"; row deleted → "Downloading" → "Up to date". Gate 9: "Up to date",
+"Downloading" and "Incomplete since …" at 1.0x and 1.3x, no clipping (an orphaned "AM" at 1.3x,
+Bug and Gap row). Gates 1–2 as a reinstall: Home 7.0 s after Sign in, History "Up to date" at
++47.6 s (about 29 s idle before the assessment walk starts); Assessment history lists 45 rows = the
+server's 45 for the year, none "Unknown child"; trackers match the original phone (Anke `a`, `s`
+from the mastery pull; Asanda `a`, `l`, `m` locked). The upgrade's first walk took assessments
+36 → 42 and items 2,140 → 2,480 with every cursor `complete`.
+
+**Fixtures (staging, disposable):** classes AF1 `769a29ec…`, NL1 `52bbdd44…` (language set to
+null); children Anke Afrika `454fd414…`, Glyph `304ecb7a…` (first name set to "Ênê Ëlô ôë"), Nola
+Lang `984c6ae6…`; their sessions, three Anke results (letters 0/60 and 1/60, words 0/50) and two
+mastery rows. Kept for the iPhone pass.
+
+**Not run, and why:** every iPhone row (no iPhone); AR2 G1, G1r and G2, B2 G2, AR3 Gates 3–4 (a
+second test EA: only Test User's password is available); AR3 Gates 5–7 (the `seed-volume` fixture
+prints its credentials only on Jim's terminal; the A03 has no SIM, so Gate 5 cannot run
+throttled); battery-run rows in Gates 1–2 (no run fixture); the log lines for Gates 1 and 8 (release
+logs need Share logs).
 
 ## Decision Register
 
@@ -3679,6 +3747,11 @@ Plan 3's authenticated HTTP probe (Task 13 Step 5, which Jim runs interactively)
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-22 | **Capital `I` and lower-case `l` cannot be told apart on the Afrikaans letter card** (A03, 360 dp): `l` is a 42 px bar, `I` a 39 px bar, both 6–7 px wide, in the capture grid and the saved detail grid. | Open, non-blocking for AF (plan call, 2026-10-20). Belongs to the test-screen redesign; `contentStatus.ts` already records the typeface need. Tracker tiles are lower case only. | Any sans-serif card mixing `I` and `l` needs a typeface with a serif `I` or a tailed `l`; check it on the phone. |
+| 2026-10-22 | **"Incomplete since" shows the latest failure, not when history became incomplete,** and its time can wrap with "AM" alone on a line at 1.3x. `historyWalk.js:285` restamps `lastFailureAt` on each failed run (as `main`'s `sessionHistoryPull.js:283` did); `syncStatusPresenter.js` formats with `toLocaleString`, which on Hermes puts a breaking space before AM/PM. | Open; small follow-up (keep the first failure until a success clears it; non-breaking space before the meridiem). | A "since" timestamp must keep the first event of the streak, not the latest. |
+| 2026-10-22 | **A class with no language shows three UI flaws** (all on `main`, from Bold Red #81–#82): Class detail prints "Language: null" (`ClassDetailScreen.js:107`); the class row ends in a stray "•" and its accessibility label holds ", ," (`ClassRow.js:25` joins without dropping empties); the language picker's Start looks enabled with nothing chosen and closes the sheet (`SelectSheet.js:83-86`). | Open; small follow-up. AF made a no-language class a supported state. | Join display parts with `.filter(Boolean)`; a confirm button with no selection should be disabled, not silently dismiss. |
+| 2026-10-22 | Assessment detail's stat labels break mid-word at 360 dp, 1.0x ("ATTEMPT / ED", "INCORRE / CT"). On `main` (#90, #87); not touched by wave 1. | Open; polish follow-up. | Letter-spaced capitals in narrow cards need `numberOfLines`/`adjustsFontSizeToFit` or a smaller tracking at 360 dp. |
+| 2026-10-22 | Session history titles a session waiting to sync with the EA's job title ("Literacy Coach") and a synced or pulled one "Session" (`SessionHistoryScreen.js:104-108`). On `main`; wave 1 does not touch `session_type`. | Open; low priority. | A list label should come from one field, whatever the row's sync state. |
 | 2026-10-21 | **A history result that references an inactive assessment tool cannot hydrate.** AR Plan 3 review round 1 fix downloads `assessment_tools`, but the existing `assessment_tools` SELECT policy shows authenticated users active tools only, so a family whose tool was later retired would fail the local foreign key and block its page. | Known gap, not fixed: no phone producer writes `assessment_tool_id` (only the payload passes it through), so no current result carries a tool id. | Revisit if any client or Head Office starts writing tool ids: either let readers see referenced inactive tools, or store a history reference row for a missing tool, as history reference children do. |
 | 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Resolved in AR Plan 3 Task 7: the shared walker retains an external saver failure with `kind = 'query'` in its returned status and failure log, and records `lastFailureAt` without advancing the committed cursor. Real-SQLite regressions exercise the actual assessment, run and mastery validators, plus a malformed second assessment page after ten committed families. RED observed three `transport` statuses where `query` was expected; GREEN retains the category. Session configs and their guard suites are unchanged. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |
 | 2026-10-20 | Reference refresh could not switch the active academic year when the server listed the new year first, or left the phone's active year out: `pullReferenceDataRows` fetches years without ordering (`src/services/offlineSync.js`), `replaceAll` upserts in response order (`src/db/repositories/referenceDataRepository.js`), and `idx_academic_years_active_unique` checks each statement (`src/db/migrations.js`). The UNIQUE failure rolled back the year table, prevented refresh completion and kept last year active on every such refresh. | Fixed in AR Plan 3 Task 7A: with exactly one incoming active year, clear other local active flags inside the replace transaction before retargeting and upserting. Real-SQLite tests exercise the real repository and real refresh in both response orders, an omitted local active year, no-active/empty responses and whole-table rollback for two active years. MR002 recovery in Task 8 depends on this fix. | A one-row rule enforced by a unique index must be kept inside the replace transaction, not left to response order. |
