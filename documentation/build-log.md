@@ -3596,6 +3596,18 @@ Fixed the six defects recorded on the Galaxy A03s (360 dp) on `fix/wave1-ui-poli
    wrap decision or leak into a new measurement pass. Each card is one accessible element
    announcing `<label>, <value>`; its child texts are not separate elements.
 
+   **Round-2 review after c93132f (medium, accepted):** a missing or zero-line
+   `onTextLayout` could leave all three cards invisible indefinitely; unchanged native
+   measurements cannot be relied on to emit again. Each keyed generation now starts a
+   1,000 ms deadline once width is positive. An undecided generation falls back to visible
+   stacked cards at the deadline; zero lines stack immediately. Row and stack decisions are
+   final within that generation. Decision/unmount clears the timer, late callbacks cannot
+   change the decision or update an unmounted instance, and a new width/font-scale/label
+   generation measures afresh. Reported Galaxy A03s build-28 evidence confirms events arrive:
+   row at 411 dp / 1.0x; stacked at 360 dp / 1.0x and 411 dp / 1.3x, all statistics visible.
+   This follow-up verifies the failure fallback with renderer/fake-timer tests; it performs
+   no additional device run.
+
 The sync contract map records the failure lifecycle and shared display formatter. No dependency,
 migration, RLS, server payload, domain-data or other sync behavior changed.
 
@@ -3641,6 +3653,16 @@ command was required for this UI follow-up):
 | `npm run test:types` | PASS, exit 0: no TypeScript diagnostics (no test count) |
 | `git diff --check` | PASS, exit 0: no whitespace errors |
 | `python3 /tmp/lp-stat-doc-audit.py` | PASS: six scope checks; items 1–5 and their RED/GREEN rows unchanged, only the stat-label Resolution changed after Decision Register, exactly six files changed, HEAD 888416b and empty index retained, both screens use the shared component without shrinking props |
+
+**Item 6 round-2 fallback verification** (same Node 20 PATH prefix):
+
+| Command after the PATH prefix | Result |
+| --- | --- |
+| `npx jest --runInBand __tests__/AssessmentStatCards.test.js __tests__/AssessmentResultsScreen.test.js __tests__/AssessmentDetailScreen.safeArea.test.js` | Missing-event RED: 1 failed suite, 2 passed; 1 failed, 23 passed, 24 total. GREEN: 3 suites, 24/24 passed. Rewritten zero-line RED: 1 failed suite, 2 passed; 1 failed, 23 passed, 24 total. GREEN: 3 suites, 24/24 passed. Expanded final GREEN: 3 suites, 32/32 passed; includes immutable decisions, timer cancellation, fresh generation deadlines, return to row after fallback, and unmount without warnings. |
+| `npx jest` | PASS, exit 0: 378 suites, 5,273/5,273 tests, 0 snapshots |
+| `npm run test:types` | PASS, exit 0: no TypeScript diagnostics (no test count) |
+| `git diff --check` | PASS, exit 0: no whitespace errors |
+| `python3 /tmp/lp-stat-r2-audit.py` | PASS: five scope checks; insertion-only item-6 log edits, card rendering/styles/accessibility/generation keys unchanged, no shrink props, exactly three files changed with no untracked files, HEAD c93132f and empty index retained, supplied A03 evidence recorded |
 
 Automated renderer checks establish the stat-layout decisions, not Android glyph layout.
 The changed screens and the U+00A0 label still need a Galaxy A03s visual recheck at 1.0x and

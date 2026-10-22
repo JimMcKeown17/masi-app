@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import SurfaceCard from '../common/SurfaceCard';
@@ -6,22 +6,41 @@ import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
 function MeasuredCards({ stats, width }) {
-  const [lineCounts, setLineCounts] = useState({});
-  const stacked = Object.values(lineCounts).some(count => count > 1);
-  const ready = width > 0 && (stacked || stats.every(stat => lineCounts[stat.key] > 0));
+  const [measurement, setMeasurement] = useState({ lineCounts: {}, stacked: null });
+  const active = useRef(true);
+  const stacked = measurement.stacked === true;
+  const decided = measurement.stacked !== null;
+  const ready = width > 0 && decided;
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (width <= 0 || decided) return;
+    const timer = setTimeout(() => {
+      if (!active.current) return;
+      setMeasurement(current => current.stacked !== null ? current : { ...current, stacked: true });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [width, decided]);
 
   return (
     <View testID="assessment-stat-layout" style={[styles.row, stacked && styles.stack, { opacity: ready ? 1 : 0 }]}>
       {stats.map(({ key, value, label, accentColor }) => {
         const labelText = (
           <Text accessible={false} style={[styles.label, stacked && styles.stackedLabel]}
-            onTextLayout={stacked ? undefined : ({ nativeEvent: { lines } }) => {
-              if (!lines.length) return;
-              // Only row measurements decide the layout. Late callbacks must not
-              // undo a wrap decision after the wider stacked cards have mounted.
-              setLineCounts(current => {
-                if (Object.values(current).some(count => count > 1) || current[key] === lines.length) return current;
-                return { ...current, [key]: lines.length };
+            onTextLayout={decided ? undefined : ({ nativeEvent: { lines } }) => {
+              if (!active.current) return;
+              // A generation decides once; late native callbacks cannot change
+              // either its measured layout or its timeout fallback.
+              setMeasurement(current => {
+                if (current.stacked !== null) return current;
+                if (lines.length !== 1) return { ...current, stacked: true };
+                if (current.lineCounts[key] === lines.length) return current;
+                const lineCounts = { ...current.lineCounts, [key]: lines.length };
+                return { lineCounts, stacked: stats.every(stat => lineCounts[stat.key] === 1) ? false : null };
               });
             }}>{label}</Text>
         );

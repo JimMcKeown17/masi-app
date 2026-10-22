@@ -100,19 +100,18 @@ test.each(['width', 'font scale'])('a later %s change remeasures and can return 
   expect(style(layout())).toMatchObject({ flexDirection: 'row', opacity: 1 });
 });
 
-test('empty text events do not reveal an unmeasured row, and late row events cannot undo stacking', () => {
+test('zero-line text decides stacked immediately, and late row events cannot undo it', () => {
   const screen = render(<AssessmentStatCards stats={stats} />);
   width(screen, 312);
-  lines(screen, 'Attempted', 0);
-  lines(screen, 'Correct', 1);
-  lines(screen, 'Incorrect', 1);
-  expect(style(screen.getByTestId('assessment-stat-layout')).opacity).toBe(0);
   const lateRowEvent = screen.getByText('Attempted').props.onTextLayout;
-  lines(screen, 'Attempted', 2);
-  fireEvent(screen.getByText('Attempted'), 'textLayout', { nativeEvent: { lines: [{}] } });
-  expect(style(screen.getByTestId('assessment-stat-layout')).flexDirection).toBe('column');
+  lines(screen, 'Attempted', 0);
+  expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+    flexDirection: 'column', opacity: 1,
+  });
   act(() => lateRowEvent({ nativeEvent: { lines: [{}] } }));
-  expect(style(screen.getByTestId('assessment-stat-layout')).flexDirection).toBe('column');
+  expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+    flexDirection: 'column', opacity: 1,
+  });
 });
 
 test('replacing a label starts a fresh measurement while changing only values preserves layout', () => {
@@ -138,4 +137,113 @@ test('callbacks from the previous width cannot decide a new measurement pass', (
   expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({ flexDirection: 'row', opacity: 0 });
   fit(screen);
   expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({ flexDirection: 'row', opacity: 1 });
+});
+
+describe('bounded measurement fallback', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  test('a missing callback reveals stacked cards after 1000ms from the measured width', () => {
+    const screen = render(<AssessmentStatCards stats={stats} />);
+    act(() => jest.advanceTimersByTime(1000));
+    expect(style(screen.getByTestId('assessment-stat-layout')).opacity).toBe(0);
+    width(screen, 312);
+    lines(screen, 'Attempted', 1);
+    lines(screen, 'Correct', 1);
+    act(() => jest.advanceTimersByTime(999));
+    expect(style(screen.getByTestId('assessment-stat-layout')).opacity).toBe(0);
+    act(() => jest.advanceTimersByTime(1));
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'column', opacity: 1,
+    });
+  });
+
+  test('a normal row decision clears the timer and ignores subsequent measurements', () => {
+    const screen = render(<AssessmentStatCards stats={stats} />);
+    width(screen, 312);
+    const lateRowEvent = screen.getByText('Attempted').props.onTextLayout;
+    act(() => jest.advanceTimersByTime(400));
+    fit(screen);
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'row', opacity: 1,
+    });
+    expect(jest.getTimerCount()).toBe(0);
+    act(() => {
+      lateRowEvent({ nativeEvent: { lines: [{}, {}] } });
+      jest.advanceTimersByTime(1000);
+    });
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'row', opacity: 1,
+    });
+  });
+
+  test.each([0, 2])('%s lines decides stacked and clears the pending timer', count => {
+    const screen = render(<AssessmentStatCards stats={stats} />);
+    width(screen, 312);
+    expect(jest.getTimerCount()).toBe(1);
+    lines(screen, 'Attempted', count);
+    expect(jest.getTimerCount()).toBe(0);
+    act(() => jest.advanceTimersByTime(1000));
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'column', opacity: 1,
+    });
+  });
+
+  test.each(['width', 'font scale', 'labels'])('a new %s generation after fallback can return to row', change => {
+    const screen = render(<AssessmentStatCards stats={stats} />);
+    width(screen, 312);
+    const lateRowEvent = screen.getByText('Attempted').props.onTextLayout;
+    act(() => jest.advanceTimersByTime(1000));
+    act(() => lateRowEvent({ nativeEvent: { lines: [{}] } }));
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'column', opacity: 1,
+    });
+
+    if (change === 'width') width(screen, 480);
+    else if (change === 'font scale') {
+      ReactNative.useWindowDimensions.mockReturnValue({ width: 360, height: 800, scale: 1, fontScale: 1.3 });
+      screen.rerender(<AssessmentStatCards stats={stats} />);
+    } else {
+      screen.rerender(<AssessmentStatCards stats={stats.map(stat => stat.key === 'attempted'
+        ? { ...stat, label: 'Tried' } : stat)} />);
+    }
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'row', opacity: 0,
+    });
+    [change === 'labels' ? 'Tried' : 'Attempted', 'Correct', 'Incorrect']
+      .forEach(label => lines(screen, label, 1));
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'row', opacity: 1,
+    });
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('a width change cancels the previous deadline and starts a fresh 1000ms window', () => {
+    const screen = render(<AssessmentStatCards stats={stats} />);
+    width(screen, 312);
+    act(() => jest.advanceTimersByTime(500));
+    width(screen, 480);
+    expect(jest.getTimerCount()).toBe(1);
+    act(() => jest.advanceTimersByTime(999));
+    expect(style(screen.getByTestId('assessment-stat-layout')).opacity).toBe(0);
+    act(() => jest.advanceTimersByTime(1));
+    expect(style(screen.getByTestId('assessment-stat-layout'))).toMatchObject({
+      flexDirection: 'column', opacity: 1,
+    });
+  });
+
+  test('unmount clears the deadline and ignores late native events without a warning', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const screen = render(<AssessmentStatCards stats={stats} />);
+    width(screen, 312);
+    const lateRowEvent = screen.getByText('Attempted').props.onTextLayout;
+    expect(jest.getTimerCount()).toBe(1);
+    screen.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+    act(() => {
+      lateRowEvent({ nativeEvent: { lines: [{}] } });
+      jest.advanceTimersByTime(1000);
+    });
+    expect(error).not.toHaveBeenCalled();
+  });
 });
