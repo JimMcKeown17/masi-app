@@ -1,16 +1,18 @@
 # Group-Centred Session Workflow
 
-**Status:** Active product and architecture specification. Not built end to end on `main`.
+**Status (2026-10-22):** Literacy capture and durable resume are realised by lesson-plan C2–C3
+on `feat/lesson-flow`. Group Detail, wider group editing and physical-device acceptance remain open.
 
 **Extracted 2026-07-23 from:** the completed and mostly stale
 [`Zazi iZandi to Masi feature-port roadmap`](./archive/zazi-izandi-feature-port-roadmap.md).
 
 ## Why this specification exists
 
-Masi's operational unit is a group block, but the current capture flow still resolves a group
-selection into child ids and stores a child-oriented session. B2 now persists and syncs the chosen
+Masi's operational unit is a group block. Literacy capture now starts with **Who are you teaching?**,
+continues on the **Lesson** screen and saves from **Wrap up**. B2 persists and syncs the chosen
 `sessions.group_id` on the session and every attendee, with server authorization by a held or
-historically held assignment in the group's Programme. The group-first UI remains later work.
+historically held assignment in the group's Programme. C2–C3 writes the fixed lesson class and
+`activities.lesson` alongside that identity (`src/lessonPlan/lessonRecord.js:19`).
 
 This work is not a navigation reskin. It crosses access grants, group identity, RLS, local
 persistence, sync payloads, session lifecycle, and reporting. The dependency order is load-bearing.
@@ -41,7 +43,8 @@ persistence, sync payloads, session lifecycle, and reporting. The dependency ord
 
 ## Prerequisites
 
-Do not start the group-first UI before these contracts are settled:
+The group-first UI uses these contracts; the dated B2 steps below retain their original evidence
+scope. Later hosted/device evidence is in the build log, not inferred from these local checks:
 
 1. **Done — session-group grant evidence (B2 Task 5, 2026-10-21).**
    Existing `GRANT_SUBJECTS` already represents class/group-membership-mediated child grants.
@@ -82,7 +85,7 @@ Do not start the group-first UI before these contracts are settled:
 ### 3. Session capture becomes group-first
 
 - The user chooses one group block before entering literacy capture.
-- The attendee set starts from the current group roster but can record justified attendance
+- The attendee set starts from group members on the visible delivery roster but can record
   differences without rewriting historical membership.
 - The local session and server session both persist the same non-null `group_id`.
 - `session_attendees` remains the historical attendee snapshot.
@@ -90,31 +93,41 @@ Do not start the group-first UI before these contracts are settled:
 
 ### 4. In-progress sessions become durable
 
-**2026-10-21 status:** [Lesson-plan spec §7.2](../docs/superpowers/specs/2026-10-20-lesson-plan-design.md#72-lesson-drafts-local-only)
-meets this requirement with the local `lesson_drafts` table, one per EA, rather than a state
-machine on `sessions.state`. This supersedes the state-machine and resume-copy wording in the
-first two bullets below: the resume action is Home's **"Lesson in progress"** card. C1 storage
-is bound to the signed-in EA handle and locally verified; it remains inert until C3 supplies the
-Lesson screen and Home wiring. The current `LiteracySessionForm` stays draft-less. Force-quit
-and native-device acceptance remain open.
+**2026-10-22 implementation:** [Lesson-plan spec §7.2](../docs/superpowers/specs/2026-10-20-lesson-plan-design.md#72-lesson-drafts-local-only)
+uses local `lesson_drafts` (v17), one per EA. `sessions.state` stays completed. The old Record form
+is retired. One handle-owned controller serialises all edits from Lesson and Wrap up; the screens
+attach to its view rather than reloading a stale JSON copy (`src/session/handleServices.js:99`,
+`src/services/lessonDraftController.js:76`).
 
-- Persist an explicit draft state machine in SQLite.
-- Surface a global "Session in progress" resume action.
-- Warn before discard or navigation away.
-- Recover the draft after force-quit, process death, offline restart, and normal app upgrade.
-- Finalization must atomically persist the completed domain rows and their outbox work, then remove
-  or close the draft without a split-brain window.
+- Opening writes nothing; first change or Wrap up creates the draft. An untouched lesson takes
+  its date from its first change (`src/hooks/useLessonDraft.js:15`, `:154`).
+- Home offers **Lesson in progress · {names} · Resume** first, without dismissal or another
+  clock-in check. "+ Record" resumes after its usual gates (`src/utils/homeAttention.js:21`,
+  `src/screens/lessons/LessonPickerScreen.js:48`).
+- Leaving a persisted lesson asks **Leave lesson** / **Keep teaching** and keeps it. **Discard
+  lesson** has its own confirmation (`src/screens/lessons/LessonScreen.js:52`, `:126`).
+- Save drains queued edits, refuses new edits and rechecks programme/child authority inside the
+  same transaction that writes the session, attendees, changed levels, tracker corrections and
+  outbox work, then deletes the draft. Rollback keeps the same session id
+  (`src/services/lessonDraftController.js:151`, `src/services/lessonSave.js:32`).
+- Persisted context and dated advice survive resume. Phone force-quit, upgrade, offline restart
+  and native navigation proof remain [device gates V](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10).
 
-### 5. Product decisions still required
+### 5. Settled capture decisions and remaining scope
 
-- Whether a group session needs an explicit timer.
-- Whether attendance toggles belong in capture or are derived from the starting roster plus
-  exceptions.
-- Whether Masi needs a backfill mode for late entry.
-- The exact copy and authorization model for Head Office changes visible to the EA.
+- **No session timer** in v1; lesson-open and save times are not teaching duration.
+- **Attendance toggles in capture**, starting from visible group members, with **+ Add a child**
+  for today. `visibleRosterChildren` is shared by ChildrenContext, lesson start and Add a child
+  (`src/utils/childVisibility.js:3`, `src/hooks/useLessonDraft.js:39`).
+- **Past dates through Wrap up's Date picker.** When date differs from advice `made_on`, save
+  keeps the taught record and omits that advice (`src/screens/lessons/LessonWrapUpScreen.js:219`,
+  `src/lessonPlan/lessonRecord.js:10`).
+- Head Office change copy and the wider composition editor remain separate work. The ADR
+  **"advice from the children, record with the group"** remains open: draft with Jim through
+  `grill-with-docs` before the PR merges (spec §11).
 
-Record settled answers in [`open-decisions-backlog.md`](./open-decisions-backlog.md) and the
-build log before implementation.
+P1–P12 are recorded in the build-log Decision Register; Jim's wording/decision pass remains open
+in [`open-decisions-backlog.md`](./open-decisions-backlog.md).
 
 ## Deliberate non-goals
 

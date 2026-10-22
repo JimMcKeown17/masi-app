@@ -239,3 +239,28 @@ device run); every iPhone row is still open.
 - [x] **U8. Server switch drill** (A03s): Incomplete since, local data kept, back to Up to date. Log lines lost to the reinstall.
 - [x] **U9. History row at 1.0x and 1.3x** (A03s, 360 dp): Up to date, Downloading, Incomplete since; no clipping. The orphaned "AM" is fixed on the UI-polish branch.
 - [ ] **iPhone:** U1–U4 and U9.
+
+## V. Lesson flow (C2–C3, 2026-10)
+
+Task 12 device acceptance is controller-owned and **not yet run**. It needs Jim's yes for four
+EAS builds **from `feat/lesson-flow`**: `preview` and `preview-content`, each on Android and iOS.
+`preview` exercises letters-only release packs; `preview-content` exercises isiXhosa blends and
+a reader (P11). Run on the Galaxy A03s at 360 dp (`wm density 320`) and an iPhone, at 1.0x and
+1.3x text. Record build ids, source revision, platform, text size and evidence with the results.
+Main's wave-1 Android 32 / iOS 16 builds from `0c5d161` do not carry this lesson flow.
+
+| Gate | Check | Builds needed | Result |
+|---|---|---|---|
+| V1 | Picker: Up next, other groups, last seen, "Today ✓" after a lesson; rows within 500 ms, measured by screen recording | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V2 | Make a group and Put in a group; the new group's class; both upload | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V3 | Lesson screen: attendance redraw within 300 ms; ticks freeze the plan; Add a child; mixed-class and no-language choices; ECD hides pair reading; leave warning on Close, Android back and native iOS swipe | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V4 | Blends and book on `preview-content`; language-specific no-blends/no-books states on `preview` | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V5 | Wrap up: chips, locked letters, tracker sheet in lesson language, reading levels, date, notes, empty-lesson confirmation | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V6 | Save offline, then online: one session with the group, attendees and marks; server rows match | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V7 | Force-quit mid-lesson, airplane-mode relaunch: Home's first card reads "Lesson in progress · {names} · Resume", chevron and no ✕; TalkBack/VoiceOver reads "Lesson in progress with Amahle and Lulu. Resume"; ticks return. Yesterday's lesson shows "Started {day}" and saves with its date | `preview` + `preview-content`, Android + iOS | Not yet run |
+| V8 | "+ Record" with a lesson in progress opens it after the gates | `preview` + `preview-content`, Android + iOS | Not yet run |
+
+Jest navigation and real-SQLite durability coverage do not establish native iOS back-swipe
+behaviour, A03s timing or phone-to-server convergence. Record results here and in the lesson-flow
+Verification Register subsection of the build log. Task 12's ADR and PR/review closure are separate
+from these physical-device gates.

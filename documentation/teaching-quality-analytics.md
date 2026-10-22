@@ -28,11 +28,33 @@ ahead of *known*: not re-drilling mastered content, not leaping past the frontie
 | Skill | Taught (per session) | Known (per child) | Quality today |
 |---|---|---|---|
 | **Letters** | `activities.letters_focused` | `letter_mastery` rows — per-letter, evidence | **Strong** — both sides granular |
-| **Blending** | `activities.session_reading_level` — one rung | `children.reading_level` — one EA-set label | **Weak** — both sides fuzzy labels |
+| **Blending** | `activities.lesson.blends_done` — actual item texts; `activities.session_reading_level` — highest ticked tier, or null | `children.reading_level` — one EA-set label | Taught items are granular; the known side remains an EA-set level |
 
-Letters work because both sides are evidence against a canonical curriculum (`LETTER_ORDER`).
-Blending is weak because both sides are a single fuzzy label. To reach parity, enrich one or both
-sides of blending's pairing. **Destination (decided 2026-07-24): evidence-based blending "known."**
+Letters use the language's pedagogical order (`PEDAGOGICAL_ORDERS`; pack teaching order for lesson
+advice, with A2 tracker alignment still separate). C2–C3 captures actual blend items; the known
+side remains a label. **Destination (decided 2026-07-24): evidence-based blending "known."**
+
+### Current capture evidence (C2–C3, 2026-10-22)
+
+`buildLessonRecord` (`src/lessonPlan/lessonRecord.js:4`) writes the existing `letters_focused`
+(allowed empty), nullable `session_reading_level`, save-time `child_reading_levels` snapshot and
+`comments`, plus this nested `lesson` object. It adds no synced table:
+
+| Key | Meaning |
+|---|---|
+| `version`, `pack_id`, `language` | `1`, pinned content pack id (nullable), lesson language code |
+| `plan` | Dated advice: engine version, `made_on`, reason, history/mastery completeness, present child ids, known/suggested/review/unlocked letters, blend tier and suggestions, suggested book, Up-next group id |
+| `plan_reason` | Only present as `'past_date'` when lesson date differs from plan `made_on`; `plan` is then null |
+| `blend_tier_shown` | Displayed tier selection, falling back to the draft plan tier; distinct from the measured ticked level |
+| `blends_done` | Ticked pack texts, including lower-tier top-ups at their own length |
+| `books_read` | `{ id, how: 'printed' }` entries; separate from 1000 Stories' top-level count |
+| `tracker_check` | `'marked'` if any present child has changes; else `'none'` if all present children have No one new yet; else null |
+
+No blends ticked means **no measured blending level**, not inability. Save changes durable child
+levels only for explicitly edited present children, while snapshotting every present child's
+current/edited level. That snapshot is not demonstrated frontier evidence. Source:
+`src/services/lessonSave.js:49`, `src/lessonPlan/lessonRecord.js:15`.
+Release packs are letters-only; blend/book capture currently needs isiXhosa `preview-content`.
 
 ## Signals
 
@@ -43,7 +65,8 @@ rebuild and from any form work — the cheapest way to start answering both ques
 
 - **Check 2 — Blending level match.** Compare `session_reading_level` against each child's entry in
   the same session's `activities.child_reading_levels`. Flag a session pitched far above a child's
-  rung.
+  rung. **Skip a null `session_reading_level`**: no blending was recorded, so there is no level
+  to compare. Do not substitute `blend_tier_shown` or the suggestion tier.
 - **Check 4 — Progression.** Chart each child's `reading_level` across their session snapshots plus
   `letter_mastery` growth over time. Flag stalls and implausible jumps.
 - **Check 6 — Prerequisite sanity (coarse).** Cross-reference each child's `reading_level` rung
@@ -137,28 +160,24 @@ item-level evidence** — and Masi already uses one on paper (monster-names + re
 **Term to promote to `CONTEXT.md` if it recurs:** *pseudoword / nonsense-word decoding* — reading
 made-up words to isolate blending skill from sight-vocabulary memory.
 
-### Tier 2 — Later: taught-side blend content + fine prerequisite check
+### Tier 2 — Taught content captured; fine prerequisite analytics remain later
 
-Capture the **actual blend content** drilled (which combinations / words). Powers the *fine* Check 6
-— validating each blend against the child's known letters. Heaviest capture; defer until Tier 0's
-coarse Check 6 proves insufficient.
+C2–C3 records the **actual blend content** ticked in `lesson.blends_done`. The fine Check 6 —
+validating each blend against the child's known letters — is still analytics work. Capturing the
+data does not establish that the check or an evidence-based known frontier is built.
 
 ## Interim — blending adherence checkbox
 
-Until blend *content* is captured (Tier 2), add a per-session **"blending practiced"** certification
-so the backend knows the prescribed blending block actually happened. **Retire it once content
-capture lands** — exactly as capturing `letters_focused` makes an "I taught letters" box
-unnecessary. (Adherence for letters is already implicit for this reason.)
+Superseded for lesson capture on 2026-10-22: ticked `lesson.blends_done` supplies the taught-content
+record. Do not add a second **"blending practiced"** certification.
 
 ## Capture-integrity fixes this analytics work depends on
 
 Garbage in the capture layer silently poisons every signal above.
 
-- **Do not force letter selection.** `LiteracySessionForm` currently requires ≥1 letter
-  (`if (selectedLetters.length === 0) errors.letters = ...`). A group that already knows all letter
-  sounds has no letters to select, so the EA fakes a tap to clear the blocker — corrupting
-  `letters_focused` and every letter-based check. Add an explicit **"children know all letters / no
-  letters taught this session"** state.
+- **Empty letters are supported.** C2–C3 retires `LiteracySessionForm` and permits
+  `letters_focused: []`. An entirely empty lesson asks **Save without letters, blends or a book?**;
+  at least one child remains mandatory (`src/screens/lessons/LessonWrapUpScreen.js:183`).
 - **Letters-mastered groups change lesson template.** Once a group masters letter sounds, the Shine
   Literacy plan transitions (Level 8+) away from phonics+blending to Review / Reading-to-child /
   Child-reads / Have-a-Go-Writing / Games. The session model must represent this **later template**,
@@ -166,12 +185,7 @@ Garbage in the capture layer silently poisons every signal above.
 
 ## Open decision
 
-**Ship-simple vs build-properly** — Jim 50/50 as of 2026-07-24.
-
-Working resolution: **not XOR — stage it.**
-1. **Now (free + tiny):** Tier 0 coarse signals, blending adherence checkbox, "no letters" escape.
-2. **Next:** Tier 1 per-child blending evidence tracker — durable across the group rebuild.
-3. **Later:** Tier 2 taught-content capture + fine Check 6.
-
-Record the settled answer in `documentation/open-decisions-backlog.md` and the build log before
-implementation.
+The staged proposal from 2026-07-24 is partly superseded by C2–C3: taught blend content and empty
+letters are implemented. Tier 0 analytics, Tier 1 demonstrated-frontier capture, the later lesson
+template and fine prerequisite checks remain separate work; the current reading-level selector
+does not implement them.
