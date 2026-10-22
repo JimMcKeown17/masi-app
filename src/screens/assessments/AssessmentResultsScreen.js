@@ -1,6 +1,6 @@
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import BrandButton from '../../components/common/BrandButton';
-import SurfaceCard from '../../components/common/SurfaceCard';
+import AssessmentStatCards from '../../components/assessment/AssessmentStatCards';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
@@ -17,19 +17,6 @@ function getFeedback(accuracy) {
   if (accuracy >= 60) return { message: 'Good effort!', color: colors.primary };
   if (accuracy >= 40) return { message: 'Nice try!', color: colors.accent };
   return { message: 'Keep practicing!', color: colors.primary, graphicColor: colors.emphasis };
-}
-
-function StatCard({ value, label, accentColor }) {
-  return (
-    <SurfaceCard style={[styles.statCard, { borderTopColor: accentColor }]}>
-      <Text style={[styles.statValue, { color: accentColor === colors.emphasis ? colors.primary : accentColor }]}>
-        {value}
-      </Text>
-      <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-        {label}
-      </Text>
-    </SurfaceCard>
-  );
 }
 
 export default function AssessmentResultsScreen({ navigation, route }) {
@@ -111,24 +98,11 @@ export default function AssessmentResultsScreen({ navigation, route }) {
           </Text>
         </View>
 
-        {/* Supporting stat cards */}
-        <View style={styles.statsRow}>
-          <StatCard
-            value={attempted}
-            label="Attempted"
-            accentColor={colors.primary}
-          />
-          <StatCard
-            value={assessment.score}
-            label="Correct"
-            accentColor={colors.success}
-          />
-          <StatCard
-            value={incorrect}
-            label="Incorrect"
-            accentColor={colors.emphasis}
-          />
-        </View>
+        <AssessmentStatCards stats={[
+          { key: 'attempted', value: attempted, label: 'Attempted', accentColor: colors.primary },
+          { key: 'correct', value: assessment.score, label: 'Correct', accentColor: colors.success },
+          { key: 'incorrect', value: incorrect, label: 'Incorrect', accentColor: colors.emphasis },
+        ]} />
       </ScrollView>
 
       <View style={[styles.buttonRow, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
@@ -198,27 +172,6 @@ const styles = StyleSheet.create({
   accuracyText: {
     color: colors.textSecondary,
     marginBottom: 2,
-  },
-  // Stat cards
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    width: '100%',
-  },
-  statCard: {
-    flex: 1,
-    borderTopWidth: 3,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  statValue: {
-    ...typeRoles.displayTitle,
-    fontVariant: ['tabular-nums'],
-    marginBottom: spacing.xs,
-  },
-  statLabel: {
-    ...typeRoles.textLabel,
-    color: colors.textSecondary,
   },
   // Buttons
   buttonRow: {
