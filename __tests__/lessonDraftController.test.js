@@ -264,3 +264,14 @@ test('a successful create through ensureDraft clears the visible error without a
   expect(controller.getSnapshot().error).toBeNull();
   await expectError(controller.beginSave(), 'LessonDraftWriteError');
 });
+test('a failed draft read is forgotten, so the next Resume reads again', async () => {
+  const row = await drafts.create(draftStart());
+  const read = jest.spyOn(drafts, 'getActive').mockRejectedValueOnce(new Error('database is locked'));
+  await expectError(controller.open({ draftId: row.id }), 'Error');
+  expect(controller.getSnapshot()).toMatchObject({ status: 'empty', draft: null, error: "Couldn't open this lesson. Try again." });
+  await controller.open({ draftId: row.id });
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(controller.getSnapshot()).toMatchObject({ status: 'ready', error: null, draft: { id: row.id } });
+  read.mockRestore();
+});
+

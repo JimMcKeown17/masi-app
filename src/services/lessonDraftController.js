@@ -89,7 +89,13 @@ export const createLessonDraftController = ({ repositories, onClose }) => {
           return snapshot.draft;
         } catch (error) {
           if (!isCurrent(context)) return snapshot.draft;
-          if (error?.name !== 'LessonDraftCorruptError') throw error;
+          if (error?.name !== 'LessonDraftCorruptError') {
+            // Forget the failed open, so the next Resume reads again instead of attaching to it.
+            current = null;
+            generation += 1;
+            publish({ status: 'empty', draft: null, error: "Couldn't open this lesson. Try again.", existingDraftId: null });
+            throw error;
+          }
           context.id = error.draftId;
           publish({ status: 'corrupt', draft: null, error, existingDraftId: error.draftId });
           return null;
