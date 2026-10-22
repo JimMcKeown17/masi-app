@@ -858,6 +858,14 @@ temporary test/filter are deleted: every included source file is checked.
 - No Paper Snackbar named import anywhere. No new named Paper TextInput, Searchbar,
   SegmentedButtons, Card, Chip, FAB, Banner, Menu, Button or HelperText imports
   anywhere in the scanned sources. Button and HelperText are plan additions to the guard.
+- No fontWeight, fontFamily or fontStyle in `src/assessment-questions/**/*.ts` or `.tsx`
+  outside `__tests__/` and `theme/`. `styleGuard.test.ts` owns `FONT_RATCHET` for existing
+  offenders; remove an entry when its file no longer violates.
+- No fontSize, lineHeight, color, backgroundColor, borderColor, borderWidth or borderRadius
+  keys, or React Native Text, Pressable, TouchableOpacity, TouchableHighlight,
+  TouchableWithoutFeedback or Modal imports, in the same package outside `__tests__/`,
+  `theme/` and `ui/`. `STYLE_RATCHET` covers existing offenders. Both package guards strip
+  comments and ignore interface/type declarations; stale or missing ratchet entries fail.
 
 `BOARD_RATCHET` is empty after Login Tasks 6 and 8 removed its final two entries. The guard
 explicitly requires it to stay empty, and every scanned file now meets the same type/control
