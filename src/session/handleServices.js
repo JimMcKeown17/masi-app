@@ -25,7 +25,9 @@ import { createSessionHistoryState } from '../services/sessionHistoryPull';
 import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
 import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
 import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
-import { isMasteryInputsComplete } from '../services/pullCoverage';
+import {
+  isMasteryInputsComplete, sessionHistoryCompletenessByChild, masteryCompletenessByChild,
+} from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
 import { StaleActorError } from './staleActor';
 
@@ -123,12 +125,21 @@ export const createHandleServices = (handle) => {
       return data || [];
     },
     fetchAndCacheSchools: () => fetchAndCacheSchools(referenceOptions),
-    sessionHistory: { start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }), store },
+    sessionHistory: {
+      start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }),
+      store,
+      completenessByChild: ({ childIds, programmeId } = {}) => sessionHistoryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds, programmeId,
+      }),
+    },
     assessmentHistory: {
       start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }),
       store: assessmentStore,
       masteryInputsComplete: ({ childIds } = {}) => isMasteryInputsComplete({
         database: handle, userId: handle.userId, childIds,
+      }),
+      masteryCompletenessByChild: ({ childIds, programmeId } = {}) => masteryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds, programmeId,
       }),
     },
     deviceProfile: {

@@ -60,3 +60,54 @@ export const isMasteryInputsComplete = async ({ database, userId, programmeId, c
   const deliveryChildren = new Set(masteryScope.childIds);
   return childIds.every(id => assessmentChildren.has(id) && deliveryChildren.has(id));
 };
+
+// Validate the walk once and reuse its covered set for every requested child.
+const coveredChildren = (cursor, windowStart) => {
+  let state = cursor;
+  if (typeof state === 'string') {
+    try { state = JSON.parse(state); } catch { return null; }
+  }
+  return isCoverageWalkComplete(state, { windowStart }) ? new Set(state.rescanChildIds) : null;
+};
+
+export const sessionHistoryCompletenessByChild = async ({
+  database, userId, programmeId, childIds = [], academicYearStart,
+}) => {
+  const incomplete = Object.fromEntries(childIds.map(id => [id, false]));
+  if (!userId) return incomplete;
+  const db = await resolveDatabase(database);
+  const programme = programmeId === undefined ? await getActiveProgrammeId(db, userId) : programmeId;
+  const windowStart = academicYearStart === undefined
+    ? (await getActiveAcademicYear(db))?.starts_on : academicYearStart;
+  if (!programme || !windowStart) return incomplete;
+  const pullState = await createSyncStateRepository({ database }).getPullState(sessionHistoryScope(userId, programme));
+  const covered = coveredChildren(pullState?.cursor, windowStart);
+  return Object.fromEntries(childIds.map(id => [id, covered?.has(id) ?? false]));
+};
+
+export const masteryCompletenessByChild = async ({ database, userId, programmeId, childIds = [] }) => {
+  const incomplete = Object.fromEntries(childIds.map(id => [id, false]));
+  if (!userId) return incomplete;
+  const db = await resolveDatabase(database);
+  const programme = programmeId === undefined ? await getActiveProgrammeId(db, userId) : programmeId;
+  const year = await getActiveAcademicYear(db);
+  if (!programme || !year?.id || !year.starts_on) return incomplete;
+
+  const stateRepository = createSyncStateRepository({ database });
+  const [assessmentState, masteryState] = await Promise.all([
+    stateRepository.getPullState(assessmentHistoryScope(userId, programme)),
+    stateRepository.getPullState(letterMasteryHistoryScope(userId)),
+  ]);
+  const assessmentCoverage = coveredChildren(assessmentState?.cursor, year.starts_on);
+  const masteryCoverage = coveredChildren(masteryState?.cursor, null);
+  if (!assessmentCoverage || !masteryCoverage) return incomplete;
+
+  const [assessmentScope, masteryScope] = await Promise.all([
+    readAssessmentScope(db, { userId, academicYearId: year.id }),
+    readMasteryScope(db, { userId }),
+  ]);
+  const assessmentChildren = new Set(assessmentScope.childIds);
+  const deliveryChildren = new Set(masteryScope.childIds);
+  return Object.fromEntries(childIds.map(id => [id, assessmentCoverage.has(id) && masteryCoverage.has(id)
+    && assessmentChildren.has(id) && deliveryChildren.has(id)]));
+};
