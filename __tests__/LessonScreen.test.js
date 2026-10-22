@@ -418,6 +418,32 @@ testLesson('a ticked blend stays visible and correctable after its tier\'s only 
   fireEvent.press(within(view.getByTestId('lesson-blends')).getByRole('button', { name: `${spoken}, ticked` }));
   await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blends).toEqual([]));
 });
+testLesson('a tier reset that fails is not retried until the attendance changes again', async () => {
+  await previewLesson(['2 Letter Blends', '3 Letter Blends']);
+  const view = mount();
+  fireEvent.press(await view.findByRole('button', { name: 'Show 3-letter (Lulu is ahead)' }));
+  const drafts = handle.repositories.lessonDrafts;
+  await waitFor(async () => expect((await drafts.getActive()).ticks.blendTierShown).toBe('3 Letter Blends'));
+  const original = drafts.update.bind(drafts);
+  const resets = [];
+  let failing = true;
+  jest.spyOn(drafts, 'update').mockImplementation(async (id, patch, ...rest) => {
+    if (patch.ticks && patch.ticks.blendTierShown === null) {
+      resets.push(patch);
+      if (failing) throw new Error('database or disk is full');
+    }
+    return original(id, patch, ...rest);
+  });
+  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
+  await view.findByText("Couldn't save your last change.");
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  expect(resets).toHaveLength(1);
+  failing = false;
+  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, absent' }));
+  fireEvent.press(await view.findByRole('checkbox', { name: 'Lulu, here' }));
+  await waitFor(async () => expect((await drafts.getActive()).ticks.blendTierShown).toBeNull());
+  expect(resets).toHaveLength(2);
+});
 testLesson('the higher-tier switch names all children who are ahead', async () => {
   await previewLesson(['2 Letter Blends', '3 Letter Blends']);
   await handle.withTransaction(async db => {
