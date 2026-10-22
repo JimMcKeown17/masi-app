@@ -12,6 +12,7 @@ import { draftStart, holdDraftWrite, observe } from '../test-support/lessonDraft
 import { getPack } from '../src/lessonPlan/packs';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { saveLesson } from '../src/services/lessonSave';
+import { buildLessonRecord } from '../src/lessonPlan/lessonRecord';
 import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
 import BrandButton from '../src/components/common/BrandButton';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
@@ -398,6 +399,24 @@ testLesson('Show 3-letter switches tiers and stores blendTierShown', async () =>
   await resumed.findByText('2 · Blending · 15 min · 3-letter');
   fireEvent.press(resumed.getByRole('button', { name: 'Show 2-letter' }));
   await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBe('2 Letter Blends'));
+});
+testLesson('a ticked blend stays visible and correctable after its tier\'s only child is marked absent', async () => {
+  await previewLesson(['2 Letter Blends', '3 Letter Blends']);
+  const view = mount();
+  fireEvent.press(await view.findByRole('button', { name: 'Show 3-letter (Lulu is ahead)' }));
+  await view.findByText('2 · Blending · 15 min · 3-letter');
+  const [first] = within(view.getByTestId('lesson-blends')).getAllByRole('button', { name: /, not ticked$/ });
+  const spoken = first.props.accessibilityLabel.replace(/, not ticked$/, '');
+  fireEvent.press(first);
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blends).toHaveLength(1));
+  fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
+  await view.findByText('2 · Blending · 15 min · 2-letter');
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blendTierShown).toBeNull());
+  const stored = await handle.repositories.lessonDrafts.getActive();
+  expect(buildLessonRecord({ draft: stored, userId: handle.userId, currentLevels: {}, sessionTypeFields: {},
+    nowIso: '2026-10-22T09:00:00.000Z' }).session.activities.lesson.blend_tier_shown).toBe('2 Letter Blends');
+  fireEvent.press(within(view.getByTestId('lesson-blends')).getByRole('button', { name: `${spoken}, ticked` }));
+  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.blends).toEqual([]));
 });
 testLesson('the higher-tier switch names all children who are ahead', async () => {
   await previewLesson(['2 Letter Blends', '3 Letter Blends']);

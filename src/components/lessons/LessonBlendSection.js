@@ -17,8 +17,11 @@ export default React.memo(function LessonBlendSection({ draft, plan, choices, pa
   const label = tierLabels[tier?.tier ?? plan.blend_tier] ?? '2-letter';
   const selected = draft.ticks.blends ?? [];
   const suggested = tier?.suggested ?? [];
-  const items = [...suggested, ...(tier?.pool ?? []).filter(item => selected.includes(item.text)
-    && !suggested.some(suggestion => suggestion.text === item.text))];
+  // Every ticked blend stays on screen, whatever tier is showing, so nothing recorded is hidden
+  // and every tick can be undone (an attendance change can remove the tier it came from).
+  const catalogue = new Map(tiers.flatMap(item => item.pool).map(item => [item.text, item]));
+  const items = [...suggested, ...selected.filter(text => !suggested.some(suggestion => suggestion.text === text))
+    .map(text => catalogue.get(text) ?? { text, display: text })];
   return <View testID="lesson-blends" style={styles.section}>
     <Text accessibilityRole="header" style={styles.heading}>{`2 · Blending · 15 min · ${label}`}</Text>
     {!choices.contentAvailable.blends ? <Text style={styles.body}>{`No blends for ${LANGUAGE_LABELS[draft.language_code]} yet.`}</Text> : <>
