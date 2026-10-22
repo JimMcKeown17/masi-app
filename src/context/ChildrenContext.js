@@ -8,6 +8,7 @@ import { useOffline } from './OfflineContext';
 import { v4 as uuidv4 } from 'uuid';
 import { captureOperationalError } from '../services/observability';
 import { nextGroupNumber, sharedClassId } from '../utils/groupHelpers';
+import { visibleRosterChildren } from '../utils/childVisibility';
 
 const ChildrenContext = createContext({});
 const denyReconcileBreakerAuthorization = () => false;
@@ -67,7 +68,7 @@ export const ChildrenProvider = ({ children }) => {
   // picker, and stats helper should consume. Hidden children stay in
   // childrenList so allChildren can resolve their names in history views.
   const visibleChildren = useMemo(
-    () => childrenList.filter(c => !c.hidden_at && !c.archived_at),
+    () => visibleRosterChildren(childrenList),
     [childrenList]
   );
 

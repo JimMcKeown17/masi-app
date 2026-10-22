@@ -8,6 +8,7 @@ import { MON } from '../test-support/lessonSaveFixtures';
 import { useLessonDraft } from '../src/hooks/useLessonDraft';
 import * as transitions from '../src/lessonPlan/lessonDraftState';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
+import { planForSave } from '../src/lessonPlan/engine';
 
 let handle, start;
 // Dispose mounted screens before the global default-handle teardown publishes closed.
@@ -158,4 +159,41 @@ testHook('beginSave from an untouched lesson includes the initial plan and locks
   await act(async () => { held.release(); row = await saving; });
   expect(row.plan).toEqual(result.current.plan);
   expect(row.plan).not.toBeNull();
+});
+testHook('an untouched lesson opened before midnight and first changed after it keeps a plan for its own date', async () => {
+  const { AppState } = require('react-native');
+  const listeners = [];
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((type, listener) => {
+    listeners.push(listener); return { remove: () => {} };
+  });
+  jest.setSystemTime(new Date('2026-10-19T21:55:00.000Z')); // 23:55 Monday, programme time
+  const { result } = mount();
+  await ready(result);
+  expect(result.current.draft.lesson_date).toBe('2026-10-19');
+  jest.setSystemTime(new Date('2026-10-19T22:05:00.000Z')); // 00:05 Tuesday
+  act(() => { for (const listener of listeners) listener('active'); });
+  await waitFor(() => expect(result.current.plan.made_on).toBe('2026-10-20'));
+  await change(result, transitions.toggleTick, 'letters', 'a');
+  const stored = await handle.repositories.lessonDrafts.getActive();
+  expect(stored.lesson_date).toBe('2026-10-20');
+  expect(planForSave({ plan: stored.plan, lessonDate: stored.lesson_date })).toEqual({ plan: stored.plan, plan_reason: null });
+});
+testHook('a new lesson takes only group members on the visible roster, as the picker does', async () => {
+  await handle.withTransaction(async db => {
+    for (const id of ['hidden', 'handed-over']) {
+      await db.runAsync("insert into children (id, first_name, last_name, class_id, created_by, hidden_at) values (?, ?, 'Child', 'class-1', ?, ?)",
+        id, id, handle.userId, id === 'hidden' ? '2026-10-01T08:00:00Z' : null);
+      await db.runAsync("insert into child_ea_assignments (id, user_id, child_id, assigned_at, unassigned_at) values (?, ?, ?, '2026-01-15', ?)",
+        id, handle.userId, id, id === 'handed-over' ? '2026-10-01' : null);
+    }
+    for (const id of ['c1', 'c2', 'hidden', 'handed-over']) {
+      await db.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at) values (?, ?, 'class-1', 'year-2026', '2026-01-15')", `ccm-${id}`, id);
+      await db.runAsync("insert into child_programme_enrollments (id, child_id, programme_id) values (?, ?, 'programme-a')", `cpe-${id}`, id);
+      await db.runAsync("insert into child_group_memberships (id, child_id, group_id, joined_at) values (?, ?, 'group-1', '2026-01-15')", `cgm-${id}`, id);
+    }
+    await db.runAsync("insert into group_ea_assignments (id, group_id, ea_user_id, programme_id) values ('gea', 'group-1', ?, 'programme-a')", handle.userId);
+  });
+  const { result } = mount({ start: { groupId: 'group-1', upNextGroupId: 'group-1' } });
+  await ready(result);
+  expect(result.current.draft.attendance.childIds).toEqual(['c1', 'c2']);
 });
