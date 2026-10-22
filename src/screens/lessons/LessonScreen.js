@@ -10,6 +10,7 @@ import { typeRoles } from '../../constants/typography';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
 import { lastSeenLabel } from '../../utils/lessonDates';
 import { groupLastSeenOn } from '../../lessonPlan/engine';
+import { visibleRosterChildren } from '../../utils/childVisibility';
 import { isStaleActorError } from '../../session/staleActor';
 import * as transitions from '../../lessonPlan/lessonDraftState';
 import BrandButton from '../../components/common/BrandButton';
@@ -73,7 +74,8 @@ export default function LessonScreen({ navigation, route }) {
           ? await repositories.classes.getClassById(draft.class_id)
           : null;
         if (active && handle.isCurrent()) setMetadata({
-          childrenById, authority, classes: pinnedClass ? [...classes, pinnedClass] : classes, roster,
+          childrenById, authority, classes: pinnedClass ? [...classes, pinnedClass] : classes,
+          roster: visibleRosterChildren(roster),
         });
       } catch (caught) { if (active && !isStaleActorError(caught)) setActionError(caught.message); }
     };

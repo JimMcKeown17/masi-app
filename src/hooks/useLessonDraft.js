@@ -8,6 +8,11 @@ import { isPreviewContentEnabled } from '../lessonPlan/packs/previewContent';
 import { languageCodeForHomeLanguage } from '../utils/assessmentRegistry';
 import { presentChildIds } from '../db/repositories/lessonDraftsRepository';
 import * as transitions from '../lessonPlan/lessonDraftState';
+import { visibleRosterChildren } from '../utils/childVisibility';
+
+// A lesson with no change yet is dated by its first change, so a lesson opened before
+// midnight and first touched after it keeps a plan made for its own date (C14).
+const datedOnFirstChange = (row, today) => (!row.id && row.lesson_date !== today ? { lesson_date: today } : {});
 
 export const useLessonDraft = ({ draftId, start } = {}) => {
   const { handle } = useSignedInEA();
@@ -32,10 +37,13 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
         .find(row => row.id === start.groupId);
       if (!group) throw new Error('This group is no longer on this phone.');
       if (!members) {
-        const memberships = await repositories.groups.getVisibleChildrenGroups({ userId: handle.userId });
-        const ids = memberships.filter(row => row.group_id === group.id && !row.removed_at).map(row => row.child_id);
-        const children = await repositories.children.getChildrenByIds(ids);
-        members = ids.map(id => children[id] ?? { id });
+        // The picker's rule (ChildrenContext.getChildrenInGroup): group members on the visible roster.
+        const [memberships, roster] = await Promise.all([
+          repositories.groups.getVisibleChildrenGroups({ userId: handle.userId }),
+          repositories.children.getMyChildren(handle.userId),
+        ]);
+        const ids = new Set(memberships.filter(row => row.group_id === group.id && !row.removed_at).map(row => row.child_id));
+        members = visibleRosterChildren(roster).filter(child => ids.has(child.id));
       }
       const classes = await repositories.classes.getClasses();
       const { classId } = resolveLessonClass({
@@ -131,8 +139,8 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
         groupId: draft.group_id, upNextGroupId: start?.upNextGroupId ?? null,
         languageCode, packId, isEcd: lessonClass?.grade === 'ECD', presentChildIds: JSON.parse(presentKey),
       } });
-      return controller.apply(transition, { ...option, classId, languageCode, packId,
-        plan: languageCode ? computeLessonPlan(input) : null });
+      return controller.apply((row, choice) => ({ ...datedOnFirstChange(row, today), ...transition(row, choice) }),
+        { ...option, classId, languageCode, packId, plan: languageCode ? computeLessonPlan(input) : null });
     }
     if (transition === transitions.toggleTick || transition === transitions.toggleBookRead) {
       assertPlan();
@@ -140,21 +148,25 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
       args[index] = { ...args[index], plan, nowIso: args[index]?.nowIso ?? new Date().toISOString() };
     }
     return controller.apply((row, ...captured) => ({
-      ...(!row.plan && plan ? { plan } : {}), ...transition(row, ...captured),
+      ...datedOnFirstChange(row, today), ...(!row.plan && plan ? { plan } : {}), ...transition(row, ...captured),
     }), ...args);
   }, [controller, draft, loaded, repositories, handle, services, today, presentKey, plan, start?.upNextGroupId, assertPlan]);
   const ensureDraft = useCallback(async () => {
     assertPlan();
-    if (!controller.getSnapshot().draft.plan) await controller.apply(transitions.setPlan, plan);
+    if (!controller.getSnapshot().draft.plan) {
+      await controller.apply(row => ({ ...datedOnFirstChange(row, today), ...transitions.setPlan(row, plan) }));
+    }
     return controller.ensureDraft();
-  }, [controller, assertPlan, plan]);
+  }, [controller, assertPlan, plan, today]);
   const beginSave = useCallback(async () => {
     assertPlan();
     // Admit the initial plan before taking the save lock, without yielding to another edit.
     // beginSave observes a failure of this write through the controller's failure barrier.
-    if (!controller.getSnapshot().draft.plan) void controller.apply(transitions.setPlan, plan).catch(() => {});
+    if (!controller.getSnapshot().draft.plan) {
+      void controller.apply(row => ({ ...datedOnFirstChange(row, today), ...transitions.setPlan(row, plan) })).catch(() => {});
+    }
     return controller.beginSave();
-  }, [controller, assertPlan, plan]);
+  }, [controller, assertPlan, plan, today]);
   return { ...snapshot, plan, choices, lessonInput, needs, apply, ensureDraft, beginSave,
     endSave: controller.endSave, discard: controller.discard, error: snapshot.error ?? loadError };
 };
