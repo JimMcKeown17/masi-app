@@ -16,6 +16,7 @@ import {
 } from '../index';
 import { FIXTURE_READ_WORDS_EN } from '../testFixtures';
 import type { QuestionProps } from '../types/QuestionProps';
+import type { Result } from '../types/Result';
 
 const QUESTIONS: Array<[string, React.ComponentType<QuestionProps>]> = [
   ['LetterSoundsQuestion', LetterSoundsQuestion],
@@ -43,10 +44,76 @@ describe('item-set resolution', () => {
     const letters = render(<LetterSoundsQuestion language="af" itemSet={CURRENT_ITEM_SETS.letter_sounds.af} onComplete={jest.fn()} />);
     fireEvent.press(letters.getByText('Start'));
     expect(letters.getByLabelText('l, current')).toBeTruthy();
-    expect(letters.getByTestId('letter-row-5')).toBeTruthy();
+    expect(letters.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
     const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} captureMode="sequential" onComplete={jest.fn()} />);
     fireEvent.press(words.getByText('Start'));
     expect(words.getByLabelText('die, current')).toBeTruthy();
+  });
+
+  describe('Afrikaans card pagination and completion', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    test('the word card starts on card rows 1–2, page 1 of 5', () => {
+      const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} captureMode="sequential" onComplete={jest.fn()} />);
+      fireEvent.press(words.getByText('Start'));
+      expect(words.getByText('Card rows 1–2 · page 1 of 5')).toBeTruthy();
+    });
+
+    test('marking 20 letters Correct moves to card rows 3–4, page 2 of 3', () => {
+      const letters = render(<LetterSoundsQuestion language="af" itemSet={CURRENT_ITEM_SETS.letter_sounds.af} durationSec={60} onComplete={jest.fn()} />);
+      fireEvent.press(letters.getByText('Start'));
+      for (let i = 0; i < 19; i += 1) {
+        fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
+      }
+      expect(letters.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
+      fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
+      expect(letters.getByText('Card rows 3–4 · page 2 of 3')).toBeTruthy();
+    });
+
+    test('marking every letter Correct completes with all 60 card items', () => {
+      const itemSet = CURRENT_ITEM_SETS.letter_sounds.af;
+      const cardLength = itemSet.rows.flat().length;
+      expect(cardLength).toBe(60);
+      const onComplete = jest.fn<void, [Result]>();
+      const letters = render(<LetterSoundsQuestion language="af" itemSet={itemSet} durationSec={60} onComplete={onComplete} />);
+      fireEvent.press(letters.getByText('Start'));
+      for (let i = 0; i < cardLength - 1; i += 1) {
+        fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
+      }
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      const result = onComplete.mock.calls[0][0];
+      expect(result).toMatchObject({
+        item_set_id: itemSet.item_set_id, language: 'af', stopped_reason: 'completed',
+        derived: { total_attempted: cardLength, total_correct: cardLength, percent: 100 },
+      });
+      expect(result.items).toHaveLength(cardLength);
+      expect(result.items.every((item) => item.is_correct)).toBe(true);
+    });
+
+    test('marking every word Correct completes with all 50 card items', () => {
+      const itemSet = CURRENT_ITEM_SETS.word_reading.af;
+      const cardLength = itemSet.words.length;
+      expect(cardLength).toBe(50);
+      const onComplete = jest.fn<void, [Result]>();
+      const words = render(<ReadWordsQuestion language="af" itemSet={itemSet} captureMode="sequential" onComplete={onComplete} />);
+      fireEvent.press(words.getByText('Start'));
+      for (let i = 0; i < cardLength - 1; i += 1) {
+        fireEvent.press(words.getByRole('button', { name: 'Correct' }));
+      }
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(words.getByRole('button', { name: 'Correct' }));
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      const result = onComplete.mock.calls[0][0];
+      expect(result).toMatchObject({
+        item_set_id: itemSet.item_set_id, language: 'af', stopped_reason: 'completed',
+        derived: { total_attempted: cardLength, total_correct: cardLength, percent: 100 },
+      });
+      expect(result.items).toHaveLength(cardLength);
+      expect(result.items.every((item) => item.is_correct)).toBe(true);
+    });
   });
 
   test.each(QUESTIONS)(
