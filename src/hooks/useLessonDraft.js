@@ -162,11 +162,18 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
     assertPlan();
     // Admit the initial plan before taking the save lock, without yielding to another edit.
     // beginSave observes a failure of this write through the controller's failure barrier.
-    if (!controller.getSnapshot().draft.plan) {
+    const current = controller.getSnapshot().draft;
+    if (!current.plan) {
       void controller.apply(row => ({ ...datedOnFirstChange(row, today), ...transitions.setPlan(row, plan) })).catch(() => {});
     }
+    // A chosen blend tier whose children have all gone is saved as the default tier the screen
+    // shows. This write sits behind the same failure barrier, so a stale tier is never saved.
+    const shownTier = current.ticks.blendTierShown;
+    if (shownTier && choices && !choices.tiers.some(item => item.tier === shownTier)) {
+      void controller.apply(transitions.setBlendTierShown, null).catch(() => {});
+    }
     return controller.beginSave();
-  }, [controller, assertPlan, plan, today]);
+  }, [controller, assertPlan, plan, today, choices]);
   return { ...snapshot, plan, choices, lessonInput, needs, apply, ensureDraft, beginSave,
     endSave: controller.endSave, discard: controller.discard, error: snapshot.error ?? loadError };
 };
