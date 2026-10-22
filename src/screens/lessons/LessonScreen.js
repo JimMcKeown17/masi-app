@@ -21,6 +21,8 @@ import StickyActionFooter from '../../components/forms/StickyActionFooter';
 import AttendanceChips from '../../components/lessons/AttendanceChips';
 import AddChildSheet from '../../components/lessons/AddChildSheet';
 import LessonLettersSection from '../../components/lessons/LessonLettersSection';
+import LessonBlendSection from '../../components/lessons/LessonBlendSection';
+import LessonBookSection from '../../components/lessons/LessonBookSection';
 import OtherLetterSheet from '../../components/lessons/OtherLetterSheet';
 import LessonChoiceSheet from '../../components/lessons/LessonChoiceSheet';
 import InProgressSheet from '../../components/lessons/InProgressSheet';
@@ -99,6 +101,9 @@ export default function LessonScreen({ navigation, route }) {
   const toggleAttendance = useCallback(id => attempt(() => apply(transitions.toggleAbsent, id)), [attempt, apply]);
   const remove = useCallback(id => attempt(() => apply(markAbsent, id)), [attempt, apply]);
   const toggleLetter = useCallback(letter => attempt(() => apply(transitions.toggleTick, 'letters', letter)), [attempt, apply]);
+  const toggleBlend = useCallback(text => attempt(() => apply(transitions.toggleTick, 'blends', text)), [attempt, apply]);
+  const toggleBook = useCallback(id => attempt(() => apply(transitions.toggleBookRead, id)), [attempt, apply]);
+  const showTier = useCallback(tier => attempt(() => apply(transitions.setBlendTierShown, tier)), [attempt, apply]);
   const wrapUp = () => attempt(async () => {
     const row = await ensureDraft();
     navigation.navigate('LessonWrapUp', { draftId: row.id });
@@ -143,6 +148,9 @@ export default function LessonScreen({ navigation, route }) {
           {!plan.history_complete ? <InlineNote tone="warning">Still downloading past lessons. Suggestions may repeat.</InlineNote> : null}
           {!plan.mastery_complete ? <InlineNote tone="warning">Still downloading what children know. Suggestions may repeat.</InlineNote> : null}
           <LessonLettersSection draft={draft} plan={plan} choices={choices} onToggle={toggleLetter} onOther={() => setOtherVisible(true)} />
+          <LessonBlendSection draft={draft} plan={plan} choices={choices} participants={participants}
+            onToggle={toggleBlend} onTier={showTier} error={error} />
+          <LessonBookSection draft={draft} choices={choices} isEcd={lessonInput?.isEcd ?? lessonClass?.grade === 'ECD'} onToggle={toggleBook} />
         </> : null}
         {draft.id ? <BrandButton label="Discard lesson" variant="tertiary" onPress={() => setDiscardVisible(true)} /> : null}
       </> : <ActivityIndicator color={colors.primary} />}
