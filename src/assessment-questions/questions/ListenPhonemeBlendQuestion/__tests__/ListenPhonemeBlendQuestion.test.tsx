@@ -1,4 +1,6 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { tokens } from '../../../theme/tokens';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ListenPhonemeBlendQuestion } from '..';
 import { FIXTURE_PHONEME_BLEND_EN } from '../../../testFixtures';
@@ -263,4 +265,109 @@ describe('ListenPhonemeBlendQuestion — onItemMarked', () => {
     expect(item.prompt).toBe('s-u-n');
     expect(item.is_correct).toBe(true);
   });
+});
+
+
+test('prompt cards are rounded, full width, and solid green when marked', () => {
+  const r = render(
+    <ListenPhonemeBlendQuestion language="en" itemSet={FIXTURE_PHONEME_BLEND_EN}
+      instructions="." onComplete={jest.fn()} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  expect(StyleSheet.flatten(r.getByTestId('prompt-scroll').props.contentContainerStyle))
+    .toMatchObject({ padding: tokens.space.lg, gap: 10 });
+  expect(r.getByLabelText('s-u-n, idle')).toHaveStyle({
+    borderRadius: tokens.radius.tile,
+    alignSelf: 'stretch',
+    backgroundColor: tokens.color.surface,
+    borderColor: tokens.color.line,
+  });
+  fireEvent.press(r.getByLabelText('s-u-n, idle'));
+  expect(r.getByLabelText('s-u-n, correct')).toHaveStyle({
+    borderRadius: tokens.radius.tile,
+    alignSelf: 'stretch',
+    backgroundColor: tokens.color.marked,
+    borderColor: tokens.color.marked,
+  });
+  expect(r.getByText('s-u-n')).toHaveStyle({ color: tokens.color.onMarked });
+});
+
+
+test('the phoneme gloss is plain, not italic', () => {
+  const r = render(
+    <ListenPhonemeBlendQuestion language="en" itemSet={FIXTURE_PHONEME_BLEND_EN}
+      instructions="." onComplete={jest.fn()} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  expect(StyleSheet.flatten(r.getByText('(sun)').props.style).fontStyle).toBeUndefined();
+  fireEvent.press(r.getByLabelText('s-u-n, idle'));
+  expect(StyleSheet.flatten(r.getByText('(sun)').props.style).fontStyle).toBeUndefined();
+});
+
+
+test('finish confirmation preserves the active scroller and hides its controls until Cancel', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(
+    <ListenPhonemeBlendQuestion language="en" itemSet={FIXTURE_PHONEME_BLEND_EN}
+      instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('s-u-n, idle'));
+  const scroller = r.getByTestId('prompt-scroll');
+  const tile = r.getByLabelText('s-u-n, correct');
+  fireEvent.press(r.getByText('Finish'));
+  const sheet = r.getByTestId('confirm-finish');
+  expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({
+    ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: tokens.color.scrim,
+  });
+  expect(sheet.props.accessibilityViewIsModal).toBe(true);
+  expect(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).toBe(scroller);
+  expect(r.getByLabelText('s-u-n, correct', { includeHiddenElements: true })).toBe(tile);
+  expect(r.queryByLabelText('s-u-n, correct')).toBeNull();
+  expect(r.queryByText('Finish')).toBeNull();
+  let activeView = scroller.parent;
+  while (activeView && activeView.props.accessibilityElementsHidden === undefined) {
+    activeView = activeView.parent;
+  }
+  expect(activeView?.props.accessibilityElementsHidden).toBe(true);
+  expect(activeView?.props.importantForAccessibility).toBe('no-hide-descendants');
+  expect(activeView?.props.pointerEvents).toBe('none');
+  fireEvent.press(r.getByText('Cancel'));
+  expect(r.queryByTestId('confirm-finish')).toBeNull();
+  expect(r.getByTestId('prompt-scroll')).toBe(scroller);
+  expect(r.getByLabelText('s-u-n, correct')).toBe(tile);
+  expect(activeView?.props.accessibilityElementsHidden).toBe(false);
+  expect(activeView?.props.importantForAccessibility).toBe('auto');
+  expect(activeView?.props.pointerEvents).toBe('auto');
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(onItemMarked).toHaveBeenCalledTimes(1);
+});
+
+test('repeated item keys keep independent positional marks and result identities', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(
+    <ListenPhonemeBlendQuestion language="en"
+      itemSet={{ ...FIXTURE_PHONEME_BLEND_EN, prompts: [{ item_key: 'same', segmented: 'first', word: 'one' }, { item_key: 'same', segmented: 'second', word: 'two' }] }}
+      instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('first, idle'));
+  expect(r.getByLabelText('second, idle')).toBeTruthy();
+  fireEvent.press(r.getByLabelText('second, idle'));
+  fireEvent.press(r.getByLabelText('first, correct'));
+  expect(r.getByLabelText('first, idle')).toBeTruthy();
+  expect(r.getByLabelText('second, correct')).toBeTruthy();
+  expect(onItemMarked).toHaveBeenCalledTimes(3);
+  expect(onItemMarked.mock.calls.map(([item]) => [item.position, item.item_key, item.is_correct]))
+    .toEqual([[0, 'same', true], [1, 'same', true], [0, 'same', false]]);
+  fireEvent.press(r.getByText('Finish'));
+  expect(r.getByText('1 items unmarked — finish anyway?')).toBeTruthy();
+  fireEvent.press(r.getByText('Yes, finish'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0].items.map((item: { position: number; item_key: string; is_correct: boolean }) =>
+    [item.position, item.item_key, item.is_correct]))
+    .toEqual([[0, 'same', false], [1, 'same', true]]);
+  expect(onComplete.mock.calls[0][0].derived.total_correct).toBe(1);
 });

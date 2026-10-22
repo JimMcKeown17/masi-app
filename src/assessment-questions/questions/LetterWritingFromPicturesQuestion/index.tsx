@@ -22,7 +22,6 @@ import type {
 import { WELA_PLUS_LETTER_WRITING_EN } from '../../itemsets/wela_plus_letter_writing.en';
 import { WELA_PLUS_LETTER_WRITING_XH } from '../../itemsets/wela_plus_letter_writing.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
@@ -86,9 +85,8 @@ function LetterWritingFromPicturesQuestionContent(
   const [phase, setPhase] = useState<Phase>('intro');
   const [currentPage, setCurrentPage] = useState(0);
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const letterFontSize = BASE_LETTER_FONT_SIZE * fontScale;
-  const altFontSize = BASE_ALT_FONT_SIZE * fontScale;
+  const letterFontSize = BASE_LETTER_FONT_SIZE;
+  const altFontSize = BASE_ALT_FONT_SIZE;
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {

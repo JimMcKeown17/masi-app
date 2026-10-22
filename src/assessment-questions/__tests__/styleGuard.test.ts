@@ -7,16 +7,10 @@ const ROOT = path.resolve(__dirname, '..');
 // Delete entries as shared typography/primitives replace each file's styling.
 export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
-  'questions/ListenAndAnswerStoryQuestion/index.tsx',
-  'questions/ListenFirstSoundQuestion/index.tsx',
-  'questions/ListenPhonemeBlendQuestion/index.tsx',
   'questions/StoryWritingRubricQuestion/index.tsx',
 ]);
 export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
-  'questions/ListenAndAnswerStoryQuestion/index.tsx',
-  'questions/ListenFirstSoundQuestion/index.tsx',
-  'questions/ListenPhonemeBlendQuestion/index.tsx',
   'questions/StoryWritingRubricQuestion/index.tsx',
 ]);
 
