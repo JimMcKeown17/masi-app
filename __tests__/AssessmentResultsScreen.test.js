@@ -5,6 +5,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import * as ReactNative from 'react-native';
 import { cleanup, fireEvent, within } from '@testing-library/react-native';
 import { v4 as uuid } from 'uuid';
 import { colors } from '../src/constants/colors';
@@ -132,4 +133,25 @@ test('Detail shows an honest missing-result state for an unknown id', async () =
     <AssessmentDetailScreen route={{ params: { assessmentId: uuid() } }} />
   </SignedInEAContext.Provider>);
   expect(await screen.findByText('Result not found.')).toBeTruthy();
+});
+
+test.each([
+  ['detail', 1], ['detail', 1.3], ['results', 1], ['results', 1.3],
+])('%s stat labels stay on one shrinking line at 360dp and %sx text', async (kind, fontScale) => {
+  jest.spyOn(ReactNative, 'useWindowDimensions').mockReturnValue({ width: 360, height: 800, scale: 1, fontScale });
+  const { id: assessmentId } = await fixture.save(5);
+  const Screen = kind === 'detail' ? AssessmentDetailScreen : AssessmentResultsScreen;
+  const screen = renderWithProviders(
+    <SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
+      <Screen navigation={{ replace: jest.fn(), navigate: jest.fn() }}
+        route={{ params: { assessmentId, childName: 'A Child', testCode: 'letter_sounds',
+          child: { id: fixture.childId }, languageCode: 'en' } }} />
+    </SignedInEAContext.Provider>,
+  );
+  await screen.findByText('Attempted');
+  for (const [index, label] of ['Attempted', 'Correct', 'Incorrect'].entries()) {
+    const text = within(screen.UNSAFE_getAllByType(SurfaceCard)[index]).getByText(label);
+    expect(text.props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 });
+    expect(StyleSheet.flatten(text.props.style)).toMatchObject({ ...typeRoles.textLabel, color: colors.textSecondary });
+  }
 });

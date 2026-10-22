@@ -104,7 +104,7 @@ export default function ClassDetailScreen({ route, navigation }) {
           <View style={styles.infoText}>
             <Text style={styles.school}>{school?.name || 'Unknown school'}</Text>
             <Text style={styles.detail}>{`${classItem.grade} • ${classItem.teacher}`}</Text>
-            <Text style={styles.detail}>{`Language: ${classItem.home_language}`}</Text>
+            <Text style={styles.detail}>{`Language: ${classItem.home_language?.trim() ? classItem.home_language : 'Not set'}`}</Text>
           </View>
           <IconCircleButton icon="create-outline" accessibilityLabel="Edit class"
             onPress={() => navigation.navigate('EditClass', { classId })} />

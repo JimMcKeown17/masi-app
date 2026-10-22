@@ -3552,6 +3552,75 @@ prints its credentials only on Jim's terminal; the A03 has no SIM, so Gate 5 can
 throttled); battery-run rows in Gates 1–2 (no run fixture); the log lines for Gates 1 and 8 (release
 logs need Share logs).
 
+### 2026-10-22 — Wave-1 UI polish from the A03 device run
+
+Fixed the six defects recorded on the Galaxy A03s (360 dp) on `fix/wave1-ui-polish`:
+
+1. Class detail renders **Language: Not set** for null, undefined, empty or whitespace-only
+   `home_language`; a nonblank language retains its original display value.
+2. Class row metadata and `classRowLabel` drop null, undefined and blank parts before joining.
+   Grade 1 / Ms Nolang / no language now reads **Grade 1 • Ms Nolang**, without a trailing
+   separator or an empty spoken comma slot. Complete rows retain their existing text.
+3. `SelectSheet` passes its null/undefined draft-key state to `BrandButton.disabled` and guards
+   the confirm handler too. Pressing Start without a selection calls neither callback and keeps
+   the sheet open; selecting an option enables confirmation. Audited every source caller:
+   Assessment Child Select is the only SelectSheet with `confirmLabel`; the other confirm-label
+   matches use ConfirmSheet. Immediate-selection sheets retain their behavior. Caller tests
+   cover language choice, retained same-child drafts, another child's fresh draft and direct
+   starts for recognized class languages.
+4. The shared history walker retains an existing `lastFailureAt` and stamps wall time only
+   when it is null/undefined. A successful page still clears it. The real-SQLite regression
+   fails twice with a recreated walker between attempts, succeeds, then fails in a new streak.
+   Reader audit before the change: `historyWalk` uses the marker to reject freshness and
+   completeness; `pullCoverage` requires a null marker; the two sync-status presenters use it
+   for the since label and choose the earliest incomplete walk. No reader requires the latest
+   failure time. Session history and all three assessment/run/mastery configs delegate to this
+   walker; there is no separate legacy session writer in this branch.
+5. Both history presenters use one small timestamp formatter. Whitespace immediately before
+   AM/PM (case-insensitive, dotted or undotted) becomes **U+00A0 NO-BREAK SPACE**. Tests supply
+   ordinary whitespace, U+202F, tabs/newlines, dotted/lowercase variants, existing U+00A0 and
+   24-hour locale text. No-meridiem text is unchanged.
+6. Assessment Detail's stat labels match the existing Results approach:
+   `numberOfLines={1}`, `adjustsFontSizeToFit`, `minimumFontScale={0.75}`. Both screens are
+   checked at 360 dp with 1.0x and 1.3x dimension fixtures, retaining their typography and colour.
+   Results already had the required props and needed no production change.
+
+The sync contract map records the failure lifecycle and shared display formatter. No dependency,
+migration, RLS, server payload, domain-data or other sync behavior changed.
+
+**RED → GREEN evidence.** Each defect's regression was run before its production fix, then the
+same focused command was rerun. Every command below used Node 20 with the exact prefix
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Item | Command after the PATH prefix | RED | GREEN |
+| --- | --- | --- | --- |
+| 1 | `npx jest --runInBand __tests__/ClassDetailScreen.test.js` | 1 failed suite; 4 failed, 16 passed, 20 total | 1 passed suite; 20/20 passed |
+| 2 | `npx jest --runInBand __tests__/ClassRow.test.js` | 1 failed suite; 13 failed, 6 passed, 19 total | 1 passed suite; 19/19 passed |
+| 3 | `npx jest --runInBand __tests__/SelectSheet.test.js` | 1 failed suite; 2 failed, 13 passed, 15 total | 1 passed suite; 15/15 passed |
+| 4 | `npx jest --runInBand --config jest.integration.config.js __tests__/historyWalk.test.js` | 1 failed suite; 1 failed, 16 passed, 17 total | 1 passed suite; 17/17 passed on real better-sqlite3 |
+| 5 | `npx jest --runInBand __tests__/syncStatusPresenter.test.js` | 1 failed suite; 8 failed, 39 passed, 47 total | 1 passed suite; 47/47 passed |
+| 6 | `npx jest --runInBand __tests__/AssessmentResultsScreen.test.js` | 1 failed suite; 2 failed, 10 passed, 12 total (run twice) | 1 passed suite; 12/12 passed |
+
+Two intermediate checks are recorded as well: item 5's first post-fix run had 46 passed and
+1 failed because the existing earliest-time assertion expected the old breaking locale space;
+that assertion now isolates timestamp choice with deterministic formatting, while the new tests
+assert exact U+00A0 output. Item 6's first post-fix run had 10 passed and 2 failed because
+"Correct" also labels grid items. The regression now scopes its query to each stat card; rerunning
+it against the unfixed label again produced 2 behavioral failures before the final GREEN.
+
+| Additional verification command after the PATH prefix | Result |
+| --- | --- |
+| `npx jest --runInBand __tests__/AssessmentChildSelectScreen.languagePicker.test.js __tests__/sessionHistoryStatus.test.js __tests__/pullCoverage.test.js` | PASS twice: 3 suites, 48/48 tests; second run includes explicit caller assertions that disabled Start keeps the sheet open |
+| `npx jest` | PASS, exit 0: 377 suites, 5,255/5,255 tests, 0 snapshots |
+| `npm run test:integration` | PASS, exit 0: 76 suites, 937/937 tests, 0 snapshots |
+| `npm run test:types` | PASS, exit 0; TypeScript reports no diagnostics (no test count) |
+| `git diff --check` | PASS, exit 0; no whitespace errors |
+| `python3 /tmp/lp-polish-doc-audit.py` | PASS: six documentation and Git-scope assertions, exit 0; initial run stopped after one assertion because its diff-block counter grouped the three adjacent row changes, then the audit was corrected to count changed rows |
+
+Automated renderer checks establish the native text-fit props, not Android glyph layout.
+The changed screens and the U+00A0 label still need a Galaxy A03s visual recheck at 1.0x and
+1.3x; no new device, EAS build, hosted operation or release was performed in this task.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -3748,9 +3817,9 @@ logs need Share logs).
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
 | 2026-10-22 | **Capital `I` and lower-case `l` cannot be told apart on the Afrikaans letter card** (A03, 360 dp): `l` is a 42 px bar, `I` a 39 px bar, both 6–7 px wide, in the capture grid and the saved detail grid. | Open, non-blocking for AF (plan call, 2026-10-20). Belongs to the test-screen redesign; `contentStatus.ts` already records the typeface need. Tracker tiles are lower case only. | Any sans-serif card mixing `I` and `l` needs a typeface with a serif `I` or a tailed `l`; check it on the phone. |
-| 2026-10-22 | **"Incomplete since" shows the latest failure, not when history became incomplete,** and its time can wrap with "AM" alone on a line at 1.3x. `historyWalk.js:285` restamps `lastFailureAt` on each failed run (as `main`'s `sessionHistoryPull.js:283` did); `syncStatusPresenter.js` formats with `toLocaleString`, which on Hermes puts a breaking space before AM/PM. | Open; small follow-up (keep the first failure until a success clears it; non-breaking space before the meridiem). | A "since" timestamp must keep the first event of the streak, not the latest. |
-| 2026-10-22 | **A class with no language shows three UI flaws** (all on `main`, from Bold Red #81–#82): Class detail prints "Language: null" (`ClassDetailScreen.js:107`); the class row ends in a stray "•" and its accessibility label holds ", ," (`ClassRow.js:25` joins without dropping empties); the language picker's Start looks enabled with nothing chosen and closes the sheet (`SelectSheet.js:83-86`). | Open; small follow-up. AF made a no-language class a supported state. | Join display parts with `.filter(Boolean)`; a confirm button with no selection should be disabled, not silently dismiss. |
-| 2026-10-22 | Assessment detail's stat labels break mid-word at 360 dp, 1.0x ("ATTEMPT / ED", "INCORRE / CT"). On `main` (#90, #87); not touched by wave 1. | Open; polish follow-up. | Letter-spaced capitals in narrow cards need `numberOfLines`/`adjustsFontSizeToFit` or a smaller tracking at 360 dp. |
+| 2026-10-22 | **"Incomplete since" shows the latest failure, not when history became incomplete,** and its time can wrap with "AM" alone on a line at 1.3x. `historyWalk.js:285` restamps `lastFailureAt` on each failed run (as `main`'s `sessionHistoryPull.js:283` did); `syncStatusPresenter.js` formats with `toLocaleString`, which on Hermes puts a breaking space before AM/PM. | Fixed on fix/wave1-ui-polish: retain the first failure until a successful page clears it; both history labels use U+00A0 before AM/PM. | A "since" timestamp must keep the first event of the streak, not the latest. |
+| 2026-10-22 | **A class with no language shows three UI flaws** (all on `main`, from Bold Red #81–#82): Class detail prints "Language: null" (`ClassDetailScreen.js:107`); the class row ends in a stray "•" and its accessibility label holds ", ," (`ClassRow.js:25` joins without dropping empties); the language picker's Start looks enabled with nothing chosen and closes the sheet (`SelectSheet.js:83-86`). | Fixed on fix/wave1-ui-polish: show Language: Not set, omit empty class metadata and spoken slots, and disable Start until a language is selected. | Join display parts with `.filter(Boolean)`; a confirm button with no selection should be disabled, not silently dismiss. |
+| 2026-10-22 | Assessment detail's stat labels break mid-word at 360 dp, 1.0x ("ATTEMPT / ED", "INCORRE / CT"). On `main` (#90, #87); not touched by wave 1. | Fixed on fix/wave1-ui-polish: Detail matches Results with single-line stat labels that shrink to fit, preserving caps, tracking and colour. | Letter-spaced capitals in narrow cards need `numberOfLines`/`adjustsFontSizeToFit` or a smaller tracking at 360 dp. |
 | 2026-10-22 | Session history titles a session waiting to sync with the EA's job title ("Literacy Coach") and a synced or pulled one "Session" (`SessionHistoryScreen.js:104-108`). On `main`; wave 1 does not touch `session_type`. | Open; low priority. | A list label should come from one field, whatever the row's sync state. |
 | 2026-10-21 | **A history result that references an inactive assessment tool cannot hydrate.** AR Plan 3 review round 1 fix downloads `assessment_tools`, but the existing `assessment_tools` SELECT policy shows authenticated users active tools only, so a family whose tool was later retired would fail the local foreign key and block its page. | Known gap, not fixed: no phone producer writes `assessment_tool_id` (only the payload passes it through), so no current result carries a tool id. | Revisit if any client or Head Office starts writing tool ids: either let readers see referenced inactive tools, or store a history reference row for a missing tool, as history reference children do. |
 | 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Resolved in AR Plan 3 Task 7: the shared walker retains an external saver failure with `kind = 'query'` in its returned status and failure log, and records `lastFailureAt` without advancing the committed cursor. Real-SQLite regressions exercise the actual assessment, run and mastery validators, plus a malformed second assessment page after ten committed families. RED observed three `transport` statuses where `query` was expected; GREEN retains the category. Session configs and their guard suites are unchanged. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |

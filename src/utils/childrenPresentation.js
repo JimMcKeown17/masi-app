@@ -23,5 +23,5 @@ export function countLabel(count, singular, plural) {
 export function classRowLabel({ name, schoolName, grade, teacher, language, childCount, groupCount, unsynced }) {
   const parts = [name, schoolName, grade, teacher, language,
     countLabel(childCount, 'child', 'children'), countLabel(groupCount, 'group', 'groups')];
-  return `${parts.join(', ')}${unsynced ? ', unsynced' : ''}. Open class`;
+  return `${parts.filter(part => part?.trim()).join(', ')}${unsynced ? ', unsynced' : ''}. Open class`;
 }

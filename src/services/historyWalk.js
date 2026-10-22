@@ -279,10 +279,10 @@ const runOnce = async ({ userId, force, deps, walk: config }) => {
         : 'transport';
     if (kind === 'budget') return finish('partial');
     if (kind !== 'cancelled' && !isStale()) {
-      // Remember the failure so a previous success is never presented as current. Written
+      // Keep the first failure since success for the "Incomplete since" label. Written
       // through the writer transaction (the resolved handle is the read-only reader in
       // production), with admission re-checked inside it.
-      let failed = { ...state, lastFailureAt: wallIso(),
+      let failed = { ...state, lastFailureAt: state.lastFailureAt ?? wallIso(),
         ...(['disabled', 'year_mismatch'].includes(kind) ? { complete: false } : {}) };
       try {
         await runRepositoryTransaction(database, async (txn) => {

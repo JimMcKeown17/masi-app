@@ -305,6 +305,31 @@ describe('shared history walker', () => {
     expect(rpc.mock.calls.every(([, args]) => args.p_after_id === 'session-1')).toBe(true);
   });
 
+  test('failures retain the first failure until a successful page clears it, then start a new streak', async () => {
+    let failing = true;
+    const p = probe({ respond: () => failing
+      ? { error: { message: 'Network request failed' } } : { data: [] } });
+    const firstFailure = new Date(wall).toISOString();
+    expect(await p.run()).toEqual({ status: 'transport', pages: 0 });
+    expect((await cursor()).lastFailureAt).toBe(firstFailure);
+
+    wall += 60_000;
+    // Recreate the walk to prove the first failure survives a restart in SQLite.
+    const resumed = probe({ respond: () => failing
+      ? { error: { message: 'Network request failed' } } : { data: [] } });
+    expect(await resumed.run()).toEqual({ status: 'transport', pages: 0 });
+    expect((await cursor()).lastFailureAt).toBe(firstFailure);
+
+    failing = false;
+    expect(await resumed.run()).toEqual({ status: 'complete', pages: 1 });
+    expect((await cursor()).lastFailureAt).toBeNull();
+
+    wall += 60_000;
+    failing = true;
+    expect(await resumed.run(true)).toEqual({ status: 'transport', pages: 0 });
+    expect((await cursor()).lastFailureAt).toBe(new Date(wall).toISOString());
+  });
+
   test('MR002 stops as year_mismatch', async () => {
     const p = probe({ respond: () => ({ error: { code: 'MR002', message: 'academic_year_mismatch' } }) });
     // An already complete cursor must become incomplete while retaining its durable tuple.

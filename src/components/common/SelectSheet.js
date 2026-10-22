@@ -82,6 +82,7 @@ export default function SelectSheet({
   }, [confirmLabel]);
 
   const handleConfirm = useCallback(() => {
+    if (draftKey == null) return;
     onSelect(draftKey);
     onDismiss();
   }, [draftKey, onDismiss, onSelect]);
@@ -109,7 +110,7 @@ export default function SelectSheet({
 
   const footer = confirmLabel || cancelLabel ? (
     <View style={styles.actions}>
-      {confirmLabel ? <BrandButton variant="primary" label={confirmLabel} onPress={handleConfirm} /> : null}
+      {confirmLabel ? <BrandButton variant="primary" label={confirmLabel} disabled={draftKey == null} onPress={handleConfirm} /> : null}
       {cancelLabel ? <BrandButton variant="tertiary" tone="ink" label={cancelLabel} onPress={onDismiss} /> : null}
     </View>
   ) : null;

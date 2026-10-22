@@ -167,8 +167,12 @@ describe('AssessmentChildSelectScreen language picker', () => {
     expect(picker.props.options).toEqual([{ key: 'en', label: 'English' }, { key: 'xh', label: 'isiXhosa' }, { key: 'af', label: 'Afrikaans' }]);
     expect(picker.props.selectedKey).toBeNull();
     expect(screen.getByRole('button', { name: 'English' }).props.accessibilityState.selected).toBe(false);
+    expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
+    fireEvent.press(screen.getByText('Start'));
+    expect(screen.getByRole('header', { name: 'Select language' })).toBeTruthy();
     expect(navigation.navigate).not.toHaveBeenCalled();
     fireEvent.press(screen.getByText('isiXhosa'));
+    expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled();
     expect(navigation.navigate).not.toHaveBeenCalled();
     fireEvent.press(screen.getByText('Start'));
     expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', {
@@ -233,8 +237,8 @@ describe('AssessmentChildSelectScreen language picker', () => {
     expect(screen.getByRole('button', { name: 'isiXhosa' }).props.accessibilityState.selected).toBe(false);
     fireEvent.press(screen.getByText('Start'));
     expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('header', { name: 'Select language' })).toBeTruthy();
 
-    fireEvent.press(screen.getByText('Buhle Dlamini'));
     fireEvent.press(screen.getByText('isiXhosa'));
     fireEvent.press(screen.getByText('Start'));
     expect(navigation.navigate).toHaveBeenCalledTimes(1);

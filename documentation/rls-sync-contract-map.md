@@ -1245,8 +1245,11 @@ coverage-write failure, breaker, bypass, outbox evidence and missing-cursor case
 - **Actor fencing.** A change of signed-in user invalidates in-flight runs. No queued request
   starts, no page commits (admission is checked at transaction entry and again after the cursor
   write), and no status publishes for a stale run.
-- **Failure memory.** A failed run records `lastFailureAt` through the writer transaction, and any
-  recorded failure blocks "Up to date" until a page succeeds.
+- **Failure memory.** A failed run records `lastFailureAt` through the writer transaction only
+  when no failure timestamp is retained. Repeated failures keep the first timestamp for
+  "Incomplete since"; any recorded failure blocks "Up to date" until a successful page clears it.
+  This rule belongs to the shared walker, so sessions, assessments, Battery Runs and mastery
+  use the same failure lifecycle.
 - **Readers.** History, Home, the Sessions tab, and the daily goal stay "sessions I recorded". The
   session-count ranking counts every session a current child attended.
   `isSessionHistoryComplete({ database, userId, programmeId, childIds, academicYearStart })`
@@ -1387,10 +1390,12 @@ the existing per-walk rule in this order:
    `Up to date`, with no detail.
 4. Otherwise: `Incomplete since <time>`, with `History not fully downloaded yet`. The time
    is the earliest incomplete walk's `lastFailureAt || updatedAt || lastPulledAt`, formatted
-   like the existing session-only presenter.
+   through the shared history-label formatter. It replaces whitespace immediately before
+   AM/PM (case-insensitive, dotted or undotted) with U+00A0 NO-BREAK SPACE so the meridiem
+   stays with the time; locales without a meridiem are unchanged.
 
-The session-only `describeHistoryState` is unchanged for Session History. Assessment History
-uses the combined presenter over the run and assessment states and displays only its detail.
+The session-only `describeHistoryState` uses the same formatter for Session History. Assessment
+History uses the combined presenter over the run and assessment states and displays only its detail.
 `assessmentHistory.store.getPullStates` adds read-time `expectedWindowStart` to each present
 Programme pull state, taken from the active year (null if missing). The combined presenter
 rejects a mismatched or missing expected year as incomplete. Durable cursors are unchanged by

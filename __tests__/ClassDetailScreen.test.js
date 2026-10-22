@@ -262,3 +262,8 @@ test('loading to loaded to loading on the same screen preserves hook order and c
     error.mockRestore();
   }
 });
+
+test.each([null, undefined, '', '  \t '])('missing home language %p is shown as Not set', (home_language) => {
+  mockUseClasses.mockReturnValue({ ...loadedState([]), classes: [{ ...classItem, home_language }] });
+  expect(renderClassDetail().getByText('Language: Not set')).toBeTruthy();
+});
