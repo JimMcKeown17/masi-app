@@ -29,6 +29,7 @@ import {
   isMasteryInputsComplete, sessionHistoryCompletenessByChild, masteryCompletenessByChild,
 } from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
+import { createLessonDraftController } from '../services/lessonDraftController';
 import { StaleActorError } from './staleActor';
 
 // Construct once, before publication. Every closure captures this handle, never the registry.
@@ -95,6 +96,7 @@ export const createHandleServices = (handle) => {
   handle.onClose(() => { store.reset(); assessmentStore.reset(); });
   return {
     repositories,
+    lessonDraft: createLessonDraftController({ repositories, onClose: handle.onClose }),
     homeAttention: createHomeAttentionStore({ database: handle, localState: repositories.localState }),
     syncEngine: createOutboxSyncEngine({
       ...options, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
