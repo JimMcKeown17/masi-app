@@ -104,6 +104,13 @@ export default function LessonScreen({ navigation, route }) {
   const toggleBlend = useCallback(text => attempt(() => apply(transitions.toggleTick, 'blends', text)), [attempt, apply]);
   const toggleBook = useCallback(id => attempt(() => apply(transitions.toggleBookRead, id)), [attempt, apply]);
   const showTier = useCallback(tier => attempt(() => apply(transitions.setBlendTierShown, tier)), [attempt, apply]);
+  // A higher tier whose children have all gone falls back to the default tier, and the draft
+  // records that, so the saved blend_tier_shown is the tier on screen.
+  const shownTier = draft?.ticks.blendTierShown ?? null;
+  const tierGone = !!(shownTier && choices && !choices.tiers.some(item => item.tier === shownTier));
+  useEffect(() => {
+    if (tierGone && status === 'ready') attempt(() => apply(transitions.setBlendTierShown, null));
+  }, [tierGone, status, attempt, apply]);
   const wrapUp = () => attempt(async () => {
     const row = await ensureDraft();
     navigation.navigate('LessonWrapUp', { draftId: row.id });
