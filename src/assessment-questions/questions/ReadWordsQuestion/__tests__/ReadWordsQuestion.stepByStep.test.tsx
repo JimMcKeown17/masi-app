@@ -1,10 +1,9 @@
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { ReadWordsQuestion } from '..';
 import { CURRENT_ITEM_SETS } from '../../../itemsets/current';
 import { validateResult } from '../../../contractTest/validateResult';
-import { tokens } from '../../../theme/tokens';
 
 const SET = CURRENT_ITEM_SETS.word_reading.en;
 const STOP_SET = { ...SET, stop_rule: { kind: 'consecutive_wrong' as const, stop_at: 10 } };
@@ -100,51 +99,51 @@ test('a stop-rule override stops at ten across rows, guards queued taps, and fre
   expect(validateResult(result, { stopAt: 10 }).valid).toBe(true);
 });
 
-test('card rows keep their identity while word tiles wrap and size to whole-word content', () => {
+test('word_reading shows card rows 1–2 as page 1 of 5 in two continuous columns', () => {
   const { screen } = start();
-  const rows = screen.getAllByTestId(/^word-row-/);
-  expect(rows).toHaveLength(10);
-  expect(StyleSheet.flatten(screen.getByTestId('word-grid').props.contentContainerStyle).paddingHorizontal)
-    .toBe(tokens.space.lg);
-  rows.forEach((row, rowIndex) => {
-    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+  expect(screen.getByText('Card rows 1–2 · page 1 of 5')).toBeTruthy();
+  expect(screen.getAllByLabelText(/, (current|not reached)$/)).toHaveLength(10);
+  expect(screen.queryAllByTestId(/^word-row-/)).toHaveLength(0);
+  const grid = screen.getByTestId('word-grid');
+  expect(grid).toHaveStyle({ flex: 1, paddingHorizontal: 16, justifyContent: 'center' });
+  expect(screen.queryByTestId('card-row-divider')).toBeNull();
+  const displayRows: ReturnType<typeof screen.getByTestId>[] = grid.findAll(
+    (node: ReturnType<typeof screen.getByTestId>) => node.type === 'View' && StyleSheet.flatten(node.props.style)?.flexDirection === 'row',
+  );
+  expect(displayRows).toHaveLength(5);
+  displayRows.forEach((row, index) => {
     const cells = within(row).getAllByLabelText(/, (current|not reached)$/);
-    expect(cells.map((cell) => cell.props.accessibilityLabel)).toEqual(
-      SET.words.slice(rowIndex * 5, rowIndex * 5 + 5).map(({ word }, column) =>
-        `${word}, ${rowIndex === 0 && column === 0 ? 'current' : 'not reached'}`),
+    expect(cells.map(cell => cell.props.accessibilityLabel)).toEqual(
+      SET.words.slice(index * 2, index * 2 + 2).map(({ word }, column) =>
+        `${word}, ${index === 0 && column === 0 ? 'current' : 'not reached'}`),
     );
-    cells.forEach((cell) => {
-      expect(StyleSheet.flatten(cell.props.style)).toMatchObject({
-        minWidth: 56, paddingHorizontal: tokens.space.md,
-      });
-      expect(StyleSheet.flatten(cell.props.style).flex).toBeUndefined();
-    });
   });
-  const firstWord = screen.getByText(SET.words[0].word);
-  expect(firstWord.props.numberOfLines).toBe(1);
-  expect(StyleSheet.flatten(firstWord.props.style).fontSize).toBe(tokens.font.markingWord);
-  expect(within(screen.getByTestId('word-grid')).queryAllByRole('button')).toHaveLength(0);
-  const decisions = screen.getByTestId('word-decisions');
-  expect(StyleSheet.flatten(decisions.props.style).flexDirection).toBe('row');
-  for (const name of ['Correct', 'Incorrect']) {
-    expect(StyleSheet.flatten(within(decisions).getByRole('button', { name }).props.style)).toMatchObject({
-      flex: 1, minHeight: 56, borderRadius: tokens.radius.pill,
-    });
-  }
-  expect(within(decisions).queryByRole('button', { name: 'Back' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+  fireEvent(grid, 'layout', { nativeEvent: { layout: { width: 360 } } });
+  expect(screen.getByLabelText(`${SET.words[0].word}, current`)).toHaveStyle({ width: 159 });
+  expect(within(grid).queryAllByRole('button')).toHaveLength(0);
 });
 
-test('current-row scrolling follows forward decisions and Back', () => {
-  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+test('long isiXhosa words shrink to fit their tile', () => {
+  const { screen } = start({ language: 'xh', itemSet: CURRENT_ITEM_SETS.word_reading.xh });
+  decide(screen, true, 30);
+  expect(screen.getByText('ibhulukhwe').props).toMatchObject({
+    numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6, maxFontSizeMultiplier: 1.2,
+  });
+});
+
+test('word 20 is current on page 2 after nineteen decisions', () => {
   const { screen } = start();
-  fireEvent(screen.getByTestId('word-row-0'), 'layout', { nativeEvent: { layout: { y: 0 } } });
-  fireEvent(screen.getByTestId('word-row-1'), 'layout', { nativeEvent: { layout: { y: 80 } } });
-  decide(screen, true, 5);
-  expect(screen.getByLabelText(`${SET.words[5].word}, current`)).toBeTruthy();
-  expect(scrollTo).toHaveBeenLastCalledWith({ y: 80, animated: true });
+  decide(screen, true, 19);
+  expect(screen.getByText('Card rows 3–4 · page 2 of 5')).toBeTruthy();
+  expect(screen.getByLabelText(`${SET.words[19].word}, current`)).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Back' }));
-  expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });
+  expect(screen.getByLabelText(`${SET.words[18].word}, current`)).toBeTruthy();
+});
+
+test('a 50-word set with no row_lengths pages as one card row: Card row 1 · page 1 of 5', () => {
+  const { screen } = start({ itemSet: { ...SET, row_lengths: undefined } });
+  expect(screen.getByText('Card row 1 · page 1 of 5')).toBeTruthy();
+  expect(screen.getAllByLabelText(/, (current|not reached)$/)).toHaveLength(10);
 });
 
 test('missing row_lengths uses one row and duplicate words retain distinct item-set keys', () => {
@@ -152,7 +151,8 @@ test('missing row_lengths uses one row and duplicate words retain distinct item-
     ...SET, row_lengths: undefined,
     words: [{ item_key: 'first', word: 'same' }, { item_key: 'second', word: 'same' }],
   } });
-  expect(screen.getAllByTestId(/^word-row-/)).toHaveLength(1);
+  expect(screen.getAllByLabelText(/same, (current|not reached)$/)).toHaveLength(2);
+  expect(screen.queryByTestId('page-indicator')).toBeNull();
   decide(screen, true);
   fireEvent.press(screen.getByRole('button', { name: 'Back' }));
   decide(screen, false);
@@ -251,4 +251,13 @@ test('Skip defaults to allowed and keeps the skipped result shape with one termi
     total_correct: 0, total_attempted: 0, percent: 0, last_attempted_position: null,
     was_timed: true, tracks_progress: false, capture_mode: 'sequential',
   } });
+});
+
+test('an empty word override can still start and End without a page', () => {
+  const { screen, onComplete } = start({ itemSet: { ...SET, words: [], row_lengths: undefined } });
+  expect(screen.queryByTestId('page-indicator')).toBeNull();
+  end(screen);
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'ea_ended', items: [],
+    derived: { total_attempted: 0, last_attempted_position: -1 } });
 });

@@ -8,7 +8,7 @@
  * privacy"); no tap-to-reveal, no auto-hide.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -19,7 +19,7 @@ import type { WriteCvcsItemSet, WriteCvcsWord } from './types';
 import { WELA_PLUS_WRITE_CVCS_EN } from '../../itemsets/wela_plus_write_cvcs.en';
 import { WELA_PLUS_WRITE_CVCS_XH } from '../../itemsets/wela_plus_write_cvcs.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { tokens } from '../../theme/tokens';
+import { Canvas, ConfirmSheet, MarkTile, QuestionIntro, TileGroups, ToggleBar } from '../../ui';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
@@ -118,7 +118,7 @@ function WriteCvcsQuestionContent(
   );
   const unmarkedCount = scoringLetters.reduce(
     (acc, scoringLetter) =>
-      acc + (isMarked(scoringLetter.itemKey) ? 0 : 1),
+      acc + (isMarked(String(scoringLetter.position)) ? 0 : 1),
     0,
   );
 
@@ -141,7 +141,7 @@ function WriteCvcsQuestionContent(
             position: scoringLetter.position,
             item_key: scoringLetter.itemKey,
             prompt: scoringLetter.letter,
-            is_correct: isMarkedRef.current(scoringLetter.itemKey),
+            is_correct: isMarkedRef.current(String(scoringLetter.position)),
             metadata: {
               word: scoringLetter.word.word,
               word_index: scoringLetter.wordIndex,
@@ -159,7 +159,7 @@ function WriteCvcsQuestionContent(
         : scoringRows.map((row) => ({
             word: row[0].word.word,
             correct: row.filter((letter) =>
-              isMarkedRef.current(letter.itemKey),
+              isMarkedRef.current(String(letter.position)),
             ).length,
             total: row.length,
           }));
@@ -191,8 +191,8 @@ function WriteCvcsQuestionContent(
 
   const handleToggle = useCallback(
     (scoringLetter: ScoringLetter) => {
-      const willBeMarked = !isMarkedRef.current(scoringLetter.itemKey);
-      toggle(scoringLetter.itemKey);
+      const willBeMarked = !isMarkedRef.current(String(scoringLetter.position));
+      toggle(String(scoringLetter.position));
       if (onItemMarked) {
         const item: ResultItem = {
           position: scoringLetter.position,
@@ -225,32 +225,11 @@ function WriteCvcsQuestionContent(
   );
 
   if (phase === 'intro') {
-    return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
-    );
+    return <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />;
   }
 
   if (phase === 'finished') {
     return <View />;
-  }
-
-  if (phase === 'confirm-finish') {
-    return (
-      <View>
-        <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable onPress={() => finish('completed')}>
-          <Text>Yes, finish</Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
-    );
   }
 
   if (phase === 'skip-picker') {
@@ -262,108 +241,50 @@ function WriteCvcsQuestionContent(
     );
   }
 
+  const confirming = phase === 'confirm-finish';
   return (
-    <View style={styles.root}>
-      <ScrollView
-        testID="prompt-scroll"
-        style={styles.scroll}
-        contentContainerStyle={styles.list}
+    <Canvas>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={confirming}
+        importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        pointerEvents={confirming ? 'none' : 'auto'}
       >
-        {scoringRows.map((row, wordIndex) => (
-          <View key={row[0].word.item_key} style={styles.wordRow}>
-            <Text style={styles.wordLabel}>{`${wordIndex + 1}. ${row[0].word.word}`}</Text>
-            <View style={styles.letterRow}>
-              {row.map((scoringLetter) => {
-                const marked = isMarked(scoringLetter.itemKey);
-                const labelState = marked ? 'correct' : 'idle';
-                return (
-                  <Pressable
-                    key={scoringLetter.itemKey}
-                    testID={`letter-${scoringLetter.itemKey}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${scoringLetter.word.word} letter ${scoringLetter.letterIndex + 1} ${scoringLetter.letter}, ${labelState}`}
-                    onPress={() => handleToggle(scoringLetter)}
-                    style={[
-                      styles.letterCell,
-                      {
-                        backgroundColor: marked
-                          ? tokens.color.marked
-                          : tokens.color.surface,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.letterText,
-                        {
-                          color: marked
-                            ? tokens.color.onMarked
-                            : tokens.color.ink,
-                        },
-                      ]}
-                    >
-                      {scoringLetter.letter}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-      <View style={styles.nav}>
-        <Pressable accessibilityRole="button" onPress={handleFinish}>
-          <Text>Finish</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setPhase('skip-picker')}
-        >
-          <Text>Skip question</Text>
-        </Pressable>
+        <TileGroups
+          card
+          testID="prompt-scroll"
+          groups={scoringRows.map((row, wordIndex) => ({
+            key: String(wordIndex),
+            heading: `${wordIndex + 1}. ${row[0].word.word}`,
+            items: row,
+          }))}
+          renderTile={scoringLetter => {
+            const state = isMarked(String(scoringLetter.position)) ? 'correct' : 'idle';
+            return (
+              <MarkTile
+                variant="letter"
+                width={52}
+                state={state}
+                text={scoringLetter.letter}
+                testID={`letter-${scoringLetter.itemKey}`}
+                accessibilityLabel={`${scoringLetter.word.word} letter ${scoringLetter.letterIndex + 1} ${scoringLetter.letter}, ${state}`}
+                onPress={() => handleToggle(scoringLetter)}
+              />
+            );
+          }}
+        />
+        <ToggleBar primary={{ label: 'Finish', onPress: handleFinish }} onSkip={() => setPhase('skip-picker')} />
       </View>
-    </View>
+      {confirming && (
+        <ConfirmSheet
+          testID="confirm-finish"
+          title={`${unmarkedCount} items unmarked — finish anyway?`}
+          confirmLabel="Yes, finish"
+          onConfirm={() => finish('completed')}
+          cancelLabel="Cancel"
+          onCancel={() => setPhase('active')}
+        />
+      )}
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  list: {
-    gap: tokens.space.sm,
-    paddingBottom: tokens.space.lg,
-  },
-  wordRow: {
-    gap: tokens.space.sm,
-    padding: tokens.space.md,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.card,
-    backgroundColor: tokens.color.canvas,
-  },
-  wordLabel: {
-    fontSize: tokens.font.body,
-    fontWeight: '600',
-    color: tokens.color.ink,
-  },
-  letterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.sm,
-  },
-  letterCell: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: tokens.space.md,
-    paddingVertical: tokens.space.sm,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.cell,
-  },
-  letterText: { fontSize: tokens.font.markingItem, fontWeight: '600' },
-  nav: {
-    flexDirection: 'row',
-    gap: tokens.space.lg,
-    padding: tokens.space.md,
-  },
-});

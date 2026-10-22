@@ -1,6 +1,8 @@
 const { resolveSupabaseProjectConfig } = require('./config/supabaseProjectConfig');
 const { resolvePreviewContentBuildConfig } = require('./config/previewContentConfig');
 
+const GALLERY_PROFILES = ['development', 'preview'];
+
 module.exports = () => {
   const supabaseConfig = resolveSupabaseProjectConfig();
   const sentryOrganization = process.env.SENTRY_ORG;
@@ -73,6 +75,7 @@ module.exports = () => {
         favicon: './assets/favicon.png',
       },
       extra: {
+        questionGallery: GALLERY_PROFILES.includes(process.env.EAS_BUILD_PROFILE),
         ...supabaseConfig,
         ...resolvePreviewContentBuildConfig(),
         sentryConfigured: Boolean(

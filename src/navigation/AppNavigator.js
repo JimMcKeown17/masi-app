@@ -54,6 +54,11 @@ import LetterMasteryRankingScreen from '../screens/insights/LetterMasteryRanking
 import AssessmentRankingScreen from '../screens/insights/AssessmentRankingScreen';
 import SessionCountRankingScreen from '../screens/insights/SessionCountRankingScreen';
 
+// Device-check gallery
+import QuestionGalleryScreen from '../screens/dev/QuestionGalleryScreen';
+import QuestionGalleryRunScreen from '../screens/dev/QuestionGalleryRunScreen';
+import { isQuestionGalleryEnabled } from '../utils/questionGallery';
+
 // Sync screen
 import SyncStatusScreen from '../screens/main/SyncStatusScreen';
 
@@ -156,6 +161,7 @@ export function MainTabNavigator() {
 }
 
 export function MainNavigator() {
+  const galleryEnabled = isQuestionGalleryEnabled();
   return (
     <Stack.Navigator
       screenOptions={{
@@ -263,6 +269,10 @@ export function MainNavigator() {
           title: 'Select child',
         }}
       />
+      {galleryEnabled && <Stack.Screen name="QuestionGallery" component={QuestionGalleryScreen}
+        options={{ title: 'Question gallery' }} />}
+      {galleryEnabled && <Stack.Screen name="QuestionGalleryRun" component={QuestionGalleryRunScreen}
+        options={{ headerShown: false }} />}
       <Stack.Screen
         name="StandaloneTest"
         component={StandaloneTestScreen}

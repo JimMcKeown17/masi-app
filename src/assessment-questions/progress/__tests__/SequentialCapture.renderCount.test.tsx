@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { LETTER_PAGE_LAYOUT } from '../../ui';
 import { SequentialCapture } from '../SequentialCapture';
 
 describe('SequentialCapture countdown isolation', () => {
@@ -29,6 +30,7 @@ describe('SequentialCapture countdown isolation', () => {
         }}
         items={[item as { item_key: string; prompt: string; row: number }]}
         rows={[[0]]}
+        layout={LETTER_PAGE_LAYOUT}
         stopRule={null}
         testIDPrefix="letter"
         durationSec={60}
@@ -41,7 +43,7 @@ describe('SequentialCapture countdown isolation', () => {
 
     act(() => jest.advanceTimersByTime(1000));
 
-    expect(screen.getByText('0:59')).toBeTruthy();
+    expect(screen.getByText('59s')).toBeTruthy();
     expect(promptRenderCount).toBe(0);
   });
 });

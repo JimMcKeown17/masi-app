@@ -36,8 +36,8 @@ export const WELA_PLUS_LETTER_WRITING_EN: ItemSet<LetterWritingFromPicturesItemS
   question_code: 'wela_plus_letter_writing',
   question_version: '2024.1',
   language: 'en',
-  itemsPerPage: 26,
-  columns: 6,
+  itemsPerPage: 12,
+  columns: 3,
   prompts: LETTERS.map((letter, index) => ({
     item_key: letter,
     expected_letter: letter,

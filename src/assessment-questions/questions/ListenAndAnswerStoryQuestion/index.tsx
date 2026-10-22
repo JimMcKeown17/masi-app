@@ -7,7 +7,7 @@
  * is untimed by design (PRD §"Pattern F — Timer: none").
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, StyleSheet } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -18,12 +18,11 @@ import type { ListenAndAnswerStoryItemSet } from './types';
 import { WELA_PLUS_LISTEN_AND_ANSWER_STORY_EN } from '../../itemsets/wela_plus_listen_and_answer_story.en';
 import { WELA_PLUS_LISTEN_AND_ANSWER_STORY_XH } from '../../itemsets/wela_plus_listen_and_answer_story.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
+import { Canvas, ConfirmSheet, MarkTile, QuestionIntro, ToggleBar, ContentText, FullScreenSheet, SecondaryButton } from '../../ui';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
-const BASE_PROMPT_FONT_SIZE = 28;
 
 type Phase =
   | 'intro'
@@ -83,8 +82,6 @@ function ListenAndAnswerStoryQuestionContent(
   const [phase, setPhase] = useState<Phase>('intro');
   const [showReread, setShowReread] = useState(false);
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const promptFontSize = BASE_PROMPT_FONT_SIZE * fontScale;
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -96,7 +93,7 @@ function ListenAndAnswerStoryQuestionContent(
 
   const questions = effectiveItemSet.questions;
   const unmarkedCount = questions.reduce(
-    (acc, q) => acc + (isMarked(q.item_key) ? 0 : 1),
+    (acc, _q, idx) => acc + (isMarked(String(idx)) ? 0 : 1),
     0,
   );
 
@@ -120,7 +117,7 @@ function ListenAndAnswerStoryQuestionContent(
             position: idx,
             item_key: q.item_key,
             prompt: q.prompt,
-            is_correct: isMarkedRef.current(q.item_key),
+            is_correct: isMarkedRef.current(String(idx)),
           }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
       const totalAttempted = isSkipped ? 0 : questions.length;
@@ -155,8 +152,8 @@ function ListenAndAnswerStoryQuestionContent(
 
   const handleToggle = useCallback(
     (idx: number, item_key: string, prompt: string) => {
-      const willBeMarked = !isMarkedRef.current(item_key);
-      toggle(item_key);
+      const willBeMarked = !isMarkedRef.current(String(idx));
+      toggle(String(idx));
       if (onItemMarked) {
         const item: ResultItem = {
           position: idx,
@@ -185,41 +182,19 @@ function ListenAndAnswerStoryQuestionContent(
 
   if (phase === 'intro') {
     return (
-      <View style={styles.introRoot}>
-        <ScrollView
-          testID="intro-story-scroll"
-          style={styles.introScroll}
-          contentContainerStyle={styles.introScrollContent}
-        >
-          {instructions ? <Text>{instructions}</Text> : null}
-          <Text style={styles.introStory}>{effectiveItemSet.story}</Text>
-        </ScrollView>
-        <Pressable
-          onPress={() => setPhase('active')}
-          style={styles.introStartButton}
-        >
-          <Text style={styles.introStartButtonText}>I've finished reading</Text>
-        </Pressable>
-      </View>
+      <QuestionIntro
+        testID="intro-story"
+        instructions={instructions}
+        startLabel="I've finished reading"
+        onStart={() => setPhase('active')}
+      >
+        <ContentText size="story">{effectiveItemSet.story}</ContentText>
+      </QuestionIntro>
     );
   }
 
   if (phase === 'finished') {
     return <View />;
-  }
-
-  if (phase === 'confirm-finish') {
-    return (
-      <View>
-        <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable onPress={() => finish('completed')}>
-          <Text>Yes, finish</Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
-    );
   }
 
   if (phase === 'skip-picker') {
@@ -231,137 +206,55 @@ function ListenAndAnswerStoryQuestionContent(
     );
   }
 
+  const confirming = phase === 'confirm-finish';
   return (
-    <View style={styles.root}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setShowReread(true)}
-        style={styles.rereadPill}
+    <Canvas>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={confirming}
+        importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        pointerEvents={confirming ? 'none' : 'auto'}
       >
-        <Text style={styles.rereadPillText}>Re-read story</Text>
-      </Pressable>
-      <Modal
-        visible={showReread}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setShowReread(false)}
-      >
-        <View style={styles.modalRoot}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <Text style={styles.modalStory}>{effectiveItemSet.story}</Text>
-          </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setShowReread(false)}
-            style={styles.modalCloseButton}
-          >
-            <Text style={styles.modalCloseText}>Close</Text>
-          </Pressable>
+        <View style={{ paddingHorizontal: tokens.space.lg, paddingTop: tokens.space.lg }}>
+          <SecondaryButton label="Re-read story" onPress={() => setShowReread(true)} />
         </View>
-      </Modal>
-      <ScrollView
-        testID="prompt-scroll"
-        style={styles.scroll}
-        contentContainerStyle={styles.list}
-      >
-        {questions.map((q, idx) => {
-          const marked = isMarked(q.item_key);
-          const labelState = marked ? 'correct' : 'idle';
-          return (
-            <Pressable
-              key={q.item_key}
-              accessibilityRole="button"
-              accessibilityLabel={`${q.prompt}, ${labelState}`}
-              onPress={() => handleToggle(idx, q.item_key, q.prompt)}
-              style={[
-                styles.card,
-                {
-                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.promptText,
-                  {
-                    fontSize: promptFontSize,
-                    color: marked ? tokens.color.onMarked : tokens.color.ink,
-                  },
-                ]}
-              >
-                {q.prompt}
-              </Text>
-              <Text
-                style={[
-                  styles.gloss,
-                  { color: marked ? tokens.color.onMarked : tokens.color.muted },
-                ]}
-              >
-                {q.acceptable_answers.join(', ')}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-      <Pressable accessibilityRole="button" onPress={handleFinish}>
-        <Text>Finish</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setPhase('skip-picker')}
-      >
-        <Text>Skip question</Text>
-      </Pressable>
-    </View>
+        <FullScreenSheet visible={showReread} onClose={() => setShowReread(false)}>
+          <ScrollView contentContainerStyle={{ padding: tokens.space.lg }}>
+            <ContentText size="story">{effectiveItemSet.story}</ContentText>
+          </ScrollView>
+        </FullScreenSheet>
+        <ScrollView
+          testID="prompt-scroll"
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: tokens.space.lg, gap: 10 }}
+        >
+          {questions.map((p, idx) => {
+            const state = isMarked(String(idx)) ? 'correct' : 'idle';
+            return (
+              <MarkTile
+                key={idx}
+                variant="promptCard"
+                state={state}
+                text={p.prompt}
+                gloss={p.acceptable_answers.join(', ')}
+                accessibilityLabel={`${p.prompt}, ${state}`}
+                onPress={() => handleToggle(idx, p.item_key, p.prompt)}
+              />
+            );
+          })}
+        </ScrollView>
+        <ToggleBar primary={{ label: 'Finish', onPress: handleFinish }} onSkip={() => setPhase('skip-picker')} />
+      </View>
+      {confirming && (
+        <ConfirmSheet
+          testID="confirm-finish"
+          title={`${unmarkedCount} items unmarked — finish anyway?`}
+          confirmLabel="Yes, finish"
+          onConfirm={() => finish('completed')}
+          cancelLabel="Cancel"
+          onCancel={() => setPhase('active')}
+        />
+      )}
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  list: { flexDirection: 'column', paddingBottom: 16 },
-  card: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    marginBottom: 8,
-  },
-  promptText: { fontWeight: '600' },
-  gloss: { fontSize: 14, marginTop: 8 },
-  rereadPill: {
-    alignSelf: 'center',
-    backgroundColor: tokens.color.canvas,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginBottom: 8,
-  },
-  rereadPillText: { color: tokens.color.primary, fontWeight: '600' },
-  modalRoot: { flex: 1, backgroundColor: tokens.color.surface },
-  modalContent: { padding: 24 },
-  modalStory: { fontSize: 18, lineHeight: 26 },
-  modalCloseButton: {
-    alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: tokens.color.primary,
-    borderRadius: 8,
-    margin: 16,
-  },
-  modalCloseText: { color: tokens.color.onPrimary, fontWeight: '600' },
-  introRoot: { flex: 1 },
-  introScroll: { flex: 1 },
-  introScrollContent: { padding: 16 },
-  introStory: { fontSize: 18, lineHeight: 26, marginTop: 8 },
-  introStartButton: {
-    alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: tokens.color.primary,
-    borderRadius: 8,
-    margin: 16,
-  },
-  introStartButtonText: { color: tokens.color.onPrimary, fontWeight: '600' },
-});

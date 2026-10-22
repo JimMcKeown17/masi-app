@@ -1,13 +1,13 @@
 /**
- * ReadWordsQuestion — WelaPLUS Pattern C (Q6, timed pill grid).
+ * ReadWordsQuestion — WelaPLUS Pattern C (Q6, timed paged word grid).
  *
- * Child reads words aloud; EA taps each pill when the child gets it right.
+ * Child reads words aloud; EA taps each tile when the child gets it right.
  * When durationSec is provided, expiry opens the last-attempted marker.
- * Pills follow card rows when row_lengths is provided and otherwise wrap.
+ * Pages keep whole card rows together, reflowing words into two columns.
  * Sequential mode shares the letter test's capture flow.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -18,11 +18,15 @@ import type { ReadWordsItemSet, ReadWordsPrompt } from './types';
 import { WELA_PLUS_READ_WORDS_EN } from '../../itemsets/wela_plus_read_words.en';
 import { WELA_PLUS_READ_WORDS_XH } from '../../itemsets/wela_plus_read_words.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { tokens } from '../../theme/tokens';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
 import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
+import {
+  Canvas, WORD_PAGE_LAYOUT, paginate, rowsFromLengths, PageIndicator, PagedGrid,
+  MarkTile, QuestionIntro, ToggleBar,
+} from '../../ui';
+import { Countdown } from '../../progress/Countdown';
 import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
@@ -98,7 +102,7 @@ function ReadWordsSequentialContent(props: QuestionProps & { itemSet: FullItemSe
     chunkByLengths(words, row_lengths ?? [words.length]).map((row) =>
       row.map((word) => ({ item_key: word.item_key, prompt: word.word }))),
   ), [words, row_lengths]);
-  return <SequentialCapture {...props} {...card} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
+  return <SequentialCapture {...props} {...card} layout={WORD_PAGE_LAYOUT} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
 }
 
 function ReadWordsQuestionContent(
@@ -118,6 +122,7 @@ function ReadWordsQuestionContent(
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const [markReason, setMarkReason] = useState<MarkReason>('ea_ended');
+  const [pageIndex, setPageIndex] = useState(0);
   const { isMarked, toggle } = useToggleMark();
 
   const isMarkedRef = useRef(isMarked);
@@ -134,11 +139,16 @@ function ReadWordsQuestionContent(
     return startTimeMsRef.current + durationSec * 1000;
   }, [durationSec]);
 
+  const getRemainingMs = useCallback(() => {
+    if (durationSec === undefined) return 0;
+    const d = getDeadlineMs();
+    return d === null ? durationSec * 1000 : d - (stopTimeMsRef.current ?? monotonicNow());
+  }, [getDeadlineMs, durationSec]);
+
   const words = effectiveItemSet.words;
-  const indexedWords = words.map((word, idx) => ({ word, idx }));
-  const wordRows = effectiveItemSet.row_lengths
-    ? chunkByLengths(indexedWords, effectiveItemSet.row_lengths)
-    : null;
+  const pages = useMemo(() => paginate(
+    rowsFromLengths(effectiveItemSet.row_lengths ?? [words.length]), WORD_PAGE_LAYOUT,
+  ), [effectiveItemSet.row_lengths, words.length]);
 
   const finish = useCallback(
     (stoppedReason: StoppedReason, lastAttempted: number = NO_ATTEMPT) => {
@@ -243,12 +253,7 @@ function ReadWordsQuestionContent(
 
   if (phase === 'intro') {
     return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
+      <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />
     );
   }
 
@@ -284,58 +289,39 @@ function ReadWordsQuestionContent(
     );
   }
 
-  const renderWord = ({ word: w, idx }: { word: ReadWordsPrompt; idx: number }) => {
-    const key = keyFor(idx, w.word);
-    const marked = isMarked(key);
-    const labelState = marked ? 'correct' : 'idle';
-    return (
-      <Pressable
-        key={key}
-        accessibilityRole="button"
-        accessibilityLabel={`${w.word}, ${labelState}`}
-        onPress={() => handleToggle(idx, w.item_key, w.word)}
-        style={[
-          styles.pill,
-          {
-            backgroundColor: marked
-              ? tokens.color.marked
-              : tokens.color.surface,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.word,
-            {
-              color: marked ? tokens.color.onMarked : tokens.color.ink,
-            },
-          ]}
-        >
-          {w.word}
-        </Text>
-      </Pressable>
-    );
-  };
-
   return (
-    <View style={styles.root}>
-      <ScrollView
-        testID="word-scroll"
-        style={styles.scroll}
-        contentContainerStyle={wordRows ? styles.rows : styles.wrap}
-      >
-        {wordRows
-          ? wordRows.map((row, r) => (
-              <View key={r} testID={`word-row-${r}`} style={styles.row}>
-                {row.map(renderWord)}
-              </View>
-            ))
-          : indexedWords.map(renderWord)}
-      </ScrollView>
-      <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
+    <Canvas>
+      {durationSec !== undefined && <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />}
+      {pages[pageIndex] && <PagedGrid
+        pages={pages}
+        pageIndex={pageIndex}
+        layout={WORD_PAGE_LAYOUT}
+        variant="word"
+        renderTile={(position, { width, height }) => {
+          const w = words[position];
+          const correct = isMarked(keyFor(position, w.word));
+          return <MarkTile
+            key={position}
+            variant="word"
+            state={correct ? 'correct' : 'idle'}
+            text={w.word}
+            width={width}
+            height={height}
+            accessibilityLabel={`${w.word}, ${correct ? 'correct' : 'idle'}`}
+            onPress={() => handleToggle(position, w.item_key, w.word)}
+          />;
+        }}
+      />}
+      <ToggleBar
+        header={<PageIndicator
+          pages={pages}
+          current={pageIndex}
+          onPrevious={() => setPageIndex((index) => Math.max(0, index - 1))}
+          onNext={() => setPageIndex((index) => Math.min(pages.length - 1, index + 1))}
+        />}
+        primary={{
+          label: 'End',
+          onPress: () => {
             const nowMs = monotonicNow();
             const deadlineMs = getDeadlineMs();
             const deadlineReached = deadlineMs !== null && nowMs >= deadlineMs;
@@ -345,50 +331,10 @@ function ReadWordsQuestionContent(
             }
             setMarkReason(deadlineReached ? 'timer' : 'ea_ended');
             setPhase('mark-last');
-          }}
-        >
-          <Text>End</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setPhase('skip-picker')}
-        >
-          <Text>Skip question</Text>
-        </Pressable>
-      </View>
-    </View>
+          },
+        }}
+        onSkip={() => setPhase('skip-picker')}
+      />
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  wrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.sm,
-    padding: tokens.space.md,
-  },
-  rows: {
-    gap: tokens.space.sm,
-    padding: tokens.space.md,
-  },
-  row: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.sm,
-  },
-  pill: {
-    paddingHorizontal: tokens.space.lg,
-    paddingVertical: tokens.space.sm,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.pill,
-  },
-  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
-  nav: {
-    flexDirection: 'row',
-    gap: tokens.space.lg,
-    padding: tokens.space.md,
-  },
-});

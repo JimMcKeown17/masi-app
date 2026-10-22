@@ -40,6 +40,7 @@
     "test:release": "npm test && npm run test:integration && npm run test:types && npm run sqlite:staging:check"
   },
   "dependencies": {
+    "@expo-google-fonts/andika": "0.4.1",
     "@expo-google-fonts/bricolage-grotesque": "0.4.1",
     "@expo-google-fonts/figtree": "0.4.1",
     "@react-native-async-storage/async-storage": "^2.2.0",

@@ -1,0 +1,105 @@
+<link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  .row { display:flex; flex-wrap:wrap; gap:28px; align-items:flex-start; margin: 8px 0 32px; }
+  .col { display:flex; flex-direction:column; gap:10px; width:360px; }
+  .col h3 { margin:0; }
+  .col p.note { margin:0; font-size:13px; line-height:1.4; opacity:.8; }
+  .phone { width:360px; height:740px; border-radius:28px; overflow:hidden; position:relative;
+           box-shadow:0 0 0 8px #1b1b1b, 0 12px 30px rgba(0,0,0,.25);
+           font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; display:flex; flex-direction:column; }
+  .status { height:34px; display:flex; align-items:center; padding:0 22px; font-size:13px; font-weight:600; }
+  .hdr { display:flex; align-items:center; gap:10px; padding:4px 16px 0; }
+  .x { width:32px; height:32px; border-radius:16px; border:1px solid; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .hdr .t { font-weight:700; font-size:16px; line-height:1.15; }
+  .hdr .s { font-size:12px; opacity:.7; }
+  .timer { display:flex; align-items:center; gap:12px; padding:14px 16px 0; }
+  .bar { flex:1; height:12px; border-radius:6px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:95%; border-radius:6px; }
+  .secs { font-weight:700; font-size:20px; min-width:44px; text-align:right; }
+  .pager { text-align:center; padding-top:12px; font-size:13px; }
+  .dots { display:flex; gap:7px; justify-content:center; margin-top:6px; }
+  .dots b { width:8px; height:8px; border-radius:4px; display:block; }
+  .gridwrap { flex:1; display:flex; align-items:center; justify-content:center; padding:0 16px; }
+  .grid { display:grid; gap:10px; width:100%; }
+  .tile { border-radius:10px; display:flex; align-items:center; justify-content:center; border:1px solid; box-sizing:border-box; }
+  .tile.letter { height:60px; font-family:'Andika',sans-serif; font-size:30px; }
+  .tile.word { height:58px; font-family:'Andika',sans-serif; font-size:21px; }
+  .actions { padding:12px 16px 18px; display:flex; flex-direction:column; gap:10px; border-top:1px solid; }
+  .pair { display:flex; gap:12px; }
+  .btn { flex:1; height:52px; border-radius:26px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:600; font-size:16px; color:#fff; }
+  .back { height:48px; border-radius:24px; border:1.5px solid; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:600; font-size:15px; background:#fff; }
+  .end { text-align:center; font-size:15px; font-weight:600; padding:4px 0 0; }
+  .legend { font-size:12px; display:flex; gap:12px; flex-wrap:wrap; margin-top:2px; }
+  .legend span { display:inline-flex; align-items:center; gap:5px; }
+  .legend i { width:12px; height:12px; border-radius:3px; display:inline-block; }
+</style>
+
+<h2>Which colour treatment feels right?</h2>
+<p class="subtitle">The layout is the same in all three. Only the colours change. Drawn at 360&nbsp;dp, the A03's width. Letters are in Andika, a font made for early readers; the font is a separate decision.</p>
+
+<div class="row" id="letters"></div>
+<h3 style="margin-top:4px">The same three, on the word test</h3>
+<p class="subtitle">Ten words per page in two columns, so long isiXhosa words like <i>ibhulukhwe</i> still fit.</p>
+<div class="row" id="words"></div>
+
+<div class="options" style="margin-top:8px">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)"><div class="letter">A</div><div class="content"><h3>Old palette</h3><p>Cream and brown, as in your Before screenshots</p></div></div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)"><div class="letter">B</div><div class="content"><h3>Masi, red accent</h3><p>What the old code had just before PR #90 removed it</p></div></div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)"><div class="letter">C</div><div class="content"><h3>Masi, ink accent</h3><p>My recommendation: red only ever means "incorrect"</p></div></div>
+</div>
+
+<script>
+(function () {
+  const PAL = {
+    a: { name:'A · Old palette', note:'Cream background, brown accent for "you are here" and Back.',
+         bg:'#FFFAF3', ink:'#2A1D14', muted:'#7A6555', line:'#EFE3D6', surface:'#FFFFFF',
+         ok:'#477D35', bad:'#B34537', accent:'#8B4A1C', accentW:3, bar:'#477D35', track:'#EDE3D8', dot:'#EDE3D8', end:'#B34537', foot:'#FFFFFF' },
+    b: { name:'B · Masi, red accent', note:'Today\'s Masi canvas and greens/reds. Current tile and Back use Masi red, so it sits next to the red "incorrect" tiles.',
+         bg:'#F8F5F4', ink:'#221A1B', muted:'#76696B', line:'#ECE5E4', surface:'#FFFFFF',
+         ok:'#2E7D27', bad:'#B3261E', accent:'#E72D4D', accentW:3, bar:'#2E7D27', track:'#ECE5E4', dot:'#E5DCDB', end:'#C81F3E', foot:'#FFFFFF' },
+    c: { name:'C · Masi, ink accent (recommended)', note:'Same Masi palette. "You are here" is a thick ink outline, so green means correct and red means incorrect, and nothing else is red except End.',
+         bg:'#F8F5F4', ink:'#221A1B', muted:'#76696B', line:'#ECE5E4', surface:'#FFFFFF',
+         ok:'#2E7D27', bad:'#B3261E', accent:'#221A1B', accentW:3, bar:'#2E7D27', track:'#ECE5E4', dot:'#E5DCDB', end:'#C81F3E', foot:'#FFFFFF' },
+  };
+  const LET = ['l','a','m','E','p','n','L','s','o','e','Y','i','K','N','d','H','f','U','b','v'];
+  const WORDS = ['inja','amanzi','umama','ubaba','indlu','isikolo','umntana','inkomo','intaka','ilanga'];
+  const MARK_L = [1,1,1,0,0,1,1,1];      // 1 correct, 0 incorrect; index 8 is current
+  const MARK_W = [1,1,0];                 // index 3 is current
+
+  function phone(p, kind) {
+    const items = kind === 'letter' ? LET : WORDS;
+    const marks = kind === 'letter' ? MARK_L : MARK_W;
+    const cur = marks.length;
+    const cols = kind === 'letter' ? 5 : 2;
+    const pages = kind === 'letter' ? 3 : 5;
+    const tiles = items.map((t, i) => {
+      let bg = p.surface, fg = p.ink, bd = p.line, bw = 1;
+      if (i < marks.length) { bg = marks[i] ? p.ok : p.bad; fg = '#fff'; bd = bg; }
+      if (i === cur) { bd = p.accent; bw = p.accentW; }
+      return `<div class="tile ${kind}" style="background:${bg};color:${fg};border-color:${bd};border-width:${bw}px">${t}</div>`;
+    }).join('');
+    const dots = Array.from({length: pages}, (_, i) => `<b style="background:${i === 0 ? p.accent : p.dot}"></b>`).join('');
+    return `
+    <div class="col">
+      <h3>${p.name}</h3>
+      <div class="phone" style="background:${p.bg};color:${p.ink}">
+        <div class="status">9:41</div>
+        <div class="hdr"><div class="x" style="border-color:${p.line};background:${p.surface}">✕</div>
+          <div><div class="t">${kind === 'letter' ? 'Letter Sounds' : 'Word Reading'}</div><div class="s">Alunamida McKeown · isiXhosa</div></div></div>
+        <div class="timer"><div class="bar" style="background:${p.track}"><i style="background:${p.bar}"></i></div><div class="secs" style="color:${p.bar}">57s</div></div>
+        <div class="pager" style="color:${p.muted}">Grid 1 of ${pages}<div class="dots">${dots}</div></div>
+        <div class="gridwrap"><div class="grid" style="grid-template-columns:repeat(${cols},1fr)">${tiles}</div></div>
+        <div class="actions" style="background:${p.foot};border-color:${p.line}">
+          <div class="pair"><div class="btn" style="background:${p.ok}">✓ Correct</div><div class="btn" style="background:${p.bad}">✕ Incorrect</div></div>
+          <div class="back" style="border-color:${p.accent};color:${p.accent}">← Back</div>
+          <div class="end" style="color:${p.end}">End Assessment</div>
+        </div>
+      </div>
+      <p class="note">${p.note}</p>
+      <div class="legend"><span><i style="background:${p.ok}"></i>correct</span><span><i style="background:${p.bad}"></i>incorrect</span><span><i style="background:#fff;border:${p.accentW}px solid ${p.accent}"></i>current</span><span><i style="background:#fff;border:1px solid ${p.line}"></i>not yet</span></div>
+    </div>`;
+  }
+  document.getElementById('letters').innerHTML = ['a','b','c'].map(k => phone(PAL[k], 'letter')).join('');
+  document.getElementById('words').innerHTML = ['a','b','c'].map(k => phone(PAL[k], 'word')).join('');
+})();
+</script>

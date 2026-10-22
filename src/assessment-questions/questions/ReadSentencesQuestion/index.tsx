@@ -7,7 +7,7 @@
  * shape per sentence as a computed field.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -22,7 +22,7 @@ import type {
 import { WELA_PLUS_READ_SENTENCES_EN } from '../../itemsets/wela_plus_read_sentences.en';
 import { WELA_PLUS_READ_SENTENCES_XH } from '../../itemsets/wela_plus_read_sentences.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { tokens } from '../../theme/tokens';
+import { Canvas, ConfirmSheet, MarkTile, QuestionIntro, TileGroups, ToggleBar } from '../../ui';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
@@ -126,7 +126,7 @@ function ReadSentencesQuestionContent(
   const flatWords = React.useMemo(() => flattenWords(sentences), [sentences]);
 
   const unmarkedCount = flatWords.reduce(
-    (acc, w) => acc + (isMarked(w.item_key) ? 0 : 1),
+    (acc, w) => acc + (isMarked(String(w.position)) ? 0 : 1),
     0,
   );
 
@@ -161,7 +161,7 @@ function ReadSentencesQuestionContent(
       const items = isSkipped
         ? []
         : flatWords.map((w) => {
-            const tapped = isMarkedRef.current(w.item_key);
+            const tapped = isMarkedRef.current(String(w.position));
             const isCorrect =
               markingPolarity === 'tap_wrong' ? !tapped : tapped;
             return {
@@ -221,8 +221,8 @@ function ReadSentencesQuestionContent(
 
   const handleToggle = useCallback(
     (w: FlatWord) => {
-      const willBeMarked = !isMarkedRef.current(w.item_key);
-      toggle(w.item_key);
+      const willBeMarked = !isMarkedRef.current(String(w.position));
+      toggle(String(w.position));
       if (onItemMarked) {
         const tappedAfter = willBeMarked;
         const isCorrect =
@@ -253,32 +253,11 @@ function ReadSentencesQuestionContent(
   );
 
   if (phase === 'intro') {
-    return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
-    );
+    return <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />;
   }
 
   if (phase === 'finished') {
     return <View />;
-  }
-
-  if (phase === 'confirm-finish') {
-    return (
-      <View>
-        <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable onPress={() => finish('completed')}>
-          <Text>Yes, finish</Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
-    );
   }
 
   if (phase === 'skip-picker') {
@@ -290,88 +269,49 @@ function ReadSentencesQuestionContent(
     );
   }
 
+  const confirming = phase === 'confirm-finish';
   return (
-    <View style={styles.root}>
-      <ScrollView testID="sentence-scroll" style={styles.scroll}>
-        {sentences.map((s, sIdx) => (
-          <View
-            key={s.item_key}
-            testID={`sentence-row-${s.item_key}`}
-            style={styles.sentenceRow}
-          >
-            {s.words.map((w) => {
-              const flat = flatWords.find((f) => f.item_key === w.item_key);
-              if (!flat) return null;
-              const marked = isMarked(w.item_key);
-              const labelState = marked ? 'correct' : 'idle';
-              return (
-                <Pressable
-                  key={w.item_key}
-                  testID={`pill-${w.item_key}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${w.word}, ${labelState}`}
-                  onPress={() => handleToggle(flat)}
-                  style={[
-                    styles.pill,
-                    {
-                      backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.word,
-                      {
-                        color: marked ? tokens.color.onMarked : tokens.color.ink,
-                      },
-                    ]}
-                  >
-                    {w.word}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
-      </ScrollView>
-      <View style={styles.nav}>
-        <Pressable accessibilityRole="button" onPress={handleFinish}>
-          <Text>Finish</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setPhase('skip-picker')}
-        >
-          <Text>Skip question</Text>
-        </Pressable>
+    <Canvas>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={confirming}
+        importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        pointerEvents={confirming ? 'none' : 'auto'}
+      >
+        <TileGroups
+          card
+          testID="sentence-scroll"
+          groups={sentences.map((sentence, sentenceIndex) => ({
+            key: String(sentenceIndex),
+            testID: `sentence-row-${sentence.item_key}`,
+            items: flatWords.filter(word => word.sentenceIndex === sentenceIndex),
+          }))}
+          renderTile={word => {
+            const state = isMarked(String(word.position)) ? 'correct' : 'idle';
+            return (
+              <MarkTile
+                variant="pill"
+                state={state}
+                text={word.word}
+                testID={`pill-${word.item_key}`}
+                accessibilityLabel={`${word.word}, ${state}`}
+                onPress={() => handleToggle(word)}
+              />
+            );
+          }}
+        />
+        <ToggleBar primary={{ label: 'Finish', onPress: handleFinish }} onSkip={() => setPhase('skip-picker')} />
       </View>
-    </View>
+      {confirming && (
+        <ConfirmSheet
+          testID="confirm-finish"
+          title={`${unmarkedCount} items unmarked — finish anyway?`}
+          confirmLabel="Yes, finish"
+          onConfirm={() => finish('completed')}
+          cancelLabel="Cancel"
+          onCancel={() => setPhase('active')}
+        />
+      )}
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  sentenceRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.sm,
-    padding: tokens.space.md,
-    margin: tokens.space.sm,
-    backgroundColor: tokens.color.canvas,
-    borderRadius: tokens.radius.cell,
-  },
-  pill: {
-    paddingHorizontal: tokens.space.md,
-    paddingVertical: tokens.space.sm,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.pill,
-  },
-  word: { fontSize: tokens.font.markingItem, fontWeight: '600' },
-  nav: {
-    flexDirection: 'row',
-    gap: tokens.space.lg,
-    padding: tokens.space.md,
-  },
-});

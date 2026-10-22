@@ -1,5 +1,7 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, within } from '@testing-library/react-native';
+import { ScrollView } from 'react-native';
+import { BottomBar, FullScreenSheet, UiText } from '../../../ui';
 import { StoryWritingRubricQuestion } from '..';
 import { FIXTURE_STORY_WRITING_EN } from '../../../testFixtures';
 
@@ -424,7 +426,7 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
     expect(onComplete.mock.calls[0][0].derived).toMatchObject({ ea_rubric_total: 40, max: 40, percent: 100 });
   });
 
-  test('11-chip rows wrap with equal gaps and preserve 48 px touch targets', () => {
+  test('11-chip rows wrap with equal gaps and preserve 52 px touch targets', () => {
     const r = render(
       <StoryWritingRubricQuestion language="en" instructions="." onComplete={jest.fn()}
         itemSet={{ ...SET, score_range: { min: 0, max: 10 } }} />,
@@ -437,7 +439,7 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
       });
       const chips = r.getAllByTestId(new RegExp(`^chip-${dimension.code}-`));
       expect(chips).toHaveLength(11);
-      for (const chip of chips) expect(chip).toHaveStyle({ width: 48, height: 48 });
+      for (const chip of chips) expect(chip).toHaveStyle({ width: 52, height: 52 });
     }
   });
 
@@ -579,4 +581,49 @@ describe('StoryWritingRubricQuestion — itemSet override', () => {
     expect(r.derived.by_dimension).toEqual({ creativity: 2 });
     expect(r.items[0].metadata).toEqual({ score: 2, scorer: 'ea', anchor_text: 'some' });
   });
+});
+
+test('the running total stays visible above Finish', () => {
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={SET} instructions="." onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  const scroll = r.UNSAFE_getByType(ScrollView);
+  expect(within(scroll).queryByText('Total: 0 / 16')).toBeNull();
+  expect(r.UNSAFE_getAllByType(BottomBar)).toHaveLength(1);
+  const panel = r.UNSAFE_getByType(BottomBar);
+  expect(panel.findAllByType(UiText).map((text: { props: { children?: React.ReactNode } }) => text.props.children)).toEqual(['Total: 0 / 16', 'Finish', 'Skip question']);
+  expect(panel.findAllByType(UiText)[0].props.variant).toBe('heading');
+  fireEvent.press(r.getByTestId('chip-spelling-3'));
+  expect(within(panel).getByText('Total: 3 / 16')).toBeTruthy();
+});
+
+test('finish confirmation overlays and hides the active view, then Cancel restores scores', () => {
+  const onComplete = jest.fn();
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={SET} instructions="." onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByTestId('chip-spelling-2'));
+  fireEvent.press(r.getByText('Finish'));
+  expect(r.getByTestId('confirm-finish').props.accessibilityViewIsModal).toBe(true);
+  const active = r.getByTestId('rubric-active', { includeHiddenElements: true });
+  expect(active.props).toMatchObject({ accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants', pointerEvents: 'none' });
+  expect(r.queryByText('Finish')).toBeNull();
+  expect(r.queryByTestId('chip-spelling-2')).toBeNull();
+  fireEvent.press(r.getByText('Cancel'));
+  expect(r.getByTestId('rubric-active').props.pointerEvents).toBe('auto');
+  expect(r.getByText('Total: 2 / 16')).toBeTruthy();
+  expect(r.getByTestId('chip-spelling-2')).toHaveAccessibleName('spelling score 2, selected');
+  expect(onComplete).not.toHaveBeenCalled();
+});
+
+test('rubric anchors and picture enlargement use FullScreenSheets with one Close each', () => {
+  const r = render(<StoryWritingRubricQuestion language="en" itemSet={FIXTURE_STORY_WRITING_EN} instructions="." onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByTestId('view-rubric-meaning_making'));
+  expect(r.UNSAFE_getAllByType(FullScreenSheet).filter(sheet => sheet.props.visible)).toHaveLength(1);
+  expect(r.getAllByRole('button', { name: 'Close' })).toHaveLength(1);
+  fireEvent.press(r.getByText('Close'));
+  fireEvent.press(r.getByTestId('picture-thumbnail'));
+  expect(r.UNSAFE_getAllByType(FullScreenSheet).filter(sheet => sheet.props.visible)).toHaveLength(1);
+  expect(r.getAllByRole('button', { name: 'Close' })).toHaveLength(1);
+  fireEvent.press(r.getByText('Close'));
+  expect(r.getByText('Total: 0 / 16')).toBeTruthy();
 });

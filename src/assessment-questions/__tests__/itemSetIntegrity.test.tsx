@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import * as S from '../itemsets/index';
 import { CONTENT_PENDING } from '../itemsets/contentStatus';
 import { render, fireEvent } from '@testing-library/react-native';
@@ -45,7 +46,8 @@ test('fixed-size Questions', () => {
     expect((S as any)[`WELA_PLUS_STORY_WRITING_${l}`].dimensions.map((d: any) => d.code)).toEqual(['meaning_making', 'spelling', 'length', 'vocabulary']);
     const lw = (S as any)[`WELA_PLUS_LETTER_WRITING_${l}`];
     expect(lw.prompts.map((p: any) => p.expected_letter).join('')).toBe('afkoswbglptxchmquydinrvzej');
-    expect(lw.columns).toBe(6);
+    expect(lw.columns).toBe(3);
+    expect(lw.itemsPerPage).toBe(12);
   }
 });
 
@@ -97,17 +99,24 @@ test('language="xh" without an override renders isiXhosa content', () => {
   expect(r.getByLabelText('inja, idle')).toBeTruthy();
 });
 
-test('pending content lists exactly the remaining picture, rubric, language-review, letter-card, and word-list work', () => {
+test('pending content lists exactly the remaining picture, rubric, language-review, and word-list work', () => {
   expect(CONTENT_PENDING).toEqual([
     { item_set_id: 'wela_plus_letter_writing@2024.1.xh', field: 'prompts.picture', note: 'Masi team to choose better pictures for g (drum), n (nest) and z (axe) and supply their isiXhosa names; draw new clock artwork for x (ixesha).' },
     { item_set_id: 'wela_plus_story_writing@2024.1.en', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions. The rubric is expected to be redesigned.' },
     { item_set_id: 'wela_plus_story_writing@2024.1.xh', field: 'dimensions.anchors', note: 'Interim scale: score each dimension 1–4 with no anchor descriptions; isiXhosa labels still needed. The rubric is expected to be redesigned.' },
     { item_set_id: 'all@2024.1.xh', field: 'strings', note: 'First-language review of every isiXhosa string.' },
-    { item_set_id: 'letter_sounds@2026.2.en', field: 'typeface', note: 'Grid A letters supplied. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
-    { item_set_id: 'letter_sounds@2026.2.xh', field: 'typeface', note: 'Grid A letters supplied. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
-    { item_set_id: 'letter_sounds@2026.2.af', field: 'typeface', note: 'Grid A letters supplied; the same 60 letters as the Zazi afrikaans_60_v2 card. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
     { item_set_id: 'word_reading@2026.1.en', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists.' },
     { item_set_id: 'word_reading@2026.1.xh', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists.' },
     { item_set_id: 'word_reading@2026.1.af', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists. Provisional, unreviewed list copied from Zazi afrikaans_words_50.' },
   ]);
 });
+
+
+test.each([S.WELA_PLUS_LETTER_WRITING_EN, S.WELA_PLUS_LETTER_WRITING_XH])(
+  '$language Q5 ships text-only picture prompts until an image layout is designed', itemSet => {
+    assert.ok(
+      itemSet.prompts.every(prompt => prompt.picture.source == null),
+      'Q5 picture images need their own tile layout (88dp tiles cannot fit an image, caption and letter) — design it before shipping images',
+    );
+  },
+);

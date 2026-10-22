@@ -821,14 +821,18 @@ EA's 1–4). Release 1 scope and decisions:
 - [ ] WelaPLUS host (Plan 3): do not offer WelaPLUS to an Afrikaans class until the battery has
   Afrikaans (`battery/wela_plus_full.ts:49` lists `en`, `xh`). Start shows 'Not available in Afrikaans
   yet', and the WelaPLUS language picker lists only the battery's languages (lesson-plan spec C22).
-- [ ] Finish design-token, capture-chrome and BottomSheet review for the full Battery Run host.
-  The standalone letter/word host, shared sequential capture, family repositories and outbox
-  ownership are integrated; this does not close the other Questions' host/device review.
+- [x] Package capture-chrome conformance: all eleven Questions use shared tiles, typography,
+  paging/layout, timers, action bars and sheets, with both style/font ratchets empty
+  (`src/assessment-questions/__tests__/styleGuard.test.ts:270`; design-system Assessment capture).
+  Task 17's A03/iPhone and large-text checks remain open; see the 2026-10-22 build-log entry.
+- [ ] Finish design-token, capture-chrome and BottomSheet review for the full Battery Run host
+  (Plan 3). Package conformance does not establish Run-host or native device acceptance.
 - [x] WelaPLUS Release 1's ADR-0007 upload dependency is implemented in Assessment Results Plan 1
   (§1 above; [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md)).
   Hosted apply and device proof remain release gates.
-- [ ] Host-side Masi design conformance for the WelaPLUS screens (Plan 3). The package itself
-  now has Masi-aligned tokens and a raw-hex guard (Plan 1, 2026-10-14).
+- [ ] Host-side Masi design conformance for the WelaPLUS screens (Plan 3). The package supplies
+  the shared capture primitives and single-owner bottom inset for that host to reuse
+  (`src/assessment-questions/ui/ActionBar.tsx:18`, `src/assessment-questions/ui/BottomBar.tsx:6`).
 - [ ] **WelaPLUS Plan 2 (data foundation) is done in part.** Assessment Results Plan 1 implements
   local/server `battery_runs`, additive result/programme fields, default-battery reference data,
   the two RPCs, payload allowlists, ordering and atomic family acknowledgement. The approved v15

@@ -1,6 +1,19 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 const mockNavigators = [];
 const mockScreens = [];
+let mockGalleryEnabled = true;
+let mockUpdatesChannel = null;
+let mockEmbeddedLaunch = true;
+jest.mock('../src/utils/questionGallery', () => ({
+  isQuestionGalleryEnabled: () => mockGalleryEnabled ?? jest.requireActual('../src/utils/questionGallery').isQuestionGalleryEnabled(),
+}));
+jest.mock('expo-updates', () => ({
+  get channel() { return mockUpdatesChannel; },
+  get isEmbeddedLaunch() { return mockEmbeddedLaunch; },
+}));
+jest.mock('../src/hooks/useTimeTracking', () => ({
+  useTimeTracking: () => ({ isSignedIn: false, handleSignOut: jest.fn() }),
+}));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => ({ isOnline: true, isSyncing: false, waitingCount: 0, needsAttentionCount: 0 }) }));
@@ -38,6 +51,9 @@ jest.mock('@react-navigation/bottom-tabs', () => {
 
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import Constants from 'expo-constants';
+import ProfileScreen from '../src/screens/main/ProfileScreen';
+import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { fireEvent } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import AppNavigator from '../src/navigation/AppNavigator';
@@ -52,6 +68,7 @@ const TITLES = {
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
   SessionCountRanking: 'Session count', SyncStatus: 'Sync status',
+  QuestionGallery: 'Question gallery',
   ChildrenList: 'Children', ClassDetail: '', ChildResults: 'Child results',
 };
 const navigation = { goBack: jest.fn(), navigate: jest.fn(), canGoBack: () => true };
@@ -68,6 +85,9 @@ function renderChrome(name, back = { title: 'Previous' }) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockGalleryEnabled = true;
+  mockUpdatesChannel = null;
+  mockEmbeddedLaunch = true;
   mockNavigators.length = 0;
   mockScreens.length = 0;
   const screen = renderWithProviders(<AppNavigator signedIn={false} />);
@@ -96,7 +116,7 @@ test('the title table covers every visible stack header', () => {
   const visible = mockScreens.filter(({ kind, name }) => kind === 'stack' && optionsFor(name).headerShown !== false).map(({ name }) => name);
   expect(visible.sort()).toEqual(Object.keys(TITLES).sort());
   expect(mockScreens.filter(({ name }) => optionsFor(name).headerShown === false).map(({ name }) => name).sort()).toEqual([
-    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'StandaloneTest', 'AssessmentResults',
+    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'StandaloneTest', 'AssessmentResults', 'QuestionGalleryRun',
   ].sort());
 });
 
@@ -142,4 +162,40 @@ test('SessionComplete has no header and disables the native back gesture', () =>
   expect(mockScreens.find(({ name }) => name === 'SessionComplete').options).toEqual({
     headerShown: false, gestureEnabled: false,
   });
+});
+
+test('with __DEV__ false and no build flag, there is no gallery route', () => {
+  mockGalleryEnabled = false;
+  mockScreens.length = 0;
+  renderWithProviders(<AppNavigator signedIn />);
+  expect(mockScreens.some(({ name }) => ['QuestionGallery', 'QuestionGalleryRun'].includes(name))).toBe(false);
+});
+
+
+test('a pilot binary on native preview channel hides both gallery routes and the Profile row despite an OTA flag true', () => {
+  const originalDev = global.__DEV__;
+  const originalExtra = Constants.expoConfig.extra;
+  try {
+    global.__DEV__ = false;
+    mockGalleryEnabled = null; // Exercise the real predicate, not a forced false.
+    mockUpdatesChannel = 'preview';
+    mockEmbeddedLaunch = false;
+    Constants.expoConfig.extra = { ...originalExtra, questionGallery: true };
+    mockScreens.length = 0;
+    const screen = renderWithProviders(<SignedInEAContext.Provider value={{
+      handle: { isCurrent: () => true, userId: 'gallery-gating-test', epoch: 1 },
+      repositories: { syncOutbox: { countUnsent: jest.fn() } },
+    }}>
+      <AppNavigator signedIn />
+      <ProfileScreen navigation={navigation} />
+    </SignedInEAContext.Provider>);
+    fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+    expect({
+      routes: mockScreens.filter(({ name }) => ['QuestionGallery', 'QuestionGalleryRun'].includes(name)).map(({ name }) => name),
+      profileRowVisible: screen.queryByRole('button', { name: 'Question gallery' }) !== null,
+    }).toEqual({ routes: [], profileRowVisible: false });
+  } finally {
+    global.__DEV__ = originalDev;
+    Constants.expoConfig.extra = originalExtra;
+  }
 });

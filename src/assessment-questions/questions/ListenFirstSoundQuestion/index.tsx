@@ -7,7 +7,7 @@
  * "Finish" prompts a confirmation when items are unmarked.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { monotonicNow } from '../../progress/clock';
 import type { QuestionProps } from '../../types/QuestionProps';
 import type { ItemSetMeta } from '../../types/ItemSet';
@@ -18,12 +18,11 @@ import type { ListenFirstSoundItemSet } from './types';
 import { WELA_PLUS_FIRST_SOUND_EN } from '../../itemsets/wela_plus_first_sound.en';
 import { WELA_PLUS_FIRST_SOUND_XH } from '../../itemsets/wela_plus_first_sound.xh';
 import { useToggleMark } from '../../hooks/useToggleMark';
-import { useChildReadingFontSize } from '../../hooks/useChildReadingFontSize';
 import { tokens } from '../../theme/tokens';
+import { Canvas, ConfirmSheet, MarkTile, QuestionIntro, ToggleBar } from '../../ui';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
-const BASE_PROMPT_FONT_SIZE = 28;
 
 type Phase = 'intro' | 'active' | 'confirm-finish' | 'skip-picker' | 'finished';
 
@@ -64,8 +63,6 @@ function ListenFirstSoundQuestionContent(
   } = props;
   const [phase, setPhase] = useState<Phase>('intro');
   const { isMarked, toggle } = useToggleMark();
-  const fontScale = useChildReadingFontSize();
-  const promptFontSize = BASE_PROMPT_FONT_SIZE * fontScale;
 
   const isMarkedRef = useRef(isMarked);
   useEffect(() => {
@@ -77,7 +74,7 @@ function ListenFirstSoundQuestionContent(
 
   const prompts = effectiveItemSet.prompts;
   const unmarkedCount = prompts.reduce(
-    (acc, p) => acc + (isMarked(p.item_key) ? 0 : 1),
+    (acc, _p, idx) => acc + (isMarked(String(idx)) ? 0 : 1),
     0,
   );
 
@@ -101,7 +98,7 @@ function ListenFirstSoundQuestionContent(
             position: idx,
             item_key: p.item_key,
             prompt: p.prompt,
-            is_correct: isMarkedRef.current(p.item_key),
+            is_correct: isMarkedRef.current(String(idx)),
           }));
       const totalCorrect = items.filter((i) => i.is_correct).length;
       const totalAttempted = isSkipped ? 0 : prompts.length;
@@ -136,8 +133,8 @@ function ListenFirstSoundQuestionContent(
 
   const handleToggle = useCallback(
     (idx: number, item_key: string, prompt: string) => {
-      const willBeMarked = !isMarkedRef.current(item_key);
-      toggle(item_key);
+      const willBeMarked = !isMarkedRef.current(String(idx));
+      toggle(String(idx));
       if (onItemMarked) {
         const item: ResultItem = {
           position: idx,
@@ -166,31 +163,12 @@ function ListenFirstSoundQuestionContent(
 
   if (phase === 'intro') {
     return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
+      <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />
     );
   }
 
   if (phase === 'finished') {
     return <View />;
-  }
-
-  if (phase === 'confirm-finish') {
-    return (
-      <View>
-        <Text>{`${unmarkedCount} items unmarked — finish anyway?`}</Text>
-        <Pressable onPress={() => finish('completed')}>
-          <Text>Yes, finish</Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
-    );
   }
 
   if (phase === 'skip-picker') {
@@ -202,77 +180,46 @@ function ListenFirstSoundQuestionContent(
     );
   }
 
+  const confirming = phase === 'confirm-finish';
   return (
-    <View style={styles.root}>
-      <ScrollView
-        testID="prompt-scroll"
-        style={styles.scroll}
-        contentContainerStyle={styles.list}
+    <Canvas>
+      <View
+        style={{ flex: 1 }}
+        accessibilityElementsHidden={confirming}
+        importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        pointerEvents={confirming ? 'none' : 'auto'}
       >
-        {prompts.map((p, idx) => {
-          const marked = isMarked(p.item_key);
-          const labelState = marked ? 'correct' : 'idle';
-          return (
-            <Pressable
-              key={p.item_key}
-              accessibilityRole="button"
-              accessibilityLabel={`${p.prompt}, ${labelState}`}
-              onPress={() => handleToggle(idx, p.item_key, p.prompt)}
-              style={[
-                styles.card,
-                {
-                  backgroundColor: marked ? tokens.color.marked : tokens.color.surface,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.promptText,
-                  {
-                    fontSize: promptFontSize,
-                    color: marked ? tokens.color.onMarked : tokens.color.ink,
-                  },
-                ]}
-              >
-                {p.prompt}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-      <Pressable accessibilityRole="button" onPress={handleFinish}>
-        <Text>Finish</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setPhase('skip-picker')}
-      >
-        <Text>Skip question</Text>
-      </Pressable>
-    </View>
+        <ScrollView
+          testID="prompt-scroll"
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: tokens.space.lg, gap: 10 }}
+        >
+          {prompts.map((p, idx) => {
+            const state = isMarked(String(idx)) ? 'correct' : 'idle';
+            return (
+              <MarkTile
+                key={idx}
+                variant="promptCard"
+                state={state}
+                text={p.prompt}
+                accessibilityLabel={`${p.prompt}, ${state}`}
+                onPress={() => handleToggle(idx, p.item_key, p.prompt)}
+              />
+            );
+          })}
+        </ScrollView>
+        <ToggleBar primary={{ label: 'Finish', onPress: handleFinish }} onSkip={() => setPhase('skip-picker')} />
+      </View>
+      {confirming && (
+        <ConfirmSheet
+          testID="confirm-finish"
+          title={`${unmarkedCount} items unmarked — finish anyway?`}
+          confirmLabel="Yes, finish"
+          onConfirm={() => finish('completed')}
+          cancelLabel="Cancel"
+          onCancel={() => setPhase('active')}
+        />
+      )}
+    </Canvas>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  list: {
-    flexDirection: 'column',
-    paddingBottom: 16,
-  },
-  card: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    marginBottom: 8,
-  },
-  promptText: {
-    fontWeight: '600',
-  },
-});

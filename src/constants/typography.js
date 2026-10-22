@@ -2,6 +2,7 @@
 // the weight-specific face and never fontWeight (fontWeight + custom family
 // makes Android fall back to the system font).
 export const fontFamilies = {
+  content: 'Andika_400Regular',
   display: 'BricolageGrotesque_800ExtraBold',
   displayBold: 'BricolageGrotesque_700Bold',
   textMedium: 'Figtree_500Medium',

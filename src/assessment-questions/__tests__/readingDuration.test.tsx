@@ -47,8 +47,13 @@ describe.each([
       <Component language="en" itemSet={itemSet} durationSec={durationSec} onComplete={onComplete} />,
     );
     fireEvent.press(screen.getByText('Start'));
-    labels.forEach((label) => fireEvent.press(sequential
-      ? screen.getByText('Correct') : screen.getByLabelText(`${label}, idle`)));
+    labels.forEach((label, index) => {
+      fireEvent.press(sequential
+        ? screen.getByText('Correct') : screen.getByLabelText(`${label}, idle`));
+      if ((index + 1) % 10 === 0 && screen.queryByLabelText('Next page')) {
+        fireEvent.press(screen.getByLabelText('Next page'));
+      }
+    });
     return { screen, onComplete };
   }
 
@@ -143,6 +148,12 @@ describe.each([
     act(() => jest.advanceTimersByTime(10000));
     fireEvent.press(screen.getByText('Cancel'));
     expect(screen.queryByText('Last item attempted')).toBeNull();
+    if (Component === ReadWordsQuestion) {
+      expect(screen.getByLabelText('Card row 1 · page 3 of 3')).toBeTruthy();
+      expect(screen.getByLabelText('word21, correct')).toBeTruthy();
+      fireEvent.press(screen.getByLabelText('Previous page'));
+      fireEvent.press(screen.getByLabelText('Previous page'));
+    }
     expect(screen.getByLabelText(`${labels[0]}, correct`)).toBeTruthy();
 
     if (nextStop === 'timer') {

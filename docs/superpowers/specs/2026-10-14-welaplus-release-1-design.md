@@ -14,6 +14,24 @@
 > rather than an English fallback: an Afrikaans run would show a missing card on every Question
 > and have no instructions.
 
+> **Status note — 2026-10-22 (capture presentation):** The approved
+> [Assessment capture style design, §4–6](./2026-10-21-assessment-capture-style-design.md)
+> amends D1, §5.3's Q1/Q6/font rows and §9.1's Side A and row-mirroring claims. Card rows
+> remain the content contract; the phone pages whole card rows and re-flows within each
+> page. Q1 uses 5 columns / 20 items and Q6 uses 2 columns / 10 items, with Previous/Next
+> page controls for Q6 (`src/assessment-questions/ui/paginate.ts:2`,
+> `src/assessment-questions/ui/paginate.ts:21`,
+> `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:295`). Side A is now
+> **Grid A, 6 × 10**, shared by the current EN/XH/AF letter sets rather than the historical
+> 5 × 12 card (`src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:83`). Q6 and Q8
+> show a visible timer when timed (`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:294`,
+> `src/assessment-questions/questions/ReadPassageQuestion/index.tsx:314`). The unused
+> `childReadingFontScale` hook/provider has been removed; content typography now comes
+> through Andika Regular and the shared `ContentText` scaling rule, with Figtree for UI
+> (`App.js:170`, `src/constants/assessmentFonts.js:3`,
+> `src/assessment-questions/ui/Text.tsx:30`). The original body remains the 2026-10-14
+> record; capture verification and remaining native gates live in `documentation/build-log.md`.
+
 **Date:** 2026-10-14
 **Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec approved by Jim 2026-10-14.
 **Parent PRD:** [`documentation/wela-plus-battery-prd-2026.md`](../../../documentation/wela-plus-battery-prd-2026.md)

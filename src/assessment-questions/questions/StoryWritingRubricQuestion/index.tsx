@@ -12,7 +12,7 @@
  * Layout: optional picture thumbnail at top (tap-to-enlarge), stacked
  * dimension cards each with header, "View full rubric" button, row of
  * tappable chips from min through max, end-anchored gloss line, then a running
- * Total out of max × dimension count beneath. Re-scoring = tap a different
+ * Total out of max × dimension count pinned above Finish. Re-scoring = tap a different
  * chip (no toggle-clear so a chosen score remains distinct from an
  * unscored dimension).
  *
@@ -22,10 +22,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
-  Text,
-  Pressable,
   ScrollView,
-  Modal,
   Image,
   StyleSheet,
 } from 'react-native';
@@ -43,6 +40,8 @@ import type {
 import { WELA_PLUS_STORY_WRITING_EN } from '../../itemsets/wela_plus_story_writing.en';
 import { WELA_PLUS_STORY_WRITING_XH } from '../../itemsets/wela_plus_story_writing.xh';
 import { tokens } from '../../theme/tokens';
+import { Canvas, ConfirmSheet, FullScreenSheet, QuestionIntro, ToggleBar, UiText } from '../../ui';
+import { RubricPictureThumbnail, RubricRow, ScoreChip } from '../../ui/RubricRow';
 import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 
@@ -152,10 +151,6 @@ function StoryWritingRubricQuestionContent(
     }
   }, [phase]);
 
-  const scoredCount = dimensions.reduce(
-    (acc, d) => acc + (scoresRef.current[d.code] != null ? 1 : 0),
-    0,
-  );
   // Live re-compute against scores (not scoresRef) so the Total reflows when chip taps land.
   const runningTotal = dimensions.reduce(
     (acc, d) => acc + (scores[d.code] ?? 0),
@@ -276,38 +271,11 @@ function StoryWritingRubricQuestionContent(
   );
 
   if (phase === 'intro') {
-    return (
-      <View>
-        {instructions ? <Text>{instructions}</Text> : null}
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Start</Text>
-        </Pressable>
-      </View>
-    );
+    return <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />;
   }
 
   if (phase === 'finished') {
     return <View />;
-  }
-
-  if (phase === 'confirm-finish') {
-    return (
-      <View>
-        <Text>{`${unscoredCount} dimensions unscored — finish anyway?`}</Text>
-        {/*
-          Codex adversarial review: 'completed' is reserved for runs where
-          every dimension is scored. A confirmed-but-incomplete finish
-          emits 'ea_ended' so downstream can distinguish a real 0 score
-          from a skipped dimension.
-        */}
-        <Pressable onPress={() => finish('ea_ended')}>
-          <Text>Yes, finish</Text>
-        </Pressable>
-        <Pressable onPress={() => setPhase('active')}>
-          <Text>Cancel</Text>
-        </Pressable>
-      </View>
-    );
   }
 
   if (phase === 'skip-picker') {
@@ -319,270 +287,117 @@ function StoryWritingRubricQuestionContent(
     );
   }
 
-  // active phase
+  const confirming = phase === 'confirm-finish';
   const rubricDim = rubricSheetDim
     ? dimensions.find((d) => d.code === rubricSheetDim) ?? null
     : null;
 
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {effectiveItemSet.picture ? (
-          <Pressable
-            testID="picture-thumbnail"
-            accessibilityRole="button"
-            onPress={() => setPictureEnlarged(true)}
-            style={styles.thumbnailRow}
-          >
+    <Canvas>
+      <View
+        testID="rubric-active"
+        style={styles.root}
+        accessibilityElementsHidden={confirming}
+        importantForAccessibility={confirming ? 'no-hide-descendants' : 'auto'}
+        pointerEvents={confirming ? 'none' : 'auto'}
+      >
+        <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
+          {effectiveItemSet.picture ? (
+            <RubricPictureThumbnail
+              source={effectiveItemSet.picture.source}
+              alt={effectiveItemSet.picture.alt}
+              onPress={() => setPictureEnlarged(true)}
+            />
+          ) : null}
+          {dimensions.map((d, position) => (
+            <RubricRow
+              key={position}
+              label={d.label}
+              chipsTestID={`rubric-chips-${d.code}`}
+              viewRubricTestID={`view-rubric-${d.code}`}
+              onViewRubric={() => setRubricSheetDim(d.code)}
+              gloss={d.end_anchor_gloss}
+            >
+              {chipScores.map((score, scorePosition) => {
+                const selected = scores[d.code] === score;
+                return (
+                  <ScoreChip
+                    key={scorePosition}
+                    score={score}
+                    selected={selected}
+                    testID={`chip-${d.code}-${score}`}
+                    accessibilityLabel={`${d.label} score ${score}${selected ? ', selected' : ''}`}
+                    onPress={() => handleChip(d.code, score)}
+                  />
+                );
+              })}
+            </RubricRow>
+          ))}
+        </ScrollView>
+        <ToggleBar
+          header={<UiText variant="heading">{`Total: ${runningTotal} / ${max}`}</UiText>}
+          primary={{ label: 'Finish', onPress: handleFinish }}
+          onSkip={() => setPhase('skip-picker')}
+        />
+      </View>
+
+      {confirming && (
+        <ConfirmSheet
+          testID="confirm-finish"
+          title={`${unscoredCount} dimensions unscored — finish anyway?`}
+          confirmLabel="Yes, finish"
+          onConfirm={() => finish('ea_ended')}
+          cancelLabel="Cancel"
+          onCancel={() => setPhase('active')}
+        />
+      )}
+
+      <FullScreenSheet
+        visible={rubricSheetDim !== null}
+        title={rubricDim?.label}
+        onClose={() => setRubricSheetDim(null)}
+      >
+        <ScrollView contentContainerStyle={styles.sheetContent}>
+          {rubricDim ? (
+            rubricDim.anchors.length === 0 ? (
+              <UiText tone="muted">Rubric descriptions coming soon</UiText>
+            ) : (
+              rubricDim.anchors.map((anchor, position) => (
+                <View key={position} style={styles.anchorRow}>
+                  <UiText variant="label" align="center" style={styles.anchorScore}>{anchor.score}</UiText>
+                  <UiText style={styles.anchorText}>{anchor.text}</UiText>
+                </View>
+              ))
+            )
+          ) : null}
+        </ScrollView>
+      </FullScreenSheet>
+
+      {effectiveItemSet.picture ? (
+        <FullScreenSheet visible={pictureEnlarged} onClose={() => setPictureEnlarged(false)}>
+          <ScrollView contentContainerStyle={styles.sheetContent}>
             {effectiveItemSet.picture.source ? (
               <Image
                 source={effectiveItemSet.picture.source}
-                style={styles.thumbnailImage}
+                style={styles.enlargedImage}
                 accessibilityLabel={effectiveItemSet.picture.alt}
               />
             ) : null}
-            <Text style={styles.thumbnailAlt}>
-              {effectiveItemSet.picture.alt}
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {dimensions.map((d) => {
-          const selectedScore = scores[d.code] ?? null;
-          return (
-            <View key={d.code} style={styles.dimensionCard}>
-              <View style={styles.dimensionHeader}>
-                <Text style={styles.dimensionLabel}>{d.label}</Text>
-                <Pressable
-                  testID={`view-rubric-${d.code}`}
-                  accessibilityRole="button"
-                  onPress={() => setRubricSheetDim(d.code)}
-                  style={styles.viewRubricButton}
-                >
-                  <Text style={styles.viewRubricText}>View full rubric</Text>
-                </Pressable>
-              </View>
-              <View testID={`rubric-chips-${d.code}`} style={styles.chipRow}>
-                {chipScores.map((s) => {
-                  const isSelected = selectedScore === s;
-                  return (
-                    <Pressable
-                      key={s}
-                      testID={`chip-${d.code}-${s}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${d.label} score ${s}${
-                        isSelected ? ', selected' : ''
-                      }`}
-                      onPress={() => handleChip(d.code, s)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: isSelected
-                            ? tokens.color.primary
-                            : tokens.color.canvas,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: isSelected
-                              ? tokens.color.onPrimary
-                              : tokens.color.primary,
-                          },
-                        ]}
-                      >
-                        {s}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {d.end_anchor_gloss !== '' ? (
-                <Text style={styles.gloss}>{d.end_anchor_gloss}</Text>
-              ) : null}
-            </View>
-          );
-        })}
-
-        <Text style={styles.runningTotal}>{`Total: ${runningTotal} / ${max}`}</Text>
-      </ScrollView>
-
-      <View style={styles.nav}>
-        <Pressable accessibilityRole="button" onPress={handleFinish}>
-          <Text>Finish</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setPhase('skip-picker')}
-        >
-          <Text>Skip question</Text>
-        </Pressable>
-      </View>
-
-      <Modal
-        visible={rubricSheetDim !== null}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setRubricSheetDim(null)}
-      >
-        <View style={styles.modalRoot}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {rubricDim ? (
-              <>
-                <Text style={styles.modalHeader}>{rubricDim.label}</Text>
-                {rubricDim.anchors.length === 0 ? (
-                  <Text style={styles.rubricPending}>
-                    Rubric descriptions coming soon
-                  </Text>
-                ) : (
-                  rubricDim.anchors.map((a) => (
-                    <View key={a.score} style={styles.anchorRow}>
-                      <Text style={styles.anchorScore}>{a.score}</Text>
-                      <Text style={styles.anchorText}>{a.text}</Text>
-                    </View>
-                  ))
-                )}
-              </>
-            ) : null}
+            <UiText variant="caption" style={styles.enlargedAlt}>{effectiveItemSet.picture.alt}</UiText>
           </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setRubricSheetDim(null)}
-            style={styles.modalCloseButton}
-          >
-            <Text style={styles.modalCloseText}>Close</Text>
-          </Pressable>
-        </View>
-      </Modal>
-
-      {effectiveItemSet.picture ? (
-        <Modal
-          visible={pictureEnlarged}
-          animationType="fade"
-          transparent={false}
-          onRequestClose={() => setPictureEnlarged(false)}
-        >
-          <View style={styles.modalRoot}>
-            <ScrollView contentContainerStyle={styles.modalContent}>
-              {effectiveItemSet.picture.source ? (
-                <Image
-                  source={effectiveItemSet.picture.source}
-                  style={styles.enlargedImage}
-                  accessibilityLabel={effectiveItemSet.picture.alt}
-                />
-              ) : null}
-              <Text style={styles.enlargedAlt}>
-                {effectiveItemSet.picture.alt}
-              </Text>
-            </ScrollView>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setPictureEnlarged(false)}
-              style={styles.modalCloseButton}
-            >
-              <Text style={styles.modalCloseText}>Close</Text>
-            </Pressable>
-          </View>
-        </Modal>
+        </FullScreenSheet>
       ) : null}
-    </View>
+    </Canvas>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { padding: 16 },
-  thumbnailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    marginBottom: 12,
-    backgroundColor: tokens.color.canvas,
-    borderRadius: 8,
-    gap: 12,
-  },
-  thumbnailImage: { width: 56, height: 56, borderRadius: 4 },
-  thumbnailAlt: {
-    flex: 1,
-    fontSize: 14,
-    color: tokens.color.ink,
-    fontStyle: 'italic',
-  },
-  dimensionCard: {
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: tokens.color.surface,
-    borderWidth: 1,
-    borderColor: tokens.color.line,
-    borderRadius: 8,
-  },
-  dimensionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dimensionLabel: { fontSize: 18, fontWeight: '600' },
-  viewRubricButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: tokens.color.canvas,
-    borderRadius: 6,
-  },
-  viewRubricText: { fontSize: 12, color: tokens.color.primary, fontWeight: '600' },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 6,
-  },
-  chip: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: tokens.color.primary,
-  },
-  chipText: { fontSize: 18, fontWeight: '600' },
-  gloss: { fontSize: 13, color: tokens.color.muted },
-  runningTotal: { fontSize: 20, fontWeight: '700', marginTop: 8 },
-  nav: {
-    flexDirection: 'row',
-    gap: 16,
-    padding: 12,
-  },
-  modalRoot: { flex: 1, backgroundColor: tokens.color.surface },
-  modalContent: { padding: 24 },
-  modalHeader: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
-  anchorRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-    gap: 12,
-  },
-  anchorScore: {
-    fontSize: 18,
-    fontWeight: '600',
-    width: 32,
-    textAlign: 'center',
-  },
-  anchorText: { fontSize: 15, flex: 1, lineHeight: 20 },
-  rubricPending: {
-    fontSize: tokens.font.body,
-    color: tokens.color.muted,
-  },
-  modalCloseButton: {
-    alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: tokens.color.primary,
-    borderRadius: 8,
-    margin: 16,
-  },
-  modalCloseText: { color: tokens.color.onPrimary, fontWeight: '600' },
+  scroll: { padding: tokens.space.lg, gap: tokens.space.lg },
+  sheetContent: { padding: tokens.space.lg },
+  anchorRow: { flexDirection: 'row', marginBottom: tokens.space.sm, gap: tokens.space.md },
+  anchorScore: { width: 32 },
+  anchorText: { flex: 1 },
   enlargedImage: { width: '100%', height: 320, resizeMode: 'contain' },
-  enlargedAlt: { fontSize: 14, fontStyle: 'italic', marginTop: 12 },
+  enlargedAlt: { marginTop: tokens.space.md },
 });

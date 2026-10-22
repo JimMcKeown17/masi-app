@@ -9,6 +9,9 @@ test('the legacy typography export is retired', () => {
 test('Figtree 600 is a named face', () => {
   expect(fontFamilies.textSemi).toBe('Figtree_600SemiBold');
 });
+test('assessment content uses Andika Regular', () => {
+  expect(fontFamilies.content).toBe('Andika_400Regular');
+});
 test('Bricolage only at 18px and above', () => {
   for (const [name, role] of Object.entries(typeRoles)) {
     if (role.fontFamily === fontFamilies.display) expect({ name, size: role.fontSize >= 18 }).toEqual({ name, size: true });

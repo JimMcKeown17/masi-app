@@ -1,7 +1,54 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, within } from '@testing-library/react-native';
 import { ReadPassageQuestion } from '..';
 import { FIXTURE_READ_PASSAGE_EN } from '../../../testFixtures';
+import { tokens } from '../../../theme/tokens';
+
+test('the timer shows only when durationSec is given', () => {
+  const r = render(
+    <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} onComplete={jest.fn()} />,
+  );
+  expect(r.queryByTestId('countdown-track')).toBeNull();
+  fireEvent.press(r.getByText('Start'));
+  expect(r.queryByTestId('countdown-track')).toBeNull();
+  r.unmount();
+
+  const timed = render(
+    <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} durationSec={60} onComplete={jest.fn()} />,
+  );
+  expect(timed.queryByTestId('countdown-track')).toBeNull();
+  fireEvent.press(timed.getByText('Start'));
+  expect(timed.getByTestId('countdown-track')).toBeTruthy();
+  expect(within(timed.getByTestId('passage-scroll')).queryByTestId('countdown-track')).toBeNull();
+});
+
+test('with durationSec it shows 60s immediately after Start', () => {
+  jest.useFakeTimers();
+  try {
+    const r = render(
+      <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} durationSec={60} onComplete={jest.fn()} />,
+    );
+    fireEvent.press(r.getByText('Start'));
+    expect(r.getByText('60s')).toBeTruthy();
+    expect(r.getByTestId('countdown-fill')).toHaveStyle({ width: '100%' });
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(r.getByText('59s')).toBeTruthy();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('paragraphs render as wrapped word pills', () => {
+  const r = render(
+    <ReadPassageQuestion language="en" itemSet={FIXTURE_READ_PASSAGE_EN} onComplete={jest.fn()} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  const pill = within(r.getByTestId('paragraph-0')).getByTestId('pill-p1.w1');
+  let row = pill.parent;
+  while (row && typeof row.type !== 'string') row = row.parent;
+  expect(row).toHaveStyle({ flexWrap: 'wrap' });
+  expect(pill).toHaveStyle({ borderRadius: tokens.radius.tile });
+});
 
 test('untimed by default: no timer fires and no correct_words_per_minute', () => {
   jest.useFakeTimers();
@@ -232,4 +279,58 @@ describe('ReadPassageQuestion — Skip flow', () => {
     expect(r.derived.last_attempted_position).toBeNull();
     expect(r.derived.tracks_progress).toBe(false);
   });
+});
+
+
+test('repeated passage words toggle independently and results retain each position', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(<ReadPassageQuestion language="en"
+    itemSet={{ ...FIXTURE_READ_PASSAGE_EN, paragraph_starts: [0],
+      words: ['there', 'how', 'there', 'how'].map(word => ({ item_key: word, word })) }}
+    onComplete={onComplete} onItemMarked={onItemMarked} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getAllByLabelText('there, idle')[1]);
+  expect(r.getAllByLabelText('there, idle')).toHaveLength(1);
+  expect(r.getAllByLabelText('there, correct')).toHaveLength(1);
+  fireEvent.press(r.getAllByLabelText('how, idle')[0]);
+  fireEvent.press(r.getByLabelText('there, correct'));
+  expect(r.getAllByLabelText('there, idle')).toHaveLength(2);
+  expect(r.getAllByLabelText('how, correct')).toHaveLength(1);
+  expect(r.getAllByLabelText('how, idle')).toHaveLength(1);
+  expect(onItemMarked).toHaveBeenCalledTimes(3);
+  expect(onItemMarked.mock.calls.map(([item]) => [item.position, item.item_key, item.is_correct]))
+    .toEqual([[2, 'there', true], [1, 'how', true], [2, 'there', false]]);
+  fireEvent.press(r.getByText('End'));
+  fireEvent.press(r.getByText('Reached the end'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0].items.map((item: { position: number; item_key: string; is_correct: boolean }) =>
+    [item.position, item.item_key, item.is_correct]))
+    .toEqual([[0, 'there', false], [1, 'how', true], [2, 'there', false], [3, 'how', false]]);
+  expect(onComplete.mock.calls[0][0].derived).toMatchObject({ total_attempted: 4, total_correct: 1, last_attempted_position: 3 });
+});
+
+
+test('Countdown ticks do not re-read or render passage word data', () => {
+  jest.useFakeTimers();
+  try {
+    let wordReadCount = 0;
+    const word = { item_key: 'word', get word() { wordReadCount += 1; return 'word'; } };
+    const r = render(<ReadPassageQuestion language="en" durationSec={60}
+      itemSet={{ ...FIXTURE_READ_PASSAGE_EN, paragraph_starts: [0], words: [word] }} onComplete={jest.fn()} />);
+    fireEvent.press(r.getByText('Start'));
+    expect(wordReadCount).toBeGreaterThan(0);
+    const tile = r.getByLabelText('word, idle');
+    wordReadCount = 0;
+    act(() => jest.advanceTimersByTime(1000));
+    expect(r.getByText('59s')).toBeTruthy();
+    expect(wordReadCount).toBe(0);
+    expect(r.getByLabelText('word, idle')).toBe(tile);
+    // Positive control: a real mark must still re-read the word and update the tile.
+    fireEvent.press(tile);
+    expect(wordReadCount).toBeGreaterThan(0);
+    expect(r.getByLabelText('word, correct')).toBeTruthy();
+  } finally {
+    jest.useRealTimers();
+  }
 });

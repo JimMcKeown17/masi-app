@@ -1,4 +1,6 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { tokens } from '../../../theme/tokens';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ReadSentencesQuestion } from '..';
 import { FIXTURE_READ_SENTENCES_EN } from '../../../testFixtures';
@@ -191,4 +193,76 @@ describe('ReadSentencesQuestion — itemSet override', () => {
     expect(onComplete.mock.calls[0][0].item_set_id).toBe('custom@1.0.en');
     expect(onComplete.mock.calls[0][0].derived.per_sentence_percent).toEqual([50]);
   });
+});
+
+
+test('Finish with unmarked items asks in a bottom sheet over the marked tiles', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(
+    <ReadSentencesQuestion language="en" itemSet={FIXTURE_READ_SENTENCES_EN}
+      instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('The, idle'));
+  fireEvent.press(r.getByLabelText('tree., idle'));
+  const markedTile = r.getByTestId('pill-s1.w1');
+  const scroller = r.getByTestId('sentence-scroll');
+  fireEvent.press(r.getByText('Finish'));
+  const sheet = r.getByTestId('confirm-finish');
+  expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    backgroundColor: tokens.color.scrim,
+  });
+  expect(sheet.props.accessibilityViewIsModal).toBe(true);
+  expect(r.getByText('18 items unmarked — finish anyway?')).toBeTruthy();
+  expect(r.getByTestId('pill-s1.w1', { includeHiddenElements: true })).toBe(markedTile);
+  expect(r.getByTestId('sentence-scroll', { includeHiddenElements: true })).toBe(scroller);
+  expect(r.queryByLabelText('The, correct')).toBeNull();
+  let hiddenView = scroller.parent;
+  while (hiddenView && hiddenView.props.accessibilityElementsHidden === undefined) {
+    hiddenView = hiddenView.parent;
+  }
+  expect(hiddenView?.props.accessibilityElementsHidden).toBe(true);
+  expect(hiddenView?.props.importantForAccessibility).toBe('no-hide-descendants');
+  expect(hiddenView?.props.pointerEvents).toBe('none');
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(onItemMarked).toHaveBeenCalledTimes(2);
+  fireEvent.press(r.getByText('Cancel'));
+  expect(r.queryByText(/items unmarked/)).toBeNull();
+  expect(r.queryByTestId('confirm-finish')).toBeNull();
+  expect(r.getByLabelText('The, correct')).toBeTruthy();
+  expect(r.getByLabelText('tree., correct')).toBeTruthy();
+  expect(hiddenView?.props.accessibilityElementsHidden).toBe(false);
+  expect(hiddenView?.props.importantForAccessibility).toBe('auto');
+  expect(hiddenView?.props.pointerEvents).toBe('auto');
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(onItemMarked).toHaveBeenCalledTimes(2);
+});
+
+
+test('repeated item keys keep positional tile identity and independent marks', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(
+    <ReadSentencesQuestion language="en" instructions="." onComplete={onComplete} onItemMarked={onItemMarked}
+      itemSet={{ ...FIXTURE_READ_SENTENCES_EN, sentences: [
+        { item_key: 'same', words: [{ item_key: 'same', word: 'first' }] },
+        { item_key: 'same', words: [{ item_key: 'same', word: 'second' }] },
+      ] }} />,
+  );
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByLabelText('second, idle'));
+  expect(r.getByLabelText('first, idle')).toBeTruthy();
+  expect(r.getByLabelText('second, correct')).toBeTruthy();
+  expect(onItemMarked).toHaveBeenCalledTimes(1);
+  expect(onItemMarked).toHaveBeenLastCalledWith({ position: 1, item_key: 'same', prompt: 'second', is_correct: true });
+  fireEvent.press(r.getByText('Finish'));
+  fireEvent.press(r.getByText('Yes, finish'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0].items).toEqual([
+    { position: 0, item_key: 'same', prompt: 'first', is_correct: false },
+    { position: 1, item_key: 'same', prompt: 'second', is_correct: true },
+  ]);
 });

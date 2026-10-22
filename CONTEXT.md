@@ -170,6 +170,21 @@ _Avoid_: treating a Battery Question as a separate kind of letter evidence.
 The versioned data used by a Question: its `question_code`, `question_version`, language, prompts and layout (including rows where supplied), plus a stop rule where applicable. The id is `${question_code}@${question_version}.${language}` and is stored on the result. Bundled sets live in `src/assessment-questions/itemsets/`; current aliases choose new tests, while readers use stored prompts and the stored set id. Languages use `en`, `xh`, `af` and `zu`; item sets exist for `en`, `xh` and `af`, and WelaPLUS for `en` and `xh`. A missing language or set means ask/show no set, never substitute English.
 _Avoid_: treating positions in a current constant array as the meaning of saved items.
 
+**Card row**:
+One row on the child's printed card, in the item set's reading order. It stays the content
+reference even when the phone re-flows its items into several display rows; saved sequential
+items retain the card-row index (`src/assessment-questions/progress/SequentialCapture.tsx:19`,
+`src/assessment-questions/progress/SequentialCapture.tsx:143`).
+_Avoid_: using “row” interchangeably for a printed card row and a phone display row.
+
+**Page**:
+A display grouping of whole card rows, never the unit of meaning. A single card row larger
+than the page capacity spans consecutive pages labelled with that card row. Capacity and
+columns belong to the Question layout, while item positions and card-row identity remain
+stable (`src/assessment-questions/ui/paginate.ts:1`,
+`src/assessment-questions/ui/paginate.ts:49`, `src/assessment-questions/ui/paginate.ts:70`).
+_Avoid_: using a page number as saved item identity, a scoring boundary, or a content version.
+
 **Stop rule**:
 For Letter Sounds, a clean stop at ten consecutive incorrect marks: `{ kind: 'consecutive_wrong', stop_at: 10 }`. The timer stops and the card says “⟨Child⟩ got 10 in a row wrong. The test has stopped.” with **Save result** and **Undo last mark**. There is no warning stage, switch-off or resume action. Undo removes the last mark and reopens capture; saving records `stopped_reason = 'stop_rule'`. Unreached items are not mastery evidence. The standalone word sets have no stop rule configured.
 _Avoid_: calling this a soft warning that the EA can override.

@@ -21,6 +21,8 @@ import BrandButton from './src/components/common/BrandButton';
 import DatabaseBootstrapGate from './src/components/bootstrap/DatabaseBootstrapGate';
 import { colors } from './src/constants/colors';
 import { typeRoles } from './src/constants/typography';
+import { assessmentFonts } from './src/constants/assessmentFonts';
+import { AssessmentThemeProvider } from './src/assessment-questions';
 import { paperTheme } from './src/theme/paperTheme';
 import {
   captureOperationalError,
@@ -31,6 +33,7 @@ import {
 
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
+import { Andika_400Regular } from '@expo-google-fonts/andika/400Regular';
 import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold, Figtree_800ExtraBold } from '@expo-google-fonts/figtree';
 
@@ -133,6 +136,7 @@ export function AppRoot() {
 
 export function App() {
   const [fontsLoaded, fontError] = useFonts({
+    Andika_400Regular,
     BricolageGrotesque_700Bold,
     BricolageGrotesque_800ExtraBold,
     Figtree_500Medium,
@@ -163,7 +167,9 @@ export function App() {
               <PaperProvider theme={paperTheme}>
                 <SheetAccessibilityBackground>
                   <DatabaseBootstrapGate>
-                    <AuthProvider><AppRoot /></AuthProvider>
+                    <AssessmentThemeProvider fonts={fontsLoaded && !fontError ? assessmentFonts : {}}>
+                      <AuthProvider><AppRoot /></AuthProvider>
+                    </AssessmentThemeProvider>
                   </DatabaseBootstrapGate>
                 </SheetAccessibilityBackground>
                 <StatusBar style="dark" />

@@ -1,4 +1,6 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { tokens } from '../../../theme/tokens';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ListenAndAnswerStoryQuestion } from '..';
 import { FIXTURE_LISTEN_AND_ANSWER_STORY_EN } from '../../../testFixtures';
@@ -551,4 +553,106 @@ describe('ListenAndAnswerStoryQuestion — questions.length not hardcoded', () =
     expect(result.items).toHaveLength(1);
     expect(result.derived.total_attempted).toBe(1);
   });
+});
+
+
+test('prompt cards are rounded, full width, and solid green when marked', () => {
+  const r = render(
+    <ListenAndAnswerStoryQuestion language="en" itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
+      instructions="." onComplete={jest.fn()} />,
+  );
+  fireEvent.press(r.getByText("I've finished reading"));
+  expect(StyleSheet.flatten(r.getByTestId('prompt-scroll').props.contentContainerStyle))
+    .toMatchObject({ padding: tokens.space.lg, gap: 10 });
+  expect(r.getByLabelText('What was the name of the bird?, idle')).toHaveStyle({
+    borderRadius: tokens.radius.tile,
+    alignSelf: 'stretch',
+    backgroundColor: tokens.color.surface,
+    borderColor: tokens.color.line,
+  });
+  fireEvent.press(r.getByLabelText('What was the name of the bird?, idle'));
+  expect(r.getByLabelText('What was the name of the bird?, correct')).toHaveStyle({
+    borderRadius: tokens.radius.tile,
+    alignSelf: 'stretch',
+    backgroundColor: tokens.color.marked,
+    borderColor: tokens.color.marked,
+  });
+  expect(r.getByText('What was the name of the bird?')).toHaveStyle({ color: tokens.color.onMarked });
+});
+
+
+test('finish confirmation preserves the active scroller and hides its controls until Cancel', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(
+    <ListenAndAnswerStoryQuestion language="en" itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN}
+      instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
+  );
+  fireEvent.press(r.getByText("I've finished reading"));
+  fireEvent.press(r.getByLabelText('What was the name of the bird?, idle'));
+  const scroller = r.getByTestId('prompt-scroll');
+  const tile = r.getByLabelText('What was the name of the bird?, correct');
+  fireEvent.press(r.getByText('Finish'));
+  const sheet = r.getByTestId('confirm-finish');
+  expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({
+    ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: tokens.color.scrim,
+  });
+  expect(sheet.props.accessibilityViewIsModal).toBe(true);
+  expect(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).toBe(scroller);
+  expect(r.getByLabelText('What was the name of the bird?, correct', { includeHiddenElements: true })).toBe(tile);
+  expect(r.queryByLabelText('What was the name of the bird?, correct')).toBeNull();
+  expect(r.queryByText('Finish')).toBeNull();
+  let activeView = scroller.parent;
+  while (activeView && activeView.props.accessibilityElementsHidden === undefined) {
+    activeView = activeView.parent;
+  }
+  expect(activeView?.props.accessibilityElementsHidden).toBe(true);
+  expect(activeView?.props.importantForAccessibility).toBe('no-hide-descendants');
+  expect(activeView?.props.pointerEvents).toBe('none');
+  fireEvent.press(r.getByText('Cancel'));
+  expect(r.queryByTestId('confirm-finish')).toBeNull();
+  expect(r.getByTestId('prompt-scroll')).toBe(scroller);
+  expect(r.getByLabelText('What was the name of the bird?, correct')).toBe(tile);
+  expect(activeView?.props.accessibilityElementsHidden).toBe(false);
+  expect(activeView?.props.importantForAccessibility).toBe('auto');
+  expect(activeView?.props.pointerEvents).toBe('auto');
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(onItemMarked).toHaveBeenCalledTimes(1);
+});
+
+test('repeated item keys keep independent positional marks and result identities', () => {
+  const onComplete = jest.fn();
+  const onItemMarked = jest.fn();
+  const r = render(
+    <ListenAndAnswerStoryQuestion language="en"
+      itemSet={{ ...FIXTURE_LISTEN_AND_ANSWER_STORY_EN, questions: [{ item_key: 'same', prompt: 'first', acceptable_answers: ['one'] }, { item_key: 'same', prompt: 'second', acceptable_answers: ['two'] }] }}
+      instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
+  );
+  fireEvent.press(r.getByText("I've finished reading"));
+  fireEvent.press(r.getByLabelText('first, idle'));
+  expect(r.getByLabelText('second, idle')).toBeTruthy();
+  fireEvent.press(r.getByLabelText('second, idle'));
+  fireEvent.press(r.getByLabelText('first, correct'));
+  expect(r.getByLabelText('first, idle')).toBeTruthy();
+  expect(r.getByLabelText('second, correct')).toBeTruthy();
+  expect(onItemMarked).toHaveBeenCalledTimes(3);
+  expect(onItemMarked.mock.calls.map(([item]) => [item.position, item.item_key, item.is_correct]))
+    .toEqual([[0, 'same', true], [1, 'same', true], [0, 'same', false]]);
+  fireEvent.press(r.getByText('Finish'));
+  expect(r.getByText('1 items unmarked — finish anyway?')).toBeTruthy();
+  fireEvent.press(r.getByText('Yes, finish'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0].items.map((item: { position: number; item_key: string; is_correct: boolean }) =>
+    [item.position, item.item_key, item.is_correct]))
+    .toEqual([[0, 'same', false], [1, 'same', true]]);
+  expect(onComplete.mock.calls[0][0].derived.total_correct).toBe(1);
+});
+
+
+test('the answer screen starts the Re-read story control 16dp below the header', () => {
+  const r = render(<ListenAndAnswerStoryQuestion language="en" onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText("I've finished reading"));
+  let wrapper = r.getByRole('button', { name: 'Re-read story' }).parent;
+  while (wrapper && typeof wrapper.type !== 'string') wrapper = wrapper.parent;
+  expect(wrapper).toHaveStyle({ paddingHorizontal: tokens.space.lg, paddingTop: tokens.space.lg });
 });
