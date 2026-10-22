@@ -22,6 +22,7 @@
 - Red means "incorrect". The only other red is the destructive End control (`tokens.color.primary`, `#C81F3E`). Selection, current item, primary buttons and page dots are ink `#221A1B`.
 - Frozen, behaviour unchanged: `progress/stepByStep.ts`, `progress/clock.ts`, `progress/applyProgress.ts`, the stop rule and its copy, every Question's `Result` (byte-identical for the same taps), timing refs and phase transitions, the `Countdown` tick and its memo isolation.
 - Copy is unchanged unless a task names the change. Pinned strings: `Start`, `I've finished reading`, `Correct`, `Incorrect`, `Back`, `Skip question`, `End test` (step-by-step), `End` (Q6, Q8), `End the test?`, `Cancel`, `Finish`, `Yes, finish`, `` `${n} items unmarked — finish anyway?` ``, `` `${n} dimensions unscored — finish anyway?` ``, `Save result`, `Undo last mark`, the stop title, `Last item attempted`, `Tap the last item the child attempted.`, `Reached the end`, `Nothing attempted`, `Confirm`, `Why are you skipping this question?`, the skip reasons, `Re-read story`, `Close`, `View full rubric`, `Rubric descriptions coming soon`, `` `Total: ${n} / ${max}` ``.
+- Behavioural tests keep every timing, identity, callback-count and `Result` assertion. Where paging moves an element off screen, a task may change only the **query** (page to it first, or assert the page label), and must say so in its commit body.
 - Accessibility labels are unchanged: step-by-step tiles `"<prompt>, current|correct|incorrect|not reached"`; toggle tiles `"<text>, idle|correct"`; Q9 `"<word> letter N <l>, idle|correct"`; Q5 `"<alt> → <letter>, idle|correct"`; last-attempted cells `"<label>, item N"`; chips `"<label> score N[, selected]"`.
 - Icons render in their own `Svg` beside the label `Text`, never inside it, so `getByText('Correct')` keeps matching.
 - Tiles and React keys use **position**, never `item_key` alone (Q6 EN and Q8 passages repeat keys).
@@ -159,9 +160,9 @@ test('every ratchet entry still violates (the ratchet only shrinks)', ...);
 **Interfaces:**
 - Consumes `textStyle`, `useAssessmentFonts` and `tokens` (Task 1).
 - Produces, all exported from `ui/index.ts`:
-  - **`UiText`** — `UiText(props: TextProps & { role?: Exclude<TextRole,'content'>; tone?: Tone; align?: 'left'|'center' })`.
+  - **`UiText`** — `UiText(props: TextProps & { variant?: Exclude<TextRole,'content'>; tone?: Tone; align?: 'left'|'center' })`. The prop is `variant`, not `role`: React Native's `TextProps.role` is an accessibility prop, and intersecting it with the typography union rejects `'body'`, `'caption'` and `'label'` (TS2322). `variant` is consumed, never forwarded.
     - `Tone = 'ink'|'muted'|'onInk'|'danger'|'marked'|'warning'|'notReached'`.
-    - `role` defaults to `'body'`, `tone` to `'ink'`.
+    - `variant` defaults to `'body'`, `tone` to `'ink'`.
   - **`ContentText`** — `ContentText(props: TextProps & { size: 'tileLetter'|'tileWord'|'promptCard'|'markingWord'|'story'; tone?: Tone; fit?: boolean })`.
     - With `fit`, it sets `numberOfLines={1}`, `adjustsFontSizeToFit`, `minimumFontScale={0.6}` and `maxFontSizeMultiplier={1.2}`.
     - It always sets `maxFontSizeMultiplier={1.2}`.
@@ -170,14 +171,14 @@ test('every ratchet entry still violates (the ratchet only shrinks)', ...);
     - Pill shape, `minHeight 52`, fill by `tone` (default `ink`) and `onInk` label.
     - `accessibilityRole="button"`, `accessibilityState={{disabled}}`.
   - **`SecondaryButton`** — same props without `tone`. Outlined: 1.5 px ink border, ink label, surface fill.
-  - **`TextLink`** — `TextLink(props: { label: string; onPress: () => void; tone?: 'ink'|'danger'; testID?: string; disabled?: boolean })`. `accessibilityRole="button"`, `minHeight 44`, label in `UiText role="label"`.
+  - **`TextLink`** — `TextLink(props: { label: string; onPress: () => void; tone?: 'ink'|'danger'; testID?: string; disabled?: boolean })`. `accessibilityRole="button"`, `minHeight 44`, label in `UiText variant="label"`.
   - **`IconButton`** — `IconButton(props: { icon: IconName; accessibilityLabel: string; onPress: () => void; disabled?: boolean; testID?: string })`. 44×44, circular, line border.
   - **`useBottomInset(): number`** — reads `SafeAreaInsetsContext` (`null` → bottom 0). Returns `Platform.OS === 'android' ? Math.max(b + 11, 16) : Math.max(b, 16)`.
   - **`BottomBar`** — `BottomBar(props: { children; testID?: string })`. White panel with a 1 px `line` top border, `paddingTop 11`, `paddingHorizontal 16`, `paddingBottom useBottomInset()`, `gap 10`.
   - **`ConfirmSheet`** — `ConfirmSheet(props: { testID: string; title: string; confirmLabel: string; onConfirm: () => void; cancelLabel?: string; onCancel?: () => void; confirmTone?: 'ink'|'danger'; children?: React.ReactNode })`.
     - The root is the absolute-fill overlay `{justifyContent:'flex-end', backgroundColor: tokens.color.scrim}` with `accessibilityViewIsModal`, and the `testID` sits on that root.
     - The panel has radius `card` on the top corners, padding `xl`, and the bottom inset.
-    - The title is `UiText role="heading" accessibilityRole="header"`.
+    - The title is `UiText variant="heading" accessibilityRole="header"`.
     - Panel order: title, confirm `PrimaryButton`, cancel `SecondaryButton` (only when `cancelLabel`), then `children` (for example the stop card's `Undo last mark` link).
   - **`FullScreenSheet`** — `FullScreenSheet(props: { visible: boolean; title?: string; onClose: () => void; children })`. Wraps RN `Modal` (`animationType="slide"`), so it renders nothing when hidden. Closes with a `SecondaryButton` labelled `Close` in a `BottomBar`.
   - **`QuestionIntro`** — `QuestionIntro(props: { testID?: string; instructions?: string; startLabel?: string; onStart: () => void; children?: React.ReactNode })`. `startLabel` defaults to `'Start'`; `children` holds extra intro content such as the story.
@@ -215,6 +216,7 @@ test('Skip question appears only when onSkip is given', ...);
 // Text.test.tsx
 test('ContentText uses the content family, never a weight, and caps OS scaling at 1.2', ...);
 test('ContentText fit shrinks to one line', () => { /* numberOfLines 1, adjustsFontSizeToFit true, minimumFontScale 0.6 */ });
+test.each(['body','caption','label','heading','timer'] as const)('UiText variant %s type-checks and leaves the accessibility role alone', (v) => { /* render <UiText variant={v} accessibilityRole="header">x</UiText>; the Text has no `role` prop set from the variant */ });
 ```
 
 - [ ] **Step 2: Run the tests and confirm they fail.** Run `npx jest src/assessment-questions/ui`. Expected: FAIL, because the modules don't exist yet.
@@ -262,7 +264,7 @@ export function PageIndicator(props: { pages: ReadonlyArray<Page>; current: numb
 
 - It returns `null` when `pages.length <= 1`.
 - Otherwise it renders:
-  - the label (`UiText role="caption" tone="muted"`, with the card-row part in `ink`);
+  - the label (`UiText variant="caption" tone="muted"`, with the card-row part in `ink`);
   - one 8 dp dot per page (`ink` when current, otherwise the `line` colour);
   - when given, `IconButton`s for previous and next, labelled `Previous page` and `Next page`, and disabled at either end.
 
@@ -387,13 +389,15 @@ test('TileGroups renders a heading per group and wraps tiles', ...);
 ### Task 6: The timer bar (Countdown)
 
 **Files:**
+- Create: `src/assessment-questions/ui/TimerBar.tsx` (presentation only, so the style guard holds)
 - Modify: `src/assessment-questions/progress/Countdown.tsx`
-- Test: `src/assessment-questions/progress/__tests__/Countdown.test.tsx` (update on purpose), `progress/__tests__/SequentialCapture.renderCount.test.tsx` (text literal only: `'0:59'` → `'59s'`)
+- Test: `ui/__tests__/TimerBar.test.tsx`, `src/assessment-questions/progress/__tests__/Countdown.test.tsx` (update on purpose), `progress/__tests__/SequentialCapture.renderCount.test.tsx` (text literal only: `'0:59'` → `'59s'`)
 - Modify: `__tests__/styleGuard.test.ts` (drop `progress/Countdown.tsx` from both ratchets)
 
 **Interfaces:**
-- Produces `Countdown = React.memo(function Countdown(props: { getRemainingMs: () => number; durationMs: number }))`. This is the spec's `ProgressTimer`.
-  - It renders a row: a rounded bar (height 12, radius 6, track `line`), then the label `` `${seconds}s` `` (`UiText role="timer"`, min width 44, right-aligned).
+- Produces `TimerBar(props: { remainingMs: number; durationMs: number })` in `ui/`. It is pure presentation and owns every colour, radius and text style of the timer.
+- Produces `Countdown = React.memo(function Countdown(props: { getRemainingMs: () => number; durationMs: number }))`. Together they are the spec's `ProgressTimer`: `Countdown` stays the memoised leaf that owns the 250 ms interval and renders `<TimerBar remainingMs={getRemainingMs()} durationMs={durationMs} />`, with no styles of its own.
+  - `TimerBar` renders a row: a rounded bar (height 12, radius 6, track `line`), then the label `` `${seconds}s` `` (`UiText variant="timer"`, min width 44, right-aligned).
   - The fill width is `remaining/durationMs` as a percentage.
   - The fill and label are `marked` while more than 10 s remain, and `warning` at 10 s or less.
   - The accessibility label `` `Time left, ${seconds} seconds` `` is unchanged.
@@ -405,11 +409,11 @@ test('TileGroups renders a heading per group and wraps tiles', ...);
   - Add a new test, `'is marked green above ten seconds'`.
   - In `renderCount.test`, change only `'0:59'` to `'59s'`. If SequentialCapture's props change in Task 7, update that test's props then.
 
-- [ ] **Step 2: Run the tests and see them fail.** Run `npx jest src/assessment-questions/progress/__tests__/Countdown.test.tsx src/assessment-questions/progress/__tests__/SequentialCapture.renderCount.test.tsx`. Expected: FAIL.
+- [ ] **Step 2: Run the tests and see them fail.** Run `npx jest src/assessment-questions/ui/__tests__/TimerBar.test.tsx src/assessment-questions/progress/__tests__/Countdown.test.tsx src/assessment-questions/progress/__tests__/SequentialCapture.renderCount.test.tsx src/assessment-questions/__tests__/styleGuard.test.ts`. Expected: FAIL.
 
 - [ ] **Step 3: Implement it.** Add the `durationMs` prop and pass `durationSec * 1000` at the one call site (`SequentialCapture.tsx:181`). Then remove `Countdown.tsx` from the ratchets.
 
-- [ ] **Step 4: Run the tests and see them pass.** Run the same command, then `npx jest src/assessment-questions`. Expected: PASS, apart from the LetterSounds and ReadWords presentation tests that still pin `'1:00'`. Update those `'m:ss'` literals now (text only), so that the full suite is green.
+- [ ] **Step 4: Run the tests and see them pass.** Run the same command (it includes the style guard and the render-count test), then `npm run test:types` and `npx jest src/assessment-questions`. Expected: PASS, apart from the LetterSounds and ReadWords presentation tests that still pin `'1:00'`. Update those `'m:ss'` literals now (text only), so that the full suite is green.
 
 - [ ] **Step 5: Commit.** `git commit -m "feat(assessment): timer bar with seconds label; amber for the last ten seconds"`
 
@@ -471,6 +475,8 @@ test('Skip question shows beside End test only when allowSkip', ...);
 test('word_reading shows card rows 1–2 as page 1 of 5 in two continuous columns', ...);
 test('long isiXhosa words shrink to fit their tile', ...);   // xh set, 'ibhulukhwe' tile Text adjustsFontSizeToFit
 test('word 20 is current on page 2 after nineteen decisions', ...); // replaces the :70 label check page expectation
+// ReadWordsQuestion.stepByStep.test.tsx:155 ('missing row_lengths uses one row…') counts word-row groups, which words no longer have.
+// Change only that query: the 50-word set with no row_lengths shows 'Card row 1 · page 1 of 5'. Keep its duplicate-key Result assertions.
 ```
 
 Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They must pass untouched. In `StandaloneTestScreen.test.js`, add `'the container leaves the bottom inset to the Question'`: the screen root has no `paddingBottom`.
@@ -497,7 +503,7 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 **Interfaces:**
 - Props, copy and behaviour are unchanged for all three.
 - `SkipReasonPicker` stays a full-screen swap:
-  - The title is a `UiText role="heading"`.
+  - The title is a `UiText variant="heading"`.
   - Each reason is a full-width `SecondaryButton`.
   - `Cancel` is a `TextLink` in a `BottomBar`.
 - `LastAttemptedSheet` stays full-screen:
@@ -543,7 +549,8 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 - `pageIndex` is `useState(0)` in `ReadWordsQuestionContent`, so it survives the `mark-last` round trip.
 - The previous and next page controls change `pageIndex`.
 - **Timer:** when `durationSec` is set, render `Countdown`.
-  - `getRemainingMs = () => { const d = getDeadlineMs(); return d === null ? 0 : d - (stopTimeMsRef.current ?? monotonicNow()); }`, memoised with `useCallback` and empty deps.
+  - `getRemainingMs = useCallback(() => { const d = getDeadlineMs(); return d === null ? durationSec * 1000 : d - (stopTimeMsRef.current ?? monotonicNow()); }, [getDeadlineMs, durationSec])`. Before the active-phase effect sets `startTimeMsRef` (`ReadWordsQuestion/index.tsx:192-196`), the clock has not started, so the full duration is the truthful value. This does not move the frozen start-time boundary.
+  - Wrap `getDeadlineMs` in `useCallback(..., [durationSec])`; it reads only refs. The `Countdown` memo then holds across toggles.
   - `durationMs = durationSec * 1000`.
 - **Tiles:**
   - each tile is `MarkTile variant="word"`, state `correct` or `idle`, keyed by position;
@@ -553,12 +560,13 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 - [ ] **Step 1: Write the failing tests.**
   - Rewrite `:12` as `'renders pages of whole card rows'`. The 3+3 set gives one page with 6 tiles and no indicator. The 7×6 shipped EN set gives `'Card row 1 · page 1 of 6'`.
   - Add these tests:
-    - `'the 60 s timer is visible and counts down'`.
+    - `'the 60 s timer shows 60s and a full bar immediately after Start, then counts down'`: assert `getByText('60s')` straight after pressing Start, before any timer advance; then advance 10 s and expect `'50s'`.
     - `'Next page shows card row 2 and keeps page-1 marks'`.
     - `'timer expiry on page 3 opens the last-attempted sheet without Cancel'`.
     - `'Cancel after End returns to the same page with its marks'`.
     - `'duplicate words on one page toggle independently'`, using the shipped EN page with `there how there how`.
-  - In `readingDuration.test.tsx`, change only the tap helper: after each 10 taps, press `getByLabelText('Next page')` when it exists.
+  - In `readingDuration.test.tsx`, change the tap helper so that after each 10 taps it presses `getByLabelText('Next page')` when it exists.
+  - The post-Cancel check at `readingDuration.test.tsx:146` queries `word1`, which is now on page 1 while the screen correctly stays on page 3. Change only that query: assert `'Card row 1 · page 3 of 3'` and `word21, correct`, then press `Previous page` twice and assert `word1, correct`. The timing and callback assertions are unchanged.
 
 - [ ] **Step 2: Run the tests and see them fail.** Run `npx jest src/assessment-questions/questions/ReadWordsQuestion src/assessment-questions/__tests__/readingDuration.test.tsx`. Expected: FAIL.
 
@@ -581,12 +589,12 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 - `TileGroups` renders one group per paragraph:
   - `testID={`paragraph-${p}`}`, no heading, no card.
   - Tiles are `MarkTile variant="pill"` with `testID={`pill-${w.item_key}`}`, kept as it is (duplicate testIDs on real passages are pre-existing; tests use the fixture). React keys come from position.
-- The timer is identical to Task 9's. It is conditional on `durationSec`, because the test at `:6` checks that the passage is untimed by default.
+- The timer is identical to Task 9's, including the full-duration value before the start effect runs (`ReadPassageQuestion/index.tsx:198-202`). It is conditional on `durationSec`, because the test at `:6` checks that the passage is untimed by default.
 - `ToggleBar` has `primary` End.
 - The passage scrolls; the page-never-scrolls rule does not apply here. Spec §3.3 is about paged grids.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `'the timer shows only when durationSec is given'`.
+  - `'the timer shows only when durationSec is given'`, and `'with durationSec it shows 60s immediately after Start'`.
   - `'paragraphs render as wrapped word pills'`: `paragraph-0` has `flexWrap: 'wrap'`, and the first pill has `borderRadius: tokens.radius.tile`.
 
 - [ ] **Step 2: Run the tests and confirm they fail.** Run `npx jest src/assessment-questions/questions/ReadPassageQuestion`. Expected: FAIL.
@@ -709,11 +717,11 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
   - Unselected: `surface` fill, 1 px `line` border, `ink` text.
 - **`RubricRow`:** `RubricRow(props: { label: string; chipsTestID: string; viewRubricTestID: string; onViewRubric: () => void; gloss?: string; children: React.ReactNode })`.
   - It is a white card with radius `card`.
-  - The label is `UiText role="label"`.
+  - The label is `UiText variant="label"`.
   - It shows a `TextLink label="View full rubric"` (ink).
   - The chips sit in a wrap row with gap 8.
 - **The Question:**
-  - Running total: `UiText role="heading"` with the text `` `Total: ${n} / ${max}` ``, pinned in the `BottomBar` above `ToggleBar primary Finish`.
+  - Running total: `UiText variant="heading"` with the text `` `Total: ${n} / ${max}` ``, pinned in the `BottomBar` above `ToggleBar primary Finish`.
   - The rubric modal and the picture modal become `FullScreenSheet`s.
   - The confirm step is `ConfirmSheet`, using the existing copy and `finish('ea_ended')`.
   - Delete the dead `scoredCount` (`:155-158`).
@@ -740,13 +748,13 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 - Create: `src/assessment-questions/battery/questionComponents.ts`
 - Modify: `src/assessment-questions/index.ts` (export `questionComponentFor`, `NullQuestion`, and the `WELA_PLUS_*` item sets from `itemsets/index.ts`)
 - Create: `src/utils/questionGallery.js`
-- Create: `src/components/assessments/TestHeader.js` (extracted from `StandaloneTestScreen.js:120-128`)
+- Create: `src/components/assessments/TestFrame.js`. It is extracted from `StandaloneTestScreen.js:119-128`: the root `View` with `paddingTop: insets.top` (and no bottom padding), plus the header. It is the one owner of the top inset for both hosts.
 - Create: `src/screens/dev/QuestionGalleryScreen.js`, `src/screens/dev/QuestionGalleryRunScreen.js`
-- Modify: `src/screens/assessments/StandaloneTestScreen.js` (use `TestHeader`)
+- Modify: `src/screens/assessments/StandaloneTestScreen.js` (use `TestFrame`)
 - Modify: `src/navigation/AppNavigator.js:171-177,266-270` (register both screens only when the gallery is enabled)
 - Modify: `src/screens/main/ProfileScreen.js:182-204` (add a nested Support tools row, `Question gallery`, only when enabled)
-- Modify: `app.config.js` (`extra.questionGallery: process.env.MASI_QUESTION_GALLERY === '1'`)
-- Modify: `eas.json` (`env.MASI_QUESTION_GALLERY: "1"` on `development` and `preview` only)
+- Modify: `app.config.js`: `extra.questionGallery: GALLERY_PROFILES.includes(process.env.EAS_BUILD_PROFILE)`, with `const GALLERY_PROFILES = ['development', 'preview']`. It fails closed: `production`, `pilot`, an unknown profile and no profile all give `false`. There is no opt-in environment variable that could switch it on in a store build. Local `npm start` needs no flag, because `__DEV__` is true there.
+- No `eas.json` change.
 - Test: `src/assessment-questions/battery/__tests__/questionComponents.test.ts`, `__tests__/questionGallery.test.js`, `__tests__/QuestionGalleryScreen.test.js`, `__tests__/AppNavigator.headers.test.js`, `__tests__/ProfileScreen.layout.test.js`, `__tests__/StandaloneTestScreen.test.js`
 
 **Interfaces:**
@@ -756,17 +764,18 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
   - The codes cover all 11 battery codes in `battery/wela_plus_full.ts`, plus `word_reading` (`ReadWords`, `{ captureMode: 'sequential' }`) and `null_question`. `wela_plus_read_words` maps to `ReadWords` with `{}`, which is grid mode.
 - Host:
   - `export function isQuestionGalleryEnabled(): boolean`, which is `__DEV__ || Constants.expoConfig?.extra?.questionGallery === true`.
-  - `TestHeader({ title, subtitle, onClose })`
+  - `TestFrame({ title, subtitle, onClose, children })`
 - **`QuestionGalleryScreen` (route `QuestionGallery`, header title `Question gallery`):**
   - A `ListGroup` called **Standalone tests** lists the `STANDALONE_TESTS` entries.
   - A `ListGroup` called **WelaPLUS battery** lists the 11 entries of `WELA_PLUS_FULL_2024_1`, in order. Read that file for its field names: `question_code`, `durationSec`, and the per-language instructions.
   - A **Language** row opens `SelectSheet` with English and isiXhosa.
+  - A **Content** row opens `SelectSheet` with `Bundled card` (default) and `Test fixture`. Fixtures come from `testFixtures/index.ts` (English only; export them from the package index under a `testFixtures` namespace). They are needed because the bundled story-writing set has no picture and empty rubric anchors, while `testFixtures/storyWriting.ts` has both. Choosing a fixture with isiXhosa selected uses the English fixture and says so in the row subtitle.
   - Tapping an entry navigates to `QuestionGalleryRun` with `{ entryKey, languageCode }`.
 - **`QuestionGalleryRunScreen` (route `QuestionGalleryRun`, `headerShown: false`):**
-  - It shows `TestHeader`.
+  - It renders inside `TestFrame`.
   - It mounts the entry's Component with:
     - `language`;
-    - `itemSet`, which is undefined for battery entries (each Question resolves its own bundled set) or `CURRENT_ITEM_SETS[code][lang]` for standalone entries;
+    - `itemSet`: for **Bundled card**, undefined for battery entries (each Question resolves its own bundled set) or `CURRENT_ITEM_SETS[code][lang]` for standalone entries; for **Test fixture**, the entry's `FIXTURE_*_EN`;
     - `durationSec` and `instructions`;
     - `childName="Gallery child"`;
     - `extraProps`.
@@ -774,12 +783,15 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
 
 - [ ] **Step 1: Write the failing tests.**
   - `'every battery and standalone question code maps to a component; unknown codes map to null'`.
-  - `'the gallery flag is on in dev, and production and pilot never set it'`. This reads `eas.json` and expects `production.env?.MASI_QUESTION_GALLERY` and `pilot.env?.MASI_QUESTION_GALLERY` to be undefined.
+  - `'the gallery build flag is on only for development and preview builds'`: evaluate `app.config.js` under `jest.isolateModules` with `EAS_BUILD_PROFILE` set to `development`, `preview`, `pilot`, `production`, `'something-else'` and unset; expect `extra.questionGallery` to be true, true, false, false, false, false.
+  - `'with __DEV__ false and no build flag, there is no gallery route and no Profile row'`: mock `isQuestionGalleryEnabled` to return false; the navigator has no `QuestionGallery` or `QuestionGalleryRun` route, and Profile › Support tools has no `Question gallery` row.
+  - `'TestFrame owns the top inset and leaves the bottom to the Question'`: render `StandaloneTestScreen` and `QuestionGalleryRunScreen` with insets `{ top: 47, bottom: 34 }`; the frame root has `paddingTop: 47` and no `paddingBottom`, and the Question's `BottomBar` pads 34 exactly once.
+  - `'Test fixture content runs the story-writing fixture with its picture and anchors'`.
   - `'the gallery lists two standalone tests and eleven WelaPLUS Questions'`.
   - `'running a gallery entry mounts its Question and shows its result'`. Use the real `NullQuestion` entry, which completes at once.
   - `AppNavigator.headers.test.js`: add `QuestionGallery: 'Question gallery'` to `TITLES`, and add `QuestionGalleryRun` to the headerShown:false list.
   - `ProfileScreen.layout.test.js`: `'Support tools shows Question gallery when the gallery is enabled'`.
-  - `StandaloneTestScreen.test.js`: the existing header assertions pass unchanged through `TestHeader`.
+  - `StandaloneTestScreen.test.js`: the existing header assertions pass unchanged through `TestFrame`.
 
 - [ ] **Step 2: Run the tests and confirm they fail.** Run `npx jest src/assessment-questions/battery __tests__/questionGallery.test.js __tests__/QuestionGalleryScreen.test.js __tests__/AppNavigator.headers.test.js __tests__/ProfileScreen.layout.test.js __tests__/StandaloneTestScreen.test.js`. Expected: FAIL.
 
@@ -845,7 +857,7 @@ Keep the behavioural tests listed in the recon (`:40`…`:403`) unchanged. They 
   - one large-text setting.
 
   Take screenshots of each.
-- [ ] **Step 3: Check the gallery.** Open all nine WelaPLUS Questions in English and isiXhosa and screenshot each one.
+- [ ] **Step 3: Check the gallery.** Open all nine WelaPLUS Questions in English and isiXhosa with bundled cards, and screenshot each one. Then, with **Test fixture**, open the populated rubric sheet, the picture enlargement (story writing) and the story re-read sheet, and screenshot those. Check the gallery header clears the status bar and notch.
 - [ ] **Step 4: Check the font.** Grid A card rows 1, 3 and 5 must show `I` and `l` as clearly different. If they do, delete the two `typeface` entries and update the itemSetIntegrity expectation. Then run `npx jest src/assessment-questions/__tests__/itemSetIntegrity.test.tsx`. Expected: PASS.
 - [ ] **Step 5: iPhone.** Ask Jim to repeat Steps 2–4 on the iPhone build. Log his verdict verbatim.
 - [ ] **Step 6: Commit.** Run `git commit -m "docs(assessment): capture style device gate; typeface content closed"`.
