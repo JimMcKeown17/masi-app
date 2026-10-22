@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { AppState, Text } from 'react-native';
 import { act, cleanupAsync, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
@@ -13,6 +13,8 @@ import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
 import { loadLessonBase, loadLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
 import BrandButton from '../src/components/common/BrandButton';
+import * as transitions from '../src/lessonPlan/lessonDraftState';
+import { formatSessionDate } from '../src/utils/sessionDateFormat';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({
@@ -22,6 +24,7 @@ const mockOffline = { isOnline: false, refreshSyncStatus: jest.fn(async () => ({
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => mockOffline }));
 jest.mock('../src/context/LookupsContext', () => ({ useLookupsContext: () => ({ jobTitles: [] }) }));
 let handle, draft, cache;
+const originalTimeZone = process.env.TZ;
 const testSave = (name, run) => test(name, async () => { try { await run(); } finally { await cleanupAsync(); } });
 function CacheObserver() { cache = useChildren(); return null; }
 const wrapper = ({ children }) => <AllProviders><SignedInEAContext.Provider value={{
@@ -63,7 +66,11 @@ beforeEach(async () => {
   });
   draft = await handle.repositories.lessonDrafts.create(draftStart({ ticks: { letters: ['a'], blends: [], books: [] } }));
 });
-afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+afterEach(() => {
+  jest.restoreAllMocks(); jest.useRealTimers();
+  if (originalTimeZone === undefined) delete process.env.TZ;
+  else process.env.TZ = originalTimeZone;
+});
 
 testSave('Save writes one session for the group and opens Session complete with the language', async () => {
   const view = mount(); await ready(view);
@@ -246,4 +253,87 @@ testSave('leaving Wrap up while a failing save is in flight leaves the lesson ed
   await waitFor(() => expect(handle.services.lessonDraft.getSnapshot().status).toBe('ready'));
   expect(await handle.repositories.lessonDrafts.getActive()).toMatchObject({ id: draft.id });
   expect(await sessions()).toEqual([]);
+});
+
+for (const [zone, now, selectedDate] of [
+  ['Pacific/Auckland', '2026-10-22T12:00:00.000Z', '2026-10-20'],
+  ['America/New_York', '2026-10-22T01:00:00.000Z', '2026-10-22'],
+]) testSave(`the date field, calendar, stored session and receipt keep the programme day under ${zone}`, async () => {
+  process.env.TZ = zone;
+  jest.setSystemTime(new Date(now));
+  draft = await handle.repositories.lessonDrafts.update(draft.id, {
+    lesson_date: '2026-10-22', plan: { ...draft.plan, made_on: '2026-10-22' },
+  });
+  const view = mount(); await ready(view);
+  fireEvent.press(view.getByRole('button', { name: 'Date, Today' }));
+  expect(await view.findByRole('button', { name: 'Thu 22 October 2026' })).toBeSelected();
+  if (selectedDate === '2026-10-20') fireEvent.press(view.getByRole('button', { name: 'Tue 20 October 2026' }));
+  else fireEvent.press(view.getByRole('button', { name: 'Cancel' }));
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await view.findByText('Session complete route');
+  expect((await sessions())[0].session_date).toBe(selectedDate);
+  expect(view.navigationRef.getCurrentRoute().params.sessionDate).toBe(selectedDate);
+  expect(formatSessionDate(selectedDate, 'pill')).toBe(selectedDate === '2026-10-20' ? 'Tue 20 Oct' : 'Thu 22 Oct');
+});
+testSave('crossing programme midnight refreshes Today and the calendar without moving the lesson date or plan', async () => {
+  jest.setSystemTime(new Date('2026-10-31T21:59:00.000Z'));
+  draft = await handle.repositories.lessonDrafts.update(draft.id, {
+    lesson_date: '2026-10-31', plan: { ...draft.plan, made_on: '2026-10-31' },
+  });
+  const listeners = new Set();
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
+    listeners.add(listener); return { remove: () => listeners.delete(listener) };
+  });
+  const view = mount(); await ready(view);
+  expect(view.getByRole('button', { name: 'Date, Today' })).toBeTruthy();
+  await act(async () => {
+    jest.setSystemTime(new Date('2026-11-01T00:01:00.000Z'));
+    listeners.forEach(listener => listener('active'));
+  });
+  fireEvent.press(await view.findByRole('button', { name: 'Date, Started Sat 31 Oct' }));
+  expect(await view.findByRole('button', { name: 'Next month' })).not.toBeDisabled();
+  fireEvent.press(view.getByRole('button', { name: 'Next month' }));
+  expect(await view.findByRole('button', { name: 'Sun 1 November 2026' })).not.toBeDisabled();
+  fireEvent.press(view.getByRole('button', { name: 'Cancel' }));
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await view.findByText('Session complete route');
+  expect((await sessions())[0]).toMatchObject({ session_date: '2026-10-31', activities: { lesson: { plan: draft.plan } } });
+});
+for (const [languageCode, language, packId] of [
+  ['xh', 'isiXhosa', 'isixhosa-interim-letters-v1'],
+  ['af', 'Afrikaans', 'afrikaans-interim-letters-v1'],
+]) testSave(`undoing all tracker changes and changing present children keeps ${language} evidence and subsequent marks in the lesson language`, async () => {
+  await handle.repositories.lessonDrafts.discard(draft.id);
+  draft = await handle.repositories.lessonDrafts.create(draftStart({ language_code: languageCode, pack_id: packId,
+    ticks: { letters: ['a'], blends: [], books: [] },
+  }));
+  await handle.withTransaction(async db => {
+    await db.runAsync('update classes set home_language = ? where id = ?', language, 'class-1');
+    await db.runAsync("insert into classes (id, school_id, name, grade, home_language, academic_year_id) values ('class-2', 'school-1', 'English class', '2', 'English', 'year-2026')");
+    await db.runAsync("update children set class_id = 'class-2' where id = 'c2'");
+    await db.runAsync("update child_class_memberships set exited_at = '2026-10-20' where child_id = 'c2'");
+    await db.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at) values ('c2-other-class', 'c2', 'class-2', 'year-2026', '2026-10-20')");
+  });
+  await handle.repositories.mastery.setLetterMastery({ childId: 'c1', letter: 'k', language: languageCode,
+    confirmed: true, changedAt: '2026-10-19T09:00:00.000Z', programmeId: 'programme-a' });
+  await handle.withTransaction(db => db.runAsync('delete from sync_outbox'));
+  const view = mount(); await ready(view);
+  const openTracker = () => fireEvent.press(within(view.getByTestId('wrap-up-child-c1')).getByRole('button', { name: /letter tracker/ }));
+  openTracker();
+  expect(await view.findByRole('button', { name: 'k, taught by coach' })).toBeTruthy();
+  fireEvent.press(view.getByRole('button', { name: 'a, not mastered' }));
+  fireEvent.press(view.getByRole('button', { name: 'Done' }));
+  await act(async () => { await handle.services.lessonDraft.apply(transitions.toggleAbsent, 'c1'); });
+  await act(async () => { await handle.services.lessonDraft.apply(transitions.toggleAbsent, 'c1'); });
+  openTracker();
+  fireEvent.press(await view.findByRole('button', { name: 'a, taught, added this session' }));
+  expect(view.getByRole('button', { name: 'k, taught by coach' })).toBeTruthy();
+  fireEvent.press(view.getByRole('button', { name: 'e, not mastered' }));
+  fireEvent.press(view.getByRole('button', { name: 'Done' }));
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await view.findByText('Session complete route');
+  expect(await (await handle.getReader()).getAllAsync("select letter, language from letter_mastery where child_id = 'c1' and confirmed = 1 order by letter"))
+    .toEqual(['e', 'k'].map(letter => ({ letter, language: languageCode })));
+  const outbox = await (await handle.getReader()).getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
+  expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([languageCode]);
 });

@@ -137,6 +137,46 @@ test('a Monday mark saved on Wednesday keeps its tap time when nothing newer is 
   expect((await read('select changed_at from letter_mastery'))[0].changed_at).toBe(MON);
   expect(JSON.parse((await read("select payload from sync_outbox where table_name = 'letter_mastery'"))[0].payload).changed_at).toBe(MON);
 });
+test.each([
+  ['a code with no tracker order', { mastered: true, languageCode: 'zu', madeAt: MON }],
+  ['a stored label instead of a code', { mastered: true, languageCode: 'English', madeAt: MON }],
+  ['a missing language', { mastered: true, madeAt: MON }],
+  ['the old boolean shape', true],
+  ['a missing tap time', { mastered: true, languageCode: 'en' }],
+  ['a letter outside the order', { mastered: true, languageCode: 'en', madeAt: MON }, 'ch'],
+  ['a non-boolean mastered', { mastered: 'yes', languageCode: 'en', madeAt: MON }],
+])('malformed tracker changes refuse the complete save for %s', async (_, change, letter = 'a') => {
+  const before = await snapshot();
+  const start = statements.length;
+  let caught;
+  try { await save({ draft: { ...draft, tracker_changes: { c1: { [letter]: change } } } }); }
+  catch (error) { caught = error; }
+  expect(caught).toMatchObject({ code: 'TRACKER_CHANGE_INVALID' });
+  expect(statements.slice(start).filter(row => row.method === 'runAsync')).toEqual([]);
+  expect(await snapshot()).toBe(before);
+});
+test('a lesson updates the same confirmation first recorded under another programme (C23)', async () => {
+  const previous = await repositories.mastery.setLetterMastery({ childId: 'c1', letter: 'a', language: 'en',
+    confirmed: false, changedAt: T0, programmeId: 'programme-b' });
+  await save();
+  expect(await read("select id, programme_id, confirmed from letter_mastery where child_id = 'c1' and letter = 'a'"))
+    .toEqual([{ id: previous.id, programme_id: 'programme-a', confirmed: 1 }]);
+  expect(await read("select operation from sync_outbox where table_name = 'letter_mastery'"))
+    .toEqual([{ operation: 'update' }]);
+});
+test('an unmark without a stored record persists a false correction and its original tap time', async () => {
+  await save({ draft: { ...draft, tracker_changes: { c1: { a: { mastered: false, languageCode: 'en', madeAt: MON } } } } });
+  expect(await read('select confirmed, changed_at from letter_mastery')).toEqual([{ confirmed: 0, changed_at: MON }]);
+  expect(JSON.parse((await read("select payload from sync_outbox where table_name = 'letter_mastery'"))[0].payload))
+    .toMatchObject({ confirmed: false, changed_at: MON, language: 'en' });
+});
+test('malformed tracker changes for absent children are ignored without changing their rows or outbox', async () => {
+  await save({ draft: { ...draft, attendance: { ...draft.attendance, absentChildIds: ['c1'] },
+    tracker_changes: { c1: { a: { mastered: true, languageCode: null } } },
+  } });
+  expect(await read('select child_id from session_attendees')).toEqual([{ child_id: 'c2' }]);
+  expect(await read("select * from sync_outbox where table_name in ('children', 'letter_mastery')")).toEqual([]);
+});
 test('no present children: NO_CHILDREN and nothing written', async () => {
   await rejectSave('NO_CHILDREN', { draft: { ...draft, attendance: { ...draft.attendance, absentChildIds: ['c1', 'c2'] } } });
 });

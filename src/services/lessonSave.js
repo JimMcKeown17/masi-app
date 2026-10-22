@@ -5,6 +5,7 @@ import { createLessonDraftsRepository, presentChildIds } from '../db/repositorie
 import { hasActiveProgrammeAssignment } from '../db/repositories/domainRepositoryUtils';
 import { compareServerTimestamps } from '../utils/serverTimestamps';
 import { buildLessonRecord } from '../lessonPlan/lessonRecord';
+import { assertTrackerChanges } from '../utils/masteryState';
 
 export class LessonSaveError extends Error {
   constructor(code, { childIds, cause } = {}) {
@@ -20,6 +21,8 @@ export const saveLesson = async ({ handle, draft, sessionTypeFields, nowIso = ne
   const childIds = presentChildIds(draft.attendance);
   if (childIds.length === 0) throw new LessonSaveError('NO_CHILDREN');
   if (!draft.plan) throw new LessonSaveError('NO_PLAN');
+  const present = new Set(childIds);
+  assertTrackerChanges(Object.fromEntries(Object.entries(draft.tracker_changes).filter(([id]) => present.has(id))));
   const options = { database: handle };
   const children = createChildrenRepository(options);
   const sessions = createSessionsRepository(options);

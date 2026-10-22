@@ -765,7 +765,7 @@ export const ChildrenProvider = ({ children }) => {
   /**
    * Get all children in a specific group.
    * Filters against visibleChildren so hidden children can't leak into
-   * session selection (ChildSelector) or group counts (GroupPickerBottomSheet).
+   * lesson attendance or group counts (GroupPickerBottomSheet).
    */
   const getChildrenInGroup = useCallback((groupId) => {
     const membershipIds = childrenGroups

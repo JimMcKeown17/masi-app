@@ -196,6 +196,8 @@ testLesson('leaving after a change asks first; Keep teaching stays; Leave lesson
   expect(await view.findByText('Leave this lesson?')).toBeTruthy();
   fireEvent.press(view.getByRole('button', { name: 'Keep teaching' }));
   await waitFor(() => expect(view.queryByText('Leave this lesson?')).toBeNull());
+  expect((await handle.repositories.lessonDrafts.getActive()).ticks.letters).toEqual(['a']);
+  expect(view.getByRole('button', { name: 'A, selected' })).toBeTruthy();
   await act(async () => { expect(backListeners[0]()).toBe(true); });
   expect(await view.findByText('Leave this lesson?')).toBeTruthy();
   fireEvent.press(view.getByRole('button', { name: 'Leave lesson' }));
