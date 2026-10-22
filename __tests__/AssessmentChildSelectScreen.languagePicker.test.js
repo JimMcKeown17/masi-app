@@ -138,8 +138,18 @@ describe('AssessmentChildSelectScreen language picker', () => {
     expect(screen.queryByLabelText('Dismiss assessment language picker')).toBeNull();
   });
 
+  test.each(['letter_sounds', 'word_reading'])('an Afrikaans class starts %s in Afrikaans without asking', async (testCode) => {
+    mockUseClasses.mockReturnValue({ classes: [{ id: 'class-1', name: 'Grade 1A', home_language: 'Afrikaans' }] });
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<PaperProvider settings={{ icon: () => null }}><AssessmentChildSelectScreen
+      navigation={navigation} route={{ params: { testCode } }} /></PaperProvider>);
+    await screen.findByText('Amahle Dlamini');
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+    expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', { testCode, child: mockUseChildren().children[0], languageCode: 'af' });
+    expect(screen.queryByLabelText('Dismiss assessment language picker')).toBeNull();
+  });
+
   test.each([
-    ['Afrikaans', 'class-1'],
     [null, 'class-1'],
     ['isiZulu', 'class-1'],
     [undefined, null],
@@ -154,7 +164,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
     await screen.findByText('Amahle Dlamini');
     fireEvent.press(screen.getByText('Amahle Dlamini'));
     const picker = screen.UNSAFE_getByType(SelectSheet);
-    expect(picker.props.options).toEqual([{ key: 'en', label: 'English' }, { key: 'xh', label: 'isiXhosa' }]);
+    expect(picker.props.options).toEqual([{ key: 'en', label: 'English' }, { key: 'xh', label: 'isiXhosa' }, { key: 'af', label: 'Afrikaans' }]);
     expect(picker.props.selectedKey).toBeNull();
     expect(screen.getByRole('button', { name: 'English' }).props.accessibilityState.selected).toBe(false);
     expect(navigation.navigate).not.toHaveBeenCalled();
@@ -173,7 +183,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
     /></PaperProvider>);
     await screen.findByText('Amahle Dlamini');
     fireEvent.press(screen.getByText('Amahle Dlamini'));
-    expect(screen.UNSAFE_getByType(SelectSheet).props.options.map(option => option.label)).toEqual(['English', 'isiXhosa']);
+    expect(screen.UNSAFE_getByType(SelectSheet).props.options.map(option => option.label)).toEqual(['English', 'isiXhosa', 'Afrikaans']);
     fireEvent.press(screen.getByText('English'));
     fireEvent.press(screen.getByText('Start'));
     expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', {

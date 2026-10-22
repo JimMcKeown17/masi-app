@@ -19,6 +19,7 @@ const SESSION_COLUMNS = [
   'user_id',
   'programme_id',
   'class_id',
+  'group_id',
   'session_date',
   'started_at',
   'ended_at',
@@ -210,9 +211,18 @@ export const createSessionsRepository = ({ database } = {}) => {
     const record = normalizeSyncFields({
       ...session,
       programme_id: programmeId,
+      group_id: session.group_id ?? null,
       activities: buildActivitiesPayload(session),
       sync_status: session.sync_status || syncStatusFromSynced(session.synced),
     });
+
+    if (shouldEnqueueOutbox(record) && record.group_id !== null) {
+      const group = await txn.getFirstAsync('select programme_id from groups where id = ?', record.group_id);
+      if (!group) throw new Error('sessions.group_id must reference a group on this phone');
+      if (group.programme_id !== programmeId) {
+        throw new Error('sessions.group_id must belong to the session programme');
+      }
+    }
 
     await upsertDomainRecord(txn, {
       tableName: 'sessions',
@@ -230,7 +240,7 @@ export const createSessionsRepository = ({ database } = {}) => {
         id: attendeeId,
         session_id: session.id,
         child_id: childId,
-        group_id: (session.group_ids || [])[0] || null,
+        group_id: record.group_id,
         attendance_status: 'present',
         sync_status: session.sync_status || syncStatusFromSynced(session.synced),
         synced: record.sync_status === 'synced',
@@ -299,6 +309,7 @@ export const createSessionsRepository = ({ database } = {}) => {
           id: attendee.id,
           session_id: attendee.session_id,
           child_id: attendee.child_id,
+          // The session keeps its historical group id; attendees stay null when the group is missing.
           group_id: await existingId(txn, 'groups', attendee.group_id),
           attendance_status: attendee.attendance_status,
           grade_snapshot: attendee.grade_snapshot ?? null,
@@ -322,25 +333,6 @@ export const createSessionsRepository = ({ database } = {}) => {
     return { savedFamilies };
   });
 
-  const updateSession = async (id, updates, keysToRemove = [], { transaction } = {}) => runWrite(transaction, async (txn) => {
-    const rows = await hydrateSessions(txn, [await txn.getFirstAsync('select * from sessions where id = ?', id)].filter(Boolean));
-    const existing = rows[0] || null;
-    if (!existing) return false;
-    const next = { ...existing, ...updates };
-    for (const key of keysToRemove) {
-      delete next[key];
-    }
-    await saveSession({
-      ...next,
-      // Local edits own their sync state, after both updates and key removal.
-      // saveSession applies this status to every attendee it rewrites too.
-      sync_status: 'pending',
-      synced: false,
-      last_sync_error: null,
-    }, { transaction: txn });
-    return true;
-  });
-
   const getUnsyncedRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync("select * from sessions where sync_status <> 'synced' order by created_at");
@@ -353,7 +345,6 @@ export const createSessionsRepository = ({ database } = {}) => {
     countSessionsOnDate,
     saveSession,
     saveHistoryPage,
-    updateSession,
     getUnsyncedRecords,
   };
 };

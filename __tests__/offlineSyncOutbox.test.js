@@ -15,6 +15,7 @@ import {
   childProgrammeEnrollmentDomainId,
   classEaAssignmentDomainId,
   deterministicDomainId,
+  getActiveAcademicYear,
   getActiveProgrammeId,
   groupEaAssignmentDomainId,
 } from '../src/db/repositories/domainRepositoryUtils';
@@ -29,8 +30,10 @@ import {
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
+import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
 
 const seedReferences = async (db) => {
   await db.runAsync("insert into schools (id, name, sync_status) values ('school-1', 'Masi Primary', 'synced')");
@@ -1358,6 +1361,7 @@ describe('SQLite outbox offline sync', () => {
       schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
       programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      assessment_tools: { replaceFromServer: jest.fn() },
       academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
@@ -1380,7 +1384,7 @@ describe('SQLite outbox offline sync', () => {
 
     await pullReferenceData({ supabaseClient, repositories, enqueueRequest });
 
-    expect(enqueueRequest).toHaveBeenCalledTimes(7);
+    expect(enqueueRequest).toHaveBeenCalledTimes(8);
     expect(events.slice(0, 6)).toEqual([
       'queue:start',
       'pull:schools',
@@ -1778,63 +1782,6 @@ describe('SQLite outbox offline sync', () => {
       last_sync_error: 'Missing user parent',
     });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 1 });
-  });
-
-  test('batches letter_mastery upserts into a single call', async () => {
-    // Seed a child that FK-satisfies letter_mastery rows (programme-1 is seeded by seedReferences).
-    await db.runAsync(`
-      insert into children (id, first_name, last_name, sync_status)
-      values ('child-mastery-batch', 'Amahle', 'Dlamini', 'synced')
-    `);
-
-    const letters = ['a', 'b', 'c'];
-    for (const letter of letters) {
-      const id = `mastery-batch-${letter}`;
-      await db.runAsync(`
-        insert into letter_mastery (
-          id, user_id, child_id, programme_id, letter, language, source, sync_status
-        )
-        values (?, 'user-1', 'child-mastery-batch', 'programme-1', ?, 'isiXhosa', 'taught', 'pending')
-      `, id, letter);
-      await enqueue(db, 'letter_mastery', id, 'insert', {
-        id,
-        user_id: 'user-1',
-        child_id: 'child-mastery-batch',
-        programme_id: 'programme-1',
-        letter,
-        language: 'isiXhosa',
-        source: 'taught',
-      });
-    }
-
-    const { supabaseClient, calls } = createSupabaseMock();
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
-
-    const result = await engine.syncAll();
-
-    const masteryBatchCalls = calls.filter(call => call.tableName === 'letter_mastery');
-    expect(masteryBatchCalls).toHaveLength(1);
-    expect(masteryBatchCalls[0]).toEqual(expect.objectContaining({
-      type: 'upsert',
-      tableName: 'letter_mastery',
-      payload: expect.arrayContaining([
-        expect.objectContaining({ letter: 'a', language: 'isiXhosa', source: 'taught' }),
-        expect.objectContaining({ letter: 'b', language: 'isiXhosa', source: 'taught' }),
-        expect.objectContaining({ letter: 'c', language: 'isiXhosa', source: 'taught' }),
-      ]),
-      options: expect.objectContaining({ onConflict: 'id' }),
-    }));
-    expect(result).toEqual(expect.objectContaining({
-      success: true,
-      totalSynced: letters.length,
-      totalFailed: 0,
-    }));
-    expect(await db.getFirstAsync(`
-      select count(*) as count
-      from letter_mastery
-      where sync_status = 'synced'
-    `)).toEqual({ count: letters.length });
-    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
   test('syncAll recovers in-flight rows left by an interrupted process', async () => {
@@ -2382,33 +2329,14 @@ describe('SQLite outbox offline sync', () => {
 
   test('keeps foreign-key and RLS failures visible as terminal failed items', async () => {
     const { assessmentId } = await seedAssessmentFamily(db);
-    await db.runAsync(`
-      insert into children (id, first_name, last_name, sync_status)
-      values ('child-1', 'Amahle', 'Dlamini', 'synced')
-    `);
-    await db.runAsync(`
-      insert into letter_mastery (
-        id, user_id, child_id, programme_id, letter, language, source, sync_status
-      )
-      values (
-        'mastery-1', 'user-1', 'child-1', 'programme-1', 'a', 'en', 'taught', 'pending'
-      )
-    `);
-    await enqueue(db, 'letter_mastery', 'mastery-1', 'insert', {
-      id: 'mastery-1',
-      user_id: 'user-1',
-      child_id: 'child-1',
-      programme_id: 'programme-1',
-      letter: 'a',
-      language: 'en',
-      source: 'taught',
+    const written = await createMasteryRepository({ database: db }).setLetterMastery({
+      childId: FAMILY_IDS.childId, programmeId: FAMILY_IDS.programmeId,
+      letter: 'a', language: 'en', confirmed: true,
     });
 
     const { supabaseClient } = createSupabaseMock({
-      upsertResults: {
-        letter_mastery: { error: { code: '42501', message: 'RLS denied' } },
-      },
       rpcResults: {
+        set_letter_mastery: { error: { code: '42501', message: 'RLS denied' } },
         submit_assessment: { error: { code: '23503', message: 'missing parent' } },
       },
     });
@@ -2421,7 +2349,7 @@ describe('SQLite outbox offline sync', () => {
     expect(result.success).toBe(false);
     expect(await db.getFirstAsync('select sync_status, last_sync_error from assessments where id = ?', assessmentId))
       .toEqual({ sync_status: 'terminal', last_sync_error: 'missing parent' });
-    expect(await db.getFirstAsync('select sync_status, last_sync_error from letter_mastery where id = ?', 'mastery-1'))
+    expect(await db.getFirstAsync('select sync_status, last_sync_error from letter_mastery where id = ?', written.id))
       .toEqual({ sync_status: 'terminal', last_sync_error: authenticatedRlsDenied });
     expect(status.failedItems).toEqual([
       expect.objectContaining({
@@ -2432,7 +2360,7 @@ describe('SQLite outbox offline sync', () => {
       }),
       expect.objectContaining({
         table: 'letter_mastery',
-        id: 'mastery-1',
+        id: written.id,
         terminal: true,
         reason: authenticatedRlsDenied,
       }),
@@ -2593,6 +2521,7 @@ describe('SQLite outbox offline sync', () => {
       schools: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       job_titles: { replaceFromServer: jest.fn() },
       programmes: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
+      assessment_tools: { replaceFromServer: jest.fn() },
       academic_years: { getAll: jest.fn(async () => []), replaceFromServer: jest.fn() },
       assessment_windows: { replaceFromServer: jest.fn() },
       teachers: { replaceFromServer: jest.fn() },
@@ -2605,6 +2534,7 @@ describe('SQLite outbox offline sync', () => {
       'schools',
       'job_titles',
       'programmes',
+      'assessment_tools',
       'academic_years',
       'assessment_windows',
       'teachers',
@@ -2628,6 +2558,7 @@ describe('SQLite outbox offline sync', () => {
       schools: 1,
       job_titles: 1,
       programmes: 1,
+      assessment_tools: 1,
       academic_years: 1,
       assessment_windows: 1,
       teachers: 1,
@@ -2635,11 +2566,65 @@ describe('SQLite outbox offline sync', () => {
     });
   });
 
+  test.each([
+    ['the new year first', [2027, 2026]],
+    ['the old year first', [2026, 2027]],
+  ])('pullReferenceData switches the active academic year whatever the response order', async (_label, order) => {
+    const db = await createMigratedDatabase(runMigrations);
+    const year = (value, active) => ({
+      id: `year-${value}`, label: String(value), starts_on: `${value}-01-15`,
+      ends_on: `${value}-12-15`, is_active: active,
+    });
+    const rowsByTable = {
+      schools: [{ id: 'school-1', name: 'Masi Primary' }],
+      job_titles: [{ id: 'job-title-1', code: 'ea', name: 'Education Assistant', is_active: true }],
+      programmes: [{ id: 'programme-1', code: 'literacy', name: 'Literacy', is_active: true }],
+      assessment_tools: [],
+      academic_years: [year(2026, true)],
+      assessment_windows: [{
+        id: 'window-2026', academic_year_id: 'year-2026', label: '2026 Baseline',
+        window_type: 'baseline', starts_on: '2026-01-15', ends_on: '2026-03-15', is_required: true,
+      }],
+      teachers: [{ id: 'teacher-1', first_name: 'Test', last_name: 'Teacher', school_id: 'school-1' }],
+      staff_programme_assignments: [{
+        id: 'spa-1', user_id: 'user-1', programme_id: 'programme-1', school_id: 'school-1',
+        assigned_at: '2026-01-15T00:00:00Z', ended_at: null,
+      }],
+    };
+    const supabaseClient = {
+      from: jest.fn((tableName) => {
+        const query = {
+          select: () => query, eq: () => query,
+          then: (resolve) => Promise.resolve({ data: rowsByTable[tableName], error: null }).then(resolve),
+        };
+        return query;
+      }),
+    };
+    const repositories = Object.fromEntries(Object.keys(rowsByTable).map((tableName) => [
+      tableName, createReferenceDataRepository({ database: db, tableName }),
+    ]));
+    const localStateRepository = createLocalStateRepository({ database: db });
+    try {
+      await pullReferenceData({ supabaseClient, repositories, localStateRepository, userId: 'user-1' });
+      expect(await getActiveAcademicYear(db)).toMatchObject({ id: 'year-2026' });
+      rowsByTable.academic_years = order.map((value) => year(value, value === 2027));
+      await expect(pullReferenceData({ supabaseClient, repositories, localStateRepository, userId: 'user-1' })).resolves.toEqual({
+        schools: 1, job_titles: 1, programmes: 1, assessment_tools: 0, academic_years: 2,
+        assessment_windows: 1, teachers: 1, staff_programme_assignments: 1,
+      });
+      expect(await getActiveAcademicYear(db)).toMatchObject({ id: 'year-2027', is_active: 1 });
+      expect(await localStateRepository.get('reference_data_complete_at')).toEqual(expect.any(String));
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('ensureReferenceData runs one reference pull for concurrent callers on an empty cache', async () => {
     const rowsByTable = {
       schools: [{ id: 'school-1', name: 'Masi Primary' }],
       job_titles: [],
       programmes: [{ id: 'programme-1', code: 'literacy', name: 'Literacy' }],
+      assessment_tools: [],
       academic_years: [{
         id: 'year-2026',
         label: '2026',
@@ -2673,7 +2658,7 @@ describe('SQLite outbox offline sync', () => {
       ensureReferenceData({ supabaseClient, repositories, userId: 'user-1' }),
     ]);
 
-    expect(supabaseClient.from).toHaveBeenCalledTimes(7);
+    expect(supabaseClient.from).toHaveBeenCalledTimes(8);
     expect(repositories.schools.replaceFromServer).toHaveBeenCalledTimes(1);
     expect(repositories.programmes.replaceFromServer).toHaveBeenCalledTimes(1);
     expect(repositories.academic_years.replaceFromServer).toHaveBeenCalledTimes(1);
@@ -2701,6 +2686,7 @@ describe('SQLite outbox offline sync', () => {
         sort_order: 1,
         is_active: true,
       }],
+      assessment_tools: [],
       academic_years: [{
         id: 'year-server',
         label: '2026',
@@ -2768,6 +2754,7 @@ describe('SQLite outbox offline sync', () => {
         schools: createSchoolsRepository({ database: db }),
         job_titles: createReferenceDataRepository({ database: db, tableName: 'job_titles' }),
         programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
+        assessment_tools: createReferenceDataRepository({ database: db, tableName: 'assessment_tools' }),
         academic_years: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
         assessment_windows: createReferenceDataRepository({ database: db, tableName: 'assessment_windows' }),
         teachers: createReferenceDataRepository({ database: db, tableName: 'teachers' }),
@@ -2815,6 +2802,7 @@ describe('SQLite outbox offline sync', () => {
         schools: [{ id: 'school-1', name: 'Masi Primary' }],
         job_titles: [],
         programmes: [{ id: 'programme-a', code: 'literacy', name: 'Literacy' }],
+        assessment_tools: [],
         academic_years: [{
           id: 'year-2026',
           label: '2026',
@@ -2857,6 +2845,7 @@ describe('SQLite outbox offline sync', () => {
         schools: createSchoolsRepository({ database: db }),
         job_titles: createReferenceDataRepository({ database: db, tableName: 'job_titles' }),
         programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
+        assessment_tools: createReferenceDataRepository({ database: db, tableName: 'assessment_tools' }),
         academic_years: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
         assessment_windows: createReferenceDataRepository({ database: db, tableName: 'assessment_windows' }),
         teachers: createReferenceDataRepository({ database: db, tableName: 'teachers' }),

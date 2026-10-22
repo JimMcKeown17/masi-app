@@ -17,11 +17,15 @@ import { createSyncOutboxRepository } from '../db/repositories/syncOutboxReposit
 import { createSupportIncidentRepository } from '../db/repositories/supportIncidentRepository';
 import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 import { createLocalStateRepository } from '../db/repositories/localStateRepository';
+import { createLessonDraftsRepository } from '../db/repositories/lessonDraftsRepository';
 import { createOutboxSyncEngine, ensureReferenceData, pullReferenceData, fetchAndCacheSchools } from '../services/offlineSync';
 import { pullPreloadedChildData, persistPreloadedChildData, pullClassData } from '../services/preloadedChildData';
 import { createHomeAttentionStore } from '../services/homeAttentionStore';
 import { createSessionHistoryState } from '../services/sessionHistoryPull';
 import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
+import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
+import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
+import { isMasteryInputsComplete } from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
 import { StaleActorError } from './staleActor';
 
@@ -47,6 +51,7 @@ export const createHandleServices = (handle) => {
     supportIncidents: createSupportIncidentRepository(options),
     syncState: createSyncStateRepository(options),
     localState: createLocalStateRepository(options),
+    lessonDrafts: createLessonDraftsRepository(options),
   };
   // Bind the composite graph to the same actor as its leaf repositories.
   repositories.classOnboarding = createClassOnboardingRepository({
@@ -80,7 +85,12 @@ export const createHandleServices = (handle) => {
     ...options, repositories, state: createSessionHistoryState(),
     client: handle.dataClient, enqueueRequest: handle.enqueueRequest, referenceDataReady,
   });
-  handle.onClose(() => store.reset());
+  const assessmentStore = createAssessmentHistoryStore({
+    ...options, repositories, states: createAssessmentHistoryStates(),
+    client: handle.dataClient, enqueueRequest: handle.enqueueRequest, referenceDataReady,
+    refreshReferenceData: () => { assertCurrent(); return pullReferenceData(referenceOptions); },
+  });
+  handle.onClose(() => { store.reset(); assessmentStore.reset(); });
   return {
     repositories,
     homeAttention: createHomeAttentionStore({ database: handle, localState: repositories.localState }),
@@ -114,6 +124,13 @@ export const createHandleServices = (handle) => {
     },
     fetchAndCacheSchools: () => fetchAndCacheSchools(referenceOptions),
     sessionHistory: { start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }), store },
+    assessmentHistory: {
+      start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }),
+      store: assessmentStore,
+      masteryInputsComplete: ({ childIds } = {}) => isMasteryInputsComplete({
+        database: handle, userId: handle.userId, childIds,
+      }),
+    },
     deviceProfile: {
       get: () => repositories.localState.get('user_profile', null),
       save: (profile) => repositories.localState.set('user_profile', profile),

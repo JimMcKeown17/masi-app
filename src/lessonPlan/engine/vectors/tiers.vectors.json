@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "defaults": {},
+  "cases": [
+    {
+      "name": "Cannot blend practises 2-letter items",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": ["Cannot blend"],
+      "expect": "2 Letter Blends"
+    },
+    {
+      "name": "Not set practises 2-letter items",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        null
+      ],
+      "expect": "2 Letter Blends"
+    },
+    {
+      "name": "2 Letter Blends stays 2-letter",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "2 Letter Blends"
+      ],
+      "expect": "2 Letter Blends"
+    },
+    {
+      "name": "3 Letter Blends practises 3-letter items",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "3 Letter Blends"
+      ],
+      "expect": "3 Letter Blends"
+    },
+    {
+      "name": "4 Letter Blends practises 4-letter items",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "4 Letter Blends"
+      ],
+      "expect": "4 Letter Blends"
+    },
+    {
+      "name": "Word Reading practises words",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "Word Reading"
+      ],
+      "expect": "Word Reading"
+    },
+    {
+      "name": "Sentence Reading practises words",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "Sentence Reading"
+      ],
+      "expect": "Word Reading"
+    },
+    {
+      "name": "Paragraph Reading practises words",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "Paragraph Reading"
+      ],
+      "expect": "Word Reading"
+    },
+    {
+      "name": "an unknown level counts as Not set",
+      "spec": "C4",
+      "fn": "blendTierForReadingLevel",
+      "args": [
+        "Advanced"
+      ],
+      "expect": "2 Letter Blends"
+    },
+    {
+      "name": "no blends ticked: no session reading level",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        []
+      ],
+      "expect": null
+    },
+    {
+      "name": "top-up items only count at their own tier",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        [
+          "mo",
+          "la"
+        ]
+      ],
+      "expect": "2 Letter Blends"
+    },
+    {
+      "name": "mixed tiers: the highest",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        [
+          "ma",
+          "lam",
+          "mama"
+        ]
+      ],
+      "expect": "4 Letter Blends"
+    },
+    {
+      "name": "show higher: a ticked word sets Word Reading",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        [
+          "umama"
+        ]
+      ],
+      "expect": "Word Reading"
+    },
+    {
+      "name": "hyphens do not count as letters",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        [
+          "u-ma-ma"
+        ]
+      ],
+      "expect": "Word Reading"
+    },
+    {
+      "name": "a 3-letter word sets 3 Letter Blends",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        [
+          "lam"
+        ]
+      ],
+      "expect": "3 Letter Blends"
+    },
+    {
+      "name": "a non-array is no reading level",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        "x"
+      ],
+      "expect": null
+    },
+    {
+      "name": "empty items are ignored",
+      "spec": "C11",
+      "fn": "deriveSessionReadingLevel",
+      "args": [
+        [
+          "",
+          "-"
+        ]
+      ],
+      "expect": null
+    }
+  ]
+}

@@ -71,6 +71,12 @@ const GROUP_EA_ASSIGNMENT_COLUMNS = [
   'row_version',
 ];
 
+const assertGroupProgrammeUnchanged = (existing, programmeId) => {
+  if (existing && existing.programme_id !== programmeId) {
+    throw new Error('groups.programme_id cannot be changed after insert');
+  }
+};
+
 const writeOutboxPayload = async (txn, outboxIdValue, payload) => {
   await txn.runAsync(`
     update sync_outbox
@@ -299,6 +305,10 @@ export const createGroupsRepository = ({ database } = {}) => {
       created_by: ownerUserId,
       sync_status: group.sync_status || syncStatusFromSynced(group.synced),
     });
+    if (shouldEnqueueOutbox(record)) {
+      const existing = await txn.getFirstAsync('select programme_id from groups where id = ?', group.id);
+      assertGroupProgrammeUnchanged(existing, programmeId);
+    }
     if (await serverPullWouldClobberPendingLocal(txn, 'groups', record)) {
       return false;
     }
@@ -334,6 +344,7 @@ export const createGroupsRepository = ({ database } = {}) => {
       synced: false,
       last_sync_error: null,
     });
+    assertGroupProgrammeUnchanged(existing, record.programme_id);
     await upsertDomainRecord(txn, {
       tableName: 'groups',
       columns: GROUP_COLUMNS,

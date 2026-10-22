@@ -1,9 +1,14 @@
+import { useAssessmentHistoryStatus } from '../src/services/assessmentHistoryStatus';
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'), useAssessmentHistoryStatus: jest.fn(),
+}));
+beforeEach(() => useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import ListGroup from '../src/components/common/ListGroup';
 import React from 'react';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
-import { FlatList, StyleSheet } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet } from 'react-native';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
@@ -47,7 +52,10 @@ jest.mock('../src/services/supabaseClient', () => ({
   },
 }));
 
-const render = ui => renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: assessmentsRepository, batteryRuns: batteryRunsRepository } }}>{ui}</SignedInEAContext.Provider>);
+const mockGetChildNamesByIds = jest.fn(async () => ({}));
+const mockGetAssessmentHistoryPullStates = jest.fn(async () => ({ batteryRuns: null, assessments: null, mastery: null }));
+const mockStartAssessmentHistoryPull = jest.fn(async () => null);
+const render = ui => renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: assessmentsRepository, batteryRuns: batteryRunsRepository, children: { getChildNamesByIds: mockGetChildNamesByIds } }, services: { assessmentHistory: { start: mockStartAssessmentHistoryPull, store: { getPullStates: mockGetAssessmentHistoryPullStates } } } }}>{ui}</SignedInEAContext.Provider>);
 
 const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
 let mockInsets = ZERO_INSETS;
@@ -115,6 +123,32 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test('pull-to-refresh calls services.assessmentHistory.start({ force: true })', async () => {
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('Pending sync');
+    expect(mockStartAssessmentHistoryPull).not.toHaveBeenCalled(); // focus only reloads SQLite
+    fireEvent(screen.UNSAFE_getByType(RefreshControl), 'refresh');
+    await waitFor(() => expect(mockStartAssessmentHistoryPull).toHaveBeenCalledWith({ force: true }));
+    expect(mockStartAssessmentHistoryPull).toHaveBeenCalledTimes(1);
+  });
+
+  test('while running, Downloading history from Head Office… is shown', async () => {
+    useAssessmentHistoryStatus.mockReturnValue({ running: true, pageVersion: 0, runVersion: 0 });
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    expect(screen.getByText('Downloading history from Head Office…')).toBeTruthy();
+    await screen.findByText('Pending sync');
+    expect(screen.getByText('Downloading history from Head Office…')).toBeTruthy();
+  });
+
+  test('an own result for a history reference child shows the stored name, not Unknown child', async () => {
+    useChildren.mockReturnValue({ allChildren: [] });
+    mockGetChildNamesByIds.mockResolvedValueOnce({ 'child-1': { name: 'Lindiwe Mbeki', hidden: false } });
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    await screen.findByText('Lindiwe Mbeki');
+    expect(screen.queryByText('Unknown child')).toBeNull();
+    expect(mockGetChildNamesByIds).toHaveBeenCalledWith(['child-1']);
   });
 
   test('load errors appear as root toasts', async () => {

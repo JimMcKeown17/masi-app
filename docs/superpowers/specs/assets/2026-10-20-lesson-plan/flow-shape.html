@@ -1,0 +1,122 @@
+<style>
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;margin-top:10px}
+  .ph{width:212px;border:2px solid #d9d0cf;border-radius:22px;background:#F8F5F4;overflow:hidden;font:11px/1.35 -apple-system,system-ui,sans-serif;color:#221A1B;flex:none}
+  .ph .cap{background:#fff;color:#76696B;font-size:10px;text-align:center;padding:4px;border-bottom:1px solid #ECE5E4;font-weight:600}
+  .hd{background:#E72D4D;color:#fff;padding:10px 10px 12px}
+  .hd b{font-size:14px;display:block}
+  .hd small{opacity:.85}
+  .steps{display:flex;gap:4px;padding:6px 8px 0}
+  .steps span{flex:1;height:3px;border-radius:2px;background:#ECE5E4}
+  .steps span.on{background:#E72D4D}
+  .card{background:#fff;border-radius:10px;margin:7px 8px;padding:7px 8px;border:1px solid #ECE5E4}
+  .lbl{font-size:8.5px;color:#76696B;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:3px}
+  .chip{display:inline-block;border:1.5px solid #E72D4D;color:#A4182F;border-radius:7px;padding:1px 6px;margin:1px 1px;font-weight:700;background:#fff}
+  .chip.on{background:#E72D4D;color:#fff}
+  .chip.rev{border-color:#ECE5E4;color:#76696B;font-weight:600}
+  .chip.ok{background:#E7F3E5;border-color:#CDE8C9;color:#2E7D27}
+  .book{display:flex;gap:7px;align-items:center}
+  .cover{width:30px;height:38px;border-radius:4px;background:linear-gradient(135deg,#FBD5DC,#EE7D90);flex:none;display:flex;align-items:center;justify-content:center;font-size:8px;color:#7C1223;font-weight:800}
+  .btn{background:#E72D4D;color:#fff;border-radius:12px;text-align:center;padding:8px;margin:8px;font-weight:700}
+  .btn.ghost{background:#fff;color:#E72D4D;border:1.5px solid #E72D4D}
+  .tick{color:#2E7D27;font-weight:800}
+  .muted{color:#76696B}
+  .kid{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-top:1px solid #F1ECEB}
+  .kid:first-of-type{border-top:0}
+  .pill{border-radius:20px;padding:1px 7px;background:#FDECEF;color:#A4182F;font-size:9.5px;font-weight:700}
+  .note{background:#FFF8E1;color:#8A4B00;border-radius:8px;padding:6px 8px;margin:7px 8px;font-size:10px}
+  .arrow{align-self:center;font-size:20px;color:#C81F3E}
+  .opt-note{font-size:13px;color:#555;margin:6px 0 2px}
+</style>
+
+<h2>How should a session flow?</h2>
+<p class="subtitle">Same example in each: the app suggests Amahle &amp; Lulu (isiXhosa, Grade 1). Letters <b>k u</b> (they know o m l a), blends at 2-letter level, book <i>Lulu ulala</i>. Masi's session is ~55 min: letters 15, blending 15, pair reading 5, read-to-child 20. Pick the shape that fits how an EA actually works; the visuals are rough.</p>
+
+<div class="options">
+
+<div class="option" data-choice="a" onclick="toggleSelect(this)">
+  <div class="letter">A</div>
+  <div class="content">
+    <h3>Three steps, like Zazi: Plan → Teach → Wrap up</h3>
+    <p class="opt-note">Separate screens for each part. Teach is where the EA taps each thing as it's done. Familiar from Zazi; one more screen than B.</p>
+    <div class="row">
+      <div class="ph"><div class="cap">1 · Plan &amp; who's here</div>
+        <div class="hd"><b>Amahle &amp; Lulu</b><small>Gr 1 · isiXhosa · last seen Mon</small></div>
+        <div class="steps"><span class="on"></span><span></span><span></span></div>
+        <div class="card"><div class="lbl">Today's plan</div>
+          New letters <span class="chip">k</span><span class="chip">u</span> <span class="muted">· review o m l a</span><br>
+          Blends <span class="chip rev">ku</span><span class="chip rev">mu</span><span class="chip rev">lu</span><br>
+          Book <i>Lulu ulala</i></div>
+        <div class="card"><div class="lbl">Who's here</div>
+          <span class="chip ok">✓ Amahle</span> <span class="chip ok">✓ Lulu</span></div>
+        <div class="btn">Start lesson</div></div>
+      <div class="arrow">→</div>
+      <div class="ph"><div class="cap">2 · Teach</div>
+        <div class="hd"><b>Teach</b><small>Tap each one when it's done</small></div>
+        <div class="steps"><span class="on"></span><span class="on"></span><span></span></div>
+        <div class="card"><div class="lbl">Letters</div><span class="chip on">k ✓</span><span class="chip">u</span><span class="chip rev">+</span></div>
+        <div class="card"><div class="lbl">Blends · 2-letter</div><span class="chip on">ku ✓</span><span class="chip on">mu ✓</span><span class="chip">lu</span><span class="chip rev">+ more</span></div>
+        <div class="card"><div class="lbl">Book</div><div class="book"><div class="cover">S2</div><div><i>Lulu ulala</i><br><span class="muted">Read in pairs · </span><b style="color:#E72D4D">Open in app ›</b></div></div></div>
+        <div class="btn">Wrap up →</div></div>
+      <div class="arrow">→</div>
+      <div class="ph"><div class="cap">3 · Wrap up</div>
+        <div class="hd"><b>Wrap up</b><small>Who knows k u without help?</small></div>
+        <div class="steps"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+        <div class="card">
+          <div class="kid"><b>Amahle</b><span class="pill">2-letter ▸</span></div>
+          <div><span class="chip on">k ✓</span><span class="chip">u</span> <span class="muted">· 7/26 ›</span></div>
+          <div class="kid" style="margin-top:4px"><b>Lulu</b><span class="pill">3-letter ▸</span></div>
+          <div><span class="chip">k</span><span class="chip">u</span> <span class="muted">· 9/26 ›</span></div>
+        </div>
+        <div class="btn">Save session</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="option" data-choice="b" onclick="toggleSelect(this)">
+  <div class="letter">B</div>
+  <div class="content">
+    <h3>Two screens: one Lesson screen kept open while teaching → Wrap up</h3>
+    <p class="opt-note">The plan <i>is</i> the recording: the EA ticks items on the same card they're reading from. Attendance sits at the top. One fewer screen than A.</p>
+    <div class="row">
+      <div class="ph"><div class="cap">Lesson (open the whole session)</div>
+        <div class="hd"><b>Amahle &amp; Lulu</b><small>Gr 1 · isiXhosa · last seen Mon</small></div>
+        <div class="card" style="padding:5px 8px"><span class="chip ok">✓ Amahle</span> <span class="chip ok">✓ Lulu</span> <span class="muted">tap if absent</span></div>
+        <div class="card"><div class="lbl">1 · Letters · 15 min</div><span class="chip on">k ✓</span><span class="chip">u</span><span class="chip rev">+</span><br><span class="muted">Review o m l a</span></div>
+        <div class="card"><div class="lbl">2 · Blending · 15 min · 2-letter</div><span class="chip on">ku ✓</span><span class="chip on">mu ✓</span><span class="chip">lu</span><span class="chip rev">+ more</span><br><span class="muted">Show 3-letter (Lulu is ahead)</span></div>
+        <div class="card"><div class="lbl">3 · Pair reading · 5 min</div><div class="book"><div class="cover">S2</div><div><i>Lulu ulala</i> <span class="tick">✓ read</span><br><b style="color:#E72D4D">Open in app ›</b> · <span class="muted">other book</span></div></div></div>
+        <div class="btn">Wrap up →</div></div>
+      <div class="arrow">→</div>
+      <div class="ph"><div class="cap">Wrap up</div>
+        <div class="hd"><b>Wrap up</b><small>Who knows k u without help?</small></div>
+        <div class="card">
+          <div class="kid"><b>Amahle</b><span class="pill">2-letter ▸</span></div>
+          <div><span class="chip on">k ✓</span><span class="chip">u</span> <span class="muted">· 7/26 ›</span></div>
+          <div class="kid" style="margin-top:4px"><b>Lulu</b><span class="pill">3-letter ▸</span></div>
+          <div><span class="chip">k</span><span class="chip">u</span> <span class="muted">· 9/26 ›</span></div>
+        </div>
+        <div class="card muted">Notes (optional)</div>
+        <div class="btn">Save session</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="option" data-choice="c" onclick="toggleSelect(this)">
+  <div class="letter">C</div>
+  <div class="content">
+    <h3>One page: today's form, with the plan placed at the top</h3>
+    <p class="opt-note">Closest to the current Record form. Nothing to navigate, but it's one long scroll, and the plan and tracker compete for space.</p>
+    <div class="row">
+      <div class="ph"><div class="cap">Record (one scroll)</div>
+        <div class="hd"><b>Amahle &amp; Lulu</b><small>Gr 1 · isiXhosa</small></div>
+        <div class="card"><div class="lbl">Suggested</div>Letters <b>k u</b> · Blends <b>ku mu lu</b> · Book <i>Lulu ulala</i></div>
+        <div class="card"><div class="lbl">Letters focused on</div><span class="chip on">k</span><span class="chip">u</span><span class="chip rev">o</span><span class="chip rev">m</span><span class="chip rev">l</span><span class="chip rev">a</span><span class="chip rev">…</span></div>
+        <div class="card"><div class="lbl">Blends done</div><span class="chip on">ku</span><span class="chip on">mu</span><span class="chip">lu</span><span class="chip rev">+</span></div>
+        <div class="card"><div class="lbl">Book read</div><i>Lulu ulala</i> ▾</div>
+        <div class="card"><div class="lbl">Reading levels</div>Amahle <span class="pill">2-letter</span> Lulu <span class="pill">3-letter</span></div>
+        <div class="card"><div class="lbl">Letter tracker</div>Amahle [+1] · Lulu [update]</div>
+        <div class="btn">Submit session</div></div>
+    </div>
+  </div>
+</div>
+
+</div>

@@ -7,6 +7,7 @@ const referenceOptions = () => {
     localStateRepository: repos.localState,
     enqueueRequest: mocks.enqueueSupabaseRequest || handle.enqueueRequest,
     repositories: { schools: repos.schools, job_titles: repos.jobTitles, programmes: repos.programmes,
+      assessment_tools: repos.assessmentTools,
       academic_years: repos.academicYears, assessment_windows: repos.assessmentWindows,
       teachers: repos.teachers, staff_programme_assignments: repos.staffProgrammeAssignments } };
 };

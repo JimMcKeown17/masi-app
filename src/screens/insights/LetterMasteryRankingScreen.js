@@ -1,3 +1,4 @@
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { OKAY_YELLOW } from '../../utils/scoreBands';
@@ -18,6 +19,7 @@ import StatBar from '../../components/dashboard/StatBar';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 
 export default function LetterMasteryRankingScreen({ navigation }) {
+  const { pageVersion, runVersion } = useAssessmentHistoryStatus();
   const onScroll = useHeaderHairline();
   const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
@@ -34,15 +36,15 @@ export default function LetterMasteryRankingScreen({ navigation }) {
       const load = async () => {
         setLoading(true);
         const [assessments, letterMastery] = await Promise.all([
-          assessmentsRepository.getLetterResults({ userId: user.id }),
-          masteryRepository.getLetterMastery({ userId: user.id }),
+          assessmentsRepository.getLetterEvidenceResults({ userId: user.id }),
+          masteryRepository.getLetterMastery({ childIds: childrenList.map((c) => c.id) }),
         ]);
         const ranked = getLetterMasteryRanking(childrenList, assessments, letterMastery, classes);
         setRanking(ranked);
         setLoading(false);
       };
       load();
-    }, [childrenList, classes, user.id])
+    }, [childrenList, classes, user.id, pageVersion, runVersion])
   );
 
   if (loading) {

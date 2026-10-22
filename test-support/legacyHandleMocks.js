@@ -7,6 +7,7 @@ const modules = {
   classGroupingState: 'classGroupingStateRepository', groupingVersions: 'groupingVersionsRepository',
   sessions: 'sessionsRepository', assessments: 'assessmentsRepository', mastery: 'masteryRepository',
   timeEntries: 'timeEntriesRepository', syncOutbox: 'syncOutboxRepository', syncState: 'syncStateRepository', localState: 'localStateRepository',
+  lessonDrafts: 'lessonDraftsRepository',
   ...Object.fromEntries(['schools','jobTitles','programmes','staffProgrammeAssignments','assessmentTools','academicYears','assessmentWindows','teachers'].map((name) => [name, 'referenceDataRepository'])),
 };
 const getModule = (file) => require(`../src/db/repositories/${file}`);
@@ -31,7 +32,7 @@ const serviceCache = new WeakMap();
 module.exports.servicesForTest = (handle) => {
   const mocks = require('./handleServiceMocks');
   const source = require('../src/services/offlineSync');
-  const services = serviceCache.get(handle) || { ...handle.services, syncEngine: { ...handle.services.syncEngine }, sessionHistory: { ...handle.services.sessionHistory, store: { ...handle.services.sessionHistory.store } } };
+  const services = serviceCache.get(handle) || { ...handle.services, syncEngine: { ...handle.services.syncEngine }, sessionHistory: { ...handle.services.sessionHistory, store: { ...handle.services.sessionHistory.store } }, assessmentHistory: { ...handle.services.assessmentHistory, store: { ...handle.services.assessmentHistory.store } } };
   for (const name of ['syncAll','syncTableByName','getSyncStatus','requeueTerminalRlsFailures','retryFailedItem']) {
     if (mocks[name]) services.syncEngine[name] = mocks[name];
   }
@@ -39,6 +40,9 @@ module.exports.servicesForTest = (handle) => {
   if (mocks.startSessionHistoryPull) services.sessionHistory.start = mocks.startSessionHistoryPull;
   if (mocks.getSessionHistoryPullState) services.sessionHistory.store.getPullState = mocks.getSessionHistoryPullState;
   if (mocks.resetSessionHistoryStatusForActorChange) services.sessionHistory.store.reset = mocks.resetSessionHistoryStatusForActorChange;
+  if (mocks.startAssessmentHistoryPull) services.assessmentHistory.start = mocks.startAssessmentHistoryPull;
+  if (mocks.getAssessmentHistoryPullStates) services.assessmentHistory.store.getPullStates = mocks.getAssessmentHistoryPullStates;
+  if (mocks.resetAssessmentHistoryStatusForActorChange) services.assessmentHistory.store.reset = mocks.resetAssessmentHistoryStatusForActorChange;
   if (jest.isMockFunction(source.ensureReferenceData)) services.referenceDataReady = source.ensureReferenceData;
   if (jest.isMockFunction(source.fetchAndCacheSchools)) services.fetchAndCacheSchools = source.fetchAndCacheSchools;
   serviceCache.set(handle, services);

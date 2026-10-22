@@ -1,3 +1,4 @@
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -17,6 +18,7 @@ import { typeRoles } from '../../constants/typography';
 import { STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 
 export default function AssessmentsScreen({ navigation }) {
+  const { pageVersion, runVersion } = useAssessmentHistoryStatus();
   const { handle, repositories } = useSignedInEA();
   const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
 
@@ -44,7 +46,7 @@ export default function AssessmentsScreen({ navigation }) {
         setStats(getAssessmentsTabStats(childrenList, results, activeAcademicYear));
       };
       loadStats();
-    }, [childrenList, user.id])
+    }, [childrenList, user.id, pageVersion, runVersion])
   );
 
   // Hold the capture UI until the programme check resolves, so an unassigned EA

@@ -1,5 +1,9 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { getConnectionActor } from '../../session/signedInHandle';
 import { createAssessmentsRepository } from './assessmentsRepository';
+import { assertPulledRunShape, ensureHistoryReferenceChildren, mergePulledRunHeaders } from './historyPageApply';
+import { createSyncStateRepository } from './syncStateRepository';
+import { resolveHistoryPullState } from './historyCoverage';
 import {
   enqueueDomainOutbox, getActiveProgrammeId, mapDomainRow, resolveProgrammeId, upsertDomainRecord,
 } from './domainRepositoryUtils';
@@ -103,9 +107,29 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     const run = await db.getFirstAsync('select * from battery_runs where id = ?', id);
     if (!run) return null;
     const results = await assessments.getQuestionResults({
+      userId: database?.userId ?? getConnectionActor(db),
       programmeId: run.programme_id, childId: run.child_id, includeSkipped: true,
     });
     return { ...mapDomainRow(run), results: results.filter(result => result.battery_run_id === id) };
+  };
+
+  const saveHistoryPage = async (rows, { scope, pullState, admit }) => {
+    try {
+      rows.forEach(assertPulledRunShape);
+    } catch (error) {
+      if (error instanceof TypeError) error.kind = 'query';
+      throw error;
+    }
+    return runRepositoryTransaction(database, async (txn) => {
+      if (admit && !admit()) throw Object.assign(new Error('Battery run history cancelled'), { kind: 'cancelled' });
+      await ensureHistoryReferenceChildren(txn, rows);
+      const result = await mergePulledRunHeaders(txn, rows);
+      await createSyncStateRepository({ database }).setPullState(
+        scope, await resolveHistoryPullState(txn, pullState), { transaction: txn }
+      );
+      if (admit && !admit()) throw Object.assign(new Error('Battery run history cancelled'), { kind: 'cancelled' });
+      return result;
+    });
   };
 
   return {
@@ -116,6 +140,7 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     getUnfinishedRunsForUser,
     getUnfinishedRunForChild,
     getRunWithResults,
+    saveHistoryPage,
   };
 };
 

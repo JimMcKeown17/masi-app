@@ -91,8 +91,10 @@ beforeEach(() => {
 test.each([
   ['letter_sounds', 'en', 'LetterSoundsQuestion'],
   ['letter_sounds', 'xh', 'LetterSoundsQuestion'],
+  ['letter_sounds', 'af', 'LetterSoundsQuestion'],
   ['word_reading', 'en', 'ReadWordsQuestion'],
   ['word_reading', 'xh', 'ReadWordsQuestion'],
+  ['word_reading', 'af', 'ReadWordsQuestion'],
 ])('hosts %s in %s using its package item set', (testCode, languageCode, component) => {
   renderHost(makeNavigation(), { ...params, testCode, languageCode });
   expect(mockQuestionName).toBe(component);
@@ -117,6 +119,10 @@ test('shows the standalone header and passes the registry instructions', () => {
     + '4. Tap Back to fix a mistake.\n'
     + '5. After 10 wrong in a row, the test stops.',
   );
+});
+
+test('shows Afrikaans in the standalone header', () => {
+  expect(renderHost(makeNavigation(), { ...params, languageCode: 'af' }).getByText('Amahle Dlamini · Afrikaans')).toBeTruthy();
 });
 
 test('Close before Start leaves immediately without an end sheet', () => {
@@ -272,7 +278,7 @@ test('a new screen instance gets a new assessment id', async () => {
   expect(saveQuestionResult.mock.calls[1][0].assessmentId).not.toBe(firstId);
 });
 
-test.each([null, 'zu', 'af'])('a missing item set for %p renders an error and never substitutes English', languageCode => {
+test.each([null, 'zu'])('a missing item set for %p renders an error and never substitutes English', languageCode => {
   const screen = renderHost(makeNavigation(), { ...params, languageCode });
   expect(screen.getByText('This test has no card for this language yet.')).toBeTruthy();
   expect(mockQuestionProps).toBeNull();

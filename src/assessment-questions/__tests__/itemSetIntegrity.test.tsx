@@ -8,10 +8,10 @@ const { CURRENT_ITEM_SETS, ...bundledSets } = S;
 const all = Object.values(bundledSets) as Array<Record<string, any>>;
 
 test('every bundled item set has its expected version and identity', () => {
-  expect(all).toHaveLength(26);
+  expect(all).toHaveLength(28);
   for (const s of all) {
     expect(s.item_set_id).toBe(`${s.question_code}@${s.question_version}.${s.language}`);
-    expect(['en', 'xh']).toContain(s.language);
+    expect(['en', 'xh', 'af']).toContain(s.language);
   }
 });
 
@@ -25,7 +25,9 @@ const count = {
 test.each([
   ['LETTER_SOUNDS_2026_1_EN', count.letters, 60], ['LETTER_SOUNDS_2026_1_XH', count.letters, 60],
   ['LETTER_SOUNDS_2026_2_EN', count.letters, 60], ['LETTER_SOUNDS_2026_2_XH', count.letters, 60],
+  ['LETTER_SOUNDS_2026_2_AF', count.letters, 60],
   ['WORD_READING_2026_1_EN', count.words, 50], ['WORD_READING_2026_1_XH', count.words, 50],
+  ['WORD_READING_2026_1_AF', count.words, 50],
   ['WELA_PLUS_READ_WORDS_EN', count.words, 40], ['WELA_PLUS_READ_WORDS_XH', count.words, 40],
   ['WELA_PLUS_READ_SENTENCES_EN', count.sentenceWords, 20], ['WELA_PLUS_READ_SENTENCES_XH', count.sentenceWords, 11],
   ['WELA_PLUS_READ_PASSAGE_EN', count.words, 80], ['WELA_PLUS_READ_PASSAGE_XH', count.words, 45],
@@ -78,6 +80,7 @@ test('card layouts', () => {
   expect(S.LETTER_SOUNDS_2026_1_XH.rows.map((row) => row.length)).toEqual([12, 12, 12, 12, 12]);
   expect(S.LETTER_SOUNDS_2026_2_EN.rows.map((row) => row.length)).toEqual([10, 10, 10, 10, 10, 10]);
   expect(S.LETTER_SOUNDS_2026_2_XH.rows).toBe(S.LETTER_SOUNDS_2026_2_EN.rows);
+  expect(S.LETTER_SOUNDS_2026_2_AF.rows).toBe(S.LETTER_SOUNDS_2026_2_EN.rows);
   expect(S.WELA_PLUS_READ_WORDS_EN.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
   expect(S.WELA_PLUS_READ_WORDS_XH.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
   expect(S.WELA_PLUS_READ_PASSAGE_EN.paragraph_starts).toEqual([0, 24, 40, 66]);
@@ -102,7 +105,9 @@ test('pending content lists exactly the remaining picture, rubric, language-revi
     { item_set_id: 'all@2024.1.xh', field: 'strings', note: 'First-language review of every isiXhosa string.' },
     { item_set_id: 'letter_sounds@2026.2.en', field: 'typeface', note: 'Grid A letters supplied. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
     { item_set_id: 'letter_sounds@2026.2.xh', field: 'typeface', note: 'Grid A letters supplied. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
+    { item_set_id: 'letter_sounds@2026.2.af', field: 'typeface', note: 'Grid A letters supplied; the same 60 letters as the Zazi afrikaans_60_v2 card. The app must render capital I and lowercase l distinguishably (the card uses a serifed capital I); pending the test-screen redesign. A designer will recreate the printed card from these rows.' },
     { item_set_id: 'word_reading@2026.1.en', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists.' },
     { item_set_id: 'word_reading@2026.1.xh', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists.' },
+    { item_set_id: 'word_reading@2026.1.af', field: 'words', note: 'Placeholder word lists — replace with real EGRA word lists. Provisional, unreviewed list copied from Zazi afrikaans_words_50.' },
   ]);
 });

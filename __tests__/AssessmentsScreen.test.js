@@ -1,3 +1,7 @@
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'),
+  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
+}));
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';

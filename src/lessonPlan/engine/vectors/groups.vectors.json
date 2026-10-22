@@ -1,0 +1,1370 @@
+{
+  "version": 1,
+  "defaults": {
+    "rankGroups": {
+      "today": "2026-10-21",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "children": {
+        "c1": { "id": "c1", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c2": { "id": "c2", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c3": { "id": "c3", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c4": { "id": "c4", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c5": { "id": "c5", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c6": { "id": "c6", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c7": { "id": "c7", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+        "c9": { "id": "c9", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true }
+      },
+      "groups": [
+        { "id": "g1", "name": "Group 1", "displayNumber": 1, "memberIds": ["c1","c2"], "languageCode": "xh", "pack": "xh-mini" },
+        { "id": "g2", "name": "Group 2", "displayNumber": 2, "memberIds": ["c3","c4"], "languageCode": "xh", "pack": "xh-mini" },
+        { "id": "g3", "name": "Group 3", "displayNumber": 3, "memberIds": ["c5","c6"], "languageCode": "xh", "pack": "xh-mini" }
+      ],
+      "sessions": []
+    }
+  },
+  "cases": [
+    {
+      "name": "a never-seen group comes first",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "sessions": [
+          { "id": "a", "programme_id": "p-lit", "session_date": "2026-10-19", "created_at": "2026-10-19T08:00:00.000Z", "children_ids": ["c1","c2"], "activities": { "letters_focused": [], "lesson": { "version": 1, "blends_done": [], "books_read": [] } } },
+          { "id": "b", "programme_id": "p-lit", "session_date": "2026-10-20", "created_at": "2026-10-20T08:00:00.000Z", "children_ids": ["c3","c4"], "activities": { "letters_focused": [], "lesson": { "version": 1, "blends_done": [], "books_read": [] } } }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g3",
+        "rows": [
+          { "groupId": "g3", "lastSeenOn": null },
+          { "groupId": "g1", "lastSeenOn": "2026-10-19" },
+          { "groupId": "g2", "lastSeenOn": "2026-10-20" }
+        ]
+      }
+    },
+    {
+      "name": "the oldest last seen is up next",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c5",
+              "c6"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1"
+          },
+          {
+            "groupId": "g2"
+          },
+          {
+            "groupId": "g3"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a group taught today is skipped and listed last",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-21",
+            "created_at": "2026-10-21T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g2",
+        "rows": [
+          {
+            "groupId": "g2",
+            "taughtToday": false
+          },
+          {
+            "groupId": "g1",
+            "lastSeenOn": "2026-10-21",
+            "taughtToday": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "last seen counts any current member, even in another group's lesson",
+      "spec": "§4.3, C2",
+      "fn": "rankGroups",
+      "input": {
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-15",
+            "created_at": "2026-10-15T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4",
+              "c1"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c5",
+              "c6"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g3",
+        "rows": [
+          {
+            "groupId": "g3"
+          },
+          {
+            "groupId": "g1",
+            "lastSeenOn": "2026-10-20"
+          },
+          {
+            "groupId": "g2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a former member's sessions do not count",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-15",
+            "created_at": "2026-10-15T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c9"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1",
+            "lastSeenOn": "2026-10-15"
+          },
+          {
+            "groupId": "g2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tie on last seen: fewest sessions this week",
+      "spec": "C2",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g2",
+        "rows": [
+          {
+            "groupId": "g2",
+            "sessionsThisWeek": 1
+          },
+          {
+            "groupId": "g1",
+            "sessionsThisWeek": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "the week starts on Monday",
+      "spec": "C2",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "d",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1",
+            "sessionsThisWeek": 1
+          },
+          {
+            "groupId": "g2",
+            "sessionsThisWeek": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "full tie: lower group number first",
+      "spec": "C2",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g10",
+            "name": "Group 10",
+            "displayNumber": 10,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g2",
+        "rows": [
+          {
+            "groupId": "g2"
+          },
+          {
+            "groupId": "g10"
+          }
+        ]
+      }
+    },
+    {
+      "name": "every group taught today: no up next",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-21",
+            "created_at": "2026-10-21T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-21",
+            "created_at": "2026-10-21T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": null,
+        "rows": [
+          {
+            "groupId": "g1",
+            "taughtToday": true
+          },
+          {
+            "groupId": "g2",
+            "taughtToday": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "a group with no current members is never up next",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g5",
+            "name": "Group 5",
+            "displayNumber": 5,
+            "memberIds": [],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1"
+          },
+          {
+            "groupId": "g5",
+            "lastSeenOn": null,
+            "nextLetters": [],
+            "lettersReason": "no_children"
+          }
+        ]
+      }
+    },
+    {
+      "name": "G11 last year's sessions do not count as seen",
+      "spec": "§7.3, Review Focus 3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2025-11-01",
+            "created_at": "2025-11-01T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1",
+            "lastSeenOn": null
+          },
+          {
+            "groupId": "g2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "G12 a session dated after today is ignored",
+      "spec": "Review Focus 3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-15",
+            "created_at": "2026-10-15T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-22",
+            "created_at": "2026-10-22T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1",
+            "lastSeenOn": "2026-10-15",
+            "sessionsThisWeek": 0
+          },
+          {
+            "groupId": "g2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "G13 the same session listed twice counts once",
+      "spec": "Review Focus 5",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "g2",
+            "name": "Group 2",
+            "displayNumber": 2,
+            "memberIds": [
+              "c3",
+              "c4"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "sessions": [
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "a",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c1",
+              "c2"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "b",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-19",
+            "created_at": "2026-10-19T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "c",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "c3",
+              "c4"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "g1",
+        "rows": [
+          {
+            "groupId": "g1",
+            "sessionsThisWeek": 1
+          },
+          {
+            "groupId": "g2",
+            "sessionsThisWeek": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "rows carry the next letters for all current members",
+      "spec": "§4.3",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "children": {
+          "c1": {
+            "id": "c1",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c2": {
+            "id": "c2",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c3": {
+            "id": "c3",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c4": {
+            "id": "c4",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c5": {
+            "id": "c5",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c6": {
+            "id": "c6",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c7": {
+            "id": "c7",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c9": {
+            "id": "c9",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        }
+      },
+      "expect": {
+        "rows": [
+          {
+            "groupId": "g1",
+            "nextLetters": [
+              "k",
+              "u"
+            ],
+            "lettersReason": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a new group's row shows the step-1 letters",
+      "spec": "§4.4",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "children": {
+          "c1": {
+            "id": "c1",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          "c2": {
+            "id": "c2",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        }
+      },
+      "expect": {
+        "rows": [
+          {
+            "groupId": "g1",
+            "nextLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "lettersReason": "first_session"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a group without a pack shows no letters",
+      "spec": "C10",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": null
+          }
+        ]
+      },
+      "expect": {
+        "rows": [
+          {
+            "groupId": "g1",
+            "nextLetters": [],
+            "lettersReason": "no_pack"
+          }
+        ]
+      }
+    },
+    {
+      "name": "G17 a member missing from children knows nothing and has incomplete history",
+      "spec": "Review Focus 5",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "g1",
+            "name": "Group 1",
+            "displayNumber": 1,
+            "memberIds": [
+              "c1",
+              "c2"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ],
+        "children": {}
+      },
+      "expect": {
+        "rows": [
+          {
+            "groupId": "g1",
+            "nextLetters": [
+              "o",
+              "m"
+            ],
+            "lettersReason": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "name": "no group numbers: name order",
+      "spec": "C2",
+      "fn": "rankGroups",
+      "input": {
+        "groups": [
+          {
+            "id": "gB",
+            "name": "Bulelani",
+            "displayNumber": null,
+            "memberIds": [
+              "c1"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          },
+          {
+            "id": "gA",
+            "name": "Amahle",
+            "displayNumber": null,
+            "memberIds": [
+              "c3"
+            ],
+            "languageCode": "xh",
+            "pack": "xh-mini"
+          }
+        ]
+      },
+      "expect": {
+        "upNextGroupId": "gA",
+        "rows": [
+          {
+            "groupId": "gA"
+          },
+          {
+            "groupId": "gB"
+          }
+        ]
+      }
+    }
+  ]
+}

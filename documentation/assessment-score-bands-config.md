@@ -21,10 +21,11 @@ but runtime code remains the executable source until that promotion happens.
 - **`tool_code`** — the Question (e.g. `letter_sounds`). Each Question has its own raw-score scale.
 - **`grade`** — matches `classes.grade`; the child's grade is taken **at assessment date** via the
   `child_class_memberships` window (never the child's current class).
-- **`language`** — `english`, `isixhosa`, …, or **`*`** (wildcard = "applies to all languages").
-  Use the wildcard for Questions whose benchmark is language-independent. Letter Sounds (LCPM) is
-  language-independent, so it uses `*`. Comprehension / writing Questions are expected to need
-  explicit per-language rows.
+- **`language`** — the result's two-letter code (`en`, `xh`, `af`, …), or **`*`** (wildcard =
+  "applies to all languages").
+  Use the wildcard for Questions whose benchmark is language-independent. Letter Sounds currently
+  uses `*`; the Afrikaans interpretation is provisional as noted below. Comprehension / writing
+  Questions are expected to need explicit per-language rows.
 
 ## Band semantics
 
@@ -52,9 +53,11 @@ A `(tool_code, grade, language)` with no row at all is also **unknown**.
 
 ## EGRA Letter Sounds (`tool_code = letter_sounds`) — go-live
 
-- **Raw score:** letters correct per minute (LCPM), out of a 60-letter set (`english_60` /
-  `isixhosa_60`), 60-second timed window.
+- **Raw score:** letters correct per minute (LCPM), out of the 60-letter Grid A card
+  (`letter_sounds@2026.2.*`), 60-second timed window.
 - **Language:** `*` — South Africa sets the LCPM benchmark independent of language.
+- **Afrikaans:** uses these `*` rows, whose cut-offs were set for other languages. Treat Afrikaans
+  bands as provisional until pedagogy confirms them.
 - **National anchor (given):** **Grade 1 benchmark = 40 LCPM, all languages** — the
   `great_min` for Grade 1.
 - **Cuts set 2026-05-30 (pedagogy).** Foundation grades 1–3 share one ladder

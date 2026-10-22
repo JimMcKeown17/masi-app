@@ -1066,10 +1066,2556 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 ---
 
+### 2026-10-21 — Assessment Results Plan 2: server current state and local schema
+
+**Scope:** server-only implementation on `feat/assessment-results-plan-2`. No phone schema,
+repository, sync or UI changes. AF Task 1 is in the stack; AF registry Tasks 2–3 and B2's parallel
+`20261021140000` migration remain controller-owned merges. Kept the approved server migration
+timestamp `20261021160000`. Hosted status: **not applied**.
+
+Built the re-key migration, immutable-payload correction receipts, UUID v5/delivery helpers,
+writer-or-deliverer SELECT policy, authenticated-only `set_letter_mastery`, and direct-write
+revokes. A receipt fixes its effective time once; only a newer `(effective_at, correction_id)`
+can replace the current record. Replays after handover return no winner fields when unreadable.
+The Plan 1 INSERT/UPDATE stamp trigger remains. Added the two-database, 20-case disposable PG17
+harness, npm command and CI step, and adapted assessment/upload harness fixtures.
+
+**Adaptations found in source:** the upload harness seeds before
+`20261015120000_time_entry_location_optional.sql` to test preservation across that older
+migration. Its new-shape mastery fixture is therefore deferred until all migrations replay;
+the location fixture still runs at its original point. The new harness runs
+`variable-conflict-default` first, then `newer-applies`, then `named-conflict-targets`:
+the missing-RPC RED must not be preempted by the absent new constraints. Active staff Programme
+uses the existing `ended_at` field. The plan-header superpowers execution skills are not
+installed in the available skill directories; the approved task order and local TDD skill
+were followed directly. No subagents or Git mutations.
+
+| Gate / command | Result |
+| --- | --- |
+| Controller PostgreSQL RED, migration moved aside (`PGTZ=UTC`, admin URL `postgresql://postgres:postgres@127.0.0.1:65433/postgres`, `HISTORY_RLS_DATABASE_NAME=masi_history_rls_local`, local Docker PG17) | `npm run verify:letter-mastery:postgres` exit 1 after fixture setup succeeded: the executed `newer-applies` assertion failed with `No function matches the given name and argument types` for `public.set_letter_mastery(uuid, uuid, text, text, boolean, timestamptz)`. A genuine RED, not a guard or fixture error. Migration restored |
+| Controller PostgreSQL GREEN, new harness | Exit 0: `{"passed":20}`, every named case passed, including `rekey` in the second database and `variable-conflict-default` printing `error` |
+| Controller existing PostgreSQL harnesses, same server | All exit 0: `history-authorization` 31 checks; `upload-contract` 6 cases (including `letter_mastery direct update refused`) plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43 |
+| Local JavaScript syntax/module checks and source checks | PASS under verified Node v20.19.4: `node --check` for all three changed harnesses; all three modules load; ESM `uuid.v5` imports. Inline static assertions pass for migration contracts, all 20 case labels, fixture expansion and npm/CI wiring. Three synthetic process checks pass for overlap defaults, actor/call overrides and second-client failure propagation; no SQL executed |
+| `npx jest __tests__/syncContractServerSchema.test.js --runInBand` | PASS: 1 suite, 5 tests |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 346 passed / 1 failed suites (347 total); 4,214 passed / 1 failed tests (4,215 total), 356.752 s. Only failure: unchanged `LiteracySessionForm.test.js` → `Saving… is busy and unavailable and ignores a second press`, 5,000 ms timeout |
+| `npx jest __tests__/LiteracySessionForm.test.js --runInBand --silent` (one isolated rerun) | Exit 0: 1 suite, 63 tests passed, 10.614 s |
+| `npm run test:integration --silent` | Exit 1: 51 passed / 1 failed suites (52 total); 553 passed / 1 failed tests (554 total), 278.57 s. Only failure: unchanged `task5AuthRaces.test.js` → `delayed password response and logout 503 cannot restore A after provider remount (manual)`, 5,000 ms timeout |
+| `npm run test:integration --silent -- __tests__/task5AuthRaces.test.js` (one isolated rerun) | Exit 0: 1 suite, 40 tests passed, 4.591 s |
+
+Final local verification explicitly uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`,
+with `node --version` reporting `v20.19.4`. An initial multi-command shell block scoped the
+PATH prefix only to its first command; syntax/module checks and the focused schema check were
+rerun with each Node/Jest command explicitly prefixed (final schema rerun: 1 suite / 5 tests,
+1.18 s). Both broad suites and both isolated timeout reruns were explicitly prefixed.
+Controller PostgreSQL invocation (database name as used locally):
+
+```sh
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:65433/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_letter_mastery HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC npm run verify:letter-mastery:postgres
+```
+
+The read-only hosted preflight (2026-10-21, `project_ref=segygjzpujphwvrubusm`) found
+`uuid-ossp` in schema `extensions`, 47 `letter_mastery` rows all labelled `isiXhosa`, and
+`20261021120000_assessment_results_contract` as the newest applied migration. Hosted wipe,
+apply and fixtures, EAS, devices and the PR are later gates, each needing Jim's yes.
+
+**AR Plan 2 Task 2, local schema 16 `letter_mastery_current_state`.**
+
+Added the leaf `src/db/domainId.js` module (only `uuid` imported), moving
+`deterministicDomainId` unchanged and re-exporting it and `letterMasteryDomainId` from
+`domainRepositoryUtils`. Mastery IDs now hash child, letter and language code without EA,
+Programme or source; child UUID text is lowercased for server parity. Added the optional
+per-migration `transform(txn)` hook after SQL and before the ledger/version writes in the same
+manual transaction. The new migration rebuilds mastery with its new columns, natural-key unique
+index, nullable Programme context without a local Programme FK, and two nullable server-ordering
+columns.
+
+**Clear rule:** map labels (including `Afrikaans → af`), lowercase letters and rank each mapped
+key by old `updated_at desc, id desc` before filtering. Keep only a synced winner; an unsynced
+winner clears the entire key rather than resurrecting an older synced row. Drop unknown
+languages and multi-character letters, and delete every old mastery outbox operation while
+preserving unrelated work. Retained rows preserve old correction provenance, timestamps and
+server-updated metadata; both new server-ordering fields start null. The JavaScript transform
+then rewrites retained row IDs using UUID v5. Real SQLite proves transform failure rolls back the
+rebuild, clear and version/ledger writes and restores FK enforcement, and relaunch performs no
+writes.
+
+The existing migration suites now check current version or find migrations by name. The
+orchestrator's no-literal-pins instruction takes precedence over the plan/C1 snippets that set
+the newest-version tripwire to N or assert historical version 15: the foundation tripwire and
+new ledger row find `letter_mastery_current_state` by name, and the assessment-results test
+checks named migration order. Historical pre-upgrade setup versions are unchanged. No plan,
+specification, repository write API, sync routing or UI behavior was edited.
+
+| Gate / command (all prefixed with Node 20.19.4 PATH) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/letterMasteryCurrentStateMigration.test.js` | Exit 1: 1 suite failed, 3 tests failed / 1 passed (4 total), 5.31 s. Executed failures: named migration absent (`migration().version`), old columns instead of the new shape, and no failing transform invoked |
+| RED: `npx jest __tests__/letterMasteryIdParity.test.js` | Exit 1: 1 suite failed to load, 0 tests executed; `Cannot find module '../src/db/domainId'`, 0.819 s, as expected by Step 2 |
+| GREEN: same migration command | Exit 0: 1 suite / 4 tests passed, 1.576 s |
+| GREEN: same ID-parity command | Exit 0: 1 suite / 2 tests passed, 0.92 s |
+| `npx jest __tests__/sqliteFoundation.test.js __tests__/hotPathIndexes.test.js __tests__/migrations.assessmentResults.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrationsForeignKeysOff.test.js --runInBand` | Exit 0: 7 suites / 102 tests passed, 6.813 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 338 suites passed / 11 failed (349 total); 4,215 tests passed / 33 failed (4,248 total), 242.984 s. All failures trace to the planned old mastery contracts; no unrelated timeout |
+| `npm run test:integration --silent` | Exit 1: 48 suites passed / 5 failed (53 total); 550 tests passed / 9 failed (559 total), 133.614 s. Failures are the planned old mastery contracts in `offlineSyncOutbox`, `LiteracySessionForm.submit`, `offlineSyncLifecycleEdits`, `syncContractCompleteness` and `foreignKeyEnforcement`; no unrelated timeout |
+
+The full unit failures are `offlineSyncOutbox.test.js`, `LiteracySessionForm.submit.test.js`,
+`literacySessionPersistence.test.js`, `masteryRepository.test.js`, `letterMasterySync.test.js`,
+`offlineSyncLifecycleEdits.test.js`, `syncContractCompleteness.test.js`,
+`LetterMasteryRankingScreen.test.js`, `masteryState.test.js`, `foreignKeyEnforcement.test.js`,
+and `completionPathBudget.test.js`. The SQL failures reference removed `user_id` columns,
+with consequent tracker/ranking UI assertions; the contract-classification assertion reports
+`letter_mastery.confirmed` count 0 rather than 1 pending Task 4. All eleven suites exercise mastery code or
+sync metadata owned by Tasks 3–6. No unrelated failure was found, so no isolated retry was
+required. Static source verification confirms the moved `deterministicDomainId` body is
+byte-identical and its leaf imports only `uuid`; `git diff --check` passes.
+
+Tasks 2–6 remain one local cutover. The old mastery repository, sync and caller contracts are
+expected to fail against the new table until their designated tasks replace them; Task 2 does
+not expand into those tasks. Hosted/backend, PostgreSQL, device, EAS, PR and commit steps are
+outside this task. Schema 16 is this branch's next free version; the controller handles the
+C1/B2 version collision at integration.
+
+**AR Plan 2 Task 3 — mastery repository and acknowledgement write-back.**
+
+Replaced the old create/update/archive/reactivate methods with
+`setLetterMastery({ childId, letter, language, confirmed, changedAt, programmeId, transaction })`.
+Validation names the invalid field before any domain/outbox write. A call samples `Date.now()`
+once, clamps a supplied tap time to that now, takes `changed_by` from the transaction's signed-in
+EA, and mints a UUID v4 correction. A keyed joined read preserves a newer correction while its
+slot is pending, failed or in flight; terminal/synced state and equal-time taps permit replacement.
+A queued time ahead of the corrected phone clock counts as now, so a new immediate tap wins.
+Retained calls return the mapped current record without exposing `outbox_status`.
+
+A new write keeps `created_at` and all server metadata, clears the local error, marks the row
+pending and queues exactly one `letter_mastery:<id>:update` slot with the nine-field payload.
+Programme is supplied context or the caller's active Programme, possibly null, with no legacy
+fallback. Real SQLite verifies one keyed read and two writes plus at most one Programme read;
+a retained save reads once and writes nothing. Caller-transaction rollback and an outbox-trigger
+failure both roll back the domain row and outbox together.
+
+`getLetterMastery` maps `confirmed` to boolean, excludes terminal rows, rejects any `userId` or
+`programmeId` key, supports child/language filters and 500-child chunks, deduplicates child IDs,
+and orders combined rows by child and letter. `getUnsyncedRecords` remains available.
+The named `applyCorrectionAcknowledgement` export implements all table branches. An applied
+or superseded winner is written only after successful outbox deletion with a matching local
+correction; superseded clears unknowable Programme context. A newer local correction keeps all
+its content and slot and receives only server ordering. An acknowledged unreadable record is
+deleted only when the same finalization conditions hold. Server timestamps remain raw strings,
+including microseconds.
+
+The test suite was rewritten using the public repository and real SQLite, registered in the
+integration runner, and expanded to 30 tests covering the specified cases, every acknowledgement
+table cell, the outbox CAS signal, transaction rollback, statement budgets and chunked read order.
+No new dependency, migration, sync dispatch, UI behavior, plan or specification edit.
+
+| Gate / command (Node 20.19.4 PATH prefix) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/masteryRepository.test.js` | Exit 1: 1 suite / all 30 tests failed, 4.893 s. Executed failures include missing `setLetterMastery` and `applyCorrectionAcknowledgement`, old filtered read behavior and integer boolean mapping |
+| GREEN: same command | Exit 0: 1 suite / all 30 tests passed, 2.627 s |
+| GREEN after strengthening the cross-chunk ordering fixture: same command | Exit 0: 1 suite / all 30 tests passed, 2.153 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 339 suites passed / 10 failed (349 total); 4,243 tests passed / 28 failed (4,271 total), 252.956 s. Repository suite turns green; no new failed suite relative to Task 2 |
+| `npm run test:integration --silent` | Exit 1: 49 suites passed / 5 failed (54 total); 580 tests passed / 9 failed (589 total), 201.091 s. Same five old-contract failures as Task 2; repository adds 30 passing tests |
+
+Compared with the Task 2 verification record, `masteryRepository.test.js` is now GREEN
+(30 tests on the new contract), and the full unit failed-suite count drops from 11 to 10.
+The integration run now includes that suite and its 30 passing tests; the five pre-existing
+integration failures remain. No new failed suite and no unrelated timeout was found, so no
+isolated retry was required. Remaining full-unit suites, grouped by the planned next tasks:
+
+- Task 4 sync: `offlineSyncOutbox.test.js`, `letterMasterySync.test.js`,
+  `offlineSyncLifecycleEdits.test.js`, `syncContractCompleteness.test.js`.
+- Task 5 readers: `masteryState.test.js`, `LetterMasteryRankingScreen.test.js`.
+- Task 6 callers/fixtures: `literacySessionPersistence.test.js`,
+  `LiteracySessionForm.submit.test.js`, `foreignKeyEnforcement.test.js`,
+  `completionPathBudget.test.js`.
+
+Reasons are the deliberately removed `saveLetterMasteryRecord` API, the new forbidden-filter
+error, old `user_id` fixture columns and consequent tracker/ranking assertions, plus
+`letter_mastery.confirmed` having classification count 0 instead of 1 until Task 4.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractServerSchema` and
+`designSystemGuard` all pass in the full unit run. `git diff --check` passes.
+
+No implementation-contract deviation was required. The simple cross-chunk read merge deduplicates
+the requested IDs and applies the same child/letter text ordering after each SQL chunk.
+The local TDD skill and approved task order were followed directly; the plan-header superpowers
+execution skills remain unavailable as recorded in Task 1. The build-log entry is required by
+the standing repo rule and the task instructions, although Task 3's file list names only the
+repository, tests and integration registration. The phone contract map's combined acknowledgement
+section remains Task 4's explicit documentation step.
+
+Tasks 4–6 still own RPC dispatch/finalization and migration of readers and write surfaces.
+The new repository's forbidden-filter errors and removed legacy methods deliberately expose
+those remaining old-contract callers. Hosted/PostgreSQL,
+Supabase CLI, EAS, PR and device gates are outside this task.
+
+**AR Plan 2 Task 4 — one RPC per correction, one acknowledgement.**
+
+Added `letterMasteryCorrection.js`: six named RPC arguments, required-field/boolean/date
+validation, and strict single-row acknowledgement parsing with only the five returned fields.
+The raw server timestamp is preserved. The engine now routes mastery exclusively through
+`set_letter_mastery`, maps local TypeErrors to `22023`, refuses malformed replies, and carries
+the parsed winner and sent correction id into success finalization. Mastery is removed from
+batchable upserts and archive/UPDATE-by-id routing; grant evidence is direct child delivery
+assignment only. The server-column allowlist reflects current state, and the two server-ordering
+columns are classified local-only.
+
+Finalization applies Task 3's helper in the same transaction as the outbox CAS delete and normal
+sync bookkeeping. A CAS miss applies only permissible server ordering before restoring the newer
+slot to pending. Applied/superseded writes the returned winner; acknowledged removes a readable
+copy that is no longer authorized; a newer local correction keeps its content and slot. A
+content-update trigger failure rolls the delete and acknowledgement back together, then the
+existing retry handler records failure/backoff without losing the correction.
+
+Added 34 real-SQLite correction cases, three real postgrest-js/stub-fetch cases and two
+classification guards. Coverage includes all outcomes, raw microseconds/offsets, both kinds of
+in-flight acknowledgement, offline coalescing, the Monday/Tuesday delayed-save regressions,
+two separate letter calls, direct-grant evidence transitions, terminal exclusion/attention,
+seven malformed-payload variants, eleven invalid-reply shapes and write-back rollback.
+The correction suite is registered in the integration runner.
+
+Old expectations replaced exactly where Task 4 directs:
+- Deleted the old mastery sync suite's four expectations: send-time random-id remapping
+  (Task 2 now owns conversion/keying), taught/untaught coalescing into an exited INSERT
+  (now a boolean correction update slot), two-install direct-upsert convergence
+  (natural-key resolution now lives in the server RPC), and legacy-random-id 23505 collision
+  (the migration converts old keys and named SQL conflict targets resolve new collisions).
+- Deleted the outbox mastery batching test; the new two-letter test requires two RPCs and no
+  table calls. Adapted the FK/RLS attention test to the real setter, update slot, generated id
+  and `set_letter_mastery` 42501; both terminal/error/attention assertions remain.
+- Deleted UPDATE-by-id mastery identity repair and zero-row/pending-grant tests. Corrections
+  no longer use UPDATE; RPC/direct-grant transitions are covered in the new suite.
+- Deleted archive/reactivation's `deleted_at` exception test; off/on are boolean corrections.
+- Removed mastery from the generic unversioned-send parameter list; the six-argument RPC test
+  covers its exclusion of `row_version` and `updated_at`.
+- Added exact direct-grant/never-UPDATE assertions and a duplicate-success override guard.
+
+| Gate / command (every command prefixed with Node 20.19.4 PATH) | Result |
+| --- | --- |
+| RED: `npm run test:integration -- __tests__/letterMasteryCorrectionSync.test.js` | Exit 1: 1 suite / all 34 tests failed, 5.056 s; engine called no mastery RPC and kept local values as synced without winner/order write-back |
+| RED: `npx jest __tests__/letterMasteryRpcError.test.js __tests__/classifyErrorHardening.test.js` | Exit 1: 2 suites failed; 5 tests failed / 13 passed (18 total), 1.578 s; direct-table URL, membership-mediated grant arm and duplicate-success bypass exposed |
+| First GREEN attempt: same integration command | Exit 0: 1 suite / all 34 tests passed, 2.569 s |
+| First GREEN attempt: same unit command | Exit 1: 1 suite passed / 1 failed; 17 tests passed / 1 failed (18 total), 1.570 s; success-response fetch stub lacked `headers.get`, required by postgrest-js |
+| GREEN after correcting that test response: same unit command | Exit 0: 2 suites / all 18 tests passed, 1.807 s |
+| `npx jest __tests__/offlineSync* __tests__/rowVersion* __tests__/syncContract* __tests__/assessmentFamily* __tests__/batch*` | Exit 0: 15 suites / all 232 tests passed, 5.649 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 344 suites passed / 6 failed (350 total); 4,284 tests passed / 22 failed (4,306 total), 98.636 s |
+| `npm run test:integration --silent` | Exit 1: 53 suites passed / 2 failed (55 total); 617 tests passed / 7 failed (624 total), 85.163 s |
+| `git diff --check` | Exit 0 |
+
+Relative to Task 3, `offlineSyncOutbox`, `offlineSyncLifecycleEdits` and
+`syncContractCompleteness` turn GREEN; the failed old `letterMasterySync` suite is deleted
+and replaced by the passing correction suite. Unit failed-suite count drops 10 → 6; integration
+drops 5 → 2. All remaining failures use old mastery APIs/filters or dependent tracker assertions:
+Task 5's `masteryState`, `LetterMasteryRankingScreen`; Task 6's
+`literacySessionPersistence`, `LiteracySessionForm.submit`, `foreignKeyEnforcement` and
+`completionPathBudget`. Only the latter form and FK suites fail integration.
+No unrelated failure or timeout occurred, so no isolated rerun was required.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractServerSchema` and
+`designSystemGuard` pass in the full unit run.
+
+Small faithful adaptations, with current source evidence:
+- The fixture exposes its actor-bound database and engine, rather than a literal handle
+  (`test-support/assessmentFamilySyncTestUtils.js:24–52`); tests create the mastery repository
+  against that same database, as its other repositories do.
+- `loadMasteryState` still passes the forbidden `userId` and filters labels
+  (`src/utils/masteryState.js:30–34`); Task 5 owns that conversion. The terminal-exclusion test
+  adapts only its repository-call arguments, preserving real SQLite/repository exclusion.
+- The existing catch after a failed finalizer records retry/backoff
+  (`src/services/offlineSync.js:1286–1308`). The rollback test therefore asserts retained
+  slot/payload and unchanged correction/server values, with failed status, rather than requiring
+  all queue bookkeeping to be byte-identical after a complete engine pass.
+- Added mastery to the existing duplicate-key acknowledgement exclusion
+  (`src/services/offlineSync.js:475–477`): otherwise an explicitly configured duplicate-success
+  table could reach finalization without the required winner. The new test was RED before this
+  addition. No other table's behavior changes.
+
+The contract map now owns the complete phone correction/acknowledgement contract, including A2,
+and removes old mastery archive, batch and re-key exceptions. LEARNING explains receipts, fixed
+effective times, winner display, the owed-slot rule, SQL natural-key resolution and PL/pgSQL
+named conflict targets. The local TDD skill and approved task order were followed; unavailable
+plan-header superpowers execution skills remain as recorded in Task 1.
+
+No PostgreSQL rerun, hosted preflight/wipe/migration,
+Supabase CLI, EAS build, device check or PR was performed. Task 1's controller PostgreSQL evidence
+is retained as such, not claimed as a new Task 4 run. Tasks 5–6 and Plan 3 pull remain separate;
+accepted risks A1/A2 and hosted/device rollout gates remain open.
+
+**AR Plan 2 Task 5 — readers use codes, confirmed rows and child scopes.**
+
+`loadMasteryState` retains its signature and return shape. Assessment evidence still uses
+`userId` to resolve the active Programme; confirmations now read only
+`getLetterMastery({ childId, language: languageCode })` and filter `confirmed`. The repository
+excludes terminal rows, so a refused correction never becomes displayed mastery. The loader
+does not filter confirmation recorder or Programme. `getLetterMasteryRanking` unions stored
+assessment evidence with matching child/code/confirmed rows. Both obsolete label imports and
+“Plan 2 re-keys” comments are removed. The ranking screen requests confirmations for exactly
+the displayed child ids, while its assessment query remains Programme-scoped.
+
+`debugDump` adds `letterMastery`, ordered by child id and letter, with exactly
+`childId, letter, language, confirmed, changedAt, correctionId, changedBy, programmeId,
+syncStatus, serverChangedAt, serverCorrectionId`. It exports boolean confirmation, raw
+timestamps and all statuses (including unconfirmed/terminal rows needed for diagnostics),
+with no names. A fresh database with no mastery table returns an empty array. Query errors
+use the existing diagnostic-error convention rather than falsely reporting an empty set.
+
+Updated the seven named suites: setter-based code-valued fixtures; the exact any-EA/any-Programme
+loader case with unconfirmed/terminal/other-language controls; another-EA ranking; explicit
+child/language and child-id-array call assertions; unconfirmed ranking exclusion; Afrikaans
+sheet filtering; and export field/ordering/false-value checks. Existing ranking counts,
+assessment semantics, unsupported-language behavior, sheet toggles, copy and visual assertions
+remain. No production writer, panel/sheet component, repository, migration, sync or pull edit.
+
+For the command ledger, **focused unit** is:
+`npx jest __tests__/masteryState.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/debugExport.test.js __tests__/sqliteFoundation.test.js`.
+**Focused integration** is:
+`npm run test:integration -- __tests__/masteryState.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/debugExport.test.js __tests__/sqliteFoundation.test.js`.
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: focused unit | Exit 1: 6 suites failed / 1 passed (7 total); 23 tests failed / 38 passed (61 total), 9.328 s. Executed failures show forbidden userId filters, label-based confirmation counting, missing taught tiles and missing export projection |
+| RED: focused integration | Exit 1: 4 suites failed; 10 tests failed / 22 passed (32 total), 9.401 s. Loader/export failures execute on SQLite; ranking suite also exposes its absent integration icon mock |
+| First GREEN: focused unit | Exit 0: 7 suites / all 61 tests passed, 3.456 s |
+| First GREEN attempt: focused integration | Exit 1: 3 suites passed / 1 failed to load; all 32 executed tests passed, 4.254 s. Ranking requires the virtual `@expo/vector-icons` mock already supplied by unit setup |
+| GREEN after adding that local test mock: focused integration | Exit 0: 4 suites / all 38 tests passed, 6.917 s |
+| GREEN with the final test fixture: focused unit | Exit 0: 7 suites / all 61 tests passed, 3.303 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 345 suites passed / 5 failed (350 total); 4,296 tests passed / 14 failed (4,310 total), 71.509 s |
+| `npm run test:integration --silent` | Exit 1: 55 suites passed / 2 failed (57 total); 638 tests passed / 7 failed (645 total), 56.045 s |
+| `rg -n "Plan 2 re-keys letter_mastery" src/utils`; plan's `grep -rn "Plan 2 re-keys letter_mastery" src/utils` | Both exit 1 with no matches, as required |
+| `git diff --check` | Exit 0 |
+
+Compared with Task 4, `masteryState` and `LetterMasteryRankingScreen` turn GREEN.
+Full-unit failed suites move 6 → 5: the two readers pass, while `LetterMasteryPanel` now
+exposes two old label/no-confirmed mock rows after the shared loader cutover. That panel and
+its fixtures are explicitly Task 6. The other four failed unit suites remain Task 6:
+`literacySessionPersistence` (4 failed tests), `LiteracySessionForm.submit` (6),
+`foreignKeyEnforcement` (1), and `completionPathBudget` (1).
+Integration still fails only the form (6 tests) and FK suite (1); the two newly registered
+reader suites pass. No unrelated failure or timeout occurred, so no isolated rerun was needed.
+`productionBindingStatic`, `moduleStateAllowlist`, `syncContractCompleteness`,
+`syncContractServerSchema`, `designSystemGuard` and `LetterTrackerScreen.plan5` all pass.
+
+Small faithful test adaptations and scope extensions:
+- Global Constraints requires real-SQLite suites to be registered. The loader and ranking screen
+  already use the real SQLite fixture but were not in the integration list. Added them at
+  `jest.integration.config.js:8–9`; the debug/foundation suites were already registered.
+  The new ranking registration needs its own virtual icon mock
+  (`__tests__/LetterMasteryRankingScreen.test.js:1`), because integration setup lacks the
+  mock that unit setup provides (`jest.setup.js:17`).
+- The Afrikaans sheet mock previously returned mixed-language rows and relied on the loader's
+  label filter. It now respects the repository's child/language arguments and asserts that exact
+  read (`__tests__/LetterTrackerBottomSheet.test.js:77–82`).
+- The dashboard fixture's old `xh` “f” row was negative under label-only matching. Under codes,
+  leaving it confirmed/xh would add a fourth mastered letter. It becomes an other-language
+  `en` row, preserving the negative control and unchanged 3/26 assertion
+  (`__tests__/dashboardStats.letterMastery.test.js:36–45`). No expected count was relaxed.
+- The fresh-before-migration debug expectation also gains `letterMastery: []`
+  (`__tests__/sqliteFoundation.test.js:562`), so the public export shape is consistent even
+  without tables. The additional export-order test proves the specified order, both boolean
+  values and absence of names.
+- The standing repo/user instructions require this build-log record although Task 5's Files
+  names no documentation. Standing domain/rollout documentation conversion remains Task 6's
+  explicit scope; no plan/spec or other standing document changed here.
+
+The local TDD skill and approved order were followed. The plan-header superpowers execution
+skills remain unavailable as recorded in Task 1. Step 5 commit, hosted preflight/wipe/migration,
+PostgreSQL harnesses, Supabase CLI, EAS, device and PR actions are controller-owned and not run.
+This task proves local readers/export behavior, not hosted SELECT visibility, two-device
+convergence or release readiness. Tasks 6–7, Plan 3 pull and accepted risks A1/A2 remain separate.
+
+**AR Plan 2 Task 6 — both tracker surfaces write corrections; local cutover checkpoint GREEN.**
+
+`persistLiteracySession` keeps AF's signature, attendee filtering and validation before the
+transaction. Each attendee change now calls `setLetterMastery` inside the same transaction as
+the session/attendees and reading levels, passing its own code, boolean, tap time, Programme and
+transaction. The old prefetch, per-Programme lookup and archive/reactivation branches are removed.
+An un-mark with no existing row writes a false correction. A delayed Monday save retains Monday's
+time; when Tuesday's newer correction is still owed, it keeps that correction/slot while the
+session saves. `idFactory` is retained in the signature but never used for mastery.
+
+`LetterMasteryPanel` now writes exactly one setter call per tap with no `changedAt`, takes its
+displayed value from the returned `confirmed`, and retains the write guard, sync nudges, locked
+assessment cells and exact save-error copy. Cached-id, reread-for-toggle, soft-delete/reactivation
+and local UUID branches are removed. The new `useLetterMasterySyncRefresh` is the plan's exact
+panel-only hook: mount's result is already seen; a new mastery sync result triggers a background
+read; other-table results and callback identity alone do not. Background reads retain the grid
+without a spinner flash, and only the latest numbered load publishes/clears loading.
+
+AF's form selection is preserved without a production form edit:
+`pendingChangesLanguageCode(...) ?? languageCodeForHomeLanguage(classes.find(c => c.id === child.class_id)?.home_language)`
+(`LiteracySessionForm.js:314–315`). Both mixed-language real-form cases pass. The session tracker
+sheet is unchanged, with its open-time baseline and accepted risk A1.
+
+Rewritten old-identity expectations, against the plan's disposition table:
+- Persistence's label/save-time assertion now requires `xh`/`en`, `confirmed` and `changed_at:
+  MADE_AT`. Existing false/true/new transitions use the setter and boolean rows instead of
+  soft-deletion. The per-Programme non-reuse test is replaced by the exact C23 same-record case.
+- The obsolete id-generation rollback injection is replaced by a real SQLite outbox trigger:
+  idFactory is no longer part of this writer, and a failed mastery enqueue must roll back the
+  session and attendees. The rejection uses `rejects.toMatchObject`.
+- Added the named Monday/Wednesday time and newer-unsent-Tuesday regressions, plus an un-mark
+  with no prior row. The time test also proves idFactory is not called.
+- Completion-budget expectations move from one bulk prefetch and archive/insert/update to
+  exactly three keyed `getFirstAsync` reads (`where lm.id = ?`), no mastery `getAllAsync`,
+  at most six mastery record/outbox writes, and three update slots. The real counting adapter
+  records SQL only, so a local runAsync spy distinguishes mastery outbox writes by parameters.
+- FK capture assertions now require both committed letters to have `en` and `confirmed: 1`.
+- Form fixtures seed through the setter, query confirmed rows and expect codes. Each child's
+  class language, pending-language precedence, selection changes and unknown-language empty
+  state remain covered. The English-negative query and payload assertions use codes too.
+- Panel mocks expose get/set only. Reactivation/saved-id assertions become exact correction
+  calls, true/false counts and returned-value behavior. Existing style, lock, missing-language,
+  failure and post-write sync-error assertions remain. Added in-flight guard, background refresh,
+  no-mastery/mount-seen and latest-load tests. Tracker-screen retry mocks now use the setter.
+
+**Controller Task 0 baseline, supplied 2026-10-21; not rerun here.** On wave-1 base `7a831fb`
+before any wave-1 change, Node 20.19.4: unit 346/347 suites and 4,202/4,203 tests passed; the sole
+designSystemGuard parallel-load failure passes alone. Integration: 52 suites / 552 tests passed.
+Types: exit 0. Hosted read-only preflight targeted `segygjzpujphwvrubusm`: uuid-ossp in
+`extensions`, 47 mastery rows all `isiXhosa`, newest applied migration
+`20261021120000_assessment_results_contract`. These are controller records, not Task 6 external
+actions. This branch additionally carries AF Tasks 1–3 and its per-child-language review fix.
+
+Focused unit command:
+`npx jest __tests__/literacySessionPersistence.test.js __tests__/completionPathBudget.test.js __tests__/foreignKeyEnforcement.test.js __tests__/LiteracySessionForm.submit.test.js __tests__/LetterMasteryPanel.test.js __tests__/LetterTrackerScreen.plan5.test.js`.
+Focused integration command:
+`npm run test:integration -- __tests__/literacySessionPersistence.test.js __tests__/completionPathBudget.test.js __tests__/foreignKeyEnforcement.test.js __tests__/LiteracySessionForm.submit.test.js`.
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: focused unit | Exit 1: all 6 suites failed; 24 tests failed / 26 passed (50 total), 13.272 s. Old writer uses forbidden filtered read; old panel never calls the setter, does not refresh on mastery sync and lets an older read clear loading |
+| RED: focused integration | Exit 1: all 4 suites failed; 15 tests failed / 21 passed (36 total), 21.882 s. Real SQLite executes the old writer's forbidden read and rollback mismatch |
+| GREEN: focused unit, same command | Exit 0: 6 suites / all 50 tests passed, 6.398 s |
+| GREEN: focused integration, same command | Exit 0: 4 suites / all 36 tests passed, 7.728 s |
+| `grep -rn "Plan 2 re-keys letter_mastery" src` | Exit 1, no matches |
+| `grep -rn "saveLetterMasteryRecord\|updateLetterMasteryRecord\|removeLetterMasteryRecord" src __tests__ test-support` | Exit 1, no matches |
+| `grep -rn "getLetterMastery({[^}]*userId" src __tests__` | Exit 1, no matches |
+| `grep -n "useLetterMasterySyncRefresh\|useOffline" src/components/session/LetterTrackerBottomSheet.js` | Exit 1, no matches |
+| `grep -rn "LANGUAGE_LABELS" src` | Exit 0; only the five allowed display/registry files |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: all 350 suites / 4,319 tests passed, 67.149 s |
+| `npm run test:integration --silent` | Exit 0: all 59 suites / 665 tests passed, 52.470 s |
+| `npm run test:types` | Exit 0: `tsc --noEmit -p tsconfig.assessment-questions.json` |
+| `git diff --check` | Exit 0 |
+
+**Comparisons (distinct baselines).** Against controller Task 0: unit totals grow 347 → 350
+suites (+3), 4,203 → 4,319 tests (+116), with every test now passing; integration grows
+52 → 59 suites (+7), 552 → 665 tests (+113). These deltas include AF's tests, not just AR Plan 2.
+Against the labelled Task 5 checkpoint: unit 345 passed / 5 failed suites and 4,296 passed /
+14 failed tests (4,310 total) becomes all 350 / 4,319 passing; total tests +9. Integration
+55 passed / 2 failed suites and 638 passed / 7 failed tests (645 total) becomes all 59 / 665
+passing; two newly registered suites and total tests +20. All five remaining old-contract suites
+are GREEN: persistence, form submit, FK enforcement, completion budgets and panel.
+No unrelated failure or timeout occurred; no isolated rerun or full-suite retry was needed.
+All binding, module-state, sync-contract and design-system guards pass.
+
+Tasks 3–5 retain their earlier dated RED/GREEN rows above (repository 30; correction sync 34
+plus RPC/error 18 and sync regressions 232; readers 61 unit / 38 integration). This Task 6 full
+checkpoint closes the intentionally red local cutover from Tasks 2–5; it does not replace or
+reinterpret those executed results.
+
+**Small faithful adaptations.**
+- Registered persistence and budget suites in `jest.integration.config.js:8–9`, as Global
+  Constraints requires for real-SQLite suites; both already use native SQLite adapters.
+- Task 3's literal retired-method absence assertions conflict with Step 4's required no-match
+  grep. `masteryRepository.test.js:72–74` now asserts the exact three-method public surface,
+  preserving and strengthening the absence guard without spelling retired method names.
+- The idFactory-based rollback test cannot hold once idFactory is deliberately unused; the
+  native outbox-trigger failure at `literacySessionPersistence.test.js:371–394` tests the same
+  atomicity boundary under the new writer.
+- Existing transition seeds now carry explicit earlier correction times; otherwise the
+  repository correctly retains their newer unsent state instead of applying the test's older
+  sheet tap. No expected final state or ordering rule was weakened.
+- Standing ROADMAP also retained a mastery-updated_at exception and a “same per-EA identity”
+  comparison outside the cited line ranges. Both are reconciled within the authorized file:
+  mastery now sends only six RPC arguments, and Zazi convergence remains separate work.
+
+Standing docs now describe code-valued current confirmations, any-current-deliverer writes/reads,
+terminal exclusion, fixed receipt times, both producers and the panel-only refresh. ADR-0005 has
+the requested dated Follow-up 2 status note; its historical decision body is preserved. ROADMAP
+retains only hosted/device rollout and Plan 3 pull/completeness as outstanding mastery work.
+No plan/spec edit, dependency, server migration, schema renumber or session-sheet change.
+
+The local TDD and React Native skills were applied. Unavailable plan-header superpowers execution
+skills remain as recorded in Task 1. Step 7 commit and all Task 7 controller/review/release work
+are skipped: no PostgreSQL rerun, hosted wipe/apply/fixtures, Supabase CLI, EAS, device or PR action.
+Hosted state is unchanged by Task 6. Local suites are fully GREEN; hosted/device proof, Plan 3 pull
+and accepted risks A1/A2 remain open.
+
+**AR Plan 2 adversarial review round 1 — panel read/tap ordering and accepted risk A3.**
+The controller reviewed Task 6 at `f88d04e`. Finding 2 reproduced through the panel and the
+real SQLite mastery repository: a pre-tap snapshot released after the tap committed changed
+the tile back to unconfirmed, and the next tap wrote true again (`[true, true]`). The panel now
+invalidates outstanding reads at tap start, refuses read publication while the setter is in
+flight, publishes the returned record, then starts one background re-read. A later tap also
+invalidates that post-save read. The existing pending-write guard, assessment locks, sync
+nudges and exact save-error copy remain covered.
+
+Four native-SQLite panel regressions cover the late pre-tap snapshot and opposite next
+correction (`[true, false]`), publication of a read started after commit, suppression of a read
+finishing during a pending tap, and invalidation of a post-save read by the next tap. Registered
+the panel suite in `jest.integration.config.js` so this native coverage runs in both test tiers.
+Panel mocks now retain saved records and the toggle test expects the mount read plus one read
+per successful tap. The full unit run exposed the same stale mock in
+`LetterTrackerScreen.plan5.test.js`: its setter claimed success but every read returned an
+empty database. The file failed alone too; its mock now retains the saved record. No production
+screen, repository, sync, server or schema change was needed beyond the panel fix.
+
+Finding 1 is **accepted risk A3**, recorded directly after A2 in the contract map and in the Bug
+And Gap Register. B's slow-clock un-confirm can lose to A's already-observed winner and silently
+revert after sync until B's clock passes the winner's time. The controller accepts this rare
+case for the current contract and raises it with Jim. The causal-base server-contract change is
+deferred; its explicit revisit trigger is a field report of a tracker mark that reverts after
+sync, or two EAs routinely co-delivering one child. Fast clocks are already clamped. This is
+a risk record, not a claim that Jim approved it or that the root problem was fixed.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; no dependencies or
+network access were used.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: `npx jest __tests__/LetterMasteryPanel.test.js` | Exit 1: 1 failed suite; 5 failed / 12 passed tests (17 total), 6.900 s. The real-repository race produced `tileStillShowsCommit: false` and corrections `[true, true]`; the other failures cover missing post-save reads and publication during a pending write |
+| GREEN: same panel command | Exit 0: 1 suite / all 17 tests passed, 3.646 s |
+| `npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js` | Exit 0: 3 suites / all 81 tests passed, 3.988 s |
+| `npm run test:integration -- __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js` | Exit 0: 3 suites / all 81 tests passed, 12.254 s |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 349 passed / 1 failed suites (350 total); 4,322 passed / 1 failed tests (4,323 total), 69.299 s. Only the tracker screen retry fixture failed after the new post-save read |
+| Isolated rerun: `npx jest __tests__/LetterTrackerScreen.plan5.test.js` | Exit 1: 1 failed suite / 1 failed test, 2.690 s; deterministic stale mock, not a parallel-load timeout |
+| After fixture correction: `npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/LetterTrackerScreen.plan5.test.js` | Exit 0: 4 suites / all 82 tests passed, 4.965 s |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: all 350 suites / 4,323 tests passed, 65.327 s |
+| `npm run test:integration --silent` | Exit 0: all 60 suites / 682 tests passed, 57.749 s |
+| `git diff --check` | Exit 0 |
+
+Against the Task 6 checkpoint at `f88d04e`, unit totals remain 350 suites and gain four tests
+(4,319 → 4,323); integration gains the newly registered panel suite and its 17 tests
+(59 / 665 → 60 / 682). Against controller Task 0 on `7a831fb`, totals are +3 unit suites / +120
+unit tests and +8 integration suites / +130 integration tests. Against the labelled Task 5
+checkpoint, totals are unchanged at 350 unit suites with +13 tests, and +3 integration suites /
++37 tests. The Task 0 and Task 5 comparisons include AF and earlier AR Plan 2 changes; they are
+not the delta from this review fix. Both final full suites are GREEN.
+
+Test-only adaptations beyond the requested panel regressions are the integration-suite
+registration and the tracker-screen fixture correction described above; no assertion about
+saved state was weakened. No plan/spec edits, Git writes, hosted actions, PostgreSQL harness
+rerun, EAS build, device check or PR action. Accepted risks A1–A3 and the existing hosted/device
+and Plan 3 pull gates remain open.
+
+**AR Plan 2 adversarial review round 2 — failed-save refresh recovery.**
+The controller verified a failure-path gap in the round-1 fix at `c7b1d88`: a tap invalidated
+an outstanding refresh, but a failed setter never scheduled a replacement read. The panel
+could therefore retain a confirmation already removed in storage. A non-background focus
+load completing while the write guard was held also discarded its loading cleanup, leaving
+the spinner up permanently and hiding both the grid and the save error.
+
+The replacement background read now starts in the setter's `finally`, after clearing the
+write guard and pending-letter state, on both success and failure. A successful setter still
+publishes its returned record; failure keeps the exact retry message. The newest read
+converges with storage and clears loading, including when an earlier focus load was discarded.
+Tap invalidation, read suppression during writes, invalidation by a later tap, the pending-write
+guard, locked cells and success-only sync nudges remain intact. No existing mounted/cancellation
+pattern exists in the panel; no new lifecycle machinery was added, as instructed.
+
+Two regressions use the real SQLite mastery repository, with a native trigger rejecting the
+confirmation of `m`. One holds a sync snapshot of `s` unconfirmed across the start of `m`'s
+write, then rejects that write: the panel reloads `s` unconfirmed, retains the error, exposes an
+enabled grid and completes an actual retry after the injected failure is removed. The other
+delivers a non-background focus read while the write is pending, then rejects the write and
+verifies the spinner ends and the error and retryable grid appear. The navigation test mock
+now permits explicit focus delivery; storage and setter behavior remain real. All four round-1
+regressions continue to pass. The standing contract map describes refresh after both outcomes.
+
+Every command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| RED: `npx jest __tests__/LetterMasteryPanel.test.js` | Exit 1: 1 failed suite; 2 failed / 17 passed tests (19 total), 5.996 s. Only the two new regressions fail: stale `s` and spinner hiding the retry error |
+| RED: `npm run test:integration -- __tests__/LetterMasteryPanel.test.js` | Exit 1: 1 failed suite; 2 failed / 17 passed tests (19 total), 5.935 s; same reproduced failures |
+| GREEN: same panel unit command | Exit 0: 1 suite / all 19 tests passed, 3.935 s |
+| GREEN: same panel integration command | Exit 0: 1 suite / all 19 tests passed, 3.971 s |
+| `npx jest __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/literacySessionPersistence.test.js __tests__/LetterTrackerScreen.plan5.test.js` | Exit 0: 5 suites / all 101 tests passed, 4.267 s |
+| `npm run test:integration -- __tests__/LetterMasteryPanel.test.js __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/literacySessionPersistence.test.js` | Exit 0: 4 suites / all 100 tests passed, 7.615 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: all 350 suites / 4,325 tests passed, 67.067 s |
+| `npm run test:integration --silent` | Exit 0: all 60 suites / 684 tests passed, 49.582 s |
+| `git diff --check` | Exit 0 |
+
+Both full suites pass on their first round-2 run; no unrelated failure or isolated rerun.
+Against the round-1 checkpoint at `c7b1d88`, suite totals are unchanged (350 unit / 60
+integration), and each tier gains exactly the two new panel regressions (4,323 → 4,325 unit
+tests; 682 → 684 integration tests). No additional test fixture or configuration changes were
+needed beyond the panel's focus simulation and native failure injection.
+
+Round 2 reaches the plan's **two-round adversarial review cap**. Final disposition and release
+remain with the controller. No Git writes, network/dependency work, plan/spec edits, PostgreSQL
+harness, hosted Supabase, EAS, device or PR action. Accepted risks A1–A3 and the existing
+hosted/device and Plan 3 pull gates remain open.
+
+#### Task 7 — release gates, Steps 1–2 (controller)
+
+Branch `feat/assessment-results-plan-2` at `bac9f8b` (it also carries lesson-plan AF). Commands use
+
+### 2026-10-21 — Lesson plan B2 Task 2: historical session group reference
+
+- Implemented local schema 16, `sessions_group_history_reference`, on
+  `feat/lesson-plan-b2-session-group`. The table rebuild preserves every session column, its
+  Programme/class FKs, state constraint, three indexes, attendee FKs/cascade and queued uploads,
+  while allowing a session to retain a group id absent from the local roster. No repository,
+  pull or upload behavior changed in this task; the local-write guard is B2 Task 4.
+- Version 16 follows the orchestrator's branch-specific ruling: C1 also uses 16 on its own branch;
+  the controller reconciles versions at merge. Existing current-version assertions now use
+  `CURRENT_SCHEMA_VERSION`, assessment-results remains explicitly pinned to migration 15, and
+  the foundation ledger/tripwire include B2 version 16.
+- Every test command below used `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+  RED: `npm run test:integration -- __tests__/sessionGroupHistoryReferenceMigration.test.js`
+  exited 1, 1 suite / 5 tests failed because the named migration's version was undefined.
+  Same-command GREEN: exit 0, 1 suite / 5 tests passed. Snapshots cover all session/attendee/outbox
+  fields, normalized index definitions and attendee FK metadata; runtime assertions cover missing
+  historical groups, retained FK/CHECK constraints, FK restoration, cascade and idempotence.
+- Focused regression command: `npx jest __tests__/sqliteFoundation.test.js __tests__/hotPathIndexes.test.js __tests__/sessionsForwardPrepMigration.test.js __tests__/foreignKeyEnforcement.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrations.assessmentResults.test.js --maxWorkers=25%`
+  passed 8 suites / 103 tests, exit 0. `npm run test:integration --silent` passed
+  53 suites / 557 tests, exit 0 (49.265 s). Full unit gate:
+  `npx jest --silent --maxWorkers=25%` passed 349 suites / 4,220 tests, exit 0 (145.925 s).
+  No unrelated failures or isolated reruns were needed.
+- No plan/spec edits, dependency installs, network, hosted Supabase, PostgreSQL harness, EAS,
+  device checks, PR or Git writes. Task 1 PostgreSQL evidence remains controller-owned. Native
+  upgrade/device proof and the remaining B2 producer/pull/sync tasks remain open.
+
+- **2026-10-21 — B2 Task 3: history keeps the session's group.** Added `group_id` immediately
+  after `class_id` in `SESSION_COLUMNS`; `saveHistoryPage` now retains the server value verbatim
+  and `getSessions` returns it. The attendee mapping still nulls an absent group, and attendee-derived
+  `group_ids` is unchanged. No group, assignment, picker/roster entry or outbox row is created,
+  including after `repairGroupOwnershipForSync`.
+- Task 3 TDD, Node 20.19.4: `npm run test:integration -- __tests__/sessionsHistoryPage.test.js __tests__/sessionHistoryPull.test.js`
+  RED exited 1: 2 failed suites, 3 failed / 45 passed tests (48 total), each failure receiving
+  `group_id: null` instead of the server's id. Same-command GREEN exited 0: 2 suites / 48 tests
+  passed. The fresh-phone case runs the real pull service/repository against a scripted RPC
+  boundary and real SQLite; it does not claim new server authorization proof.
+- Updated the B2/hydration/table contracts and `CONTEXT.md` Relationships. Corrected the stale
+  shared-database cursor wording to per-EA files (ADR-0008), and the directly affected forward-prep
+  note that still claimed the repository omitted both fields. Outbound `group_id` stays
+  `INTENTIONALLY_UNSYNCED` until Task 4; the Session definition's planned NOT NULL remains unchanged.
+- Task 3 remaining gates, all with `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/syncContractCompleteness.test.js` passed 1 suite / 5 tests,
+  exit 0 (3.676 s). `npx jest --silent --maxWorkers=25%` passed 349 suites / 4,222 tests,
+  exit 0 (337.112 s). `npm run test:integration --silent` passed 53 suites / 559 tests,
+  exit 0 (43.556 s). No unrelated failures or isolated reruns were needed. The same-command
+  focused RED/GREEN times were 14.812 s / 14.693 s. `git diff --check` passed. Hosted, EAS,
+  device and PR steps were not run.
+
+- **2026-10-21 — B2 Task 4: capture and upload the session group.** `saveSession` stores explicit
+  `group_id` (null when absent) on the session and every attendee, ignoring legacy `group_ids`
+  without rewriting memberships. Before an enqueued non-null-group write, the transaction checks
+  that the group exists locally and belongs to the resolved Programme; archived groups remain
+  valid. The exact missing-group and wrong-Programme errors occur before any family/outbox write.
+  `SERVER_COLUMNS.sessions` now sends `group_id`; `INTENTIONALLY_UNSYNCED.sessions` retains only
+  the prescribed completed-state message, with the assessment summary exclusion preserved.
+- Repository TDD: with the Node 20.19.4 PATH prefix,
+  `npm run test:integration -- __tests__/sessionsRepository.test.js` RED exited 1:
+  4 failed / 9 passed tests (13 total, 1 suite; 1.572 s). Failures reproduced attendee group loss,
+  legacy `group_ids` use, and missing/wrong-Programme groups being accepted. Same-command GREEN
+  exited 0: 1 suite / 13 tests passed (2.238 s).
+- Sync TDD: `npm run test:integration -- __tests__/sessionGroupSync.test.js` RED exited 1:
+  3 failed / 1 passed tests (4 total, 1 suite; 3.590 s), because session payloads stripped
+  `group_id`; the pre-update queued payload case passed. The new `sessionGroupServer` models the
+  group FK and C19 at the network boundary, including atomic batches, ended assignments,
+  assignment insert-or-ignore and exact lifecycle acknowledgements. Real SQLite regressions
+  cover save/delete/reconnect, a half-uploaded family, Head Office ending an assignment, and an
+  old queued session without the group key. A temporary SQLite observation trigger records any
+  terminal transition even if its row is later removed; none occurs in the passing scenarios.
+- Sync GREEN: `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/syncContractCompleteness.test.js`
+  passed 2 suites / 9 tests, exit 0 (2.208 s). Focused unit command:
+  `npx jest __tests__/syncContractServerSchema.test.js __tests__/offlineSync.stripping.test.js __tests__/offlineSync.pendingSessions.test.js __tests__/literacySessionPersistence.test.js --maxWorkers=25%`
+  passed 4 suites / 22 tests, exit 0 (2.098 s). All commands use
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+- Updated the session/attendee/B2 contracts, forward-prep note and group-workflow prerequisites.
+  Documentation deliberately distinguishes the completed Tasks 1–4 contract from Task 5's
+  pending failed-parent gates and historical assignment evidence, plus Task 6's lost-response
+  retry release prerequisite. Task 4 Step 9's blanket "done" wording for prerequisites 1/4 would
+  overstate those later implementations: `offlineSync` still has only the class dependency for
+  sessions and no session grant entry. No dependency/retry implementation was pulled forward.
+  Local/synthetic server proof does not replace PostgreSQL, hosted or native device gates.
+- Task 4 full gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,231 tests, exit 0 (98.461 s). `npm run test:integration --silent` passed
+  54 suites / 568 tests, exit 0 (55.742 s). No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. No hosted Supabase, PostgreSQL harness, EAS, device or PR work was
+  performed; those gates retain their separate owners. No plan checkboxes or other spec sections
+  changed; group-workflow product sections remain for C2/C3.
+
+- **2026-10-21 — B2 Task 5: group dependencies and owed held-assignment evidence.** Sessions
+  declare class/group parents and remove their nullable edges independently. Same-pass failures
+  hold back only the exact group's lessons without advancing their retry counters. Only sessions
+  and attendees gain `{ heldGroupAssignment: 'group_id' }`: a nonterminal owed assignment insert
+  joined to this EA's local assignment counts even after it ends. The EA comes from outbox
+  `owner_user_id`; archive-only, terminal and other-EA inserts do not count. Other grant paths stay
+  active-only, and assignment archive rank 6 is unchanged. No schema, package dependency or server policy
+  change was needed.
+- Task 5 TDD uses the existing `sessionGroupServer` network boundary, real SQLite repositories
+  and engine, and the persistent terminal-observation trigger. Six evidence cases cover ended,
+  archive-only, terminal and other-EA assignments, attendee parity and other-table isolation.
+  Three scenarios cover an assignment insert failing across three passes after group deletion,
+  a group insert failing once, and class-scoped/classless sessions without a group. The deleted
+  group's family converges within six ordinary passes without manual retry, with observed
+  retryable `42501` messages and no terminal transition after any pass. The failed group holds
+  its lesson untouched in pass 1 and the family lands in pass 2.
+- Task 5 RED, all commands prefixed with
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js` exited 1 with
+  4 failed / 9 passed tests (13 total, 1 suite; 5.083 s): session/attendee held-group evidence
+  returned false, the deleted-group lesson went terminal, and the failed group did not prevent
+  its session request. `npx jest __tests__/classifyErrorHardening.test.js` exited 1 with
+  1 failed / 12 passed tests (13 total, 1 suite; 8.067 s): the session grant map was absent.
+  Before that behavior-level integration RED, two fixture-only corrections were required:
+  the initial run had 8 failed / 5 passed (11.406 s), including six assignment-date CHECK
+  failures; fixing the assignment start date left 5 failed / 8 passed (6.146 s), including an
+  archive id mismatch. The archive fixture now explicitly supplies the planned `:lifecycle` id
+  because generic outbox enqueue defaults to `:archive`; neither correction changed production
+  code or weakened an expectation.
+- Task 5 same-command GREEN: integration passed 1 suite / 13 tests (6.185 s); classification
+  unit tests passed 1 suite / 13 tests (5.024 s), both exit 0. The requested focused regression
+  command `npx jest offlineSync syncOutboxRepository syncErrorGuard deterministicErrorBudget`
+  passed 10 suites / 130 tests (15.260 s), exit 0. Plan Step 4's `npm run test:integration`
+  passed 54 suites / 577 tests (137.194 s), exit 0.
+- Updated Global Contract 10, same-pass gating, error classification/limitations, the B2 session
+  contract and review file map. ROADMAP now closes the stale grant tripwire, noting that
+  membership-mediated evidence already existed; collision-proof grouping remains deferred by
+  C16 with no new group-write kind. Group-workflow prerequisites 1 and 4 now read done for
+  Tasks 1–5. Task 6's lost-response insert retry remains a separate B2 merge/release prerequisite.
+  No plan/spec checkboxes changed. Step 6's commit is controller-owned; PostgreSQL, hosted
+  Supabase, EAS, native-device and PR gates were not run in this task. Local/synthetic evidence
+  does not establish those gates.
+- Task 5 full unit gate (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,240 tests (117.428 s), exit 0. No unrelated failures or isolated reruns occurred.
+- Task 5 final integration gate (same Node 20 PATH): `npm run test:integration --silent` passed
+  54 suites / 577 tests (43.479 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. Only the engine, its two planned test files and the four named
+  standing/evidence docs changed; the plan, spec, migrations and package files are unchanged.
+
+- **2026-10-21 — B2 Task 6: an insert retry must not ask for UPDATE rights.** Added the private
+  `INSERT_OR_IGNORE_TABLES` set (immutable assignments plus sessions) and used it in single and
+  batch dispatch. Only inserts use ignore-duplicates; sessions remain unbatched, attendees retain
+  merge upsert, and immutable-assignment classification, batching and version-stamping rules are
+  unchanged. Deleted the unused `sessionsRepository.updateSession`; `saveSession` is unchanged.
+  An edit re-saved as insert would otherwise be acknowledged locally but ignored on the server.
+- Task 6 TDD, all commands prefixed with
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (Node v20.19.4):
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js`
+  RED exited 1: 2 failed suites, 2 failed / 24 passed tests (26 total; 9.621 s). The committed
+  parent lost its response; pass 2 retried a merge before any attendee existed and left one
+  terminal session. The insert-only repository test found the old edit method. Same-command
+  GREEN exited 0: 2 suites / 26 tests passed (16.123 s). The real-SQLite regression now proves
+  first-pass committed parent/failed outbox, untouched pending attendees, then two insert-or-ignore
+  parent calls and an entirely synced family in pass 2, with no terminal transition or manual retry.
+- Extended `sessionGroupServer` with commit-then-lost-response behavior, group checks before
+  conflict handling, ignore-duplicates on every table, and the attendee-dependent session merge
+  refusal. Its scope remains a synthetic boundary, not real RLS. The requested focused command
+  `npx jest offlineSync syncOutboxRepository rowVersionSend activePairDomainIds` passed
+  10 suites / 158 tests (22.957 s), exit 0. Plan Step 4's `npm run test:integration` passed
+  54 suites / 577 tests (140.018 s), exit 0.
+- Added `insertOrIgnoreSql` and the four prescribed PostgreSQL cases:
+  `session-insert-retry-before-attendees`, `session-insert-retry-still-checks-the-row`,
+  `session-merge-retry-before-attendees`, `attendee-merge-retry-after-commit`. Each uses a separate
+  rolled-back actor transaction with setup as postgres. `node --check scripts/session-group-postgres-harness.cjs`
+  passed, exit 0. `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` passed
+  1 suite / 13 tests (0.583 s), exit 0. **Step 6, controller (local Docker PG17, port 65433,
+  `PGTZ=UTC`):** `npm run -s verify:session-group:postgres` exit 0 with 31 cases, the four new ones
+  included; `session-insert-retry-still-checks-the-row` returned `42501` as required. Every other
+  PostgreSQL harness still passes: `history-authorization` 31, `upload-contract` 6 cases plus
+  location 34, rowVersion 22 and timeEntryForward 39, `organisation-label` 23, `support-incident` 18,
+  `assessment-results` 53, `ea-access` 43. PostgREST HTTP and hosted proof remain later gates.
+- Updated the operation/session/B2 contract and added the learning chapter "Retrying an insert
+  must not ask for edit rights". Added the decision row and reconciled the existing lost-response
+  Bug and Gap row rather than duplicating the same gap. Saved-session editing remains out of v1
+  and must add a versioned UPDATE-by-id operation when it ships. No plan/spec checkboxes, schema,
+  migration, package or unrelated application files changed. Step 8's commit, hosted Supabase,
+  EAS, native-device and PR work remain outside this task's implementation authority.
+- Task 6 first full unit run: `npx jest --silent --maxWorkers=25%` exited 1 with
+  1 failed / 349 passed suites, 1 failed / 4,239 passed tests (4,240 total; 72.547 s).
+  `moduleStateAllowlist.test.js` required an actor-lifecycle treatment for the plan's new
+  module-private `INSERT_OR_IGNORE_TABLES`. Isolated `npx jest __tests__/moduleStateAllowlist.test.js`
+  confirmed the same failure (1 suite / 1 test failed; 0.804 s). Added one inventory entry beside
+  the existing fixed sync-policy sets: `device-level fixed sync policy`. This is fixed table-name
+  policy, never EA runtime data; the exact-inventory guard remains unchanged. Same-command GREEN
+  passed 1 suite / 1 test (0.964 s), exit 0. This test-only addition is the plan's one omitted
+  dependency, not an unrelated failure or a change to the signed-in EA handle contract.
+- Task 6 final integration gate (same Node 20 PATH): `npm run test:integration --silent` passed
+  54 suites / 577 tests (67.530 s), exit 0. No unrelated failures or isolated reruns were needed.
+- Task 6 final full unit rerun (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,240 tests (95.826 s), exit 0. `git diff --check` passed. Ten files changed:
+  the nine Task 6 paths plus the one-line actor-lifecycle inventory entry required by its new set.
+
+- **2026-10-21 — B2 adversarial review, round 1: preserve group evidence and session identity.**
+  Finding 1 (high): authenticated group DELETE could cascade away the assignment evidence needed
+  by another device's queued session family. Finding 2 (medium): a permitted parent UPDATE could
+  change Programme/group without rechecking its attendees. Per the controller, the B2 migration
+  is not applied anywhere, so both fixes extend `20261021140000_session_group_authorization.sql`
+  in place; no new migration is introduced.
+- Dropped `groups_delete_created_by` and revoked group DELETE from `authenticated`, preserving
+  service-role DELETE privileges. EAs use archive. Added private
+  `prevent_session_identity_change()` / `sessions_prevent_identity_change` BEFORE UPDATE, in the
+  existing identity-trigger style: empty search path, direct EXECUTE revoked from
+  public/anon/authenticated, `IS DISTINCT FROM` on Programme/group and the clear `23514` rejection.
+  Identity-preserving notes/family timestamp updates retain their existing authorization checks.
+  The trigger applies to privileged updates too; a purge of a referenced group must account for
+  `ON DELETE SET NULL` changing immutable session identity. The service-role case uses an
+  unreferenced disposable group and does not claim a general historical purge workflow.
+- Harness cases were written first and appended after the existing cases:
+  `group-hard-delete-refused` catches exactly `42501`, checks group/assignment survival and proves
+  a service-role disposable purge; `session-programme-move-refused` inserts a valid session and
+  attendee as an EA active in Programme A, then models a sequential A-to-B staff Programme move,
+  refuses both Programme-B PATCH shapes with `23514` and checks unchanged parent/attendee identity
+  after each; trigger-dropped controls require both same-actor PATCH variants to succeed without
+  RLS changes, with savepoints restoring the A row between controls. `session-update-keeping-identity-allowed`
+  checks UPDATEs that explicitly preserve or omit identity. Caught refusals use subtransactions
+  so unchanged rows can be inspected in the same rolled-back case. The existing unheld-group
+  direct UPDATE case now expects `23514`: the identity trigger runs before the restrictive
+  policy's former `42501`. The group purge fixture sets service_role BYPASSRLS within its
+  transaction, matching hosted and the organisation-label harness; the shared bootstrap creates
+  only a plain role. **Controller PostgreSQL (local Docker PG17, port 65433, `PGTZ=UTC`):** RED against HEAD's
+  migration failed in an executed assertion (`session-update-to-unheld-group` got `42501` from the
+  restrictive policy where the trigger gives `23514`). The first GREEN exposed an invalid fixture (two
+  active staff programmes for one EA, refused by `idx_staff_programme_assignments_active_user_unique`),
+  corrected to a sequential A→B move with trigger-dropped controls. Final GREEN: `session-group` 34
+  cases; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and
+  timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53;
+  `ea-access` 43. All exit 0.
+- Static TDD, all commands under
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` RED exited 1 with
+  2 failed / 13 passed tests (15 total, 1 suite; 0.638 s), because the delete guard and identity
+  trigger were absent. Same-command GREEN passed 1 suite / 15 tests (0.512 s), exit 0.
+  `node --check scripts/session-group-postgres-harness.cjs` passed before and after the migration
+  change, exit 0. Static checks preserve the bounded timeouts and idempotent policy/trigger setup;
+  they do not establish actual SQL/RLS behavior or migration reapplication proof.
+- Focused regression commands (same Node 20 PATH):
+  `npm run test:integration -- __tests__/sessionGroupSync.test.js __tests__/sessionsRepository.test.js __tests__/groupsRepository.test.js`
+  passed 2 suites / 26 tests (1.773 s); adding the lifecycle/junction paths instead of the group
+  repository path also passed those same 2 suites / 26 tests (1.880 s). The integration runner's
+  testMatch excludes the additional paths, so they were run explicitly with unit Jest:
+  `npx jest __tests__/groupsRepository.test.js __tests__/offlineSync.pendingSessions.test.js`
+  passed 2 suites / 15 tests (1.370 s), and
+  `npx jest __tests__/groupAssignmentLifecycle.test.js __tests__/junctionRepositoryGuards.test.js`
+  passed 2 suites / 27 tests (1.696 s). All exited 0; no assertion or runner scope was weakened.
+- Updated the B2 section and groups/sessions table rows. No new phone deletion test is added:
+  `sessionGroupServer` has no stateful group DELETE and cannot prove the privilege refusal.
+  The database refusal is the guard; existing real-SQLite archive/reconnect family coverage stays
+  in place. No phone code, sync behavior, plan/spec, package or other migration changed. No
+  network, hosted Supabase, PostgreSQL execution, EAS, device, PR or Git-write action was taken.
+- Review round 1 full gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,242 tests (67.638 s), exit 0; `npm run test:integration --silent` passed
+  54 suites / 577 tests (42.517 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed. Exactly the existing B2 migration, its static test/harness and the
+  contract map/build log changed; phone code, the synthetic server and the plan are unchanged.
+
+- **2026-10-21 — Review-round-1 harness fixture correction.** Controller PostgreSQL RED against
+  HEAD's migration was genuine (`42501` versus the expected identity-trigger `23514`). The first
+  controller GREEN failed before an assertion: the attempted second active staff Programme
+  assignment violated `idx_staff_programme_assignments_active_user_unique`. The original
+  simultaneous-A/B fixture was invalid; that run did not establish the programme-move guard.
+- Corrected only the programme-move fixture: the EA inserts its valid A session/attendee first;
+  postgres then ends its A staff assignment before inserting B. The fixture retains the active
+  direct child delivery assignment required by `has_active_session_attendee_assignment` and the
+  already-held B group. As the EA, it asserts one active staff assignment, B activation, attendee
+  write authority and held-B-group authority before attempting both refused PATCHes. The same
+  case then drops only the identity trigger as postgres and requires both PATCH variants to
+  succeed as the EA. Savepoints restore the original A row between controls and the outer
+  rollback restores the trigger. This separates trigger refusal from RLS refusal. The sibling
+  identity-preserving-update and group-delete cases use only the existing A assignment and have
+  no second-active-assignment setup problem; neither was changed. The migration is unchanged by
+  this correction. PostgreSQL execution remains controller-owned; no local rerun was attempted.
+- Fixture-correction proof, Node 20.19.4 PATH prefix:
+  `node --check scripts/session-group-postgres-harness.cjs` passed, exit 0;
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` passed 1 suite / 15 tests
+  (0.514 s), exit 0. `git diff --check` passed. The migration's SHA-256 was identical before and
+  after this follow-up; only the harness and this existing B2 log subsection were edited.
+
+- **2026-10-21 — B2 adversarial review, round 2: a group's Programme is immutable.** The controller
+  confirmed round 1 and found the final mutable persisted input to the held-group check:
+  `groups.programme_id`. Group ownership/assignment permits a raw-client PATCH without requiring
+  staff assignment to the proposed Programme. Such a change could strand a queued A-session
+  after inserts are acknowledged, or put uploaded A-history beneath a B-group. Extended the same
+  unapplied B2 migration with `prevent_group_programme_change()` / `groups_prevent_programme_change`:
+  BEFORE UPDATE, `IS DISTINCT FROM`, clear `23514`, empty search path, direct EXECUTE revoked and
+  idempotent drop/create. Name, class and archive/restore updates keep their existing checks.
+- Added one transaction-local assertion shared by `groupsRepository.updateGroup` and the
+  existing-row `saveGroup` path. A Programme mismatch throws
+  `groups.programme_id cannot be changed after insert` before writes/enqueues. Synced and pending
+  rows are covered, including a nonempty pre-existing outbox; group, assignment and outbox
+  snapshots stay unchanged after refusal. Equal Programme and name-only writes still work.
+  The existing group repository test uses better-sqlite3 directly; added it to the integration
+  testMatch so the required real-SQLite regressions also run in the normal integration gate.
+- Wrote both PostgreSQL cases first, appended after all prior cases:
+  `group-programme-change-refused` checks refusal and unchanged group/assignment Programme, then
+  drops only the trigger as postgres inside the rolled-back case and requires the identical PATCH
+  to succeed as the same EA. `group-edit-keeping-programme-allowed` checks rename with unchanged
+  Programme, class changes and archive/restore. The EA has only its existing active A staff
+  assignment throughout; no simultaneous-active-Programme fixture is used. **Controller PostgreSQL (local
+  Docker PG17, port 65433):** RED against HEAD's migration failed in the executed
+  `group-programme-change-refused` assertion ("Expected SQLSTATE 23514, but the statement was
+  allowed"); GREEN passed `session-group` 36 cases, including the trigger-dropped control, and every
+  other harness (`history-authorization` 31, `upload-contract` 6 + 34 + 22 + 39, `organisation-label`
+  23, `support-incident` 18, `assessment-results` 53, `ea-access` 43).
+- Round 2 RED, all commands under
+  `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npx jest __tests__/sessionGroupAuthorizationMigration.test.js` exited 1 with
+  1 failed / 15 passed tests (16 total, 1 suite; 0.621 s): the group Programme trigger was absent.
+  `npm run test:integration -- __tests__/groupsRepository.test.js` exited 1 with
+  4 failed / 15 passed tests (19 total, 1 suite; 3.583 s): both update/re-save paths accepted the
+  forbidden change for synced and pending groups. Positive equal-Programme/name-only cases
+  passed before implementation. Same-command GREENs exited 0: static 1 suite / 16 tests
+  (0.488 s); group repository 1 suite / 19 tests (1.521 s).
+- `node --check scripts/session-group-postgres-harness.cjs` passed, exit 0.
+  Focused `npm run test:integration -- __tests__/groupsRepository.test.js __tests__/sessionsRepository.test.js __tests__/sessionGroupSync.test.js`
+  passed 3 suites / 45 tests (3.688 s), exit 0. Updated the groups table contract and B2's complete
+  input/evidence fences: immutable session group/Programme, immutable group Programme, immutable
+  assignment identity, revoked group/assignment DELETE, server-derived actor identity; assignment
+  Programme remains deliberately excluded from the helper, and ending an assignment still does
+  not erase C19 authority. No new migration, local schema version, sync-engine behavior, package,
+  plan/spec or Git write was introduced. No hosted, PostgreSQL, EAS, device or PR work was run.
+- Round 2 final gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  350 suites / 4,250 tests (87.704 s), exit 0; `npm run test:integration --silent` passed
+  55 suites / 596 tests (68.559 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` and the final harness syntax recheck passed. Eight scoped files changed:
+  the existing migration/harness, group repository and its tests, static migration test,
+  integration testMatch, contract map and this B2 verification subsection.
+
+- **2026-10-21 — B2 adversarial review, round 3: authoritative group pulls converge.** The
+  round-2 local Programme guard also ran for `saveServerGroupRows`, because that persistence
+  boundary delegates to `saveGroup`. It rejected historical cached/server Programme drift before
+  the existing pending/failed and row-version checks, leaving acknowledged or terminal groups
+  outside the EA's correct Programme roster and preventing a session save. Restricted the
+  `saveGroup` assertion to local writes classified by `shouldEnqueueOutbox(record)`; `updateGroup`
+  retains its unconditional local-edit assertion. Authoritative persistence bypasses only the
+  local-mutation guard and still uses the unchanged convergence checks. The server trigger,
+  PostgreSQL harness, sync engine and pull callers are unchanged.
+- Added five real-SQLite regressions through the public repositories: acknowledged and terminal
+  B caches accept a newer A server row, return to the EA's A roster and permit an A session with
+  its attendee; pending and failed B rows skip the conflicting pull with unchanged rows and
+  complete outbox snapshots; an older server version cannot re-scope an acknowledged cache.
+  Existing local update/re-save refusal cases for synced/pending groups and accepted
+  equal-Programme/name-only edits remain green. Updated the contract map's B2 section and groups
+  row to distinguish local mutation immutability from authoritative pull convergence.
+- Round 3 RED/GREEN, under `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`:
+  `npm run test:integration -- __tests__/groupsRepository.test.js` first exited 1 with
+  **5 failed / 19 passed tests** (24 total, 1 suite; 1.904 s). Each new case reached the
+  Programme assertion and returned `failed: 1` / `fallbackUsed: true` instead of applying or
+  deliberately skipping the row. The same command after the scoped fix exited 0 with
+  **1 suite / 24 tests passed** (2.378 s).
+  Focused `npm run test:integration -- __tests__/groupsRepository.test.js __tests__/sessionsRepository.test.js __tests__/sessionGroupSync.test.js __tests__/ChildrenContextPull.integration.test.js __tests__/pullReconcile.integration.test.js`
+  passed **5 suites / 86 tests** (5.495 s), exit 0.
+- Round 3 final gates (same Node 20 PATH): `npx jest --silent --maxWorkers=25%` passed
+  **350 suites / 4,255 tests** (68.196 s), exit 0; `npm run test:integration --silent` passed
+  **55 suites / 601 tests** (42.112 s), exit 0. No unrelated failures or isolated reruns occurred.
+  `git diff --check` passed; read-only `git diff --exit-code` confirmed no migration or harness
+  changes. Four scoped files changed: the group repository, its real-SQLite tests, the contract
+  map and this B2 verification subsection. No PostgreSQL, network, hosted, device or Git write
+  work was run.
+
+#### Task 7 — branch gates (controller)
+
+Branch `feat/lesson-plan-b2-session-group` at `f548ed0`, base `7a831fb`. Commands use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; PostgreSQL is local Docker PG17 on port 65433
+with `PGTZ=UTC`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 350 suites / 4,325 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 60 suites / 684 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres` (on `f88d04e`; no server file changed after it) | `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `5f41036`; AF reviewed
+separately), two rounds, the plan's cap:
+- Round 1, needs-attention: [high] a correction made on a phone whose clock is slow, after it has
+  observed another phone's newer winner, loses to that winner; [medium] the mastery panel's
+  background refresh could overwrite a tap that had just committed. The panel race was fixed in
+  `c7b1d88` (taps invalidate in-flight reads and re-read after the save). The slow-clock case is
+  recorded as **accepted risk A3** (contract map): it needs two phones correcting the same child and
+  letter with one clock slow beyond the gap, and the root fix (a causal base in `set_letter_mastery`)
+  changes the approved server contract, so it goes to Jim.
+- Round 2, needs-attention: [medium] after a failed save the panel kept a stale tile, and a focus
+  load during the failed write could leave the spinner on. Fixed in `bac9f8b` (the re-read runs after
+  success and failure).
+
+**Steps 3–8 (sync-first check, hosted wipe and apply, EAS builds, gate fixture, device checks): not
+yet run.** Each needs Jim's yes. The hosted order is B2, then this plan, then Plan 3. The device
+checks run on the combined Android build Jim chose for wave 1.
+
+### 2026-10-21 — Lesson-plan AF: Afrikaans, release gate (controller)
+
+**What shipped on `feat/lesson-plan-af`** (base `7a831fb`):
+- `5f41036` Task 1: each pending tracker change carries the language and time of its tap; the
+  sheet's language is fixed when it opens; `persistLiteracySession` validates every change before
+  its transaction and refuses the whole save on an invalid one (`TRACKER_CHANGE_INVALID`).
+- `e2ab553` Task 2: `af` in `LANGUAGE_LABELS`, `case 'afrikaans'`, and Zazi's provisional
+  `AFRIKAANS_PEDAGOGICAL_ORDER` in `PEDAGOGICAL_ORDERS`.
+- `31946ee` Task 3: `letter_sounds@2026.2.af` (Grid A, the same 60 letters as Zazi's
+  `afrikaans_60_v2`) and `word_reading@2026.1.af` (Zazi's provisional, unreviewed
+  `afrikaans_words_50`, verified character for character against the Zazi source). WelaPLUS stays
+  `en`/`xh`.
+- `ca1ec6b` review round 1 fix (below).
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`):
+- Round 1, needs-attention, one [high] finding, verified in code: the session form took every
+  tracker's language from the **first selected child's** class, so in a mixed-language session an
+  English child's marks were stamped `af` and saved as `Afrikaans`, invisible to that child's
+  English tracker and ranking. The same bug existed for English/isiXhosa mixes; AF widened it. Fixed
+  at the root (`ca1ec6b`): each child's tracker uses that child's own class language; a pending
+  change's language still wins; an unknown class language shows the empty state, never another
+  child's language. This overrides the plan's "first selected child stays as the default" call
+  (plan line 123). RED (focused tracker/form/persistence suites): 3 failed / 109 passed, the three
+  wrong-language cases; GREEN 112/112.
+- Round 2, approve: no material findings; it confirmed the fix and that `LetterMasteryPanel`
+  derives each child's own language and saves immediately.
+
+**Suites** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`, on `ca1ec6b`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 347 suites / 4,243 tests passed (baseline 4,202) |
+| `npm run test:integration --silent` | 52 suites / 558 tests passed (baseline 552) |
+| `npm run test:types` | Exit 0 |
+| `node scripts/sqlite-staging.cjs check` (main checkout, config only) | OK, `project_ref=segygjzpujphwvrubusm` |
+
+**Device gate (Step 4): not yet run.** Jim chose one combined Android preview build for all
+wave-1 plans (2026-10-21). The AF rows (Afrikaans letter test, word test, capital I vs lower-case l,
+Figtree ê ë ô, Afrikaans tracker with a hosted read-back, no-language class) run on that build on
+the Galaxy A03s, with a mixed-language session added for the round-1 fix. iPhone rows wait for an
+iOS build. Results will be recorded here.
+
+### 2026-10-21 — Assessment Results Plan 3: server history authority, pages, probes and shared traversal
+
+#### Task 1: server history read authority
+
+**Scope:** migration sections 1–4 only, the disposable PostgreSQL harness, npm/CI wiring and
+Task 1's standing docs. The controller's accepted Task 0 deviation is retained: branch
+`feat/assessment-results-plan-3` is stacked on Plan 2 (`b8c2807`), rather than `main`. Plan 2's
+server migration and AF are present; Plan 2 phone Tasks 2–6 are outside this slice. The new
+migration timestamp remains `20261022120000`, after every existing migration in this checkout.
+No phone storage, repositories, sync, handle or UI changes are part of Task 1.
+
+Built `private.can_read_assessment` with unbounded owner authority and an active-year class arm.
+An active class assignment in any Programme qualifies through any membership in that class in
+the active year, including exited memberships. Assessment date is bounded to the year's inclusive
+start/end; runs use `(started_at at time zone 'Africa/Johannesburg')::date`. Replaced only the
+assessment, item and run SELECT policies; items follow the readable parent. Delivery, historical
+delivery, group and child creator status grant no assessment reads. The exclusive write RPCs and
+Plan 2's `letter_mastery_select_writer_or_deliverer` remain unchanged.
+
+Added the private three-feature rollout table, per-user/everyone/off precedence helper,
+app-role revokes, RLS without policies, idempotent seed rows that preserve controller overrides,
+and the seven specified indexes. The migration uses session-level 10-second lock and 60-second
+statement bounds, then resets both. Page RPCs remain Task 2.
+
+**Harness:** 39 named cases (48 SQL invocations when constructed synthetically), all nine actors,
+exact parent/run visibility and complete item families, direct predicate matrix, SAST year edge,
+inclusive year boundaries, any-Programme class authority, no-active-year owner/class behavior,
+Plan 2 mastery handover/un-confirm sequence, grants, switch seed/precedence/default, reapply
+preserving overrides, and the exact SELECT-policy inventory. Fixtures use explicit historical
+`enrolled_at`/`assigned_at` values so existing date-range CHECKs do not preempt assertions.
+`UNRELATED` is the child creator to exercise the explicit no-creator-grant rule. The first SQL
+assertion is `current-delivery-denied`, with message
+`CURRENT_DELIVERY must not see A_2026_LATE through delivery alone`. It uses no new Task 1 object,
+so a controller replay without the migration reaches the intended policy regression.
+
+**Verification:** every Node/Jest command uses
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; `node --version` reports `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Controller PostgreSQL RED, Step 3 (migration moved aside; local Docker PG17 port 65433, `PGTZ=UTC`) | Exit 1 after fixtures succeeded: the executed `current-delivery-denied` assertion raised `CURRENT_DELIVERY must not see A_2026_LATE through delivery alone`, the regression the plan predicts. Migration restored |
+| Controller PostgreSQL GREEN and all other `verify:*:postgres`, Step 5 | All exit 0: `assessment-history` 39/39 named cases; `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43 |
+| `node --check scripts/assessment-history-postgres-harness.cjs` and module load | PASS; importing the module does not invoke the harness |
+| Inline Node static/synthetic checks | PASS: first-call ordering and injected failure propagation; complete construction of 39 case labels / 48 calls; nine actor read matrices; 13 predicate/grant cases; timeout/reset syntax; seven keyset indexes; three replacement policies; no mastery-policy mutation; npm/CI wiring. No SQL executed |
+| `npx jest __tests__/syncContractServerSchema.test.js __tests__/historyAuthorizationPostgresHarness.test.js __tests__/releaseGateConfig.test.js __tests__/syncRelationshipIndexesSupabaseMigration.test.js --runInBand --silent` | PASS: 4 suites, 45 tests, 19.608 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 1: 346 passed / 1 failed suites (347 total); 4,239 passed / 1 failed tests (4,240 total), 313.79 s. Only failure: unchanged `LiteracySessionForm.test.js` → `Saving… is busy and unavailable and ignores a second press`, 5,000 ms timeout |
+| `npx jest __tests__/LiteracySessionForm.test.js --runInBand --silent` (one isolated rerun) | Exit 0: 1 suite, 63 tests passed, 16.749 s |
+| `npm run test:integration --silent` | Exit 0: 52 suites, 555 tests passed, 131.964 s |
+| `git diff --check` | PASS |
+
+The local controller PostgreSQL is port **65433**, overriding the plan's **55432**; CI remains
+**5432**. Controller command (for RED replay without this migration, then GREEN with it):
+
+```sh
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:65433/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_assessment_history HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC npm run verify:assessment-history:postgres
+```
+
+Hosted schema preflight/apply/fixtures, HTTP probes, EAS, devices and PRs are later controller
+gates, each needing Jim's yes. No network or Supabase CLI was used.
+The plan-header superpowers execution skills are absent from the available skill directories;
+the approved task sequence and local TDD skill were followed directly. The disposable PostgreSQL run
+above proves the RLS behavior locally; hosted deployment is not yet proven.
+
+
+#### Task 2: server page RPCs
+
+**Scope:** sections 5–7 of `20261022120000_assessment_history_pull.sql`, the existing PostgreSQL
+harness, Operation Semantics and this register. Task 1 is commit `939c29f`; its controller
+PostgreSQL RED/GREEN (39 cases) and all existing harnesses passed. The branch remains stacked on
+Plan 2's server work; its phone Tasks 2–6 are outside this task. No phone implementation changed.
+
+Built `get_assessment_history_page`, `get_battery_run_history_page` and `get_letter_mastery_page`
+with the approved signatures/defaults, stable definer execution, empty search paths and
+authenticated-only EXECUTE. Each validates auth, feature switch, arguments, then (for the two
+Programme pages) the server's active year and expected year id. No active year raises `55000`
+`no_active_academic_year`; mismatch raises `MR002` `academic_year_mismatch`, even for an empty
+page. Each positive-grant arm orders/limits before the union; the final joined page orders and
+limits again. All pages use `(updated_at, id)`, page sizes 1–200 and overlap 0–600 seconds.
+
+Assessment families carry exactly the parent allowlist, position-ordered seven-key item objects
+(or `[]`), an explicitly allowlisted run header or null, and the child identity projection.
+A readable assessment grants its embedded run header even when that run's SAST start date is
+before the year; run RLS and the run pager remain year-bounded. Mastery uses Plan 2's last-writer
+or current-deliverer grants, no year/Programme filter, nullable Programme and false confirmations.
+Task 1's sections 1–4, policies, switch and indexes are preserved.
+
+**Harness:** 39 existing cases plus 104 page cases and one dense-plan gate: **144 total**. New
+cases begin with the executed `assessment-page-exists` assertion, before any fixture depends on
+a new RPC. Includes 27 size-one actor/feature equivalence walks, owner year limits, embedded
+headers, exact payload keys, skipped/legacy families, year rollover and mismatch on empty pages,
+nullable/current mastery and handover, argument/auth/switch ordering, isolated features and user
+overrides, duplicate grants, Programme partitioning, tied microsecond keysets/overlap on all three
+streams, status-only run deltas and server stamping. The dense fixture has 20,000 noise rows and
+5,000 owner rows; it prints root shared blocks before requiring sparse-class and deep-owner pages
+to use less than one tenth of the authenticated raw-RLS baseline. Measured by the controller: raw-RLS
+baseline 51,098 root shared blocks (693.9 ms); deep owner page 2,107 blocks (11.3 ms), about 24x
+fewer; `dense-plan-buffer-gate` passed.
+
+**Adaptations:** Plan 2's `set_letter_mastery` has six scalar arguments and no `updated_at`
+payload. Its stamp case supplies a 2001 correction time and asserts server `updated_at = now()`;
+assessment/item and run payloads carry 2001 `updated_at` values. The mastery handover pager case
+repeats the transition in a rolled-back transaction with fresh correction ids, preserving Task
+1's final state. Keyset-only fixtures also roll back. The embedded-header and expected-year
+rules are approved plan calls beyond the older AR signatures, not new decisions here.
+
+Every Node/Jest command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; the runtime
+reports `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Controller PostgreSQL RED, Step 2 (HEAD's sections 1–4 swapped in; local Docker PG17 port 65433, `PGTZ=UTC`) | Exit 1 after Task 1's fixtures and cases succeeded: the executed `assessment-page-exists` assertion failed with `No function matches the given name and argument types` for `public.get_assessment_history_page`. Working copy restored byte-identical |
+| Controller PostgreSQL GREEN, existing harnesses and dense-plan measurements, Step 4 | All exit 0: `assessment-history` 144/144 named cases including `dense-plan-buffer-gate`; `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43 |
+| `node --check scripts/assessment-history-postgres-harness.cjs` and module loading | PASS; import does not execute the harness |
+| Inline Node static/synthetic checks | PASS: first-new-assertion ordering and injected failure propagation; construction of 39 old + 104 page cases / 152 SQL calls without undefined interpolation; 27 actor/feature walks; RPC signatures, projections, grants, guard order, three per-arm/final limits; unchanged sections 1–4 and final timeout resets. Synthetic dense-plan checks accept a valid comparison and reject both the ratio boundary and wrong deep-page count. No SQL executed; synthetic buffer values are not measurements |
+| `npx jest __tests__/syncContractServerSchema.test.js __tests__/historyAuthorizationPostgresHarness.test.js __tests__/syncRelationshipIndexesSupabaseMigration.test.js --runInBand --silent` | Exit 0: 3 suites, 37 tests passed, 1.876 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 347 suites, 4,240 tests passed, 62.19 s |
+| `npm run test:integration --silent` | Exit 0: 52 suites, 555 tests passed, 35.383 s |
+| `git diff --check` | PASS |
+
+Controller invocation uses local port **65433**, overriding the plan's 55432; CI remains 5432:
+
+```sh
+PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:65433/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_assessment_history HISTORY_RLS_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE PGTZ=UTC npm run verify:assessment-history:postgres
+```
+
+Hosted work, HTTP probes, EAS, devices and
+PRs remain controller steps. No network, dependency installation, hosted access or Supabase CLI
+was used. The controller's disposable PostgreSQL run above establishes the behaviour and the
+performance threshold locally. Hosted PostgREST family-cap proof remains Task 3/later gates.
+
+
+#### Task 3: authenticated HTTP probe and volume fixture
+
+**Scope:** `scripts/assessment-history-http-probe.cjs`, its pure Jest helper tests, the npm
+`assessment-history:probe` command and this register. Task 2 is commit `b8d2b99`; the controller
+completed its PostgreSQL RED/GREEN (144 cases, dense gate passed). No migrations, repositories,
+SQLite, sync, handle or phone implementation changed in Task 3. No hosted mode was run.
+
+Built `buildProbeFamilies`, `validateProbePage`, `buildVolumeFixture` and a project-locked
+`validateProbeEnv` wrapper. The builders produce exactly 20 families / 1,220 items and, at volume,
+2 classes / 70 children / 140 families / 8,540 items / 780 confirmations, with 30 delivery children.
+Every generated family passes the real `assertSubmitShape`; results and confirmations belong to
+the co-EA, while the gate EA holds class/delivery grants. Relationship ids follow the existing
+active-pair UUIDv5 contract; mastery ids follow Plan 2's current-state UUIDv5 contract. Parent and
+item ids are fresh random UUIDs. Page validation checks every family count, item length, declared
+count and position order, duplicate parents, and the more-than-1,000-item control.
+
+**Hosted runtime, written but unrun:** default `probe` seeds a disposable marked account/profile,
+school, Programme assignment and child, inserts the synthetic families as service role, signs in
+with the publishable-key client, calls `get_assessment_history_page` with the active year id and
+page size 50, and validates the response against the generated ids. The separate raw-item query
+must return exactly 1,000 rows. Cleanup runs once in `finally`; success is printed only after
+zero-residue checks. `seed-volume` creates both marked EAs, the class/child/grant/history fixture,
+and checks exact counts before returning only the gate EA's email/password to the operator's TTY.
+`cleanup-volume --namespace <uuid>` recovers the owned accounts from admin-only Auth metadata and
+the school namespace, deletes in dependency order and verifies exact zero counts. Discovery uses
+pagination; filters and inserts are batched. No passwords/service keys or manifests are saved to
+disk. The namespace is printed before seeding so a lost response or interrupted process can be
+cleaned up later. Namespace/account ownership checks precede deletion; account deletion follows
+domain cleanup. Cleanup also handles lesson/run/mastery rows the gate operator may create.
+
+The env loader reuses `parseEnvContent` and the existing four `*_SQLITE` variables, with explicit
+process env taking precedence. Validation reuses the existing probe's required-field/ref guard
+and additionally requires the exact HTTPS SQLite endpoint (no alternate host, credentials, port,
+path, query or fragment). Client construction uses that fixed endpoint. Imports do not read env
+files or construct clients. SDK/parse/request errors are never printed verbatim; fixed stage
+messages avoid echoing secrets. Only `seed-volume` has a credential-output path, behind a TTY gate.
+
+**Choices/adaptations:** synthetic `probe.1` letter results deliberately have the plan's 61 items;
+they are not labelled as the bundled 60-item Grid A. No published content or expected count was
+changed. The volume builder accepts a year id but no year dates; the runner stamps assessment
+dates with the server's active-year start so its generated history is in scope. Existing
+`parseEnvContent` is reused without adding a dependency or importing dotenv directly. Synchronous
+CJS UUIDv5 generation uses built-in SHA-1 because the installed uuid package is ESM; tests compare
+all 780 mastery ids and all 102 active-pair relationship ids with the installed uuid.v5.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npx jest __tests__/assessmentHistoryHttpProbe.test.js --runInBand` — initial RED | Exit 1: 1 failed suite, 0 tests executed, 0.633 s. `Cannot find module '../scripts/assessment-history-http-probe.cjs'` was the specified missing-module failure |
+| Same command — initial helper GREEN | Exit 0: 1 suite, 13 tests passed, 1.255 s |
+| Same command — active-pair regression RED | Exit 1: 1 suite failed; 13 passed / 1 failed tests (14 total), 1.364 s. The new relationship-id assertion received a random UUIDv4 instead of the expected canonical UUIDv5 |
+| Same command — active-pair GREEN | Exit 0: 1 suite, 14 tests passed, 1.394 s |
+| Same command — complete helper GREEN | Exit 0: 1 suite, 16 tests passed, 2.141 s; includes mode parsing and credential-safe failure output |
+| Same command — final focused rerun after runtime cleanup review | Exit 0: 1 suite, 16 tests passed, 1.542 s |
+| `node --check scripts/assessment-history-http-probe.cjs` | PASS, exit 0 |
+| Plain Node import with a failing fetch sentinel and SDK-cache check | PASS, exit 0: zero fetch calls; Supabase SDK not loaded |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 348 suites, 4,256 tests passed, 61.971 s; no isolated rerun required |
+| `git diff --check` | PASS |
+| SQLite integration, PostgreSQL, hosted probe/volume modes | Not run. Task 3 changes only the script/pure tests/npm wiring; no SQLite/migration/repository/sync/handle change triggers the integration gate. All hosted/network execution is explicitly reserved for Jim/controller |
+
+Later operator commands, **not executed in Task 3**:
+
+```sh
+npm run assessment-history:probe
+npm run assessment-history:probe -- seed-volume
+npm run assessment-history:probe -- cleanup-volume --namespace <uuid>
+```
+
+Each uses the Node 20 prefix above. Hosted runs belong to Task 13 and require Jim's approval at
+that time. Task 3 Step 5 (commit), hosted writes/cleanup, EAS, devices and PRs remain controller
+steps. Pure helper results establish fixture shape and local validation only; they do not prove
+hosted API cap behavior, auth provisioning, RLS, migration deployment, seeded phone behavior or
+cleanup after an actual hosted failure.
+
+#### Task 4: shared history walker extracted from CAP-004
+
+**Scope:** `src/services/historyWalk.js`, `src/db/repositories/historyCoverage.js`, the session
+walk config in `sessionHistoryPull.js`, the new real-SQLite `historyWalk.test.js` and integration
+registration, the contract map and CAP-004 briefing. Existing session pull, production routing,
+status and OfflineContext tests are unchanged. No schema migration or server change is needed.
+
+Extracted the queue-aware deadline, between-page run budget, raw keyset cursor, delta-first
+re-walk, jittered backstop, failure memory, single flight and actor-generation fence. Sessions
+retain every export/value, exact log format, cursor JSON fields, historical delivery coverage,
+two-RPC complete-family fetch and object-form pull state. The original parent session object is
+passed through to the saver, including `group_id`; B2's additional group-id regression remains
+a later integration-merge guard.
+
+The shared walker adds child/class coverage, a smaller first page on every run (including a
+budget resume), a null window that never resets the cursor, optional RPC/save/first-commit
+timing, MR001 `disabled` and MR002 `year_mismatch`. Both stops retain the durable tuple and
+record failure; disabled uses `console.log`, year mismatch warns and marks the cursor incomplete.
+Walks with `dropLostCoverage` supply a pull-state function that the saver resolves inside its
+own transaction after rows and before cursor. Every such page and failure-marker write bounds
+all coverage snapshots to grants read through that writer transaction. The run adopts the
+bounded state after save resolution. Fresh runs write nothing. Coverage removal preserves
+all other cursor fields and `last_pulled_at`, and never creates a missing scope.
+
+The real-SQLite Probe tests cover all 16 specified cases, including a lost grant during an
+in-flight page or failure, paused re-walk snapshots, regained grants, and historical session
+coverage. The final assertion strengthening also checks an existing null window and MR002
+against an already complete cursor with a durable raw timestamp/id. The contract map now
+states that each scope lives in the EA's own file (ADR-0008), replacing the stale shared-file
+claim.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 1: `npm run test:integration -- __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js` | Exit 0: 2 suites, 36 tests passed |
+| Step 1: `npx jest __tests__/sessionHistoryStatus.test.js __tests__/OfflineContext.test.js` | Exit 0: 2 suites, 59 tests passed; existing React act warnings |
+| Step 3: same two commands after extraction | Both exit 0: unchanged 2 suites / 36 integration tests and 2 suites / 59 unit tests; `git diff --stat -- __tests__/` empty at this refactor checkpoint |
+| Step 5: `npm run test:integration -- __tests__/historyWalk.test.js` — first RED | Exit 1: 13 failed / 3 passed (16 total). Twelve new-behavior failures plus one fixture timestamp CHECK failure |
+| Same command — corrected RED before feature implementation | Exit 1: 12 failed / 4 passed (16 total), 1.511 s. Explicit assignment time fixes the fixture; executed assertions show missing class coverage, wrong first page size, ordinary query classification for MR001/MR002, lost coverage retained, null-window reset, absent timing and coverage helper |
+| Same command — GREEN | Exit 0: 1 suite, 16 tests passed, 1.709 s |
+| Step 7: same two session guard commands | Both exit 0: unchanged 2 suites / 36 integration tests (3.176 s) and 2 suites / 59 unit tests (2.527 s) |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 349 suites, 4,276 tests passed, 64.828 s |
+| `npm run test:integration --silent` | Exit 0: 53 suites, 571 tests passed, 50.846 s |
+| Focused walker rerun after null-window and retained-MR002-position assertion strengthening | Exit 0: 1 suite, 16 tests passed, 1.828 s |
+| `git diff --check` | PASS |
+
+**Choices and limits:** the Probe uses real SQLite grant/row tables and the existing repository
+transaction helper; no new dependency or schema version. Completeness is recalculated against
+the transaction's grants when bounding, so a child lost during an empty delta does not leave
+a spurious re-walk due. Session walks keep the original object save contract and do not bound
+lost grants. The two plan-accepted invisible-loss / loss-and-return-within-one-run cases still
+rely on the 6–8-day backstop. This is local traversal/SQLite evidence only. Task 4 Step 9 (commit),
+hosted/Supabase work, PostgreSQL execution, EAS, device checks and PRs belong to the controller;
+none were run here. No task implementation remains open.
+
+#### Task 7A: reference refresh switches the active academic year in any response order
+
+**Scope:** `src/db/repositories/referenceDataRepository.js`, the existing real-SQLite
+`referenceDataRepository.test.js` and `offlineSyncOutbox.test.js` suites, the contract map's
+"Profile and reference refresh" bullet and this register. Task 4 is commit `09e0d62`.
+Task 7A is independent of Tasks 5–7 and does not depend on Plan 2's phone work.
+
+Reproduced the three specified UNIQUE failures through public repository/refresh entry points:
+new-active-year first at the repository, an omitted local active year, and new-active-year first
+through `pullReferenceData`. Both old-year-first controls passed before the fix. Added
+`singleActiveColumn: 'is_active'` to the academic-year config, passed it through `getConfig`
+with a null default, and kept the clear inside the existing replace transaction, after scope
+deletion and before label retargeting and the response-order upserts. Exactly one incoming active
+year clears other active flags; zero or multiple active records do not clear. The original
+partial unique index still rejects multiple active years and rolls back the whole table.
+
+Seven new cases cover both response orders at both entry points, an omitted local active year,
+no-active/empty responses, and full rollback after the first of two incoming active years was
+inserted. Classes retain their historical academic-year FK. The refresh cases use real
+repositories for all seven tables and their own real local-state repository for the completion
+marker. Existing label-retarget/FK coverage remains green. No fetch ordering, schema version,
+unique index, sync service or handle behavior changed; no new dependency or file is needed.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 3: `npm run test:integration -- __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js` — RED | Exit 1: 2 failed suites; 3 failed / 66 passed tests (69 total), 5.321 s. Only the three specified cases fail with `SQLITE_CONSTRAINT_UNIQUE` / `UNIQUE constraint failed: academic_years.is_active` |
+| Same command — RED after strengthening the empty-response, rollback and completion-marker controls | Exit 1: same 3 failed / 66 passed tests, 4.182 s; production code still unchanged |
+| Step 5: same command — GREEN | Exit 0: 2 suites, 69 tests passed, 3.709 s |
+| Step 5: `npx jest __tests__/handleServices.test.js` | Exit 0: 1 suite, 31 tests passed, 1.786 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 349 suites, 4,283 tests passed, 66.423 s |
+| `npm run test:integration --silent` | Exit 0: 53 suites, 578 tests passed, 41.99 s |
+| `git diff --check` | PASS |
+| Read-only diff check of the plan, `offlineSync.js`, `migrations.js` and integration config | Unchanged |
+
+**Choices, limits and gates:** the active-record filter uses the same truthiness as the existing
+SQLite boolean binding. Tests use the existing real-SQLite setup and reference-refresh test
+adapter; no integration registration change is needed because both suites are already registered.
+No plan deviation or unrelated failure occurred, so no isolated failure rerun was needed.
+The 2026-10-20 Bug And Gap Register row records the failure and reuse rule. Task 7A's commit
+step is controller-owned. Hosted Supabase, PostgreSQL execution, EAS, device checks and PRs were
+not performed. Task 8 still owns MR002 refresh-and-restart orchestration; this task establishes
+the real refresh's order-independent year switch. No Task 7A implementation remains open.
+
+#### Task 5: set-wise assessment-family and Battery Run page apply
+
+**Scope:** `historyPageApply.js`, `assessmentsRepository.saveHistoryPage`,
+`batteryRunsRepository.saveHistoryPage`, two new real-SQLite suites and their shared fixtures,
+integration registration, the contract map's new Page apply subsection and the ROADMAP's
+assessment/run cheap-apply checkbox. Task 7A is `3620c46`; Plan 2's phone work is merged at
+`4cb9f7f`. No schema, server, walker or handle implementation changed.
+
+Built the 999-binding helpers for chunked id selection, multi-row insert-or-ignore and absent
+history-reference children. Existing children are never rewritten. Both savers validate a whole
+page before writing, then apply children, deduplicated run headers, families/items and resolved
+cursor under one repository transaction. Entry and final actor admission checks surround every
+awaited write; cancellation and pull-state resolver errors roll back the entire page. No await
+follows the final admission check inside either callback. No page apply writes outbox work or
+reconciles absence. Raw server timestamps are retained; items inherit their parent timestamps,
+booleans bind as 0/1 and metadata/derived values serialize to JSON.
+
+Present immutable families in every sync status keep their parent, items and outbox evidence.
+Absent run headers hydrate with `started_here = 0`; locally started runs remain authoritative.
+Other runs advance only from `in_progress` to one terminal status. A bounded multi-row CTE
+updates only status/completion/update/server-update fields. Missing local classes do not erase
+plain `class_id` values. Embedded co-EA headers from before the year satisfy the assessment FK
+without entering the current EA's run listing. Set-wise SQL is the approved substitute for a
+native prepare API that the signed-in facade does not expose.
+
+**Fixture adaptation:** the plan's default `child-1`, `user-1` and `user-2` are not UUIDs, but
+`assertSubmitShape` requires UUIDs for child, user and Programme (`assessmentFamilyPayload.js:78-79`).
+Shared `assessmentHistoryFixtures.js` uses UUID equivalents and adds matching Programme and
+staff-assignment rows after `seedCoreData`; the co-EA listing test queries the matching UUID EA.
+Validation is not weakened. The two tests keep their planned fixture meaning and test names.
+
+The first GREEN revealed a fixture teardown error: it closed the handle-owned registry writer
+before handle disposal. The facade fixture now seeds through its own new connection and closes
+that connection separately; the final focused run has no disposal warnings. Added meaningful
+guards beyond the 17 planned cases: 1,200-id lookup chunking, duplicate embedded headers, eleven
+malformed-run variants, and run-page cancellation/resolver rollback. The invalid-calendar case
+first proved that `Date.parse` normalizes February 30; a calendar-date check now rejects it
+without normalizing the stored server string. The facade test also exercises the run-update CTE.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 3: `npm run test:integration -- __tests__/assessmentHistoryPage.test.js __tests__/batteryRunHistoryMerge.test.js` — RED | Exit 1: 2 failed suites, all 17 tests failed, 6.464 s. Both factories lack `saveHistoryPage`; setup/local pending writes succeed |
+| Same command — initial GREEN | Exit 0: 2 suites, 17 tests passed, 2.461 s; fixture teardown warnings identified and corrected |
+| Same command — malformed-calendar RED | Exit 1: 1 failed / 1 passed suite, 1 failed / 30 passed tests (31 total), 2.593 s. February 30 incorrectly resolved with two inserted runs |
+| Same command — final GREEN | Exit 0: 2 suites, 31 tests passed, 2.567 s; no disposal warnings |
+| Step 5: `npx jest __tests__/productionBindingStatic.test.js` | Exit 0: 1 suite, 14 tests passed, 5.655 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 354 suites, 4,395 tests passed, 68.263 s |
+| `npm run test:integration --silent` | Exit 0: 62 suites, 719 tests passed, 60.6 s |
+| Statement/binding gates in the focused suite | PASS: 50 families / 3,050 items use fewer than 100 statements; every statement has at most 999 placeholders; 1,200 ids return the expected map across bounded lookups; 10 families / 610 items and run advancement pass the signed-in facade |
+| `git diff --check` | PASS |
+
+**Limits and follow-up:** no unrelated suite failures occurred, so no isolated failure rerun was
+needed. The plan file is unchanged. Local SQLite and facade results do not establish A03s
+timing, hosted cap/RLS behavior or end-to-end history hydration. Task 5's commit and any
+PostgreSQL, hosted Supabase, EAS, device or PR steps are controller-owned and were not run.
+Task 5 implementation is complete. Code inspection found an existing later-integration gap:
+`historyWalk.js:276-278` maps a saver rejection carrying `kind = 'query'` to `transport` unless
+it is an internal `HistoryRunStop`. Task 5 returns the specified query-classified TypeErrors;
+the walker remains outside this task's files. The Bug And Gap Register records this for the
+history-wiring task. The failure still blocks completeness; the gap is its reported category.
+
+#### Task 6: accepted-tuple mastery page merge and atomic handover delete
+
+**Scope:** `serverTimestamps.js`, mastery page apply/scope/delete exports, the child EA reconcile
+apply callback, the new timestamp and real-SQLite mastery suites, expanded reconcile tests,
+integration registration, contract map and LEARNING. Task 5 is `9bb717a`. Plan 2's correction
+writer, reader and acknowledgement ordering remain byte-for-byte unchanged; panel review fixes
+and accepted risk A3 remain the controller's later merge.
+
+The timestamp helper parses whole seconds separately from 0–6 fractional digits, normalizes
+the explicit offset, and uses integer microseconds with a safe-number check. It rejects invalid
+calendar dates, malformed/offsetless timestamps and unsafe results, including negative-epoch
+and exact-tie coverage. Lowercase UUID ordering breaks time ties as on the server. Incoming
+timestamp strings are stored raw, never rewritten through millisecond precision.
+
+Mastery pages validate before writing and commit references, values and resolved cursor in one
+writer transaction, with entry/final actor admission checks. One current-row lookup and one
+outstanding-slot lookup precede the merge. Pending/failed values and outstanding corrections
+are untouched. Synced values require a strictly newer accepted server tuple; terminal values
+accept an equal tuple too, and null server ordering is lowest. A terminal outbox row never
+blocks recovery or later advancement and remains unchanged as needs-attention evidence.
+Tests run both correction-id orderings through the real MA001 terminal finalizer and apply
+a stale page after the real acknowledgement function. Empty pages delete nothing.
+
+The reconcile now captures the children it will end, runs the existing assignment update,
+then calls `deleteUndeliveredLetterMastery` in the same admitted transaction. The helper checks
+for any remaining active assignment, deletes only synced mastery with no pending/failed/in-flight
+slot, and drops the undelivered ids from all three mastery coverage sets even when it deletes
+no values. It uses at most four statements, preserves the last-pulled stamp and unrelated
+cursors, never creates a missing scope and never changes the outbox. The original assignment
+update's `changes` still defines `ended`. Breaker refusal, same-pair supersede and pending local
+ends preserve values/coverage. A trigger-induced coverage failure proves the assignment end
+and mastery deletion roll back together; per-row fallback does not reconcile.
+
+**Necessary test adaptation:** `masteryRepository.test.js:72-74` asserted the exact three-method
+Plan 2 API. Adding the plan-required fourth method made that single assertion fail in both full
+suites. Its expected list now includes `saveHistoryPage`; every correction-ordering assertion
+is unchanged. No production redesign or schema change was needed. The additional guards cover
+null/tied tuples, page cancellation/resolver rollback, direct-helper active/empty inputs, the
+four-statement ceiling, and coverage removal when every domain value must stay.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 4: `npm run test:integration -- __tests__/letterMasteryHistoryPage.test.js __tests__/pullReconcile.integration.test.js` — RED | Exit 1: 2 failed suites; 13 failed / 29 passed tests (42 total), 6.13 s. Ten page-saver cases lack the new method; three reconcile assertions retain mastery that should be deleted |
+| Step 4: `npx jest __tests__/serverTimestamps.test.js` — RED | Exit 1: 1 failed suite, 0 tests executed, 0.847 s; missing `serverTimestamps` module |
+| Same integration command — GREEN | Exit 0: 2 suites, 42 tests passed, 2.767 s |
+| Same timestamp command — GREEN | Exit 0: 1 suite, 14 tests passed, 1.361 s |
+| Same focused integration command after additional boundary guards | Exit 0: 2 suites, 48 tests passed, 3.638 s |
+| Step 6: `npx jest __tests__/masteryState.test.js __tests__/LetterMasteryPanel.test.js __tests__/productionBindingStatic.test.js` | Exit 0: 3 suites, 41 tests passed, 6.422 s |
+| Step 6: `npm run test:integration -- __tests__/pullReconcileOffline.integration.test.js __tests__/ChildrenContextPull.integration.test.js` | Exit 0: 2 suites, 14 tests passed, 3.218 s |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 355 passed suites; 1 failed / 4,431 passed tests (4,432 total), 68.944 s. Only the exact repository API list failed |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 62 passed suites; 1 failed / 739 passed tests (740 total), 61.812 s. Same API assertion |
+| `npx jest __tests__/masteryRepository.test.js` after updating the API expectation | Exit 0: 1 suite, 30 tests passed, 2.056 s |
+| `npm run test:integration -- __tests__/masteryRepository.test.js` after that adaptation | Exit 0: 1 suite, 30 tests passed, 2.092 s |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 356 suites, 4,432 tests passed, 67.281 s |
+| Final `npm run test:integration --silent` | Exit 0: 63 suites, 740 tests passed, 50.205 s |
+| Read-only comparison of HEAD/current function bodies | PASS: `setLetterMastery`, `getLetterMastery` and `applyCorrectionAcknowledgement` are byte-for-byte unchanged |
+| `git diff --check` | PASS |
+
+No unrelated timeout or suite failure occurred. The contract map records the merge, handover
+delete and coverage rule; LEARNING explains accepted state versus local edits and refusal
+evidence. Plan-accepted late-page/last-writer re-download residuals remain: a hidden row can
+reappear locally, but readers remain current-delivery-scoped and lost coverage makes the child's
+return re-walk. The existing Task 5 query-classification follow-up in `historyWalk` remains
+outside this task. Task 6 implementation is complete. The commit step, hosted Supabase work,
+PostgreSQL execution, EAS, devices and PRs are controller-owned and were not performed.
+
+#### Task 7: three history walks and server-known scope queries
+
+Built `src/services/assessmentHistoryPull.js` with the exact public constants, scope keys,
+three independent history states and repository factories/fallbacks. Runs and assessments resolve
+one active Programme/year per run and share that year id across coverage and every RPC page.
+They use class and child coverage, page sizes 200 and first-10/then-50 respectively, and stop
+without requests when reference dependencies are missing. Mastery needs neither Programme nor
+year and uses 200-row pages and current-delivery coverage. All three configs use timing logs,
+the shared enqueue deadline/budget/overlap/backstop, and transaction-bound lost-grant coverage.
+
+The canonical queries include only synced active assignments. Assessment coverage spans class
+assignments in any Programme and synced memberships in the selected year, including exited
+memberships. Mastery coverage spans synced current direct assignments. No migration or dependency
+was added. No page performs absence reconcile or deletion. The store, application triggers and
+MR002 reference-refresh/restart remain Task 8; the walk returns the mismatch without completing.
+
+Added two real-SQLite suites and a dynamic keyset/overlap server fixture; registered both suites
+in the integration config. Tests cover the fresh-phone co-EA 61-item result plus confirmation
+union, a zero-Question run and lifecycle delta, gains and loss/return of class/delivery grants,
+pending grants excluded, year agreement and a server rollover between pages, restart from a
+saved cursor, disabled/resumed downloads and absence preserving local rows. ClassesContext now
+has proof that its pulled assignment persists into the canonical scope query and that a later
+acknowledged removal excludes it, without changing production context code.
+
+The handover suite runs the real `setLetterMastery`, real outbox engine/acknowledgement,
+real roster reconcile and real mastery walk. It preserves the pending `s` correction/outbox
+while deleting synced `k`, excludes the lost child from My Children and drops its coverage
+before a walk runs. Return recovers an old `k` behind the overlap, both inside freshness and
+after a request held across the reconcile. Only the server is fake.
+
+**Task 5 follow-up resolved.** One branch in `historyWalk.js` now preserves an external
+saver's `kind = 'query'`, just as it already preserved cancellation. Real validators for all
+three savers produced RED `transport` statuses where `query` was expected. GREEN reports
+query in status/failure log, writes the failure marker and retains the committed cursor.
+An additional malformed second-page case proves ten committed families/items remain while
+the rejected page never advances. The Task 5 Bug And Gap row is resolved. Session config,
+session guard test files and Plan 2's mastery repository are unchanged (read-only diff check).
+
+**Choices and adaptations.** Reused the existing valid UUID assessment fixtures: the plan's
+readable `child-1`/EA labels cannot pass `assessmentFamilyPayload.js:78-79` or
+`historyPageApply.js:45-47`. The handover suite retains the plan's `user-1`, `child-m`,
+`child-n` labels. Fixture setup supplies the required class grade, historical assignment/
+membership dates and active class memberships for My Children
+(`migrations.js:242-246,283-293`; `childrenRepository.js:740-745`). No production assertion
+was weakened. A two-query assessment scope (class ids plus an EXISTS membership query) avoids
+dynamic bind lists and works through the facade. RPC argument construction and page-save
+forwarding are the only small shared config helpers; no new scheduler/state machine was added.
+
+The existing Task 5/6 page-apply subsection is retained; the requested new traversal subsection
+is after CAP-004. CONTEXT broadens the history-reference definition, and all ten specified
+roadmap items have evidence pointers. The timestamp checkbox is explicitly scoped to these
+four tables' already-built INSERT/UPDATE triggers
+(`20261021120000_assessment_results_contract.sql:111-130`); future table audits remain required.
+The two physical-device gate checkboxes stay open.
+
+All recorded verification commands below use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; verified runtime `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| Step 2: `npm run test:integration -- __tests__/assessmentHistoryPull.test.js __tests__/letterMasteryHandover.test.js __tests__/ClassesContextPull.integration.test.js` — initial RED | Exit 1: 3 failed suites, 0 tests executed, 0.907 s; missing `assessmentHistoryPull` module |
+| Same command after adding the configs, before the follow-up fix | Exit 1: 2 failed / 1 passed suites, 10 failed / 22 passed tests (32 total), 3.814 s. Three executed query-vs-transport assertions plus fixture FK/date/My Children setup failures |
+| Same command after fixture corrections | Exit 1: 1 failed / 2 passed suites, 4 failed / 28 passed tests, 3.442 s. Three classification failures plus one remaining membership-date check |
+| Fixture-edit intermediate run | Exit 1: 1 suite could not parse a quoted SQL literal, 2 suites passed / 12 tests passed. The quote was corrected before the clean behavioral RED; this is not behavioral evidence |
+| Same Step 2 command — clean classification RED | Exit 1: 1 failed / 2 passed suites, 3 failed / 29 passed tests (32 total), 3.605 s. Only actual saver validation failures reported `transport` instead of `query` |
+| Same command after preserving query kind — GREEN | Exit 0: 3 suites / 32 tests passed, 3.388 s |
+| Same command with later-page rejection and missing-year guards | Exit 0: 3 suites / 34 tests passed, 4.446 s |
+| Step 4: `npx jest __tests__/productionBindingStatic.test.js` | Exit 0: 1 suite / 14 tests passed, 6.14 s |
+| `npm run test:integration -- __tests__/sessionHistoryPull.test.js __tests__/sessionHistoryPullProductionRouting.test.js __tests__/historyWalk.test.js` | Exit 0: 3 suites / 52 tests passed, 5.191 s |
+| `npx jest __tests__/sessionHistoryStatus.test.js __tests__/OfflineContext.test.js` | Exit 0: 2 suites / 59 tests passed, 3.653 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 358 suites / 4,466 tests passed, 116.629 s |
+| `npm run test:integration --silent` | Exit 0: 66 suites / 785 tests passed, 105.834 s |
+| `git diff --check` and read-only no-diff checks of session config/guards and mastery repository | PASS |
+
+The two full suites ran concurrently; no unrelated failure or timeout required a file rerun.
+Task 7 implementation and local verification are complete. The commit step is controller-owned.
+No PostgreSQL/hosted probe, migration application, hosted fixture, EAS build, device check or PR
+was run; this task adds phone walks and synthetic-remote SQLite evidence only.
+
+#### Task 8: handle-owned store, trigger wiring and history trigger budget
+
+Built `createAssessmentHistoryStore` and `useAssessmentHistoryStatus` in
+`src/services/assessmentHistoryStatus.js`. The store waits for the signed-in handle's reference
+readiness barrier and runs Battery Runs → assessments → mastery, with separate walker states,
+page/run publication versions and per-walk results. `getPullStates(userId)` resolves that user's
+active Programme scopes and unscoped mastery state; absent Programme values are null.
+Missing identity starts do nothing. A returned cancellation stops the pass, other statuses
+permit the next walk, and stale actor errors rethrow.
+
+MR002 permits one reference refresh per pass and one rerun of the mismatched walk after a
+successful refresh. Later/repeated mismatches never loop. The refresh is the real
+`pullReferenceData(referenceOptions)` through the handle's refresh barrier, with current-actor
+admission; it switches the local year whatever the response order (Task 7A). Ordinary refresh
+failure logs the fixed tag and message only, leaves the walk incomplete and still allows
+mastery. A stale refresh ends the pass. Tests execute this through the real reference
+repositories and refresh in both response orders, including failed-year-query behavior.
+
+Starts during a running pass share one trailing pass, upgraded to forced if any waiting call
+is forced. This serial follow-up closes the class-persisted-after-coverage window without
+starting concurrent walks. Reset invalidates all three walker states and all publication
+callbacks, discards the pending pass (resolving its callers with null), and allows a new actor's
+pass without waiting for the old actor. The snapshot remains generation-fenced through the old
+pass's completion. No timer, schema, dependency or new automatic retry loop was added.
+
+`handleServices` constructs the store with handle repositories/client/queue and resets it on
+close. `services.assessmentHistory.start` captures `handle.userId`; consumers cannot redirect
+the handle service to another EA. ChildrenContext resets on actor change and starts after
+roster persistence; ClassesContext starts after assignments persist and bootstrap status
+publishes; OfflineContext starts beside session history on an online foreground/reconnect when
+no roster pull was requested. These are never awaited. Assessment History has a forced
+pull-to-refresh control with a gesture-local indicator; focus still only reads SQLite.
+Page-driven reader refresh and combined History UI remain Task 9.
+
+Extended the legacy handle adapter to clone the assessment service/store and accept its three
+specified mocks. Added the two real-SQLite suites to the integration configuration, provider/
+gesture cases in the five prescribed existing suites, and a shared test fixture that runs the
+real walks and real refresh against a dynamic fake server. The static trigger inventory pins
+exactly three session and four assessment start sites. It forbids starts from repositories,
+components, hooks, upload and literacy persistence. The real-store budget makes zero RPCs at
++1/+7/+14 minutes and exactly three delta-page calls at +16.
+
+**Adaptations and choices.** `ClassesContext.test.js:7-9` was repository-only despite the plan's
+provider-case instruction. Its added provider block uses the real class repositories and a fake
+remote boundary, observes the new trigger and verifies the synced assignment, without changing
+the existing repository cases. The shared fixture uses the existing valid UUID Programme/child
+fixtures for its real assessment-page case. The refresh-control indicator follows only the
+gesture's shared promise; background page subscriptions belong to Task 9. A default set of
+independent walker states is created when the store caller omits `states`.
+
+Recorded RED → GREEN commands below all use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime check returned `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npm run test:integration -- __tests__/assessmentHistoryStatus.test.js __tests__/historyPullTriggerBudget.test.js __tests__/handleServices.test.js` — RED | Exit 1: 3 failed suites; 1 failed / 31 passed tests (32 executed), 5.755 s. Two suites could not load the missing store; the new handle case found no assessmentHistory service |
+| `npx jest __tests__/OfflineContext.test.js __tests__/ChildrenContext.test.js __tests__/ClassesContext.test.js __tests__/AssessmentHistoryScreen.plan5.test.js --maxWorkers=25%` — RED | Exit 1: 4 failed suites; 7 failed / 91 passed tests (98 total), 4.269 s. Trigger/reset/control assertions failed; the class-provider fixture also lacked isCurrent |
+| `npx jest __tests__/ClassesContext.test.js` after fixing the fixture's isCurrent | Exit 1: 1 suite; 1 failed / 6 passed tests, 1.459 s. The persisted assignment was present but the assessment-history start count was zero |
+| Same focused integration command after implementation | Exit 1: 1 failed / 2 passed suites; 1 failed / 46 passed tests (47 total), 4.223 s. Actor-snapshot assertion sampled React before B's subscription flush; corrected by awaiting that boundary inside act |
+| Same focused provider/gesture command — GREEN | Exit 0: 4 suites / 98 tests passed, 4.866 s |
+| Same focused integration command after the subscription timing correction and three additional lifecycle guards — GREEN | Exit 0: 3 suites / 50 tests passed, 4.919 s |
+| `npx jest __tests__/productionBindingStatic.test.js __tests__/sessionHistoryStatus.test.js` | Exit 0: 2 suites / 24 tests passed, 8.275 s |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 360 suites / 4,495 tests passed, 135.134 s |
+| `npm run test:integration --silent` | Exit 0: 68 suites / 806 tests passed, 125.64 s |
+| `git diff --check`; read-only no-diff check for the plan, session store/walk, shared walker and mastery repository | PASS |
+
+Both full suites ran concurrently. No unrelated failure or timeout required a file rerun.
+The production-handle test closes A during a never-resolving Battery Run request, observes a
+StaleActorError, verifies B's store is untouched and reopens A with no history failure marker.
+Additional real-store cases cover cancellation, discarding a waiting trailing pass on reset,
+failed prerequisites, repeated mismatch and disabled-walk continuation.
+
+The contract map now records store lifecycle, bounded year recovery and the exact seven-row
+trigger inventory. ROADMAP Z8 is built specifically for the three AR history RPCs; uploads,
+roster/reference and session-history pulls remain ungated. Z4 is pinned for history pulls;
+broader domain trigger budgets remain open. Task 8 implementation and local verification are
+complete. No PostgreSQL execution, hosted Supabase work,
+hosted fixture, EAS build, device check or PR was performed.
+
+#### Task 9: one History row and committed-page reader refresh
+
+Added `describeCombinedHistoryState`, leaving the session-only `describeHistoryState`
+byte-for-byte unchanged. Sync Status now reads the session, Battery Run, assessment and mastery
+states and combines both stores' running flags. Priority is running → any missing state →
+all complete/stamped/no retained failure → earliest incomplete time. The exact labels/details
+are unchanged. Assessment History uses the run and assessment states and displays only detail,
+with the same spacing as Session History.
+
+Added `children.getChildNamesByIds(ids)`: deduplicated, 200-id chunks, identity/hidden projection
+only, including history reference rows. It returns names and boolean hidden flags without
+changing roster eligibility or writing/enqueueing anything. Assessment History resolves child
+ids missing from `allChildren` through it and retains roster-name precedence. Real-SQLite
+tests exercise roster/reference/hidden/missing ids, empty input, 1,205 references, more than one
+query and at most 999 bindings per query; `getChildren` still excludes references.
+
+Home retains its session-history versions and adds assessment-history versions. Assess,
+My Children, Assessment History, Child Results and both ranking screens reload their SQLite
+reads when assessment-history `pageVersion` or `runVersion` changes. Sync Status reloads
+all four state rows on either store's versions. None of these subscriptions starts a pull.
+
+The panel-only `useLetterMasterySyncRefresh` keeps its upload-result behavior and adds a
+page-version seen-ref. A version already present at mount is seen, so the focus load happens
+once. A later page calls the existing background loader once without hiding the grid.
+`LetterMasteryPanel` itself is unchanged: taps still invalidate in-flight reads and its
+post-save load and write-in-flight guards retain their ordering. `LetterTrackerBottomSheet`
+is also unchanged and has no page signal. The new sheet test leaves a pending mark and old
+baseline untouched on a published page, then reopens and reads the baseline once. Its possible
+stale tiles while open remain the already-accepted Plan 2 A1 / Task 9 trade-off.
+
+**Small faithful adaptations.** Task 8's trigger guard rejected any lowercase
+`assessmentHistory` mention in hooks, including Task 9's explicitly required observer import.
+An executed RED found only `src/hooks/useLetterMasterySyncRefresh.js`. The guard now permits
+that one observer file through the mention check while still rejecting both history `.start`
+references there and preserving the exact seven-caller inventory and RPC budget. No start
+site changed. Six existing reader suites supplied partial repository-only handle fixtures;
+their fixtures now supply the status observer (and a real store for mixed-result history)
+without weakening production service requirements or their existing data assertions.
+
+Every recorded verification command uses
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; runtime is `v20.19.4`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npx jest __tests__/syncStatusPresenter.test.js __tests__/syncStatusScreen.test.js __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/ChildResultsScreen.test.js __tests__/childrenHistoryReference.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterMasteryPanel.test.js --maxWorkers=25%` — RED | Exit 1: 6 failed / 1 passed suites; 14 failed / 87 passed tests (101 total), 6.368 s. Missing combined presenter/name lookup and refresh/status behavior; sheet preservation already passed |
+| Same command with a partial implementation | Exit 1: 2 failed / 5 passed suites; 3 failed / 98 passed tests, 4.987 s. An edit script had stopped at a different repository destructure; remaining screen edits were completed and the Child Results test now creates a fresh React element for rerender |
+| Same seven-suite command — GREEN | Exit 0: 7 suites / 101 tests passed, 4.613 s |
+| `npm run test:integration -- __tests__/historyPullTriggerBudget.test.js` — guard RED | Exit 1: 1 failed / 2 passed tests, 1.07 s; the new read-only hook import matched the old blanket mention ban |
+| `npm run test:integration -- __tests__/childrenHistoryReference.test.js __tests__/LetterMasteryPanel.test.js __tests__/historyPullTriggerBudget.test.js` — GREEN | Exit 0: 3 suites / 31 tests passed, 5.182 s; rerun with the explicit binding-budget assertion passed 31 tests in 4.753 s |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 6 failed / 354 passed suites; 37 failed / 4,473 passed tests (4,510 total), 75.507 s. All failures were old partial reader fixtures missing the new status service |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 67 passed suites; 6 failed / 804 passed tests (810 total), 59.241 s. Same Letter Mastery Ranking fixture issue |
+| `npx jest __tests__/ChildrenListScreen.test.js __tests__/readers.mixedResults.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/AssessmentsScreen.test.js __tests__/AssessmentRankingScreen.test.js __tests__/ChildrenListScreenRefresh.test.js --maxWorkers=25%` after fixture adaptation | Initial adaptation hid the store factory in five mocked modules: exit 1, 5 failed / 1 passed suites, 39 failed / 12 passed tests, 3.49 s. Retaining actual exports fixed it: exit 0, 6 suites / 51 tests passed, 3.884 s |
+| `npm run test:integration -- __tests__/LetterMasteryRankingScreen.test.js` | The incomplete mock first failed all 6 tests (1.569 s); after retaining actual exports, exit 0, 1 suite / 6 tests passed, 2.003 s |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 360 suites / 4,510 tests passed, 73.578 s |
+| Final `npm run test:integration --silent` | Exit 0: 68 suites / 810 tests passed, 59.274 s |
+| Extra `npx jest __tests__/productionBindingStatic.test.js __tests__/sessionHistoryStatus.test.js` run concurrently with the full suite | Exit 1: 1 failed / 1 passed suites; 2 failed / 22 passed tests, 8.547 s. The duplicate binding suite raced its own `src/__binding_probe__.js` fixture (ambient-probe observation / ENOENT cleanup); the full suite's copy passed |
+| Required isolated rerun: `npx jest __tests__/productionBindingStatic.test.js` after full-suite completion | Exit 0: 1 suite / 14 tests passed, 5.972 s; no code change and no probe residue |
+| Final `npm run test:integration -- __tests__/historyPullTriggerBudget.test.js` after retaining the reference-level start ban | Exit 0: 1 suite / 3 tests passed, 0.781 s |
+| `git diff --check`; read-only no-diff checks of the plan, panel, sheet, session store/walk and shared walker; exact session presenter comparison | PASS |
+
+Both full suites ran concurrently. The extra binding-guard run was incorrectly overlapped with
+the full unit suite's copy; it was rerun alone as recorded above. No unrelated timeout occurred.
+No production fallback or test expectation was weakened to accommodate a partial fixture.
+
+The contract map records combined status, reference-name reads, page subscriptions and accepted
+sheet staleness; the roadmap now includes assessments in History. Task 9 implementation and
+local verification are complete. The commit step is controller-owned. No migration, dependency,
+network/hosted Supabase action, PostgreSQL execution, EAS build, device check or PR was performed.
+Native visual and physical two-phone gates remain open.
+
+#### Task 10: C23 — current academic year letter evidence
+
+`getQuestionResults` now accepts an inclusive `untilDate`. The new
+`getLetterEvidenceResults({ userId, childId, childIds })` reads Letter results between the
+active academic year's start and end through the existing active-Programme query. With no
+active year it returns `[]`. Ordinary history is retained and its accessor remains unbounded
+unless the caller supplies dates. No schema or write-path change is required.
+
+`pickLatestLetterResult` is the shared selector for `latestLetterResult` and the mastery
+ranking: match child/language, require a Letter Question and a reached item, exclude skipped
+results, then sort by assessment date and creation time. It filters into a new array, leaving
+the caller's order intact. The ranking screen reads the bounded accessor. `masteryState.js`
+continues through `latestLetterResult`; confirmations still have no year, recorder or Programme
+filter. Before the year's baseline, or with no active year, confirmations continue to count.
+
+The new real-SQLite suite uses two independent migrated databases, `seedCoreData`'s active
+2026 year (via `seedHistoryData`) and an inactive 2025 year. It covers the five named plan
+cases plus inclusive start/end, out-of-window dates, child filters, empty child ids and the
+continued availability of ordinary history. The screen suite also proves that last year's
+result renders 0/26. Pure selector tests retain date/time, language, child, Question, skipped,
+empty and unreached eligibility checks and verify that input order is unchanged.
+
+**Small faithful test adaptations.** `createFamilySyncFixture`
+(`test-support/assessmentFamilySyncTestUtils.js:25-46`) does not seed an academic year. Existing
+mastery-loader tests now explicitly seed 2026 (`__tests__/masteryState.test.js:14-24`), as does
+the ranking fixture (`__tests__/LetterMasteryRankingScreen.test.js:34-55`); their clocks are
+fixed within that year. The existing repository selector test now seeds its year and passes
+`language: 'xh'` (`__tests__/assessmentsRepository.questionResults.test.js:374-391`), matching
+Task 10's explicit-language picker contract instead of its previous all-language call.
+The full suites identified one more fixture: the session form's stored-evidence test had no
+academic year. It now seeds 2026 and dates the result inside it
+(`__tests__/LiteracySessionForm.submit.test.js:288-307`). Its locked tile and confirmation-save
+assertions are unchanged. No production fallback was added for an incomplete fixture.
+
+Every verification command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`;
+the runtime is `v20.19.4`. The focused unit command is
+`npx jest __tests__/letterEvidenceYear.test.js __tests__/masteryState.test.js __tests__/letterMastery.storedItems.test.js __tests__/LetterMasteryPanel.test.js __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterTrackerBottomSheet.plan5.test.js __tests__/LetterTrackerScreen.plan5.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/assessmentsRepository.questionResults.test.js --maxWorkers=25%`.
+The focused SQLite command is
+`npm run test:integration -- __tests__/letterEvidenceYear.test.js __tests__/masteryState.test.js __tests__/LetterMasteryPanel.test.js __tests__/LetterMasteryRankingScreen.test.js`.
+
+| Gate / command | Result |
+| --- | --- |
+| `npm run test:integration -- __tests__/letterEvidenceYear.test.js` — RED | Exit 1: 5 failed / 1 passed tests, 1 failed suite, 3.672 s. Executed assertions showed last-year, after-end and no-active-year evidence still counting; two tests found the missing bounded accessor. |
+| `npx jest __tests__/dashboardStats.letterMastery.test.js __tests__/LetterMasteryRankingScreen.test.js --runInBand` — RED | First run: exit 1, 2 failed suites, 4 failed / 15 passed tests, 2.559 s. Adding the rendered old-year regression and rerunning before implementation: exit 1, 5 failed / 15 passed tests (20 total), 4.181 s. Missing picker/accessor and last year's rendered evidence. |
+| Same single-suite SQLite command — GREEN | Exit 0: 1 suite / 6 tests passed, 1.367 s. |
+| Same two-suite unit command — GREEN | Exit 0: 2 suites / 20 tests passed, 2.675 s. |
+| Focused unit command, before legacy fixture adaptation | Exit 1: 2 failed / 8 passed suites, 4 failed / 272 passed tests (276 total), 7.049 s. Three loader assertions and the repository selector required an active year; the selector also required an explicit language. |
+| Focused SQLite command, before legacy fixture adaptation | Exit 1: 1 failed / 3 passed suites, 3 failed / 45 passed tests (48 total), 11.005 s. Same loader fixture issue. |
+| Focused unit command — GREEN | Exit 0: 10 suites / 276 tests passed, 7.122 s. |
+| Focused SQLite command — GREEN | Exit 0: 4 suites / 48 tests passed, 6.164 s. |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 361 passed suites, 1 failed / 4,531 passed tests (4,532 total), 70.503 s. Session form's stored-evidence fixture lacked an active year. |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 69 passed suites, 1 failed / 828 passed tests (829 total), 64.6 s. Same session-form fixture. |
+| `npx jest __tests__/LiteracySessionForm.submit.test.js --runInBand` after fixture adaptation | Exit 0: 1 suite / 14 tests passed, 5.676 s. |
+| `npm run test:integration -- __tests__/LiteracySessionForm.submit.test.js` after fixture adaptation | Exit 0: 1 suite / 14 tests passed, 5.74 s. |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,532 tests passed, 68.926 s. |
+| Final `npm run test:integration --silent` | Exit 0: 70 suites / 829 tests passed, 55.832 s. |
+| `git diff --check` and read-only no-diff checks of the plan and protected production paths | PASS. |
+
+Both full suites ran concurrently, without an extra concurrent production-binding suite. No
+unrelated timeout was identified. The plan, C1 `pullCoverage.js`, mastery loader, correction
+repository, panel, tracker sheet and history walkers have no diff. The panel's read/tap guards
+and sheet guard suites pass. `CONTEXT.md` and the contract map describe the C23 window and
+confirmation behavior. Task 10 implementation and local verification are complete. It adds
+no dependency or hosted work. The commit step is
+controller-owned; no PostgreSQL, network/hosted Supabase, EAS, device or PR action was run.
+Physical old-phone/fresh-phone agreement remains a device gate; this proof uses local SQLite.
+
+#### Task 11: mastery input completeness for the lesson engine
+
+Added `isMasteryInputsComplete({ database, userId, programmeId, childIds = [] })` to C1's
+`pullCoverage.js`. It resolves the active Programme when omitted and the active year, reads
+the assessment and mastery cursors, and delegates completed/year/failure/covered-child checks
+to the existing `isCoverageWalkComplete`. It then checks every requested child against both
+current scope queries: current-year synced class membership under an active synced class
+assignment, and an active synced direct delivery assignment. Missing dependencies or either
+cursor give false. The Battery Run cursor is irrelevant. Empty child ids give the two-walk
+answer; malformed child lists fail closed through C1's existing predicate.
+
+`services.assessmentHistory.masteryInputsComplete({ childIds })` captures the signed-in
+handle and its EA. It performs only SQLite reads, writes no cursor or outbox, starts no pull
+and caches no result. The handle-service test proves a supplied alternative user cannot
+change the captured actor, B does not borrow A's completed coverage, and A's accessor rejects
+with `StaleActorError` after switching. C1's `isCoverageWalkComplete` and
+`isSessionHistoryComplete` function bodies are unchanged, verified against HEAD.
+
+Extended `pullCoverage.test.js` with the plan's cases, including separate assessment/mastery
+failure recovery, current-year rollover, gains, immediate class/delivery loss, lost-and-regained
+grants, MR002 and an irrelevant failed run cursor. Cursors come from the real walks over real
+SQLite, with only the remote boundary fake. The 09:00/09:05/09:06/09:07 handover case uses the
+real acknowledged reconcile: it deletes `child-a`'s older 07:00 `k`, returns `fresh` without
+an RPC, leaves the returning child incomplete while `child-b` stays complete, then re-walks
+from a null keyset and restores `k`. Read-only assertions preserve sync state and an empty
+outbox and observe no RPCs. A real handle-services test covers the public engine accessor.
+
+**Adaptations and fixture choices.** The controller-authorized C1 precondition is its copied
+code/tests on this branch, rather than a main merge (plan Task 11's opening prerequisite).
+No C1 behavior was changed. The existing contract-map CAP-004 Readers bullet did not yet
+contain C1's coverage-helper explanation; it now documents those existing helpers and points
+to the new mastery completeness subsection. The rollover fixture explicitly adds 2027 class
+memberships (`__tests__/pullCoverage.test.js:195-204`), since `readAssessmentScope` requires
+memberships in the active year (`src/services/assessmentHistoryPull.js:29-38`). The first
+post-implementation run exposed a test-fixture error: the class assignment's default date
+was later than its simulated September removal, violating the lifecycle CHECK. The fixture
+now explicitly assigns it on 15 January (`__tests__/pullCoverage.test.js:159-160`); no assertion
+or production constraint was weakened. `handleServices.test.js` is the sole extra test file
+beyond Task 11's named coverage test, needed to verify the required handle-bound interface.
+
+Every command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (Node `v20.19.4`).
+
+| Gate / command | Result |
+| --- | --- |
+| `npm run test:integration -- __tests__/pullCoverage.test.js` — RED | Exit 1: 1 failed suite, 14 failed / 12 passed tests (26 total), 2.143 s. All new cases reached the missing `isMasteryInputsComplete` export; the existing C1 tests passed. |
+| `npx jest __tests__/handleServices.test.js --maxWorkers=25%` — RED | Exit 1: 1 failed suite, 1 failed / 32 passed tests (33 total), 2.254 s. The new public handle method was missing. |
+| Same coverage command, first implementation run | Exit 1: 2 failed / 24 passed tests, 2.027 s. Both failures were the fixture assignment/removal date CHECK described above. |
+| Same coverage command — GREEN | Exit 0: 1 suite / 26 tests passed, 1.94 s. |
+| Same handle-services command — GREEN | Exit 0: 1 suite / 33 tests passed, 2.135 s. |
+| `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,547 tests passed, 78.538 s. |
+| `npm run test:integration --silent` | Exit 0: 70 suites / 844 tests passed, 64.828 s. |
+| Read-only source comparison against HEAD | PASS: both existing C1 helper bodies are unchanged. |
+| `git diff --check`; no-diff check of the plan, walkers, scopes, repositories, coverage-write helpers and integration config | PASS. |
+
+The full suites ran concurrently, with no extra simultaneous production-binding test. No
+unrelated failure or timeout occurred. The contract map contains the CAP-004 reader note
+and the four-condition mastery contract. Task 11 implementation and local verification are
+complete. The commit step is controller-owned. No dependency install, network, hosted
+Supabase action, PostgreSQL execution, EAS build, device check or PR was performed. Physical
+handover/convergence and subsequent controller branch/release gates remain separate proof.
+
+#### Controller adversarial review round 1: Retry convergence, tool hydration and year recovery
+
+Addressed the three production failures reproduced by the controller on `25a901c`, with
+real-SQLite RED regressions before each implementation change. No server migration changed.
+
+**Finding 1 — terminal Retry could strand a synced wrong value.** A pull can replace the
+displayed correction id while preserving the refused terminal payload. Successful finalization
+therefore cannot require that displayed id to equal the sent id. `applyCorrectionAcknowledgement`
+now installs the returned winner after the outbox CAS succeeds unless a pending/failed/in-flight
+slot still carries a different correction. The latter, and an unsuccessful CAS, retain Plan 2's
+ordering-only behavior. The existing direct CAS and newer-tap-mid-flight tests pass unchanged.
+The history merge can also repair a synced display at an equal accepted tuple when its value,
+actor, correction or time differs from its watermark. Owed slots still block every such merge;
+consistent equal tuples remain no-ops, and terminal restoration retains refusal evidence.
+
+The end-to-end local regression uses the real engine, Retry, walks and completeness accessor:
+refusal → accepted-value pull restoration → successful Retry → immediate returned-winner
+installation → next pull still equals the server, no outbox rows, completeness true. Separate
+equal-watermark cases repair stranded correction/time and value-only mismatches.
+
+**Finding 2 — a non-null tool FK could block every page retry.** The existing reference refresh
+now fetches `assessment_tools` after programmes using its existing repository configuration.
+The history store's readiness barrier awaits this refresh in the regression; both fresh and
+previously completed caches acquire the active tool before the family/cursor commit. Its id
+is retained. An explicit refresh runs even when the cache already completed, so no new marker,
+schema, or fresh-install requirement was added. The existing signed-in provider also invokes
+this full refresh (`src/context/SignedInEAContext.js:48-55`). Test adapters and reference fixture
+maps now supply the eighth table.
+
+Local migration review found authenticated SELECT at
+`supabase/migrations/20260521115416_masi_clean_rls_policies.sql:41` and the active-only policy
+at `:79-81`, with SELECT retained by the later cleanup migrations. The fixture's tool is active;
+inactive-tool visibility remains governed by that existing policy. No hosted grant claim or
+new migration is inferred from this local review.
+
+**Finding 3 — recovery left an earlier completed run on the old year.** After MR002, a successful
+reference refresh that changes year id/start restarts both Programme walks, retaining the one
+refresh per pass bound. With an unchanged year, only the failed walk retries once. Failure and
+stale-actor handling remain bounded. `getPullStates` projects the current active year's
+`expectedWindowStart` onto each present Programme state; the combined presenter rejects a
+missing/mismatched window immediately, without changing durable cursors. Both existing UI
+consumers use those returned states. `isMasteryInputsComplete` already checked its assessment
+cursor against the active year; the new test proves it stays false after the switch and true
+after the new-year walks. Session history code and its standalone presenter are unchanged.
+
+The between-walk test completes runs in 2026, switches the server at the assessment request,
+and observes `B → A(MR002) → B(2027) → A(2027) → M`, one refresh. Before the new run commits,
+the presenter cannot say Up to date; afterwards both Programme cursors hold the new window.
+
+**Faithful test adaptations.** The earlier equal-tuple test supplied a different confirmation
+under the same immutable tuple while expecting it to be ignored. Its equal replay now carries
+the same accepted value; lower tuples still differ and remain ignored
+(`__tests__/letterMasteryHistoryPage.test.js:64-86`). The two new repair regressions explicitly
+test differing values at an equal watermark. The reference table list grows from seven to
+eight: repository maps and exact request/result assertions were extended accordingly. The
+first full runs found two remaining seven-request assertions in `handleServices.test.js:429,483`;
+both now expect eight while preserving their readiness/offline behavior checks.
+
+Every test command below uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+The affected unit command is
+`npx jest __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/letterMasteryHistoryPage.test.js __tests__/letterMasteryHandover.test.js __tests__/assessmentHistoryPage.test.js __tests__/assessmentHistoryPull.test.js __tests__/assessmentHistoryStatus.test.js __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js __tests__/syncStatusPresenter.test.js __tests__/pullCoverage.test.js __tests__/sessionHistoryPull.test.js __tests__/historyWalk.test.js --maxWorkers=25%`.
+The affected SQLite command is
+`npm run test:integration -- __tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/letterMasteryHistoryPage.test.js __tests__/letterMasteryHandover.test.js __tests__/assessmentHistoryPage.test.js __tests__/assessmentHistoryPull.test.js __tests__/assessmentHistoryStatus.test.js __tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js __tests__/pullCoverage.test.js __tests__/sessionHistoryPull.test.js __tests__/historyWalk.test.js`.
+
+| Gate / command | Result |
+| --- | --- |
+| F1 RED: `npm run test:integration -- __tests__/pullCoverage.test.js __tests__/letterMasteryHistoryPage.test.js` | Exit 1: 2 failed suites, 3 failed / 41 passed tests, 3.146 s. Retry left confirmed=true instead of false; both equal-watermark repairs were skipped. |
+| F1 GREEN: same two suites plus `__tests__/masteryRepository.test.js __tests__/letterMasteryCorrectionSync.test.js` | Exit 0: 4 suites / 108 tests passed, 5.468 s; existing CAS tests unchanged. |
+| F2 RED: `npm run test:integration -- __tests__/assessmentHistoryStatus.test.js` | Exit 1: 1 failed suite, 2 failed / 15 passed tests, 1.47 s. Both non-null tool cases hit FK failure and an incomplete assessment walk. |
+| F2 GREEN: same suite plus `__tests__/referenceDataRepository.test.js __tests__/offlineSyncOutbox.test.js` | Exit 0: 3 suites / 85 tests passed, 5.123 s. |
+| F3 RED: `npm run test:integration -- __tests__/assessmentHistoryStatus.test.js` | Exit 1: 1 failed suite, 2 failed / 17 passed tests, 1.672 s. No new-year run retry occurred, and old completed cursors still presented Up to date. |
+| F3 RED: `npx jest __tests__/syncStatusPresenter.test.js --maxWorkers=25%` | Exit 1: 1 failed suite, 2 failed / 33 passed tests, 2.245 s. Wrong/missing active windows were accepted as current. |
+| F3 GREEN: same SQLite command | Exit 0: 1 suite / 19 tests passed, 1.624 s. |
+| F3 GREEN: same presenter command | Exit 0: 1 suite / 35 tests passed, 1.903 s. |
+| Affected unit command above | Exit 0: 13 suites / 319 tests passed, 7.114 s. |
+| Affected SQLite command above | Exit 0: 12 suites / 284 tests passed, 15.154 s. |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 361 passed suites, 2 failed / 4,554 passed tests (4,556 total), 84.992 s. Two obsolete reference request counts in handleServices. |
+| First `npm run test:integration --silent` | Exit 1: 1 failed / 69 passed suites, 2 failed / 849 passed tests (851 total), 70.15 s. Same two counts. |
+| `npx jest __tests__/handleServices.test.js --maxWorkers=25%` after count adaptation | Exit 0: 1 suite / 33 tests passed, 2.184 s. |
+| `npm run test:integration -- __tests__/handleServices.test.js` after count adaptation | Exit 0: 1 suite / 33 tests passed, 2.214 s. |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,556 tests passed, 78.803 s. |
+| Final `npm run test:integration --silent` | Exit 0: 70 suites / 851 tests passed, 65.678 s. |
+| `git diff --check`; no-diff checks of migrations, plan, session/shared walks and mastery coverage helper; exact session presenter comparison | PASS. |
+
+The full suites ran concurrently; no extra production-binding suite overlapped them. No
+unrelated timeout occurred. The contract map now records acknowledgement ownership, equal
+repairs, tool hydration and current-year status/recovery. The three review fixes and local
+verification are complete. Git remains read-only for the implementer; controller review and
+commit, PostgreSQL re-verification, hosted actions and physical device checks remain separate
+gates. No network, migration, hosted operation, EAS build or PR action was performed.
+
+#### Controller adversarial review round 2: cached co-EA assessment visibility at rollover
+
+Fixed the verified round-2 finding on `8711be4`: a previously downloaded co-EA family remained
+readable after the active academic year changed, even though the server's non-owner read arm
+is year-bounded. **This is the plan's second and final adversarial review round; the two-round
+review cap is reached.** No additional review round is implied by these local verification runs.
+
+The canonical `getQuestionResults` now adds an owner/year predicate to every parent SQL
+query, including `assessmentId` and chunked child/code reads. The reader's own `user_id` arm
+has no implicit date bound. A non-owner row must satisfy an `EXISTS` on the active academic
+year with inclusive `assessment_date BETWEEN starts_on AND ends_on`; no active year means
+only owner rows remain readable. Explicit caller filters still narrow the query as before.
+Item hydration receives only the visible parents. No post-filter or deletion changes cached
+family data. `getLetterResults` inherits the rule, and the independent `countResults` SQL
+aggregate shares the same private predicate.
+
+Reader identity is explicit `userId`, or the bound handle id/registered SQLite connection
+actor when omitted; without either it returns no results. The existing unscoped repository
+test API therefore has no identity bypass. The sole production nested caller omitting an EA,
+`batteryRuns.getRunWithResults`, now explicitly supplies the bound actor while retaining its
+run-Programme override. It never uses the run recorder as reading authority. No signature changes.
+
+**Production caller audit (all result-accessor calls in `src/`).**
+
+| Caller | Reading identity / outcome |
+| --- | --- |
+| `ChildResultsScreen.js:58-62` | Passes `userId: user.id` with child/Question filters; unchanged. |
+| `AssessmentDetailScreen.js:48` | Passes reading EA plus `assessmentId` and `includeSkipped`; unchanged. |
+| `AssessmentHistoryScreen.js:73-75` | Passes reading EA and own-recorder filter; unchanged. |
+| `AssessmentResultsScreen.js:50`, `AssessmentChildSelectScreen.js:48` | Both pass reading EA; unchanged. |
+| `AssessmentRankingScreen.js:71`, `LetterMasteryRankingScreen.js:39` | Both pass reading EA; mastery ranking uses the stricter current-year evidence accessor. |
+| `AssessmentsScreen.js:42`, `ChildrenListScreen.js:111` | Both pass reading EA to Letter reads; unchanged. |
+| `HomeScreen.js:91` | Passes reading EA to the already-current-year aggregate; unchanged. |
+| `masteryState.js:25-27` | Forwards supplied reading EA to `latestLetterResult`, which forwards it to bounded evidence reads; unchanged. |
+| `batteryRunsRepository.js:105-113` | Now passes `database.userId` or the registered connection actor; this was the only missing identity. |
+
+`dashboardStats` is pure and receives these scoped rows; it makes no repository call itself.
+`countResults` currently has no production caller outside its repository export, but is protected
+as a public reader. Mastery evidence remains year-bounded for owner results too (C23), while
+ordinary owner history stays readable across years.
+
+**Real-SQLite regression.** The saver downloads a co-EA family with items and a run header
+while the child has synced delivery/enrolment and current-year class membership under a held
+class. Own 2026 history is saved too. The full real reference refresh activates 2027; the
+child remains on the roster. List, child, 1,205-child chunked, detail, Letter, count, omitted-id
+bound-actor and nested run-result reads exclude the old co-EA family and retain owner history.
+Snapshots prove the assessment and item rows are unchanged. A second case covers inclusive
+year edges, adjacent excluded dates, owner results before/after the year, and no active year.
+
+**Test/implementation adaptations.** The first fixture attempt omitted the required class
+assignment Programme. It was fixed before the valid behavioral RED run; no production change
+preceded that RED. An existing filter test expected a co-EA result without creating an active
+year. It now seeds 2026 (`__tests__/assessmentsRepository.questionResults.test.js:344-346`), with
+all filter/order/item assertions unchanged. The first implementation performed a separate
+active-year lookup. The full suite and standalone `repositoryReadPath` rerun caught a count
+budget increase from two to three queries. Moving the year lookup into the shared SQL `EXISTS`
+kept the original two-query count guard and all its assertions unchanged. There is no relaxed
+budget, new persisted state, cache wipe or UI workaround.
+
+Every test command uses `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+The final focused command is
+`npx jest __tests__/assessmentsRepository.test.js __tests__/assessmentsRepository.questionResults.test.js __tests__/batteryRunsRepository.test.js __tests__/ChildResultsScreen.test.js __tests__/AssessmentDetailScreen.safeArea.test.js __tests__/AssessmentDetailGrid.test.js __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/letterEvidenceYear.test.js __tests__/readers.mixedResults.test.js __tests__/dashboardStats.localDate.test.js __tests__/dashboardStats.hiddenChildren.test.js __tests__/dashboardStats.letterMastery.test.js __tests__/dashboardStats.sessionCounts.test.js __tests__/letterAssessmentRanking.test.js __tests__/LetterMasteryRankingScreen.test.js __tests__/AssessmentRankingScreen.test.js __tests__/SessionCountRankingScreen.test.js __tests__/repositoryReadPath.test.js --maxWorkers=25%`.
+Earlier 17-suite focused runs used the same command without `repositoryReadPath.test.js`.
+
+| Gate / command | Result |
+| --- | --- |
+| First fixture attempt: `npm run test:integration -- __tests__/letterEvidenceYear.test.js` | Exit 1: 2 failed / 6 passed tests, 1.554 s. Rollover case stopped at the missing Programme NOT NULL constraint; the boundary case reached the visibility assertion. Not counted as the completed rollover RED. |
+| Same command — valid RED before implementation | Exit 1: 1 failed suite, 2 failed / 6 passed tests (8 total), 1.471 s. Co-EA family still returned after the real rollover; adjacent out-of-year co-EA dates also returned. |
+| Same command — first GREEN | Exit 0: 1 suite / 8 tests passed, 1.629 s. |
+| Initial 17-suite focused unit command | Exit 1: 1 failed / 16 passed suites, 1 failed / 312 passed tests (313 total), 7.749 s. Existing co-EA filter fixture lacked an active year. |
+| Same 17-suite command after fixture adaptation | Exit 0: 17 suites / 313 tests passed, 7.277 s. |
+| `npm run test:integration -- __tests__/assessmentsRepository.test.js __tests__/letterEvidenceYear.test.js __tests__/LetterMasteryRankingScreen.test.js` | Exit 0: 3 suites / 20 tests passed, 3.152 s. |
+| First `npx jest --silent --maxWorkers=25%` | Exit 1: 1 failed / 361 passed suites, 1 failed / 4,557 passed tests (4,558 total), 80.574 s. Count query budget was three instead of two. |
+| First `npm run test:integration --silent` | Exit 0: 70 suites / 853 tests passed, 66.939 s. |
+| `npx jest __tests__/repositoryReadPath.test.js --maxWorkers=25%`, standalone before the SQL-snapshot fix | Exit 1: 1 failed / 4 passed tests, 0.947 s. Same two-query budget failure. |
+| `npm run test:integration -- __tests__/letterEvidenceYear.test.js` after SQL `EXISTS` | Exit 0: 1 suite / 8 tests passed, 1.923 s. |
+| Final 18-suite focused command above | Exit 0: 18 suites / 318 tests passed, 7.639 s, including the unchanged query-budget guard. |
+| Final `npx jest --silent --maxWorkers=25%` | Exit 0: 362 suites / 4,558 tests passed, 79.35 s. |
+| Final `npm run test:integration --silent` | Exit 0: 70 suites / 853 tests passed, 64.46 s. |
+| `git diff --check`; protected-path no-diff checks | PASS: plan, migrations, query-budget guard, history walkers/status, mastery correction and coverage code unchanged. |
+
+The full suites ran concurrently with no extra production-binding suite. The observed full
+unit failure reproduced alone and was fixed in production SQL, rather than attributed to load.
+Round-2 implementation and local verification are complete; no unrelated timeout occurred.
+The contract map now distinguishes ordinary owner history, co-EA temporal visibility and C23
+evidence. No migration, network, hosted Supabase action, PostgreSQL execution, EAS build, device
+check or PR was performed. Git is read-only for the implementer. Controller commit and any
+remaining release/device gates remain separate from the completed two-round review.
+
+#### Task 12 — branch gate and adversarial review (controller)
+
+Branch `feat/assessment-results-plan-3` at `0b3506d`, stacked on Assessment Results Plan 2 (merged
+through `1272172`), with lesson-plan C1's `pullCoverage.js` copied byte-for-byte (`0332c93`).
+Commands use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; PostgreSQL is local Docker PG17
+on port 65433 with `PGTZ=UTC`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 362 suites / 4,558 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 70 suites / 853 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres` | `assessment-history` 144; `letter-mastery` 20; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+| `grep -rn "current_user_can_read_child" supabase/migrations/20261022120000_assessment_history_pull.sql` | No match |
+| `grep -rn "from('assessments')\|from('letter_mastery')\|from('battery_runs')" src` | No match |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base Plan 2's tip), two rounds,
+the plan's cap:
+- Round 1, needs-attention, three reproduced failures, all fixed in `8711be4`: [high] a refused
+  correction restored by a pull and then retried successfully could leave the phone's mark
+  permanently wrong while `masteryInputsComplete` said true; [medium] a result naming an assessment
+  tool could never hydrate (the reference pull did not download `assessment_tools`); [medium] a year
+  switch during MR002 recovery left the run walk complete on the old year while status read "Up to
+  date". A residual (a result naming an inactive tool) is recorded as a known gap.
+- Round 2, needs-attention: the round-1 fixes held, including that a newer owed tap is never
+  overwritten; one new [medium] finding: cached co-EA results stayed readable after the academic
+  year rolled over. Fixed in `0b3506d` (local reads apply the server's non-owner current-year rule;
+  owner results stay unbounded).
+
+**Tasks 13–14 (rollout and device gates): not yet run.** Each step needs Jim's yes. The hosted order
+is B2, then Plan 2, then this plan; the device checks run on the combined Android build Jim chose for
+wave 1.
+
+### 2026-10-21 — Lesson plan A1: content packs
+
+**What shipped on `feat/lesson-plan-a1-content-packs`** (base `7a831fb`; plan
+`docs/superpowers/plans/2026-10-20-lesson-plan-a1-content-packs.md`):
+- `1debdcf` Task 1: the early-reader-books decodability checker vendored byte-for-byte from books
+  commit `1c301cf` into `src/utils/decodability/` plus `src/constants/contracts/decodability-v1.json`,
+  SHA-256 pinned: `index.js` `72c644e4…3614`, `lint.js` `5996751b…ff50`, `normalize.js`
+  `b25cad3e…892d`, `sounds.js` `38ed7e34…663e`, vectors `598fd3ca…2842`. All shared vector loops
+  ported except the books repo's TypeScript generator check (119 tests).
+- `5444285` Task 2: `lintMasiPack`, the shared lint plus Masi rules (ids, language, channel, word
+  bank, reader details, two-letter step blends); malformed input returns a result, never throws.
+- `ab1943c` Task 3: the frozen pack registry (`getPack`, `getPackById`, `CURRENT_PACK_IDS`) and three
+  interim letters-only release packs (`xh`, `en`, `af`), hash-pinned and append-only.
+- `9fea2f8` Task 4: preview content gated twice (C12): the build refuses `MASI_PREVIEW_CONTENT=1` on
+  the `pilot` and `production` profiles, and the runtime refuses the native `preview` and
+  `production` update channels; a `preview-content` internal APK profile for test builds.
+- `b728f3b` Task 5: `isixhosa-candidates-preview-v1`, generated from the books repo at
+  `1c301cfddcee061d5d5f915e991d7470a4ba7f37`: 3,328 candidate words, 12 letter steps, 11 sound steps,
+  one draft reader. The controller regenerated it byte-identical; `yaml@2.8.2` was already locked,
+  and an offline lockfile rebuild was byte-identical.
+- `10faef4` Task 6: `content_diagnostics` in the support export, with a 72-case checker self-check;
+  loaded lazily and fenced so a broken checker cannot break the export.
+- `b555e92`, `ae6219a`: review fixes (below).
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`):
+- Round 1, needs-attention, two [medium] findings, both verified: (1) the lint accepted zero,
+  negative and duplicate step ids, so a malformed future pack could reorder unlocking; (2) the
+  registry test asserted that every bundled release is current, which would block the documented
+  append-only upgrade. Fixed in `b555e92`: `step_id`, `step_id_duplicate` and `sound_step_order`
+  (sound steps after letter steps, per the books design); `createPackRegistry` with a two-version
+  test.
+- Round 2, needs-attention: confirmed both fixes; one new [medium] finding: a non-retired reader with
+  no readable text passed the lint, and the engine would treat it as readable. Fixed in `ae6219a`
+  (`reader_empty`). No third round: the findings narrowed, and the fix is pinned by tests.
+- Accepted plan call kept: the preview pack is bundled in every binary but resolves only through
+  `allowPreview` (decision 8).
+
+**Suites and static checks** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`, on `ae6219a`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 353 suites / 4,574 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 52 suites / 554 tests passed |
+| `npm run test:types` | Exit 0 |
+| `git diff 7a831fb --stat -- supabase src/db src/services src/screens src/components src/utils/assessmentRegistry.js src/constants/egraConstants.js documentation/rls-sync-contract-map.md` | Empty |
+| `git diff 7a831fb --stat -- src/utils/decodability src/constants/contracts` | Exactly the five vendored files |
+| `grep -rn "lessonPlan/packs" src \| grep -v "^src/lessonPlan/"` | Only `src/utils/debugExport.js` |
+| T3, `MASI_PREVIEW_CONTENT=1 EAS_BUILD_PROFILE=pilot node -e "require('./app.config')()"` | Exit 1 with the C12 refusal; `production` is refused the same way |
+
+**Device gate (Step 6): T1 and T2 not yet run.** A1 has no screen, so the 1.0x/1.3x text-size and
+visual checks do not apply. T1 (Android, Hermes, developer path) needs a `preview-content` build on
+the Galaxy A03s; Jim chose one combined Android build for wave 1, so T1 runs on that build if it uses
+the `preview-content` profile. T2 (iOS, field path) waits for an iOS `preview` or `pilot` build. Both
+must pass before any slice that runs the checker on a field phone ships in a pilot build.
+
+### 2026-10-21 — Lesson plan A3: pure engine and real-pack hand-off
+
+All local commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"` (Node
+20.19.4). Historical controller records were supplied on 2026-10-21; they are attributed
+separately from worker runs and do not claim hosted, device or field proof.
+
+| Date | Command/Check | Result | Notes |
+| --- | --- | --- | --- |
+| 2026-10-21 | Lesson plan A3: controller baseline, base `7a831fb`, before any wave-1 change | Unit: 346/347 suites, 4,202/4,203 tests; the one `designSystemGuard` failure under parallel load passed alone. Integration: 52 suites / 552 tests. `test:types`: exit 0. | Controller record, Node 20.19.4. The loaded full-unit run was not a clean pass; its isolated failure rerun was green. |
+| 2026-10-21 | Lesson plan A3: Task 1 controller check, `34ac7d1` | 25 tests passed; 20 letter cases matched the plan table. | Controller record: `packs.json` was JSON-equal to the plan; runner and purity guard were identical to its code. |
+| 2026-10-21 | Lesson plan A3: Task 2 controller check, `3365888` | 38 tests passed; 12 first-session cases matched the plan. | Controller record. |
+| 2026-10-21 | Lesson plan A3: Task 3 controller check, `d94532f` | 57 tests passed; 18 group cases; `rankGroups` comparator matched the plan. | Controller record. |
+| 2026-10-21 | Lesson plan A3: Task 4 controller check, `2ba835b` | Vectors + purity: 70/70 tests; 12 lesson-context vectors. | Controller record. |
+| 2026-10-21 | Lesson plan A3: Task 5 controller check, `84f6c87`, after A1 merge `3ca4ce0` | Vectors + purity + decodability: 207/207 tests; 17 tier vectors. | Controller record. A1 Tasks 1–4 supplied the vendored checker before Task 5. |
+| 2026-10-21 | Lesson plan A3: Task 6 controller check, `cadd466` | Vectors + purity: 147/147 tests; 25 blend vectors and the plan/choices agreement check. | Controller record. |
+| 2026-10-21 | Lesson plan A3: Task 7 controller check, `0439797` | Vectors + purity: 165/165 tests; 15 book vectors. | Controller record. Each task's worker report recorded a green full unit suite; Task 7 recorded 353 suites / 4,685 tests. |
+| 2026-10-21 | Lesson plan A3: controller check after A1 merge `9f5aa2f` | Vectors + purity + packs + decodability: 327/327 tests. | Controller record. A1 Tasks 5–6 supplied `isixhosa-candidates-preview-v1` and diagnostics before Task 8. |
+| 2026-10-21 | Lesson plan A3: Task 5 worker report, `npx jest __tests__/lessonPlanEngine.vectors.test.js -t "tiers"`; vectors/purity gate; `npx jest --silent --maxWorkers=25%` | RED: missing `blendTierForReadingLevel` export, 1 failed / 1 passed / 67 skipped. Same-command GREEN: 2 passed / 67 skipped; all 16 incremental additions passed, ending at 18 passed / 67 skipped. Vectors/purity: 88/88. Full unit: 353 suites / 4,606 tests. | Historical worker report, not a Task 8 rerun. The separate checker run passed 119 tests. |
+| 2026-10-21 | Lesson plan A3: Task 6 worker report, `npx jest __tests__/lessonPlanEngine.vectors.test.js -t "blends"`; vectors/purity gate; `npx jest --silent --maxWorkers=25%` | RED: missing `computeLessonChoices` export, 1 failed / 7 passed / 79 skipped. Same-command GREEN: 8 passed / 79 skipped; all 24 incremental additions passed, ending at 32 passed / 79 skipped. Vectors/purity: 147/147. Full unit: 353 suites / 4,665 tests. | Historical worker report. The separate checker run passed 119 tests. |
+| 2026-10-21 | Lesson plan A3: Task 7 worker report, `npx jest __tests__/lessonPlanEngine.vectors.test.js -t "books"`; vectors/purity gate; `npx jest --silent --maxWorkers=25%` | RED: expected book choices but received `books: []`, 1 failed / 1 passed / 144 skipped. Same-command GREEN: 2 passed / 144 skipped; all 14 incremental additions passed, ending at 18 passed / 144 skipped. Vectors/purity: 165/165. Full unit: 353 suites / 4,685 tests. | Historical worker report. The separate checker run passed 119 tests; supplemental read-only book tie-break/scope checks passed. |
+| 2026-10-21 | Lesson plan A3: Task 8 prerequisite, `npx jest __tests__/lessonPlanPacks.test.js __tests__/decodability.test.js` | PASS: 2 suites, 162 tests, 0 snapshots; exit 0; 3.302 s. | Local worker run. Release IDs and preview ID matched the plan; checker provenance stayed byte-identical. |
+| 2026-10-21 | Lesson plan A3: `npx jest __tests__/lessonPlanEngine.realPacks.test.js --verbose` | PASS on first run: 1 suite, 9 tests, 0 snapshots; exit 0; 1.284 s. | Task 8 Step 2 expects PASS against the completed engine, so no artificial RED or engine change was introduced. The nine per-test times follow; they are Node/Jest observations, not device latency. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — isiXhosa first session | PASS, 317 ms. | Step-1 letters and decodability. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — isiXhosa mid-course | PASS, 68 ms. | Steps 1–3 known gives `i t`; suggestions decode at step 4. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — isiXhosa all letters known | PASS, 177 ms. | No suggested pool item needs a sound step. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — xh interim release | PASS, 22 ms. | Step-1 letters, no blend/book content. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — en interim release | PASS, 20 ms. | Step-1 letters, no blend/book content. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — af interim release | PASS, 19 ms. | Step-1 letters, no blend/book content. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — xh language mapping | PASS, 20 ms. | Engine and A1 release/preview language agree. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — en language mapping | PASS, 19 ms. | Preview lookup falls back to the same-language release pack. |
+| 2026-10-21 | Lesson plan A3: real-pack timing — af language mapping | PASS, 20 ms. | Preview lookup falls back to the same-language release pack. |
+| 2026-10-21 | Lesson plan A3: `npx jest __tests__/lessonPlanEngine.realPacks.test.js __tests__/lessonPlanEngine.vectors.test.js __tests__/lessonPlanEnginePurity.test.js` | PASS: 3 suites, 174 tests, 0 snapshots; exit 0; 6.559 s. | Local Task 8 worker run, including all 35 plan/choices agreement rows. |
+| 2026-10-21 | Lesson plan A3: `npx jest --silent --maxWorkers=25%` | PASS: 356/356 suites, 4,738/4,738 tests, 0 snapshots; exit 0; 99.986 s. | Local Task 8 full unit gate with the requested shared-machine worker cap. No isolated failure rerun was needed. |
+| 2026-10-21 | Lesson plan A3: `npm run test:integration --silent` | PASS: 52/52 suites, 554/554 tests, 0 snapshots; exit 0; 70.146 s. | Local unchanged real-SQLite regression gate, run because Task 8 Step 6 explicitly requires it. No SQLite, repository, sync or handle implementation changed. |
+| 2026-10-21 | Lesson plan A3: `git diff --check`; read-only Node document/link/history audit; Git file inventory | PASS: no whitespace output; exactly the four Task 8 files; five added relative links resolve; historical nonblank log lines retained in order; learning section is append-only; three glossary terms follow Letters focused; 9 Decision and 4 Gap rows extend their existing tables. | A follow-up audit initially failed because its new-entry wording check also scanned historical Decision/Gap prose. Restricting it to the added A3 entries passed; no historical text was changed. Verification is a dated `###` subsection immediately before Decision Register, per the task brief overriding the plan's older no-subsection wording. No engine, vendored checker, pack, plan or spec edit. |
+| 2026-10-21 | Lesson plan A3: `/codex:adversarial-review` (`gpt-6-astra`), base `7a831fb`, branch `9bac675`, round 1 | **Approve, no material findings.** All 174 engine checks passed in its harness, plus 472 plan/choices identity checks, 400 history-order permutations, 400 frozen-plan checks with changed mastery, reading levels and history, eight malformed-history shapes and 18 boundary checks (unknown languages, duplicate children, Unicode counts, save dates, catalogue key order). | Controller record. A1 was reviewed separately as a dependency. The approval covers the engine contract, not the later Lesson-screen integration or device gates, which stay with C3. |
+| 2026-10-21 | Lesson plan A3: controller gate suites on `9bac675` (A1 merged), `npx jest --silent --maxWorkers=25%`; `npm run test:integration --silent`; `npm run test:types` | Unit 356 suites / 4,738 tests passed; integration 52 suites / 554 tests passed; types exit 0. | Controller record, Node 20.19.4, against the 346 / 4,202 and 52 / 552 baseline. Device checks remain C3 gates; A3 has no screen. |
+| 2026-10-21 | Lesson plan A3: C3 device/performance hand-off | **NOT RUN.** Galaxy A03s (360dp) and iPhone, both 1.0x and 1.3x text, full roster of 6 pairs: picker Up next and every row's next letters within 500 ms; attendance toggle updates letters/blends within 300 ms, with no dropped frames while scrolling. | A3 adds no screen. Preserve the plan's release-build/isiXhosa-test-pack criterion, but C3's controller must resolve the artifact choice: the candidate test pack is preview-only and C12 forbids enabling it in pilot/production artifacts. No content guard is bypassed here. |
+
+### 2026-10-21 — C1 Tasks 1–5, local schema 16, repository, signed-in EA handle, history coverage and inert Home card builder
+
+Migration 16 adds the additive, local-only `lesson_drafts` table to each EA's SQLite file. The
+database enforces one row through a constant unique `slot`, enforces unique `session_id`, and has
+no foreign keys or sync bookkeeping. An upgrade from the immediately previous schema preserves an
+existing session and owned outbox row; a second launch is a true migration no-op and leaves the
+stored draft byte-for-byte equivalent at the row boundary.
+
+#### Verification Register
+
+| Gate | Command | Result |
+|---|---|---|
+| Migration RED | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run test:integration -- __tests__/lessonDraftsMigration.test.js` | Expected FAIL: 1 suite / 4 tests failed because the named migration was undefined and `lesson_drafts` did not exist |
+| Migration GREEN | Same command | PASS: 1 suite / 4 tests; exit 0 |
+| Task 1 focused neighbors | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest __tests__/sqliteFoundation.test.js __tests__/timeEntryLocationMigration.test.js __tests__/rowVersionLocal.test.js __tests__/outboxOwnerMigration.test.js __tests__/migrations.assessmentResults.test.js __tests__/syncContractCompleteness.test.js __tests__/productionBindingStatic.test.js` | PASS: 7 suites / 108 tests; exit 0 |
+| Full unit suite | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npx jest --silent` | PASS: 348 suites / 4,206 tests; exit 0 |
+| Full integration suite | `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run test:integration --silent` | PASS: 53 suites / 556 tests; exit 0 |
+
+An earlier focused invocation overlapped a second copy of `productionBindingStatic.test.js`; both
+used its fixed temporary `src/__binding_probe__.js`, producing 2 failures / 106 passes. The required
+isolated rerun passed 1 suite / 14 tests, and the subsequent clean focused command above passed all
+7 suites / 108 tests. This was a runner-overlap artifact; no production binding changed.
+
+Evidence is local Jest and real better-sqlite3 only. No Supabase/PostgreSQL, EAS, device,
+force-quit, release, production, or field gate was run. Version 16 follows the task orchestrator's
+parallel-B2 allocation and remains subject to merge-time version reconciliation.
+
+#### Task 2 — local lesson draft repository
+
+The factory-only `createLessonDraftsRepository({ database, idFactory })` exposes `getActive`,
+`create`, `update` and `discard`, plus four named error classes and the pure `presentChildIds`
+helper. Create/update use the existing repository transaction boundary. Context and a fixed plan
+cannot drift; tracker changes retain their language code and ISO tap time; reading-level changes
+contain edits only. Updates validate the complete merged draft and replace supplied JSON fields
+whole. Unreadable JSON reports every affected column without changing the stored row. Discard
+decodes nothing and joins an explicitly supplied save transaction, so a rollback restores the
+draft with its original session id. No singleton, production caller, outbox row or server write
+was added; handle wiring remains Task 3.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Create/read RED → GREEN | `npm run test:integration -- __tests__/lessonDraftsRepository.test.js` | RED: 1 suite failed to load (`Cannot find module .../lessonDraftsRepository`), 0 tests executed. GREEN: 1 suite / 4 tests passed; exit 0 |
+| Update RED → GREEN | Same command | RED: 11 failed / 4 passed (`repo.update is not a function`). GREEN: 1 suite / 15 tests passed; exit 0 |
+| Discard RED → GREEN | Same command | RED: 3 failed / 14 passed (`repo.discard is not a function`, including the restored corruption-test assertions). GREEN: 1 suite / 17 tests passed; exit 0 |
+| Additional storage-contract coverage RED → GREEN | Same command | RED: 1 failed / 24 passed; JSON serialization silently dropped an undefined future ticks key. GREEN: 1 suite / 25 tests passed; exit 0. Covers defaults, concurrent create refusal, reserved/unknown keys, field-path errors, whole-field replacement, fixed-value equality, timestamps, all corrupt JSON columns and rejection of lossy JSON values |
+| Draft-id fixed-field equality RED → GREEN | Same command | RED: 1 failed / 25 passed; repeating the stored draft id was incorrectly rejected with TypeError. GREEN: 1 suite / 26 tests passed; exit 0. Repeating id is accepted; changing it throws LessonDraftContextError, as required by the general fixed-field rule (plan lines 310, 331–332) |
+| Production binding | `npx jest __tests__/productionBindingStatic.test.js` | PASS: 1 suite / 14 tests; exit 0 |
+| Full unit, before the final draft-id regression | `npx jest --silent --maxWorkers=25%` | PASS: 349 suites / 4,233 tests; exit 0 |
+| Full unit, final code | `npx jest --silent --maxWorkers=25%` | 348 suites passed / 1 failed; 4,233 tests passed / 1 failed (4,234 total); exit 1. The unrelated SessionCountRankingScreen pageVersion-refresh test expected rendered count 2 but still saw 0 at line 55 |
+| Required isolated unrelated-file rerun | `npx jest __tests__/SessionCountRankingScreen.test.js` | PASS: 1 suite / 4 tests; exit 0. No screen/test change; one non-failing VirtualizedList act warning |
+| Full integration, final code | `npm run test:integration --silent` | 53 suites passed / 1 failed; 581 tests passed / 1 failed (582 total); exit 1. The unrelated LiteracySessionForm.submit back-to-back-submit test exceeded its existing 5,000 ms timeout at line 130 |
+| Required isolated integration-file rerun | `npm run test:integration -- __tests__/LiteracySessionForm.submit.test.js` | PASS: 1 suite / 8 tests; exit 0 (3.524 s). No source/test/timeout change |
+
+Plan sequencing adaptation: Task 2 Step 5's corruption test calls `discard` at plan lines 507–508,
+but `discard` is not introduced until Step 11 (lines 543–544). Its final two assertions were
+deferred to the discard slice and restored unchanged before that RED run. All 17 planned test
+names and final assertions are retained. Nine additional tests cover the remaining stated
+storage rules; invalid values that cannot round-trip through JSON are refused with field paths
+rather than silently changed. Evidence remains local Jest/real better-sqlite3; physical device,
+handle reopen/isolation, hosted backend and release checks are later gates.
+
+The final full runs retain the two unrelated failures above even though each file passed its
+single isolated rerun. They are not reported as fully green aggregate exits. The integration run
+also emitted existing auth/network failure-path, stale/closed-handle, React/Paper and ChildrenContext
+undefined-`.catch` diagnostics in passing suites. No out-of-scope fix or timeout adjustment was made.
+
+#### Task 3 — on the handle, isolated per EA, durable across restarts
+
+`createHandleServices` now constructs `lessonDrafts` with the same `{ database: handle }` as the
+rest of the repository graph. The legacy component-test map includes the factory-only module;
+without a singleton export it falls through to the real handle-bound repository. No production
+caller of create/update/discard or UI wiring was added.
+
+The two planned file-backed tests use separate writer and query-only reader connections. A third raw
+connection reads the committed session id, language code and lesson date before either handle
+connection closes. Reset then requests an orderly close and awaits disposal; reopening offline
+returns the full saved draft unchanged, including tracker tap time and reading-level edits. The
+A → B → A case proves separate files/slots and refuses a late update through A's revoked handle
+with `StaleActorError`. This is local better-sqlite3 evidence, not a process-kill or Expo-device
+claim; a real force-quit remains Task 6's device gate.
+
+Standing docs now identify `lesson_drafts` as the session side of the SQLite draft lifecycle,
+with `sessions.state` left completed and the Battery Run lifecycle kept separate. C1 remains
+inert until C3; today's LiteracySessionForm stays draft-less. The finish-or-discard UI item is
+still open, and v1 has no session timer. The contract map records the local-only table and its
+Task 1–3 tests; the learning note explains the table, slot, save transaction and language choices.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Handle/durability RED | `npm run test:integration -- __tests__/lessonDraftsDurability.test.js __tests__/handleServices.test.js` | Expected FAIL: 2 suites failed; 3 failed / 30 passed (33 total). Both durability tests found `lessonDrafts` undefined; the exact repository graph lacked the new key; exit 1 |
+| Handle/durability GREEN | Same command | PASS: 2 suites / 33 tests; exit 0 |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 350 suites / 4,236 tests; exit 0 (84.478 s); no isolated rerun needed |
+| Full integration suite | `npm run test:integration --silent` | PASS: 55 suites / 584 tests; exit 0 (49.512 s); no isolated rerun needed |
+
+No plan/API adaptation was required. No Supabase/PostgreSQL, network, EAS, device, release or
+field operation was run.
+
+The integration run emitted existing intentional auth/network failure-path, React/Paper,
+closed-handle and ChildrenContext undefined-`.catch` diagnostics in passing suites. No failure,
+timeout change or out-of-scope repair was needed.
+
+#### Task 4 — per-lesson session-history completeness
+
+`pullCoverage.js` adds the pure `isCoverageWalkComplete` and async, read-only
+`isSessionHistoryComplete` predicates. The latter resolves an omitted programme and academic-year
+start through the same SQLite helpers as CAP-004, reads only that EA/programme's existing session
+cursor through the bound sync-state repository, and delegates to the pure predicate. Coverage
+requires strict `complete === true`, the pull's null failure marker, the requested/current year,
+and every present child in `rescanChildIds`. Malformed coverage fails closed; an empty child list
+gives the walk-level answer. `windowStart: null` skips the pure helper's year check for a future
+unbounded walk. No new cursor, state, pull trigger, production caller or UI change was added.
+
+The tests retain all nine planned names and exercise cursors written by the actual pull into
+real SQLite: no walk, covered and group-only children, a newly assigned child, year rollover,
+explicit-year override, failure recovery and programme separation. Three additional tests cover
+malformed fields, missing programme/year, and empty-child-list/read-only behavior. The contract
+map now treats the four cursor fields as a reader contract, distinguishes this answer from Sync's
+"Up to date", and corrects the old shared-file description to ADR-0008's per-EA files.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Pure predicate RED | `npm run test:integration -- __tests__/pullCoverage.test.js` | Expected FAIL: 1 suite failed to load, 0 tests executed; `Cannot find module '../src/services/pullCoverage'`; exit 1 |
+| Pure predicate GREEN | Same command | PASS: 1 suite / 3 tests; exit 0 (4.064 s) |
+| Real-pull cursor RED | Same command | Expected FAIL: 1 suite; 8 failed / 4 passed (12 total); `isSessionHistoryComplete is not a function`; exit 1 |
+| Real-pull cursor GREEN | Same command | PASS: 1 suite / 12 tests; exit 0 (2.729 s) |
+| Pull and binding neighbors | `npx jest __tests__/sessionHistoryPull.test.js __tests__/productionBindingStatic.test.js` | PASS: 2 suites / 49 tests; exit 0 (15.514 s) |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 351 suites / 4,250 tests; exit 0 (300.603 s); no isolated rerun needed |
+| Full integration suite | `npm run test:integration --silent` | PASS: 56 suites / 596 tests; exit 0 (131.933 s); no isolated rerun needed |
+
+No plan/API adaptation was required. Evidence is local Jest and real better-sqlite3 with scripted
+server responses, not hosted authorization or device proof. No Supabase/PostgreSQL, EAS, device,
+release or field operation was run. Assessment/mastery completeness remains AR Plan 3; the
+lesson-engine caller remains wave 2. The integration run emitted intentional failure-path logs,
+React warnings, closed-handle diagnostics and the existing ChildrenContext undefined-`.catch`
+diagnostics in passing suites. No timeout change or out-of-scope repair was made.
+
+#### Task 5 — Home "Lesson in progress" card builder, inert until C3
+
+`deriveHomeAttentionItems` accepts optional `lessonInProgress` data and places its neutral,
+non-dismissible card before sync attention within the existing two-item cap. The exact title,
+visual/spoken name lists, U+00B7 Resume subtitle and reserved `Lesson` / `{ draftId }` target are
+covered by tests, including three names and no known names. `lessonInProgressFromDraft` reuses
+`presentChildIds` and `formatNameList`; a name lookup follows attendance order, skips absent or
+unknown children, and retains a lesson with no names when everyone is absent. Null draft returns
+null. The existing AttentionArea gains only the `play-circle-outline` icon key: its canvas tile,
+22dp glyph, chevron, accessibility label and `onOpen(item)` behavior remain shared with the other
+cards. The requested glyph exists in the bundled Ionicons map.
+
+All five prescribed utility tests are retained verbatim, including the static guard that Home
+does not read drafts before the Lesson route ships. The added component test verifies the icon,
+canvas fill, chevron, copy, absence of a Dismiss button and the full item passed to `onOpen`.
+HomeScreen, navigation, repository/storage code and existing card behavior are unchanged. The
+React Native skill informed reuse of the existing IconTile/Text/styles; no new style or component
+was needed.
+
+All commands below use `PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Command after the Node prefix | Result |
+|---|---|---|
+| Card builder/rendering RED | `npx jest __tests__/homeAttention.test.js __tests__/AttentionArea.test.js` | Expected FAIL: 2 suites; 5 failed / 11 passed (16 total); missing lesson item/helper and icon mapping, with the old priority still active; exit 1 (1.626 s) |
+| Card builder/rendering GREEN | Same command | PASS: 2 suites / 16 tests; exit 0 (1.692 s) |
+| Typography and design-system neighbors | `npx jest __tests__/homeTypeRoles.test.js __tests__/designSystemGuard.test.js` | PASS: 2 suites / 235 tests; exit 0 (1.499 s) |
+| Full unit suite | `npx jest --silent --maxWorkers=25%` | PASS: 351 suites / 4,256 tests; exit 0 (242.015 s); no isolated rerun needed |
+| Final whitespace check | `git diff --check` | PASS; exit 0 |
+
+No plan/API adaptation was required. The full integration runner was not invoked for this pure
+builder/icon-map task: no SQLite, migration, repository, sync or handle implementation changed.
+Evidence is local Jest, not native visual or screen-reader acceptance. No network, dependencies,
+Supabase/PostgreSQL, EAS, device, release or field operation was involved. C3 owns draft loading,
+navigation params, the actual Lesson route, deferred-read/routing tests and the carried device
+card/resume gates; C1 deliberately adds no production caller or route wiring.
+
+#### Task 6 — gates (controller)
+
+Branch `feat/lesson-plan-c1-lesson-draft` at `dc9a439` (Tasks 1–5: `93d6a27`, `e048632`, `89cf980`,
+`8103e99`, `dc9a439`), base `7a831fb`. All commands use
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`.
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 351 suites / 4,256 tests passed, no skipped suites (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 56 suites / 596 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `/codex:adversarial-review` (`gpt-6-astra`, base `7a831fb`), round 1 | **Approve, no material findings.** It probed the v15→v16 upgrade and replay, concurrent-create refusal, frozen-plan rejection, an atomic session/attendee/outbox/draft rollback with a successful retry, and eleven cursors written by the real pull (interrupted handover rescan, failed page, recovery, uncovered child, year rollover) |
+
+**Device gate (Step 3): not yet run.** Jim chose one combined Android preview build for all wave-1
+plans (2026-10-21). The upgrade check (install the current `main` build, record a session, install
+this build over it; the app opens, Home is unchanged at 1.0x and 1.3x, Session History keeps the
+session, Export Database shows `lesson_drafts` at the merged schema version with 0 rows) runs on that
+build on the Galaxy A03s. The schema number is set when C1, B2 and AR Plan 2's local migrations are
+renumbered at the integration merge. The card gate (Step 4) is carried into the C2–C3 plan.
+| `npx jest --silent --maxWorkers=25%` | 350 suites / 4,255 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 55 suites / 601 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| `verify:*:postgres`, final migration | `session-group` 36 cases; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+| Task 1 Step 6 RED | Migration moved aside: `session-group-held-active` refused by `sessions_forward_prep_pin_defaults_insert` (recorded with Task 1) |
+| Task 6 Step 6 | The four lost-reply cases pass; `session-insert-retry-still-checks-the-row` returns `42501` |
+
+**Adversarial review** (`/codex:adversarial-review`, `gpt-6-astra`, base `7a831fb`), three rounds:
+- Round 1, needs-attention: [high] an authorized hard group delete cascaded away the held
+  assignment that authorizes sessions queued on another device; [medium] a parent UPDATE could move
+  a session's programme or group under its attendees. Fixed in `2658ecb` (EA group DELETE revoked;
+  a trigger fixes a session's programme and group, `23514`).
+- Round 2, needs-attention: [high] the group's holder could change `groups.programme_id`, the last
+  mutable input of the held-group check. Fixed in `3103a4d` (a trigger on groups, and a local guard).
+  Every input of `private.current_user_has_held_group_assignment` is now immutable or archive-only.
+- Round 3, needs-attention: no new server bypass; [medium] the round-2 local guard also blocked
+  authoritative group pulls, so a phone with a stale cached programme could never converge. Fixed in
+  `f548ed0` (the guard runs only for writes that will be uploaded). No fourth round: the fix is
+  narrow and pinned by real-SQLite tests for convergence and for pending-row protection.
+- Note: a privileged (service-role) purge of a group that sessions still reference now fails,
+  because the foreign key's `ON DELETE SET NULL` would change an immutable `sessions.group_id`.
+  Session history should not silently lose its group, so this is intended.
+
+**Hosted apply and device gates (Task 8): not yet run.** The hosted order is B2, then Assessment
+Results Plan 2, then Plan 3, each with Jim's yes; the device checks run on the combined Android
+build Jim chose for wave 1.
+
+### 2026-10-21 — Lesson plan wave 1: integration branch (controller)
+
+Branch `feat/lesson-plan-wave1` merges all seven wave-1 plans for the single combined Android build
+Jim chose (2026-10-21). `origin/main` (`f27b347`) was already contained in the plans' base
+`7a831fb`, so no rebase was needed. Start: Assessment Results Plan 3's tip `bc2dd74`, which carries
+lesson-plan AF (`5b93025`), Assessment Results Plan 2 (`1272172`) and Plan 3. Then merged:
+lesson-plan A1 (`ae6219a`, `a06b67a`), A3 (`23f38ff`, `a6c8f7a`), C1 (`f0a65e5`, `05fdca8`) and B2
+(`44f86f6`, `7a299db`).
+
+**Local schema renumbering.** Three branches each claimed local version 16. On this branch:
+`letter_mastery_current_state` = 16, `lesson_drafts` = 17, `sessions_group_history_reference` = 18.
+No device had run any of these branches, so no installed database holds a conflicting number.
+Every migration test finds its migration by name or compares with `CURRENT_SCHEMA_VERSION`; the
+foundation tripwire and migration ledger now name 18 and list all three.
+
+**Merge resolutions worth knowing.**
+- `src/services/pullCoverage.js` and its test: Plan 3's copy is C1's helper (unchanged on C1 since
+  `8103e99`) plus `isMasteryInputsComplete`, so Plan 3's version was kept.
+- Contract map, merged row by row: B2 owns the `sessions`/`session_attendees` rows and the
+  held-group retry evidence; Plans 2–3 own the assessment, item, run and mastery rows; the `42501`
+  row carries both B2's held-group evidence and Plan 2's direct-arm rule for mastery. The stale
+  `updateSession` (B2 removed it) and `letter_mastery.deleted_at` (Plan 2 removed it) paragraphs
+  were dropped.
+- `package.json` and CI keep both the `letter-mastery` and `session-group` PostgreSQL harnesses.
+- B2's "a pulled session keeps its group id" test passes through Plan 3's extracted history walker.
+
+**Gates on `7a299db`** (`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`; local Docker PG17
+on port 65433, `PGTZ=UTC`):
+
+| Gate | Result |
+| --- | --- |
+| `npx jest --silent --maxWorkers=25%` | 377 suites / 5,217 tests passed (baseline 346 / 4,202) |
+| `npm run test:integration --silent` | 76 suites / 936 tests passed (baseline 52 / 552) |
+| `npm run test:types` | Exit 0 |
+| All nine `verify:*:postgres` harnesses, every migration replayed together | `session-group` 36; `letter-mastery` 20; `assessment-history` 144; `history-authorization` 31; `upload-contract` 6 cases plus location 34, rowVersion 22 and timeEntryForward 39; `organisation-label` 23; `support-incident` 18; `assessment-results` 53; `ea-access` 43. All exit 0 |
+
+**Not yet run, each needing Jim's yes:** Assessment Results Plan 2's sync-first check and hosted
+`letter_mastery` wipe; the three hosted migrations in order (B2 `20261021140000`, Plan 2
+`20261021160000`, Plan 3 `20261022120000`); the Android EAS build of this branch; and every plan's
+device checks on the Galaxy A03s.
+
+### 2026-10-22 — Lesson plan wave 1: hosted rollout of B2 and Assessment Results Plans 2–3 (Jim's yes)
+
+Jim approved the whole rollout in one answer (2026-10-22): sync check, `letter_mastery` wipe, then
+the three migrations one at a time with read-only checks between them. Every command went through
+the isolated staging helper with the stored CLI login (the inherited `SUPABASE_ACCESS_TOKEN` is
+stale), and every output named `project_ref=segygjzpujphwvrubusm`. The migrations were pushed from
+this branch's worktree, with `.env.local` linked from the main checkout only for the duration (its
+values are never printed) and `supabase/.temp` copied for the link; the link was removed afterwards.
+To push one file at a time, the later files were held outside `supabase/migrations` and restored
+before the next push.
+
+1. **Sync check: not possible.** The Galaxy A03s was no longer connected over adb, and no iPhone was
+   available. `masi-app-sqlite` holds only test data, so the only exposure is unsynced test
+   confirmations on a test phone, which Plan 2's local re-key clears anyway.
+2. **Preflight (read-only):** newest applied migration `20261021120000_assessment_results_contract`;
+   `letter_mastery` 47 rows, all `isiXhosa`.
+3. **Wipe (Assessment Results Plan 2, Task 7 Step 4):** `delete from public.letter_mastery` →
+   0 rows remain.
+4. **B2 `20261021140000_session_group_authorization`.** Dry run listed only this file; pushed.
+   Verified: ledger row; the four B2 policies RESTRICTIVE; no `sessions_forward_prep_pin_defaults_%`;
+   the held-group helper executable by `authenticated`, not `anon`; `authenticated` has no DELETE on
+   `groups` and `groups_delete_created_by` is gone; both identity triggers present.
+5. **Assessment Results Plan 2 `20261021160000_letter_mastery_current_state`.** Dry run listed only
+   this file; pushed. Verified: ledger row; `set_letter_mastery` security definer, executable by
+   `authenticated`, not `anon`; `authenticated` has no INSERT, UPDATE or DELETE on `letter_mastery`
+   and keeps SELECT; no `authenticated` privilege on `letter_mastery_corrections`; the only policy is
+   `letter_mastery_select_writer_or_deliverer`; 0 rows. Old builds' tracker saves now fail; install
+   the new build before field use. (Corrected after the device run below: build 26's save fails with
+   `PGRST204`, "Could not find the 'deleted_at' column", not the `42501` the plan predicted, because
+   the old payload still names a dropped column.)
+6. **Assessment Results Plan 3 `20261022120000_assessment_history_pull`.** Baseline counts first
+   (read-only, no wipe): assessments 42, assessment_items 2,480, battery_runs 0, letter_mastery 0,
+   letter_mastery_corrections 0. Dry run listed only this file; pushed. Verified: ledger row; the
+   three page RPCs and `private.can_read_assessment` are security definer with an empty search path;
+   RPCs executable by `authenticated`, not `anon`; the three new SELECT policies present and the three
+   old ones gone; `private.history_pull_rollout` holds three enabled everyone rows, RLS on, no
+   policies.
+7. A final dry run reported the remote database up to date.
+
+**Not run (each needs Jim's yes):** B2's rollback-only actor probe (Task 8 Step 4), Plan 2's
+rollback-only `set_letter_mastery` smoke, Plan 3's rollback-only hosted matrix (Task 13 Step 4) and
+Plan 3's authenticated HTTP probe (Task 13 Step 5, which Jim runs interactively).
+
+### 2026-10-22 — Lesson plan wave 1: Galaxy A03s device run on the integration build
+
+Build: EAS `ea9d2099-5932-4558-a39f-ecdafade982c`, Android `preview-content`, versionCode 27, from
+`c25eace`; the APK's bundle carries every plan's markers. Phone: Galaxy A03s at 360 dp
+(`wm density 320`), text 1.0x and 1.3x, signed in as the staging Test User on `masi-app-sqlite`.
+Jim unlocked the phone and approved "test everything", which covered the disposable staging
+fixtures below. The auto-mode classifier refused Claude driving the export share sheet, so Jim
+emailed each export. Screenshots and the per-step log are in the session scratchpad
+(`scratchpad/device/`, `scratchpad/evidence.md`).
+
+**Upgrade over build 26 (C1 Step 3, B2 G1, AR2 G0).** Build 26 first recorded a session online (synced),
+a letter tap (`k`, Asanda), and a session offline. Jim's email needed Wi-Fi, which synced that first
+offline session before the install. Build 27 had been installed but not yet opened, so the phone went back to build 26
+(`adb install -r -d`), recorded a fresh offline session (two attendees) and took build 27 over it
+offline.
+
+| Check | Result |
+| --- | --- |
+| Opens past the database gate, no update or error screen, no new card | PASS |
+| Home before/after, 1.0x and 1.3x | PASS: pixel diff differs only in the sync badge digit (4 → 3) |
+| Waiting work across migrations 16 and 18 | PASS: 4 waiting → 3. Migration 16 dropped the refused letter row; the pending session and both attendees survived the `sessions` rebuild, then synced (server: 2 attendees, `group_id` null) |
+| Session history lists earlier sessions | PASS |
+| Export after reconnect | PASS: `schemaVersion` 18; migrations 16 `letter_mastery_current_state`, 17 `lesson_drafts`, 18 `sessions_group_history_reference`; `lesson_drafts` 0; sessions 31 / attendees 61 (= before + the offline session); outbox 0; `failedOutboxRows` [] |
+| AR2 G0 re-key of a stored confirmation | Not exercisable: the phone held no synced confirmation, and build 26 can no longer create one (its save fails with `PGRST204`). The re-key is covered by the migration tests |
+| Old build after the hosted change | Build 26 keeps the refused tap as "1 waiting" with a backoff and no failure card; the upgrade clears it |
+
+**A1 T1 PASS:** `content_diagnostics.decodabilitySelfCheck` = `{ vectorVersion: 1, passed: 72,
+failed: [] }`, `previewContentAllowed` true, `currentPacks.xh` `isixhosa-candidates-preview-v1`.
+**A1 T3 PASS** (Mac): `MASI_PREVIEW_CONTENT=1` refused for `pilot` and `production` with the C12
+message; `preview-content` loads.
+
+**AF (class AF1 Afrikaans, class NL1 with its language cleared on staging).**
+
+| Row | Result |
+| --- | --- |
+| Afrikaans letter test | PASS: no picker; "Anke Afrika · Afrikaans"; first row `l a m E p n L s o e`; 1 right then 10 wrong in a row stops the test, saved as "Stopped: 10 in a row wrong" |
+| Afrikaans word test | PASS: no picker; first row `die en is in op` |
+| Capital I vs lower-case l | FAIL, as expected (non-blocking; Bug and Gap row) |
+| Figtree ê ë ô | PASS: "Ênê Ëlô ôë Toets" in the Assess list, AF1 roster (bold), avatar and session selector, with no box or fallback face. The name was set on staging, because adb cannot type non-ASCII |
+| Afrikaans tracker | PASS: sheet order `a s m e k i r o n t …`; two marks; panel "2 / 26 letters mastered"; server rows `a`, `s` with `language = 'af'` (the AR2 code; the AF plan's `'Afrikaans'` predates AR2, its stated revisit trigger) |
+| Mixed-language session (review fix `ca1ec6b`) | PASS: in one session the Afrikaans child's sheet shows the Afrikaans order, the isiXhosa child's the isiXhosa order with her locks |
+| No-language class | PASS with a UX note: picker lists English, isiXhosa, Afrikaans, none ticked; Start without a choice starts nothing but closes the sheet; tracker and sheet show "No letter set for this class language." without clipping at 1.3x |
+
+**AR2 G3 PASS:** panel and session sheet at 1.0x and 1.3x, no clipping, count matches the green
+tiles, locked tiles unchanged.
+
+**AR3.** Gate 8 (Jim's yes): a per-EA `assessments` off row → forced refresh keeps the local list,
+Sync status "Incomplete since …"; row deleted → "Downloading" → "Up to date". Gate 9: "Up to date",
+"Downloading" and "Incomplete since …" at 1.0x and 1.3x, no clipping (an orphaned "AM" at 1.3x,
+Bug and Gap row). Gates 1–2 as a reinstall: Home 7.0 s after Sign in, History "Up to date" at
++47.6 s (about 29 s idle before the assessment walk starts); Assessment history lists 45 rows = the
+server's 45 for the year, none "Unknown child"; trackers match the original phone (Anke `a`, `s`
+from the mastery pull; Asanda `a`, `l`, `m` locked). The upgrade's first walk took assessments
+36 → 42 and items 2,140 → 2,480 with every cursor `complete`.
+
+**Fixtures (staging, disposable):** classes AF1 `769a29ec…`, NL1 `52bbdd44…` (language set to
+null); children Anke Afrika `454fd414…`, Glyph `304ecb7a…` (first name set to "Ênê Ëlô ôë"), Nola
+Lang `984c6ae6…`; their sessions, three Anke results (letters 0/60 and 1/60, words 0/50) and two
+mastery rows. Kept for the iPhone pass.
+
+**Not run, and why:** every iPhone row (no iPhone); AR2 G1, G1r and G2, B2 G2, AR3 Gates 3–4 (a
+second test EA: only Test User's password is available); AR3 Gates 5–7 (the `seed-volume` fixture
+prints its credentials only on Jim's terminal; the A03 has no SIM, so Gate 5 cannot run
+throttled); battery-run rows in Gates 1–2 (no run fixture); the log lines for Gates 1 and 8 (release
+logs need Share logs).
+
+### 2026-10-22 — Lesson plan wave 1: A03 device run, part 2 (second EA, volume, handover)
+
+Continues the part 1 record above, same day, same Galaxy A03s, staging `segygjzpujphwvrubusm` only.
+Jim approved each external step at the time: TestB's password reset, the volume fixture (he ran
+`seed-volume` in his own terminal; Claude ran `cleanup-volume`), the staging fixtures below, and
+two more server-switch drills. Jim emailed every export and log. Gates 6 and 7 ran on build 28
+(`5055da54…`, the UI-polish branch, which carries all of wave 1 and changes only the first-failure
+rule on the sync path); everything else ran on build 27. Per-step evidence and screenshots:
+`scratchpad/evidence.md`, `scratchpad/device/`.
+
+**Second EA.** TestB's password was reset through the admin API and stored in `.env.local`, never
+printed. ADR 0008 keeps each EA's database across sign-out, so two EAs on one phone stand in for two
+phones (a shared-phone run, not concurrent). Fixtures: a session by Test User with `group_id` =
+Test User's Group 1 and Asanda attending (`2111a0a7…`); TestB co-delivering Asanda (`adeefe67…`);
+TestB on class 1A (`93c6b2e1…`). These stay for the iPhone pass.
+
+| Gate | Result |
+| --- | --- |
+| B2 G2 (fresh database for TestB, group never on the phone) | PASS: first download finished with no sync failure; the ranking counts all 13 of Asanda's sessions, the grouped one included; TestB's export shows sessions 16, `groups` 0, `group_ea_assignments` 0, `child_group_memberships` 0, outbox 0 |
+| AR3 Gate 3 (second EA on a shared class) | PASS: class 1A shows "1 child, 0 groups" (Asanda only); her tracker shows Test User's assessment locks (3 / 26); Child Results shows Test User's 3 / 60; TestB's own Assessment history is empty; the control child (Gua) is in no roster, test picker or session picker; Home "1 of 9 children assessed" |
+| AR3 Gate 4 (handover and back) | PASS: Test User confirmed `k` for Kunaal; Head Office moved him to TestB; Test User's export then held no letter row for him; TestB showed `k` taught, un-confirmed it and synced; moved back, Test User's tracker shows `k` not mastered; the log shows `[LetterMasteryHistory] start forced=false mode=rewalk_due` at 10:59:42Z |
+
+**Volume account** (2 English classes, 70 children, 30 delivered, 140 results, 8,540 items, 780
+confirmations; namespace `9508002b…`, removed afterwards with zero residue).
+
+| Gate | Result |
+| --- | --- |
+| AR3 Gate 5 (first commit, volume) | PASS on Wi-Fi (no SIM, so not throttled): `[AssessmentHistory] end … pages=7 durationMs=19977 complete=true rpcMs=6284 saveMs=13419 firstCommitMs=1558`; two later fresh runs 1,687 ms and 1,677 ms |
+| AR3 Gate 6 (interrupted download) | PASS: three force-stops about 5 s into a download and one Wi-Fi drop mid-walk; History reached Up to date; the export matches the server exactly (140 / 8,540 / 780), every cursor complete with no `lastFailureAt`; the resumed assessment walk took 6 pages against 7 fresh, so a committed page was kept, not refetched. The start lines carry no cursor position, and the lines from the first two killed runs were lost (see the logger row) |
+| AR3 Gate 7 (lesson during the first download) | PASS on the second attempt: marks at 13:09:30Z during the assessment walk and the submit at 13:09:33.4Z during the letter-mastery walk (13:09:31.337–34.525Z); the confirmation appeared about 0.7 s after the tap (screen recording at 10 fps); the download completed; the marks reached the server as `en` with their own times (13:09:30.343, 13:09:30.945) and showed after a reopen. The first attempt submitted 51 s after the download ended, because a dump-driven script was too slow; the rerun replayed learned coordinates |
+| AR3 Gates 1, 4, 5, 8 log lines | Gate 1 `[AssessmentHistory] end status=complete pages=3 … complete=true`; Gate 4 and 5 as above. Gate 8's lines were lost: the log starts at the 09:27Z reinstall, after the drill. Its on-screen criteria passed in part 1, and a second drill on build 28 passed again |
+
+**Not run:** every iPhone row (AF, A1 T2, B2 G1/G2, C1, AR2 G1–G3, AR3 Gates 1–4 and 9); AR2 G1, G1r
+and G2, which need two phones at once; AR3 Gate 5 throttled to 3G (no SIM); the battery-run rows
+in AR3 Gates 1–2 (no run fixture).
+
+**Observations** (no gate failed on them): a fresh sign-in waits about 35 s for the domain pull
+before any history walk starts, and that pull logs no timing; with Wi-Fi off, the in-flight
+battery-run request failed after about 13 s and the walks then restarted and failed nine times in
+5 s while NetInfo reported offline, until the budget stopped them; on the volume account, an empty
+battery-run page took 21.6 s and 12.0 s to save after the restarts, against 245 ms on a clean run,
+which points at writer contention.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-21 | AR Plan 3 review round 2 enforces cached assessment owner/year visibility in the canonical parent SQL and count aggregate. The active-year test stays inside the same statement; nested run reads supply their bound reading EA. The plan's two-round adversarial-review cap is reached. | A cached, once-authorized co-EA result must not remain readable after its year expires. Retaining rows preserves owner history, and a SQL predicate protects every accessor path before item hydration without weakening query budgets or relying on caller date filters. | A release/device gate exposes a concrete remaining visibility mismatch; further work requires explicit scope beyond this completed review cap. |
+| 2026-10-21 | AR Plan 3 review round 1 uses outbox ownership for mastery acknowledgement, permits equal-watermark display repair without owed work, hydrates tools through the existing full reference refresh, and restarts both Programme walks after a recovery year change. Combined status checks read-time active-window context. | A restored display id cannot own a refused payload's Retry, a watermark must describe the displayed accepted value, a valid FK must be hydrated before page apply, and a completed cursor from the previous year cannot establish current completeness. Existing CAS, one-refresh budget and session semantics remain load-bearing. | Controller adversarial review or physical refusal/Retry, non-null tool, or between-walk year-change gates expose a further convergence or authority mismatch. |
+| 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |
+| 2026-10-21 | AR Plan 3 Task 10 bounds assessment evidence to the active academic year's inclusive dates and shares one child/language selector between tracker reads and the mastery ranking. No active year supplies no assessment evidence; confirmations still count. | A phone retaining last year's results must agree with a fresh phone downloading only the current year. Date filtering belongs in the repository accessor; stored items still determine mastery, while confirmations remain current child state. | Physical rollover/convergence gates or lesson-engine integration expose a different evidence window or selector. |
+| 2026-10-21 | AR Plan 3 Task 9 presents one History status over all four walks and observes page/run versions only to re-read SQLite. The panel's existing background loader receives page signals; the open session sheet receives none. | Upload completion cannot establish inbound completeness, reference children need names without roster authority, and a page observer must not become another pull trigger. Preserving the panel's tap/read fences and the sheet's baseline avoids changing accepted correction intent. | Device gates expose stale displayed data, extra pulls, tap rollback or a new need to refresh an open sheet safely. |
+| 2026-10-21 | AR Plan 3 Task 8 serializes one coalesced trailing history pass and permits at most one reference refresh/restart per pass on MR002. The store and all triggers capture the signed-in handle; close/reset fences all old publications. | Joining an in-flight pass can miss a class persisted after its coverage snapshot. One follow-up closes that window while normal freshness still bounds RPC traffic; a bounded real refresh recovers year disagreement without a retry loop. | Provider/device trigger budgets, actor-close or year-rollover tests show extra requests, stranded coverage or stale publication. |
+| 2026-10-21 | AR Plan 3 Task 7 uses synced server-known grants for assessment/run/mastery coverage, with one resolved year per Programme run and the existing transactional bounds on every durable write. Saver query classifications survive the traversal boundary. | Timestamp progress alone cannot detect authorization gains or recover a deleted old mastery row. Lost coverage makes return a gain, and expected-year agreement prevents a completed cursor for the wrong year. One extra classification branch fixes the Task 5 reporting gap without changing session traversal. | Controller review or device year-rollover/handover gates expose a mismatch in grants, cursor progress or recovery. |
+| 2026-10-21 | AR Plan 3 Task 6 orders mastery pulls against accepted server tuples and couples handover deletion with coverage removal in the acknowledged assignment transaction. Terminal outbox evidence never owns or blocks the accepted value. | A stale page must not undo a newer acknowledgement, a phone clock must not block accepted-state convergence, and an old timestamp cursor cannot recover locally deleted rows unless the returning child is a coverage gain. The existing breaker admits both assignment ending and deletion together. | Device handover, stale-page or refusal-recovery gates expose convergence or visibility behavior outside the plan's accepted residuals. |
+| 2026-10-21 | AR Plan 3 Task 5 uses multi-row statements with a 999-binding ceiling for assessment-family and run page apply, including set-wise terminal run advancement. | The signed-in facade exposes individual SQL calls rather than native prepare handles. Bounded batched statements preserve one page/cursor transaction while avoiding per-item calls; present immutable families and locally started runs remain untouched. | A03s first-commit timing, production facade compatibility or larger page measurements require tuning within the same atomicity contract. |
+| 2026-10-21 | AR Plan 3 Task 4 shares CAP-004 traversal while retaining sessions as a historical-delivery config. Revocable-grant walks bound all coverage snapshots inside each page/failure write transaction; handover has a db-level removal helper. | Timestamp progress cannot establish authorization coverage. Reading grants in the committing writer prevents an in-flight page from restoring a grant lost while it waited, and preserving the session object contract keeps existing consumers stable. | Assessment/mastery integration, handover or device gates expose coverage restoration, cursor drift or a session regression. |
+| 2026-10-21 | AR Plan 3 Task 3 marks disposable Auth users with an admin-only fixture namespace and never persists fixture credentials. Recovery cleanup discovers that namespace and verifies exact zero residue; only seed-volume prints the gate credentials on a TTY. | A namespace survives a lost create response without a secret-bearing local manifest. Exact target validation and safe stage-only errors keep hosted credentials out of other output paths. Synthetic probe.1 content preserves the prescribed 61-item cap test without mislabelling published card data. | Controller hosted probe, cleanup/failure recovery or seeded device gates expose a fixture ownership or content-contract mismatch. |
+| 2026-10-21 | AR Plan 3 Task 2 implements the approved embedded-header read rule and expected-year check in the Programme pagers. | A readable family needs its referenced run for the local FK even when the run started before the year; the caller's expected year must agree with server authority before any page can complete. Run SELECT/pager bounds and other Question grants stay independent. | Controller PostgreSQL header/year tests, dense-plan gate or hosted HTTP proof exposes a contract mismatch. |
+| 2026-10-21 | Assessment Results Plan 3 Task 1 keeps owner reads unbounded, class reads active-year bounded, and uses the SAST run start date; mastery retains Plan 2's last-writer/current-deliverer rule. | These are separate positive grants from the approved plan. A history SELECT change must not broaden delivery/group/creator authority or change the write RPCs. Rollout seed reapply preserves controller decisions. | Controller PG17 read matrix, switch precedence/reapply or existing upload harness exposes a contract mismatch; resolve before hosted apply. |
+| 2026-10-21 | Assessment Results Plan 2 Task 4: one RPC per correction, never batched; volume is a few rows per session. | A parsed reply returns the winner and belongs to one claimed correction; atomic acknowledgement must preserve a newer owed local correction. Mastery ordering uses correction time/UUID and receipts, not send-time row versions. | Field volume makes per-correction requests material, or a reviewed batch RPC preserves the identical per-correction receipt and acknowledgement contract. |
+| 2026-10-21 | Home's draft loading and `openItem` parameter forwarding ship with the `Lesson` route in C3. Reserve `Lesson` with `{ draftId }`; C1 ships only the inert card builder and icon. | A C3 bundle can leave a durable draft before an OTA rollback within the same runtime. A rolled-back bundle must never show a card for a route it does not register; card wiring and route registration must travel together. | C3 registers `Lesson` and removes the temporary Home-does-not-read-drafts guard, with real navigation and deferred-read tests plus the carried device gate. |
+| 2026-10-21 | Lesson draft context, language code and plan are fixed at the storage boundary (C14, C18); tracker changes must be in the lesson's language; the save path deletes the draft in its own transaction. | A resumed lesson must preserve its original context and correction times. `discard(id, { transaction })` joins the caller's save transaction; a failed save restores the same draft/session id. JSON validation prevents silently lost edits. | Wave 2 changes the lesson-context contract or the save transaction boundary. |
+| 2026-10-21 | **Session inserts are insert-or-ignore by id; `updateSession` deleted** (B2 Task 6). | A committed session whose response is lost retries before its attendees; merge upsert invokes `sessions_update_active_assignment_after_attendee` and can go terminal because no attendee has landed. Insert-or-ignore never changes stored content, still runs INSERT checks and acknowledges no error, as for immutable assignment inserts. Sessions remain unversioned and unbatched. The unused edit method re-saved as insert and would silently lose server edits, so it is removed; attendees retain merge upsert because their UPDATE policy needs no extra authority. Four new PostgreSQL cases retain controller execution as a separate gate. | saved-session editing ships |
 | 2026-10-17 | **Field-continuity decisions (Jim).** (1) The **server** closes a time entry left open for more than ten hours; the phone-only close is not enough. (2) Android backup **excludes every SQLite database** (Claude's recommendation, accepted). (3) Losing an unfinished session or assessment form on navigate-away or process death is **accepted for the pilot**. (4) Revocation follows **Zazi's model**, operated by a script until a Head Office admin website exists. | (1) A phone that stays offline or unopened leaves the hosted row open indefinitely, so staff reports cannot tell a forgotten clock-out from a long day. (2) A restored database replays already-accepted work (Zazi ZZ-BUG-20260907-001); the server is the recovery path. (3) Drafts belong to the planned SQLite draft/run lifecycle, not a temporary patch. (4) One proven operator procedure across both apps; the website is later Head Office work. | Field reports of lost forms; the server close is found to fight legitimate long shifts; a Head Office admin surface is built. |
 | 2026-09-04 | Treat 1,000 rows as the verified hosted PostgREST response cap and require explicit bounded pagination, deadlines, and completeness accounting in the first implementation of every potentially larger pull family. | A real cap-plus-one request returned exactly 1,000 of 1,205 rows with HTTP 206 and an exact content range. A successful but capped response is incomplete replication, not a performance inconvenience; the current assessment-item estate is already close enough that a non-paginated intermediate contract would be throwaway and unsafe. | The hosted API cap is deliberately reconfigured and re-proven through an equivalent cap-plus-one probe, or a family moves behind a server operation whose response-completeness contract is independently bounded and tested. |
 | 2026-08-29 | Treat an authorized session as one complete delivery-history aggregate. Owning the session or having a historical direct delivery assignment to any attendee grants the complete parent and every attendee row. | The parent activities JSON already carries child-keyed facts for the delivery event, and a child-filtered attendee list would imply a privacy boundary that does not exist while also misrepresenting the event. Admission to the session is the authorization boundary. | Masi introduces a less-trusted reader class or genuinely sensitive per-child facts. Put such facts behind a separately authorized table or redacted projection rather than silently adding them to this aggregate. |
@@ -1221,6 +3767,23 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 | 2026-10-20 | **Assessment Results Plan 1: one complete Question family, one authenticated write call, one acknowledgement** (ADR-0009). Standalone and battery evidence share `question_code`; item identity stays unchanged. | Partial uploads cannot masquerade as low scores. A single durable payload and atomic local acknowledgement make replay safe; server identity checks distinguish an accepted retry from a different family. Run headers use a separate forward-only RPC and precede linked Questions. | Submitted answers become mutable, Questions stream partial evidence, or privileged writers add post-submission evidence. Hosted apply still needs Task 14 approval. |
 | 2026-10-20 | **Assessment readers use stored items and explicit scopes.** Case-folded reached-item mastery includes WelaPLUS Q1/any recorder; assessed counts use the active academic year, Total counts qualifying result rows, Avg score averages latest raw scores, and ranking grade uses local-day membership intervals with current-class fallback. | A test's evidence must survive entry-point, item-set layout, recorder and class changes. No active year or unknown language must not silently mean all-time or English. Confirmation labels/identity remain Plan 2. | A programme needs a different business timezone, count definition, assessment scope or confirmation conflict rule. |
 
+| 2026-10-20 | **Lesson plan design approved, then aligned with assessment results (rev 2).** Spec `docs/superpowers/specs/2026-10-20-lesson-plan-design.md`: languages are codes (`af` for Afrikaans); the Afrikaans letter test is an `af` copy of Grid A (the same 60 letters as Zazi's `afrikaans_60_v2`); track B1 (mastery inputs) is AR Plans 2–3 with five asks (§7.6). Jim: J21 this workstream writes and builds AR Plans 2–3; J22 `yaml@2.8.2` as an exact devDependency; J23 a child in an EA's group is always one of that EA's own children. | The lesson-plan spec was written against `97e088c`; #89/#90 merged the same day and settled language identity, the family upload and the mastery re-key. Adopting the approved, built design avoids two parallel ones. | AR Plans 2–3 change their contracts, or Head Office seeds a group member without a direct assignment. |
+| 2026-10-20 | **Wave-1 plans written and Codex-reviewed:** `2026-10-20-lesson-plan-{af-afrikaans,a1-content-packs,a3-engine,c1-lesson-draft,b2-session-group}.md` and `2026-10-20-assessment-results-plan-{2,3}.md`. Build order: AF first; AR Plan 2 after AF; AR Plan 3 after Plan 2 and C1's `pullCoverage.js`; A1, A3, C1 and B2 in parallel. Wave 2 (A2, C2–C3, C4, C5) is planned once wave 1 is in code. | Rounds per plan: AF 1, C1 1, B2 2 (approved), A1/A3 2, AR Plan 2 2, AR Plan 3 3. Each round's findings were verified against code before fixing; rounds stopped when findings narrowed to rare timing races, which are recorded as accepted risks in the plans. | A build task finds a plan contradicting the code it cites. |
+| 2026-10-20 | **Accepted plan risks (Codex rounds; no code change):** an open session tracker sheet can show a stale tile after a sync supersedes or refuses a confirmation (AR Plan 2 A1; its refresh was dropped because it raced with cancel taps); a clock rollback can keep back a later explicitly timed sheet tap until upload (AR Plan 2 A2); a developer-build draft pinned to a replaced preview pack shows the no-content state (A1); a refused mastery correction restored by the pull and then manually re-sent can leave the phone showing the restored value (AR Plan 3). | Each needs a rare sequence (a wrong clock and its correction, a manual retry after a refusal and a regained grant, a developer-only preview regeneration). The fixes would add machinery out of proportion to the risk. | Any of them is seen in the field or in a device gate. |
+| 2026-10-21 | **Lesson-plan AF plan calls.** (1) Package Questions keep bundled `en`/`xh` defaults only, so the battery never gets Afrikaans. (2) Dead `egraConstants.js` sets are left in place; only `AFRIKAANS_PEDAGOGICAL_ORDER` is added. (3) The tracker-change slice lands before Afrikaans enters the registry. (4) A pending change is valid only as a non-null object with boolean `mastered`, a code with a tracker order, a letter in that order and a parseable `madeAt`. (5) The tracker sheet's language is fixed when it opens, from the opened child's own class (round 1 replaced the first-selected-child default). (6) `af` is appended last in each map. (7) Item sets are typed, then frozen by statement. (8) Standalone languages are checked separately from battery languages. (9) Score-band and EGRA docs corrected for codes and step-by-step capture. | Each keeps Afrikaans additive and keeps English and isiXhosa behaviour unchanged, while closing the mixed-language mislabel at its source. | AR Plan 2 lands (labels become codes); the real Afrikaans pack lands (A2); WelaPLUS gains Afrikaans. |
+| 2026-10-21 | **Lesson plan A1 plan calls.** (1) Pack ids `<name>-interim-letters-v<N>` and `isixhosa-candidates-preview-v<N>`; "current" is the explicit `CURRENT_PACK_IDS` map. (2) Pack language names map to codes inside A1 (`PACK_LANGUAGE_CODES`), own-property only. (3) C12 uses two checks, build profile and native update channel, plus a `preview-content` test profile; no in-app toggle. (4) Lint strictness: word step equals its first decodable step, normalised text, syllables match, every reader has details, two-letter step blends; after review, positive unique step ids with sound steps after letter steps, and no empty active reader. (5) Packs are deep-frozen; release files are hash-pinned and never removed. (6) The test pack is generated from the books repo and refuses drift. (7) The Hermes check lives in the support export, loaded lazily and fenced. (8) The preview pack is bundled in every binary and resolves only through `allowPreview`. | Content comes from the books project as a versioned contract; Masi validates and gates it rather than editing it, and old releases stay resolvable for saved sessions. | The books project ships its own preview file; the real isiXhosa pack is released; A2 moves the tracker to packs, taking the `PEDAGOGICAL_ORDERS` agreement test with it. |
+| 2026-10-21 | Lesson plan A3: the engine is a pure functional core, version `1`, with plain inputs and JSON vectors beside it. `today` is supplied, never read from the clock; no I/O, React state, assessment-list imports or module-level mutable collections. | Advice is deterministic, the same vectors can prove a server port, and the checker remains unchanged. Reasons/tags are codes; C3 owns user-facing copy. | A new engine version or input contract is approved. |
+| 2026-10-21 | Lesson plan A3: `PACK_LANGUAGE_BY_CODE` is frozen `{ xh: 'isixhosa', en: 'english', af: 'afrikaans' }`; usable packs need an own code match and nonempty teaching order. No English fallback for null/unknown/`zu`; manual letters use `alphabet ?? []`. | Pack names and app codes differ; the real-pack smoke pins the map to A1's loader. Steps sort by step and missing content arrays/maps are empty. | A1 adds a language or changes the shared catalogue contract. |
+| 2026-10-21 | Lesson plan A3: known letters come from C23's loader, never from engine reads. Present children deduplicate first-wins; known letters case-fold. Group mastery is all present when fewer than 3, otherwise at least 80% or at most one behind. Suggest two unknown letters, or every unknown step-1 letter only with complete first-session history; preserve reason precedence `no_children` → `no_pack` → `first_session` → normal/all-known. | Out-of-order mastery is real knowledge; unlocked letters are the step prefix plus mastered letters, and content is filtered by sound set rather than step number. | The pedagogy or mastery-loader contract changes. |
+| 2026-10-21 | Lesson plan A3: session IDs deduplicate first-wins; programme/year/today window applies again inside the engine; per-child ordering is date, creation timestamp, ID descending. Last 3 sessions rank blends; last 5 determine recent books. Up next uses current members, skips today, then oldest seen, fewest sessions in the Monday-start week, group number/name/ID ties. | Retained older rows, wrong future clocks and local/pulled duplicate rows must not alter advice. Old-form sessions still consume recency slots. | The history window or scheduling policy changes. |
+| 2026-10-21 | Lesson plan A3: `deriveSessionReadingLevel(blendsDone)` deliberately drops the sheet rev-1 `pack` argument. Count each ticked item's own normalized Unicode code points; ignore zero counts; non-array/no counted item gives null. Tiers are frozen `READING_LEVELS.slice(1, 5)`. | Counting normalized letters is pack-independent; a lower-tier top-up item must not be recorded as the displayed higher tier. | A future rule measures sound units instead of letters. |
+| 2026-10-21 | Lesson plan A3: the 2-letter pool re-checks `letterCount === 2`, even behind A1's `step_blend_length`; only the word bank supplies 3/4/5+ items. First normalized occurrence wins. Rank rotated usable items in four explicit suggested-letter/recent buckets, then top up from whole nearest-lower tiers until at least six items; suggest at most six. | An unlinted longer step blend is never misclassified. The group hash and supplied day make rotation stable without relying on sort stability; the app invents no content and never consults assessment word lists. | Pool source or ranking rules change. |
+| 2026-10-21 | Lesson plan A3: Frozen plan rule — reason, suggested/unlocked letters and rotation day stay the plan's. A valid frozen blend tier anchors the default tier, six suggestions and Suggested book; browse pool remainder, higher tiers, child IDs and book Read dates refresh. A null frozen tier recomputes tiers/book from frozen letters; no pack/children still gives no tiers/books. | A pull or later-day resume cannot rewrite what the EA was advised. `evaluateLesson` and per-call token caches keep plan/choices aligned; the runner checks identity on the plan's own inputs. | C3 changes the freeze boundary or draft pack pinning. |
+| 2026-10-21 | Lesson plan A3: books exclude retired readers; catalogue order is step, position within that step, then ID. Readability excludes normalized tricky words and requires unlocked sounds. Choose highest-step readable non-recent book; otherwise oldest latest read by date/timestamp/ID, then higher step/catalogue ties. ECD has no book row. | The whole-window latest read supplies Read dates, independently of the five-session recent set. Multi-letter sounds stay locked in v1. | Sound-step or book-selection pedagogy changes. |
+| 2026-10-21 | Lesson plan A3: save retains a plan exactly when lesson date equals `made_on`, however late; an unfrozen plan recomputes only on its own day. Class resolution uses the group's class or its current members, never children added for the day. | C14 preserves dated advice as evidence; C18 prevents attendance from switching language. Missing plans are programmer errors, not invented advice. | Lesson-date, class or language ownership changes. |
+| 2026-10-21 | Historical group reference: rebuild local `sessions` without the group FK (v 16); rejected a history-reference `groups` row. | Authorized session history can name a group the EA never held or no longer holds, while the roster pull downloads only currently assigned groups. A synthetic group needs a name the history API lacks and makes group readers, edits, archive, reconcile and ownership repair reason about a new access-bearing row kind. A plain id preserves history without creating a group or assignment, matching `battery_runs.class_id` in #90; local capture validation belongs in `saveSession` (B2 Task 4). | A screen needs a session's group name offline. |
+| 2026-10-22 | **Accepted risk A3 stays accepted (Jim).** A letter correction made on a phone whose clock is slow, after it has observed another phone's newer correction, loses to that winner. | Rare: it needs two phones correcting the same child and letter and a clock slow beyond the gap; fast clocks are already clamped. The root fix (a causal base carried in `set_letter_mastery`) changes the approved server contract. | A field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. |
+| 2026-10-22 | **AR3 Gates 3–4 ran with two EAs signed in in turn on one Galaxy A03s (plan call).** ADR 0008 keeps each EA's database across sign-out, so the run exercises the shared-phone path end to end. | It proves visibility, handover delete and rewalk on real hardware, but not two phones writing at the same moment. | Run the same gates on the A03s and the iPhone together, with AR2 G1, G1r and G2, before the field build. |
 
 ---
 
@@ -1228,6 +3791,18 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-22 | **The app log loses its last 30 s when Android kills the app.** `logger.js` flushes every 30 s (`FLUSH_INTERVAL`) and on backgrounding only, so a force-stop, crash or low-memory kill drops the buffered lines. On the A03s, two killed runs lost every line, including `Running "main"`. | Open: #93. | Write warnings and errors straight through, flush on a shorter cycle, or persist incrementally, so a killed or crashed run keeps its last lines. |
+| 2026-10-22 | **A brand-new sign-in blocks Record for 35–45 s with "No active programme… contact your supervisor".** The EA's programme simply has not downloaded yet; the copy blames a missing assignment. | Open: #94. | Distinguish "still loading" from "not assigned"; consider loading the staff programme first in the domain pull. |
+| 2026-10-22 | **A Head Office reassignment appeared on the receiving phone only after Sync now** in the Gate 4 run; a cold start and a pull-to-refresh on Children did not bring the moved child in on either EA. | Open: #95; needs a reproduction with logs. | A roster change should reach the phone on its next ordinary pull. |
+| 2026-10-22 | **Capital `I` and lower-case `l` cannot be told apart on the Afrikaans letter card** (A03, 360 dp): `l` is a 42 px bar, `I` a 39 px bar, both 6–7 px wide, in the capture grid and the saved detail grid. | Open, non-blocking for AF (plan call, 2026-10-20). Belongs to the test-screen redesign; `contentStatus.ts` already records the typeface need. Tracker tiles are lower case only. | Any sans-serif card mixing `I` and `l` needs a typeface with a serif `I` or a tailed `l`; check it on the phone. |
+| 2026-10-22 | **"Incomplete since" shows the latest failure, not when history became incomplete,** and its time can wrap with "AM" alone on a line at 1.3x. `historyWalk.js:285` restamps `lastFailureAt` on each failed run (as `main`'s `sessionHistoryPull.js:283` did); `syncStatusPresenter.js` formats with `toLocaleString`, which on Hermes puts a breaking space before AM/PM. | Open; small follow-up (keep the first failure until a success clears it; non-breaking space before the meridiem). | A "since" timestamp must keep the first event of the streak, not the latest. |
+| 2026-10-22 | **A class with no language shows three UI flaws** (all on `main`, from Bold Red #81–#82): Class detail prints "Language: null" (`ClassDetailScreen.js:107`); the class row ends in a stray "•" and its accessibility label holds ", ," (`ClassRow.js:25` joins without dropping empties); the language picker's Start looks enabled with nothing chosen and closes the sheet (`SelectSheet.js:83-86`). | Open; small follow-up. AF made a no-language class a supported state. | Join display parts with `.filter(Boolean)`; a confirm button with no selection should be disabled, not silently dismiss. |
+| 2026-10-22 | Assessment detail's stat labels break mid-word at 360 dp, 1.0x ("ATTEMPT / ED", "INCORRE / CT"). On `main` (#90, #87); not touched by wave 1. | Open; polish follow-up. | Letter-spaced capitals in narrow cards need `numberOfLines`/`adjustsFontSizeToFit` or a smaller tracking at 360 dp. |
+| 2026-10-22 | Session history titles a session waiting to sync with the EA's job title ("Literacy Coach") and a synced or pulled one "Session" (`SessionHistoryScreen.js:104-108`). On `main`; wave 1 does not touch `session_type`. | Open; low priority. | A list label should come from one field, whatever the row's sync state. |
+| 2026-10-21 | **A history result that references an inactive assessment tool cannot hydrate.** AR Plan 3 review round 1 fix downloads `assessment_tools`, but the existing `assessment_tools` SELECT policy shows authenticated users active tools only, so a family whose tool was later retired would fail the local foreign key and block its page. | Known gap, not fixed: no phone producer writes `assessment_tool_id` (only the payload passes it through), so no current result carries a tool id. | Revisit if any client or Head Office starts writing tool ids: either let readers see referenced inactive tools, or store a history reference row for a missing tool, as history reference children do. |
+| 2026-10-21 | Code inspection during AR Plan 3 Task 5 found that `historyWalk.js:276-278` maps a page saver rejection with `kind = 'query'` to `transport`; only internal `HistoryRunStop` kinds and external cancellation are retained. | Resolved in AR Plan 3 Task 7: the shared walker retains an external saver failure with `kind = 'query'` in its returned status and failure log, and records `lastFailureAt` without advancing the committed cursor. Real-SQLite regressions exercise the actual assessment, run and mastery validators, plus a malformed second assessment page after ten committed families. RED observed three `transport` statuses where `query` was expected; GREEN retains the category. Session configs and their guard suites are unchanged. | A shared traversal boundary must preserve the public error classification returned by its page-apply adapter. |
+| 2026-10-20 | Reference refresh could not switch the active academic year when the server listed the new year first, or left the phone's active year out: `pullReferenceDataRows` fetches years without ordering (`src/services/offlineSync.js`), `replaceAll` upserts in response order (`src/db/repositories/referenceDataRepository.js`), and `idx_academic_years_active_unique` checks each statement (`src/db/migrations.js`). The UNIQUE failure rolled back the year table, prevented refresh completion and kept last year active on every such refresh. | Fixed in AR Plan 3 Task 7A: with exactly one incoming active year, clear other local active flags inside the replace transaction before retargeting and upserting. Real-SQLite tests exercise the real repository and real refresh in both response orders, an omitted local active year, no-active/empty responses and whole-table rollback for two active years. MR002 recovery in Task 8 depends on this fix. | A one-row rule enforced by a unique index must be kept inside the replace transaction, not left to response order. |
+| 2026-10-21 | **AR Plan 2 accepted risk A3 — slow-clock correction after observing another phone's winner.** B is an hour slow and receives A's 10:00 winner via a superseded acknowledgement. At real 10:01 B un-confirms at 09:01; its receipt keeps 09:01, ordering retains A's winner, and B finalizes back to confirmed true. The un-confirm is silently reverted and repeats until the slow clock passes the winner's time. | **Accepted by the controller in adversarial review round 1; controller to raise with Jim; not fixed here.** Rare combination of two phones correcting the same child/letter/language plus a clock slow beyond the real correction gap; fast clocks are already clamped. Root revisit: carry the observed winner's correction id as a causal base in set_letter_mastery and accept a correction whose base equals the current winner. This changes the approved server contract. | Revisit trigger: a field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. Wall-clock order does not express causality after a phone observes another writer's result. |
 | 2026-09-04 | The session authorization/RPC contract was source- and CI-proven but not hosted; the app still has no inbound session/attendee hydration. | Applied exactly the two authorized migrations to the verified SQLite backend and passed hosted six-actor, grants, anonymous-denial, cap, plan, cleanup, and no-op gates. The server prerequisite is closed. Mobile parent paging, attendee paging, deadlines, atomic SQLite publication, incomplete-family behavior, reconnect/cold-open proof, release uptake, and field verification remain open and must not be collapsed into this result. | Persisted source, hosted schema, PostgREST behavior, mobile implementation, installed build, device convergence, and field recovery are separate evidence states. Close and label each boundary independently. |
 | 2026-09-04 | The standard staging helper was unusable in the current operator environment: its legacy-config guard raised `LegacyDbConfigLoadError`, and the inherited Supabase access token was stale. | Stopped before writes, switched to an isolated current-main worktree, revalidated non-secret link metadata against `segygjzpujphwvrubusm`, kept credentials process-only, and used canonical Supabase CLI dry-run/push/list commands. Root repair of the local env/token path is deferred because changing user credentials/config was outside this migration gate. | Release runbooks need a target-verified, noninteractive path whose config parser and CLI authentication are both exercised before the action window. A safe operational fallback still preserves canonical DDL and exact-target controls. |
 | 2026-08-29 | The locally proven session authorization slice was product-blocked on complete-family versus child-redacted visibility. | Jim selected the complete aggregate. Ratified it in ADR-0005 and standing contracts, removed it from the open-decision backlog, reran the real PostgreSQL actor/page/plan harness plus complete unit and real-SQLite gates, and prepared the committed source for `main`. Hosted apply and authenticated hosted proof remain deliberately separate. | A shared aggregate needs one explicit admission boundary and a data-classification rule. Row filtering cannot create privacy if the parent payload already carries the same facts. |
@@ -1363,7 +3938,13 @@ gate). The dry run listed only this file against `segygjzpujphwvrubusm`. Verifie
 | 2026-10-20 | Assessment Results reviews found stale undo statistics, an old-shape mastery-ranking loader, coverage input-shape sniffing and UTC-day grade attribution. | Fixed in Tasks 2, 10 and 12: recompute maximum streak from kept marks; load typed letter results including other recorders; split `getAssessmentCoverage`/`getCoverageFromCounts`; use SAST `toLocalDateString` for membership edges. Tests/checkpoints are in the Tasks 1–12 verification section. | Verify the real screen loader and date boundary, not only a helper fed ideal fixtures. |
 | 2026-10-20 | Task 6 draft docs still said controller GREEN and phone cutover were pending; programme naming assumed a separate Core Literacy R–3 row. | Reconciled in Task 13: controller reports PG17 53/53 plus five existing harnesses GREEN, Tasks 7–12 are committed, and the read-only preflight identified combined `code = literacy`. Expired shell token was bypassed with stored CLI login (`env -u SUPABASE_ACCESS_TOKEN`) for that read-only probe. Hosted migration remains unapplied. | Source, controller-local PostgreSQL proof, hosted state and device proof remain separate evidence. |
 | 2026-10-20 | Remaining Plan 1 boundaries: SQLite v15 omits the server's stopped-reason and programme-default-pair CHECKs; the existing mastery writer still sends `updated_at`; history pull and native swipe-back are not proven by these tests. | Run status/completion/purpose-window CHECKs match; family validation enforces stopped-reason shape before enqueue. No schema or mastery writer change in Task 13. New server triggers replace mastery timestamps; Plan 2 owns its writer/re-key, Plan 3 owns pull, and Task 14 owns hosted/build/device gates. | Do not describe every SQLite/server constraint or every phone timestamp writer as identical. The omitted CHECKs remain a recorded schema difference, not a claimed fix. |
-
+| 2026-10-20 | **A session whose upload commits but whose reply is lost can go terminal** (found by Codex round 1 of the B2 plan; pre-existing since `20260521140331_masi_rls_review_fixes.sql:89`). Merge upsert takes the UPDATE path, and `sessions_update_active_assignment_after_attendee` needs an attendee that has not landed yet, so `42501` with no pending evidence marks the session terminal. The first retry is 5 s and ordinary passes retry the parent first. | **2026-10-21 — fixed locally by B2 Task 6:** session inserts use insert-or-ignore by id in dispatch, and the unused `sessionsRepository.updateSession` is deleted to prevent silently ignored edits. `sessionGroupSync.test.js` pins commit/lost response/two-pass convergence with no terminal transition; `sessionsRepository.test.js` pins the absence of the edit method. Four new cases in `session-group-postgres-harness.cjs` cover ignored retry before attendees, proposed-row checks, the old merge denial and attendee merge replay; controller PostgreSQL execution remains open, separate from local proof. | A retry must never need more authority than the first attempt. Saved-session editing must add UPDATE-by-id semantics and row versions, not reuse insert. |
+| 2026-10-20 | **The reference refresh cannot switch the active academic year if the new year arrives first** (found by Codex on AR Plan 3). `pullReferenceDataRows` fetches years unordered and `replaceFromServer` upserts them one by one against the unique active-year index, so the transaction fails with `SQLITE_CONSTRAINT_UNIQUE` and the phone keeps the old year. Would hit every phone at a January rollover. | Not fixed yet. AR Plan 3 adds a task making the switch atomic and order-independent, tested with both response orders through the real repository. | A unique index plus row-by-row upserts hides an ordering assumption; apply deactivations before activations in one transaction. |
+| 2026-10-21 | **Mixed-language sessions stamped tracker marks with the first selected child's language** (found by the AF adversarial review, round 1). With an Afrikaans child selected first, an English child's marks were saved as `Afrikaans` and vanished from that child's English tracker and ranking; English/isiXhosa mixes had the same bug before AF. | Fixed in `ca1ec6b`: each child's tracker uses that child's own class language; unknown shows the empty state. Real-SQLite regressions cover Afrikaans/English and English/isiXhosa mixes and a null-language child. | A per-session default is a guess whenever a session can mix classes; derive per-child context from the child. |
+| 2026-10-21 | Lesson plan A3: the §7.3 session-history completeness predicate is not implemented or tested by this pure engine. | C1's lesson-draft plan owns the finished walk, current year, failure and present-child coverage tests. A3 consumes per-child `historyComplete` and tests engine behavior when it is false. | A local list of sessions is not proof of a complete download. |
+| 2026-10-21 | Lesson plan A3: C23's current-year letter-evidence bound, AR Plan 2's confirmation re-key and `masteryInputsComplete` remain AR Plans 2–3 work (§7.6 asks 2–4). | Until those land, wave 2 must use today's `loadMasteryState` for `knownLetters` and pass `masteryComplete: false` for every child, so production plans record `mastery_complete: false`. A3 records the supplied flag; synthetic tests deliberately also exercise true. | One evidence owner; no second engine-side assessment reader or guessed completeness. |
+| 2026-10-21 | Lesson plan A3: teaching-quality Check 2 must skip null `session_reading_level` once C11's derived value is written. | C3 updates `documentation/teaching-quality-analytics.md` with its save path. A3 supplies `deriveSessionReadingLevel` only and changes no session writer or analytics consumer. | No ticked blends means no measured blending level, not the displayed tier. |
+| 2026-10-21 | Lesson plan A3: on-device cost and UI proof remain C3 gates; the Step 8 release-build/test-pack wording also needs controller artifact clarification under C12. | Carry the 500 ms picker / 300 ms attendance thresholds, smooth scrolling, 6 pairs, Galaxy A03s (360dp)/iPhone and 1.0x/1.3x text into C3. The candidate pack remains developer-preview-only; do not enable it in pilot/production. Adversarial-review result has an explicit controller placeholder in Verification. | Node/Jest timings are not device performance, release approval or field evidence. |
 
 ---
 

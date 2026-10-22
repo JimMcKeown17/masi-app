@@ -26,6 +26,7 @@ For every non-trivial task:
 | Device/release acceptance | `documentation/device-gates-sqlite-backend-2026-07.md` | `DEPLOYMENT.md`, latest build-log entries |
 | Auth cold start or sign-out | `documentation/auth-session-resilience-2026-04-24.md` | AuthContext, persisted-session service, support logs |
 | Assessment score meaning/content | `CONTEXT.md`, `documentation/assessment-score-bands-config.md` | `documentation/egra_letter_sets.md`, pedagogy decisions |
+| Lesson-plan content packs or the decodability checker | `documentation/content-packs.md` | lesson-plan spec §4.1; `early-reader-books/checker/README.md` |
 | WelaPLUS | [`wela-assessment-component-build.md`](./wela-assessment-component-build.md) | Wela PRD, assessment-battery learning chapter, relevant ADRs |
 | Group-centred sessions | `documentation/group-session-workflow.md` | contract map, CONTEXT, open decisions, relevant ADRs |
 | Masi/Zazi comparison or shared field-app infrastructure | `documentation/field-app-capability-ledger.md`, `documentation/field-app-portfolio-invariants.md`, `documentation/masi-zazi-portfolio-audit-2026-08-27.md` | current app contract maps, source, tests, live probes, and relevant ADRs |

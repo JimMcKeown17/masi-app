@@ -279,8 +279,10 @@ is correct.
 
 ### 6.7 Assessments
 
-- Select an authorized child and infer language from normalized class data when possible.
-- Support grid and sequential EGRA capture modes.
+- Select an authorized child. Language comes from the class's `home_language`: English (`en`),
+  isiXhosa (`xh`) or Afrikaans (`af`). When missing or unsupported, the EA picks from the languages
+  that have an item set, with nothing preselected and never English by default.
+- Step-by-step capture only; the stop rule comes from the item set.
 - Preserve wall-clock-accurate timing, background pause/resume, hard stop, and last-attempted
   confirmation.
 - Store parent assessment and item evidence atomically before navigation.

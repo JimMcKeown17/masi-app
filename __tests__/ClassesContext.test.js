@@ -146,3 +146,65 @@ describe('ClassesContext repository operations', () => {
     expect(classes.map(c => c.name)).toEqual(['1A', '2B']);
   });
 });
+
+// Exercise the provider trigger through a real persisted class pull, in addition to
+// this file's existing repository-only cases.
+describe('ClassesContext assessment history trigger', () => {
+  const React = require('react');
+  const { renderHook, waitFor } = require('@testing-library/react-native');
+  const { ClassesProvider, useClasses } = require('../src/context/ClassesContext');
+  const { SignedInEAContext } = require('../src/context/SignedInEAContext');
+  const { requireCurrentHandle } = require('../src/session/signedInHandle');
+  let start, online, failed, services, handle;
+  const query = result => {
+    const builder = { select: () => builder, eq: () => builder, is: () => builder,
+      order: () => builder, limit: () => builder, then: (resolve, reject) => Promise.resolve(result).then(resolve, reject) };
+    return builder;
+  };
+  const wrapper = ({ children }) => React.createElement(SignedInEAContext.Provider, {
+    value: { handle, services, repositories: requireCurrentHandle().repositories },
+  }, React.createElement(ClassesProvider, null, children));
+
+  beforeEach(() => {
+    start = jest.fn(async () => null);
+    online = true; failed = false;
+    const actual = requireCurrentHandle();
+    services = { referenceDataReady: async () => {}, fetchAndCacheSchools: async () => [],
+      assessmentHistory: { start } };
+    handle = { isCurrent: () => true, enqueueRequest: task => task(), dataClient: {
+      from: table => query({ data: table === 'staff_programme_assignments' ? [{ programme_id: 'programme-a' }]
+        : table === 'classes' ? [{
+          id: 'class-server', school_id: 'school-1', name: 'Server Class', grade: '1',
+          class_ea_assignments: [{ id: 'class-ea-server', class_id: 'class-server', ea_user_id: actual.userId, programme_id: 'programme-a' }],
+        }] : [],
+        error: failed ? { message: 'Network request failed' } : null }),
+      rpc: async () => ({ data: null, error: { message: 'ack unavailable' } }),
+    } };
+    jest.spyOn(require('../src/context/AuthContext'), 'useAuth').mockImplementation(() => ({ user: { id: actual.userId } }));
+    jest.spyOn(require('../src/context/OfflineContext'), 'useOffline').mockImplementation(() => ({
+      isOnline: online, isSyncing: false, domainPullNonce: 0, refreshSyncStatus: async () => {},
+    }));
+    jest.spyOn(require('../src/context/ChildrenContext'), 'useChildren').mockReturnValue({
+      children: [], refreshFromCache: async () => {},
+    });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test('a persisted class pull starts assessment history once', async () => {
+    // The authoritative local programme survives an unavailable acknowledgement.
+    await (await getTestWriter()).runAsync('update staff_programme_assignments set user_id = ?', requireCurrentHandle().userId);
+    const { result } = renderHook(useClasses, { wrapper });
+    await waitFor(() => expect(result.current.classes.map(row => row.id)).toContain('class-server'));
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith();
+    expect(await (await getTestWriter()).getFirstAsync("select sync_status from class_ea_assignments where id = 'class-ea-server'"))
+      .toEqual({ sync_status: 'synced' });
+  });
+
+  test.each(['failed', 'offline'])('a failed or offline class pull does not (%s)', async mode => {
+    failed = mode === 'failed'; online = mode !== 'offline';
+    const { result } = renderHook(useClasses, { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(start).not.toHaveBeenCalled();
+  });
+});

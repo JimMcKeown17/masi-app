@@ -18,6 +18,8 @@ jest.mock('expo-sharing', () => ({
   shareAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-updates', () => ({ channel: null }));
+
 jest.mock('expo-constants', () => ({
   expoConfig: {
     version: '1.2.0',
@@ -80,10 +82,21 @@ describe('debug database export metadata', () => {
         ('user-1', 'assessments:assessment-1:insert', 'assessments', 'assessment-1', 'insert', '{"id":"assessment-1"}', 'terminal', 1, 'RLS denied')
     `);
 
+    await db.runAsync("insert into children (id, first_name, last_name) values ('mastery-child', 'Test', 'Learner')");
+    await db.runAsync("insert into programmes (id, code, name) values ('mastery-programme', 'literacy', 'Literacy')");
+    await db.runAsync(`insert into letter_mastery
+      (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id,
+       sync_status, server_changed_at, server_correction_id)
+      values ('mastery-k', 'mastery-child', 'k', 'en', 1, '2026-10-20T08:00:00.000Z',
+       'correction-k', 'other-ea', 'mastery-programme', 'terminal',
+       '2026-10-20T08:00:00.123456+00:00', 'server-correction-k')`);
+
     const result = await exportDatabase({ handle: requireCurrentHandle() });
 
     expect(result).toEqual({ success: true });
     const exported = JSON.parse(mockWrittenContent);
+    expect(exported.content_diagnostics.decodabilitySelfCheck).toEqual({ vectorVersion: 1, passed: 72, failed: [] });
+    expect(exported.content_diagnostics.previewContentAllowed).toBe(false);
     expect(exported.sqlite_refactor_build).toBe('plan-6');
     expect(exported.app_version).toBe('1.2.0');
     expect(exported.releaseMetadata).toEqual(expect.objectContaining({
@@ -129,7 +142,63 @@ describe('debug database export metadata', () => {
         lastError: 'RLS denied',
       }),
     ]);
+    expect(exported.database.letterMastery).toEqual([{
+      childId: 'mastery-child', letter: 'k', language: 'en', confirmed: true,
+      changedAt: '2026-10-20T08:00:00.000Z', correctionId: 'correction-k',
+      changedBy: 'other-ea', programmeId: 'mastery-programme', syncStatus: 'terminal',
+      serverChangedAt: '2026-10-20T08:00:00.123456+00:00', serverCorrectionId: 'server-correction-k',
+    }]);
     expect(exported.database['@sessions']).toBeUndefined();
+  });
+
+  test('orders mastery diagnostics by child and letter and retains unconfirmed records without names', async () => {
+    const db = await getTestWriter();
+    await runMigrations(db);
+    for (const childId of ['child-b', 'child-a']) {
+      await db.runAsync('insert into children (id, first_name, last_name) values (?, ?, ?)', childId, 'Test', 'Learner');
+    }
+    for (const [childId, letter, confirmed] of [['child-b', 'a', 1], ['child-a', 'z', 0], ['child-a', 'a', 1]]) {
+      await db.runAsync(`insert into letter_mastery
+        (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by)
+        values (?, ?, ?, 'en', ?, '2026-10-20T08:00:00.000Z', ?, 'user-1')`,
+      childId + letter, childId, letter, confirmed, 'correction-' + childId + letter);
+    }
+    const dump = await debugDump({ handle: requireCurrentHandle() });
+    expect(dump.letterMastery.map(row => [row.childId, row.letter, row.confirmed])).toEqual([
+      ['child-a', 'a', true], ['child-a', 'z', false], ['child-b', 'a', true],
+    ]);
+    expect(dump.letterMastery.every(row => Object.keys(row).sort().join(',') === [
+      'childId', 'letter', 'language', 'confirmed', 'changedAt', 'correctionId', 'changedBy',
+      'programmeId', 'syncStatus', 'serverChangedAt', 'serverCorrectionId',
+    ].sort().join(','))).toBe(true);
+    expect(JSON.stringify(dump.letterMastery)).not.toContain('Learner');
+  });
+
+  test('a content diagnostics module that fails to load does not break the export', async () => {
+    const db = await getTestWriter();
+    await runMigrations(db);
+    jest.doMock('../src/lessonPlan/packs/contentDiagnostics', () => { throw new Error('checker failed to load'); });
+    try {
+      const result = await exportDatabase({ handle: requireCurrentHandle() });
+      expect(result).toEqual({ success: true });
+      expect(JSON.parse(mockWrittenContent).content_diagnostics).toEqual({ error: 'Error: checker failed to load' });
+    } finally {
+      jest.dontMock('../src/lessonPlan/packs/contentDiagnostics');
+    }
+  });
+
+  test('a content diagnostics call that throws does not break the export', async () => {
+    const db = await getTestWriter();
+    await runMigrations(db);
+    jest.doMock('../src/lessonPlan/packs/contentDiagnostics', () => ({
+      getContentDiagnostics: () => { throw new Error('diagnostics call failed'); },
+    }));
+    try {
+      expect(await exportDatabase({ handle: requireCurrentHandle() })).toEqual({ success: true });
+      expect(JSON.parse(mockWrittenContent).content_diagnostics).toEqual({ error: 'Error: diagnostics call failed' });
+    } finally {
+      jest.dontMock('../src/lessonPlan/packs/contentDiagnostics');
+    }
   });
 
   test('logs export still shares persisted logger output', async () => {

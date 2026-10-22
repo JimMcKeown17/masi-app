@@ -1,6 +1,11 @@
+import { useAssessmentHistoryStatus } from '../src/services/assessmentHistoryStatus';
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'), useAssessmentHistoryStatus: jest.fn(),
+}));
+beforeEach(() => useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import ChildResultsScreen from '../src/screens/assessments/ChildResultsScreen';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
@@ -28,6 +33,19 @@ describe('ChildResultsScreen', () => {
     jest.clearAllMocks();
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     assessmentsRepository.getQuestionResults.mockResolvedValue([]);
+  });
+
+  test('an increment of runVersion reloads the results once', async () => {
+    const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' };
+    const element = () => <PaperProvider><ChildResultsScreen navigation={{ navigate: jest.fn() }} route={{ params: { child } }} /></PaperProvider>;
+    const screen = render(element());
+    await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledTimes(1));
+    assessmentsRepository.getQuestionResults.mockResolvedValue([{ id: 'pulled', child_id: child.id,
+      question_code: 'letter_sounds', assessment_date: '2026-10-21', score: 9, total_items: 60, derived: { percent: 15 } }]);
+    useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 1 });
+    await act(async () => { screen.rerender(element()); });
+    await screen.findByText('9 / 60 correct');
+    expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledTimes(2);
   });
 
   test('renders assessment sections and embeds the mastery panel', async () => {

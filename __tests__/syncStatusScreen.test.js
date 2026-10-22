@@ -1,5 +1,11 @@
+import { useAssessmentHistoryStatus } from '../src/services/assessmentHistoryStatus';
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'), useAssessmentHistoryStatus: jest.fn(),
+}));
+beforeEach(() => useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 }));
 jest.mock('../test-support/handleServiceMocks', () => ({
 getSessionHistoryPullState: jest.fn(),
+getAssessmentHistoryPullStates: jest.fn(),
 retryFailedItem: jest.fn()
 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -11,7 +17,7 @@ import { colors, tints } from '../src/constants/colors';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
 import { retryFailedItem } from '../test-support/handleServiceMocks';
 import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
-import { getSessionHistoryPullState } from '../test-support/handleServiceMocks';
+import { getSessionHistoryPullState, getAssessmentHistoryPullStates } from '../test-support/handleServiceMocks';
 
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 jest.mock('@react-navigation/native', () => ({
@@ -23,6 +29,8 @@ useSessionHistoryStatus: jest.fn() }));
 beforeEach(() => {
   useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 });
   getSessionHistoryPullState.mockResolvedValue(null);
+  const complete = { lastPulledAt: '2026-10-21T10:00:00Z', cursor: '{"complete":true}' };
+  getAssessmentHistoryPullStates.mockResolvedValue({ batteryRuns: complete, assessments: complete, mastery: complete });
 });
 
 
@@ -192,4 +200,27 @@ test('Sync now retains its forced sync handler', () => {
   const screen = renderScreen();
   fireEvent.press(screen.getByRole('button', { name: 'Sync now' }));
   expect(state.syncNow).toHaveBeenCalledWith({ force: true });
+});
+
+
+test('complete sessions with an incomplete assessment walk do not show Up to date', async () => {
+  mockUseOffline.mockReturnValue(offline());
+  const complete = { lastPulledAt: '2026-10-21T10:00:00Z', cursor: '{"complete":true}' };
+  getSessionHistoryPullState.mockResolvedValue(complete);
+  getAssessmentHistoryPullStates.mockResolvedValue({ batteryRuns: complete,
+    assessments: { updatedAt: '2026-10-21T08:00:00Z', cursor: '{"complete":false}' }, mastery: complete });
+  const screen = renderScreen();
+  await screen.findByText('History not fully downloaded yet');
+  expect(screen.queryByText('Up to date')).toBeNull();
+  expect(screen.getAllByText('History')).toHaveLength(1);
+  expect(getAssessmentHistoryPullStates).toHaveBeenCalledWith('user-1');
+});
+
+test.each(['pageVersion', 'runVersion'])('assessment %s reloads the four History states', async version => {
+  mockUseOffline.mockReturnValue(offline());
+  const screen = renderScreen();
+  await waitFor(() => expect(getAssessmentHistoryPullStates).toHaveBeenCalledTimes(1));
+  useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, [version]: 1 });
+  screen.rerender(<AllProviders><SyncStatusScreen /></AllProviders>);
+  await waitFor(() => expect(getAssessmentHistoryPullStates).toHaveBeenCalledTimes(2));
 });

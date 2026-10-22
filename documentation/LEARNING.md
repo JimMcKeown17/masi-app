@@ -9,6 +9,40 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## Retrying an insert must not ask for edit rights
+
+A network failure cannot tell the phone whether the server committed a request. In B2's session
+case, the server can store the session while its response disappears. The phone correctly keeps
+the insert in its durable outbox and holds back the attendees for that pass. On the next pass the
+session runs first again. The mistake was sending that retry as a merge upsert: finding the stored
+id turns an insertion attempt into an UPDATE authorization request.
+
+The session UPDATE policy, `sessions_update_active_assignment_after_attendee`, requires a landed
+attendee with active child authority. No attendee has landed yet, so that policy refuses the
+parent retry. With no pending parent or grant to explain the denial, the phone marks it terminal.
+The original insert succeeded, but the phone cannot acknowledge it without manual intervention.
+This is an operation-shape problem, not a reason to loosen the UPDATE policy or add a retry loop.
+
+Sessions are insert-only in this release. Sending their inserts with
+`upsert(payload, { onConflict: 'id', ignoreDuplicates: true })` maps to `ON CONFLICT (id) DO NOTHING`:
+a new row is inserted, while a committed id is left unchanged. INSERT `WITH CHECK` still applies
+to the proposed row; the retry does not get permission to change stored content. As for immutable
+assignment inserts, no error acknowledges the attempt. Sessions do not batch and are outside the
+row-version contract. The real-SQLite regression commits the parent, loses the response, advances
+past backoff, and proves the parent and attendees finish in two ordinary passes without a terminal
+transition. Four disposable PostgreSQL cases cover the SQL/RLS boundary; controller execution is
+a separate gate, including the assertion that an ignored retry with an unheld group is refused.
+
+The unused `updateSession` method had to go with this change. It re-saved edits as `insert`, which
+would now change SQLite but be silently ignored on the server. Saved-session editing is outside
+v1; when it ships it needs a distinct UPDATE-by-id operation, row versions and attendee-removal
+semantics, not a re-sent insert. `saveSession` itself is unchanged.
+
+Attendees differ: their UPDATE policy asks for the same owned session and active child authority
+as their INSERT policy, and B2's group check accepts a historically held assignment for both.
+Their merge upsert therefore remains appropriate. The general lesson is to match the retry's
+database operation to the original intent: retrying a creation must not acquire edit semantics.
+
 ## Numbering writes when they leave, not when they are made
 
 A version is useful only if it measures the order we need to protect. One record can have several
@@ -1897,3 +1931,193 @@ tabulate the measurements before theorising. And a percentage size is only meani
 against a parent whose size does not depend on the child; Jest cannot run Yoga, so the
 regression test pins that contract (every wrapper is `flex: 1`) rather than a pixel position.
 
+## One mark per child and letter: why the server keeps a receipt and returns the winner
+
+A letter confirmation belongs to the child, letter and language. Two EAs correcting that mark
+are changing one current record. Programme and the last writer explain the context; they do not
+create separate truths. D1 orders corrections by when they were made, with the correction UUID
+breaking an exact time tie. An older offline confirm must lose to a newer un-confirm, even if
+the older phone uploads last.
+
+There are two times to distinguish: the requested tap time and the server's effective correction
+time. A phone clock can be fast, so the server clamps a new correction to its own now. That clamp
+must happen exactly once. Suppose phone A is an hour fast, confirms at T1, and loses the reply.
+Phone B un-confirms at T2. If A's retry at T3 were clamped again, its effective time could move
+past T2 and undo B's newer correction. A server-only receipt fixes A's effective time at first
+arrival. Its correction id binds the immutable payload; a retry must match it or gets MA001.
+
+The reply is also part of correctness. Success says the server accepted a correction, but it
+does not promise that correction won. The server therefore returns the current winner. In one
+SQLite transaction the phone removes the claimed outbox slot and writes that winner back,
+including its ordering tuple. A losing phone immediately shows the newer un-confirm instead
+of displaying its own confirm as synced. If the caller no longer has read access, the reply is
+acknowledged with no record, and the phone removes its local row.
+
+A local save can happen while a request is in flight. The finalizer compares the claimed slot
+and correction id with what is still stored. If a newer local correction exists, it keeps the
+local value and owed slot, and applies only the server ordering metadata. This is the same
+separation as a receipt and a draft: learning what the server accepted does not erase work
+the phone has yet to send.
+
+That protection starts before upload. The slot holds only one correction. Replacing Tuesday's
+queued un-confirm with Monday's sheet mark saved on Wednesday would lose Tuesday's correction
+before the server could order them. The repository keeps a newer correction while it is pending,
+failed or in flight. It compares a queued timestamp ahead of the corrected phone clock as now.
+The rare clock-rollback/delayed-sheet order recorded as accepted risk A2 remains explicit in the
+[contract map](./rls-sync-contract-map.md#letter-mastery-one-current-record-the-most-recently-made-correction-wins-assessment-results-plan-2).
+
+Finally, resolving the natural key must happen inside SQL. A read-then-insert check leaves a
+race when two writers see no row, the shape of Zazi's ZZ-BUG-20260813-006. The RPC's conflict
+update resolves child × letter × language in one statement. Its conflict targets are named
+constraints for another reason: RETURNS TABLE columns are PL/pgSQL variables. An unqualified
+ON CONFLICT (correction_id) can collide with the output variable and raise 42702 under the default
+plpgsql.variable_conflict setting. Named constraints, qualified column references and the
+function-local use_column directive make that name resolution deliberate.
+
+## 2026-10-21 — Mastery history compares accepted states; handover removes coverage atomically
+
+A phone holds two kinds of information about a mastery correction. The visible value may be
+the EA's latest edit, while `server_changed_at` and `server_correction_id` record the last state
+accepted by the server. A history page must compare against that accepted tuple. Comparing it
+with the edit's own timestamp would let a wrong phone clock block convergence. Conversely, a
+page fetched before a newer acknowledgement must not undo the newly accepted value. Exact
+microseconds and a lowercase UUID tie-break preserve the server's ordering without rounding
+different corrections into the same millisecond. An outstanding correction is still owed, so
+the pull leaves its value and outbox slot alone. The existing local writer's ordering is unchanged.
+
+Refusal evidence is different from outstanding work. A terminal outbox row says a correction
+was refused; it does not own the accepted value forever. The merge therefore ignores terminal
+slots as blockers and restores a terminal domain row from an equal or newer accepted tuple.
+The outbox evidence stays visible in needs-attention. Once restored, the domain row follows the
+ordinary strictly-newer rule, even though the refusal record still exists. This separates
+recovering what the child knows from retaining evidence of what failed.
+
+An empty page says nothing about why a row was absent. Only the validated relationship
+acknowledgement authorizes ending a delivery assignment. That reconcile transaction can then
+delete the ended child's synced mastery when no correction is still owed. Pending, failed and
+terminal domain rows remain. The delete sits behind the assignment reconcile's existing
+mass-end breaker; if the breaker stops the handover, it also stops the delete. A failed coverage
+write rolls back both the assignment end and the mastery delete, and per-row fallback performs
+neither reconcile action.
+
+Deleting the rows is only half the handover. A completed timestamp cursor may already have
+passed their old server timestamps, so a later delta cannot recover them when the child returns.
+The same transaction must remove the child from the mastery cursor's covered sets. Regaining
+that child then counts as a gain and starts a full re-walk, even if the intervening run was
+fresh and wrote nothing. Each walk write also bounds coverage using grants read inside its own
+transaction, so a page waiting across the handover cannot restore stale coverage. Assessment
+and run rows are not deleted by a delivery handover, so their cursors need no such drop.
+
+## A pure engine with JSON vectors (lesson plan, October 2026)
+
+The [lesson-plan engine](../src/lessonPlan/engine/index.js) is a functional core: plain data
+goes in and advice comes out. It does not open SQLite, read React state, make requests, or
+decide what time it is. The Lesson flow will own those jobs. This boundary lets us test the
+teaching rules without starting a screen or a database, and keeps the same input from producing
+different advice merely because it ran somewhere else.
+
+**The teaching day is evidence, not a clock lookup.** The caller supplies `today` as a SAST
+`YYYY-MM-DD` key. It becomes the plan's `made_on` and controls deterministic rotation. If the
+engine read the clock itself, a test at midnight or a retry on another day could silently
+change the advice. C14 makes the distinction concrete: a Monday lesson finished on Wednesday
+keeps Monday's plan when its lesson date still equals `made_on`; changing the lesson date
+means that plan is no longer evidence of advice for that date. Frozen choices retain the
+plan's day and advice, while today's date still bounds refreshed history.
+
+**Filter history at the rule boundary, even when the loader already filters it.** An older
+phone may retain last year's sessions while a new phone has downloaded only the current year.
+The engine re-applies the active-programme and academic-year window, drops future-dated rows,
+and collapses repeated session IDs before applying recency rules. Given the same covered
+history, both phones therefore use the same evidence. This does not make an incomplete
+download complete: the caller supplies each child's `historyComplete`, and missing history
+must not be mistaken for a first session. The download-completeness predicate belongs to C1,
+not to this engine.
+
+**A rule should have one owner.** The engine receives `knownLetters` instead of looking up
+letter results or confirmations. C23's evidence union belongs to the
+[shared mastery loader](../src/utils/masteryState.js): assessment evidence plus EA confirmation,
+in the lesson's language. AR Plans 2–3 can add the current-year evidence bound, re-key the
+confirmations and download other EAs' evidence without making the engine another evidence
+reader. Until those inputs are complete, the Lesson flow must pass `masteryComplete: false`;
+the engine records the supplied completeness rather than guessing it.
+
+**JSON vectors are a portable behavioral contract.** The
+[vectors beside the engine](../src/lessonPlan/engine/vectors/) contain plain inputs and expected
+outputs, with an engine-version pin. One [Jest runner](../__tests__/lessonPlanEngine.vectors.test.js)
+resolves fixture packs and freezes the inputs. A later server implementation can run the same
+cases, instead of translating expectations into a second test suite that might drift. The
+runner also checks that a plan and its browse choices agree, including when choices are
+anchored to that same frozen plan. The separate purity guard keeps clocks, I/O and ambient
+mutable state from creeping into the core.
+
+**Use a second rule to check the result, not the result's own helper.** Synthetic vectors tell
+us that ranking and tie-breaks match our specification. The
+[real-pack smoke](../__tests__/lessonPlanEngine.realPacks.test.js) additionally loads A1's bundled
+packs and checks advice with the books project's unchanged checker. Its taught-step analysis
+is an independent oracle for the engine's unlocked-sound filtering: first-session advice must
+decode at step 1, and all-letter advice must not require a later sound step. The smoke also
+checks the three release packs' letters-only behavior and the loader/engine language mapping.
+The isiXhosa candidate pack is preview content, not approved field vocabulary. These local
+tests prove neither on-device Hermes behavior nor the Lesson screen's rendering and latency;
+those remain explicit controller/device gates.
+
+## A lesson in progress is its own table, not a session state
+
+An unfinished lesson is useful work, but it is not yet evidence that a session happened. Putting
+it in `sessions` would make every reader responsible for excluding it: history, daily counts,
+sync and server RLS would all need to remember the distinction. Keeping the unsaved lesson in
+local `lesson_drafts` gives those readers one meaning for a session row. The save transaction
+creates the completed session only when the EA finishes. The existing `sessions.state` values
+for unfinished work remain unused by this flow.
+
+Each signed-in EA handle binds the repository to that EA's own SQLite file. The repository checks
+for an existing draft, and the database backs it with a unique `slot` constrained to `1`. The
+code check supplies a useful error naming the existing draft; the constraint protects the invariant
+even if a future writer misses the check. SQLite v12's required-outbox-owner trigger uses the same
+pattern: enforce a critical rule at the storage boundary as well as in application code.
+
+Finalization must be indivisible. `discard(id, { transaction })` deletes the draft through the
+caller's save transaction, alongside the session, attendees, mastery edits and outbox work. If any
+part fails, rollback restores the draft with the same session id, so a retry keeps the original
+identity. A separate committed deletion would lose unfinished work before the save had succeeded.
+
+A durable draft can outlive the day or the class language that originally supplied its context.
+It therefore stores language codes from `LANGUAGE_LABELS`, and every pending tracker change must
+match the lesson's language and retain its original ISO tap time. Resuming never re-derives either
+value at save time. Local tests prove the row is readable from a second connection before close,
+survives an offline reopen unchanged, and remains separate across EA switches. A real force-quit
+on Expo SQLite is still a device gate. C1 supplies storage; C3 supplies the user-facing lifecycle.
+
+## A foreign key states the present; a session's group is history
+
+A session records a past group block, while the phone's group roster records the EA's current
+assignments. Those sets need not match. After a handover, an incoming EA can read a child's old
+sessions without ever holding the old group. An ended assignment or a deleted group can also
+remove it from the working roster. The roster query in
+[`preloadedChildData`](../src/services/preloadedChildData.js) fetches only groups with an active
+assignment to this EA in the selected Programme; it cannot promise a local row for every group
+named in authorized history.
+
+A local foreign key would force the phone to discard that historical id or invent a group row.
+We rejected a history-reference `groups` row because a group is an operational object: ordinary
+group readers, pickers, edits, archive, reconcile and ownership repair would all have to learn
+to exclude it. Ownership repair can create assignments. The history API also does not supply
+the group's required name. A plain id on the session preserves the fact without adding roster
+or edit authority. Assessment Results #90 made the same call for `battery_runs.class_id`: the
+phone can retain the captured class id when its current class roster no longer contains it.
+The server keeps its foreign key in both cases.
+
+Local migration 16, `sessions_group_history_reference`, rebuilds `sessions` with all 16 columns,
+the Programme/class foreign keys, the state check and its three indexes, but no group foreign
+key. The migration runner turns foreign keys off before the transaction and restores them after
+it. Creating the replacement, copying explicit columns, dropping the old table, then renaming
+the replacement keeps the attendee foreign key pointing at `sessions`. Renaming the old table
+first would redirect that foreign key to the old name. The real-SQLite upgrade regression checks
+rows, queued uploads, index definitions and the attendee cascade across this operation.
+
+History import and new capture have different validation needs. B2 Task 4 will put the local-write
+check in `saveSession`: a chosen group must exist on this phone and belong to the session's
+Programme, including an archived group for a lesson already captured. That repository guard
+replaces the group FK for local writes; this schema task alone does not install it. If a future
+screen needs a session's group name offline, revisit the historical display data required rather
+than promoting a historical id into a working group.

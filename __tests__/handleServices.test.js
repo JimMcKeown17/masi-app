@@ -62,6 +62,34 @@ afterEach(async () => {
   jest.restoreAllMocks();
 });
 
+test('masteryInputsComplete reads only the captured handle and EA without starting a pull', async () => {
+  const transport = jest.fn(async url => response(referenceRows(new URL(url).pathname.split('/').pop(), A)));
+  const a = await open(A, transport);
+  await a.services.referenceDataReady();
+  await a.withTransaction(async tx => {
+    await tx.runAsync("insert into children (id, first_name, last_name, sync_status) values (?, 'Test', 'Child', 'synced')", CHILD);
+    await tx.runAsync("insert into classes (id, school_id, name, grade, academic_year_id) values ('held', 'school', 'Held', '1', 'year')");
+    await tx.runAsync("insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, sync_status) values ('class-ea', 'held', ?, ?, 'synced')", A, PROGRAMME);
+    await tx.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, sync_status) values ('membership', ?, 'held', 'year', 'synced')", CHILD);
+    await tx.runAsync("insert into child_ea_assignments (id, user_id, child_id, sync_status) values ('delivery', ?, ?, 'synced')", A, CHILD);
+  });
+  transport.mockClear();
+  expect(await a.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD] })).toBe(false);
+  expect(transport).not.toHaveBeenCalled();
+  await a.services.assessmentHistory.start({ force: true });
+  const before = await (await a.getReader()).getAllAsync('select * from sync_state order by scope');
+  transport.mockClear();
+  expect(await a.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD], userId: B })).toBe(true);
+  expect(await (await a.getReader()).getAllAsync('select * from sync_state order by scope')).toEqual(before);
+  expect(transport).not.toHaveBeenCalled();
+  const bTransport = jest.fn(async () => response());
+  const b = await open(B, bTransport);
+  expect(await b.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD] })).toBe(false);
+  await expect(a.services.assessmentHistory.masteryInputsComplete({ childIds: [CHILD] }))
+    .rejects.toMatchObject({ name: 'StaleActorError' });
+  expect(bTransport).not.toHaveBeenCalled();
+});
+
 test.each(['update', 'batch'])('T3 / whole-pass: stale %s stops the pass without retries, fallback, metadata or sending the next record', async (mode) => {
   const entered = deferred();
   const release = deferred();
@@ -239,6 +267,25 @@ test('close during an in-flight history pull writes no failure marker and cannot
   expect(await (await again.getReader()).getAllAsync('select * from sync_state')).toEqual([]);
 });
 
+test("close during an in-flight assessment history pull writes no failure marker and cannot publish into B's store", async () => {
+  const entered = deferred();
+  const transport = jest.fn(async url => {
+    const table = new URL(url).pathname.split('/').pop();
+    if (table === 'get_battery_run_history_page') { entered.resolve(); return new Promise(() => {}); }
+    return response(referenceRows(table, A));
+  });
+  const a = await open(A, transport);
+  const run = observe(a.services.assessmentHistory.start({ force: true }));
+  await within(entered.promise);
+  await requestClose({ reason: 'switch' });
+  const b = await open(B, async () => response());
+  const snapshot = b.services.assessmentHistory.store.getSnapshot();
+  expect(await within(run)).toMatchObject({ error: { name: 'StaleActorError' } });
+  expect(b.services.assessmentHistory.store.getSnapshot()).toBe(snapshot);
+  const again = await open(A, transport);
+  expect(await (await again.getReader()).getAllAsync('select * from sync_state')).toEqual([]);
+});
+
 test('the complete repository graph, composite onboarding and profile cache are bound to one handle', async () => {
   const a = await open(A, async () => response());
   expect(a.services.repositories).toBe(a.repositories);
@@ -247,7 +294,7 @@ test('the complete repository graph, composite onboarding and profile cache are 
     'childClassMemberships', 'classOnboarding', 'classGroupingState', 'groupingVersions',
     'sessions', 'assessments', 'batteryRuns', 'mastery', 'timeEntries', 'schools', 'jobTitles', 'programmes',
     'staffProgrammeAssignments', 'assessmentTools', 'academicYears', 'assessmentWindows',
-    'teachers', 'syncOutbox', 'syncState', 'localState', 'supportIncidents',
+    'teachers', 'syncOutbox', 'syncState', 'localState', 'lessonDrafts', 'supportIncidents',
   ].sort());
   await a.repositories.programmes.replaceFromServer(referenceRows('programmes', A));
   await a.repositories.schools.replaceFromServer(referenceRows('schools', A));
@@ -379,7 +426,7 @@ test('cold readiness joins the background reference pull and waits for its last 
     release.resolve();
     await Promise.all([readiness, refresh]);
     expect(await a.repositories.staffProgrammeAssignments.getAll()).toHaveLength(1);
-    expect(transport).toHaveBeenCalledTimes(7);
+    expect(transport).toHaveBeenCalledTimes(8);
   } finally { release.resolve(); }
 });
 
@@ -433,7 +480,7 @@ test('a completed reference pull with every table empty is ready offline after r
   const online = jest.fn(async () => response());
   const a = await open(A, online);
   await a.services.pullReferenceData();
-  expect(online).toHaveBeenCalledTimes(7);
+  expect(online).toHaveBeenCalledTimes(8);
   await requestClose({ reason: 'offline restart with empty references' });
   const offline = jest.fn(async () => { throw new TypeError('Offline'); });
   const reopened = await open(A, offline);

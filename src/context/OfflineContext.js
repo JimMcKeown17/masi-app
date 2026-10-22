@@ -245,6 +245,7 @@ export const OfflineProvider = ({ children }) => {
     // Otherwise let history's own admission and single flight decide whether to run.
     if (!rosterPullRequested && userId && isOnlineRef.current && handle.isCurrent()) {
       void services.sessionHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Session history failed:', error); });
+      void services.assessmentHistory.start().catch((error) => { if (!isStaleActorError(error)) console.error('Assessment history failed:', error); });
     }
   }, [requestDomainPull]);
 

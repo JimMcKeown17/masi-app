@@ -73,6 +73,32 @@ describe('history reference children', () => {
     expect((await db.getFirstAsync("select history_reference from children where id = 'child-ref'")).history_reference).toBe(0);
   });
 
+  test('getChildNamesByIds returns reference and roster children while getChildren still excludes references', async () => {
+    await insertReference(db);
+    await db.runAsync("insert into children (id, first_name, last_name, hidden_at) values ('child-roster', 'Amahle', 'Dlamini', '2026-10-21')");
+    const repository = createChildrenRepository({ database: db });
+    expect(await repository.getChildNamesByIds(['child-ref', 'child-roster', 'missing', 'child-ref'])).toEqual({
+      'child-ref': { name: 'Lindiwe Mbeki', hidden: false }, 'child-roster': { name: 'Amahle Dlamini', hidden: true },
+    });
+    expect((await repository.getChildren()).map(row => row.id)).toEqual(['child-roster']);
+    expect(await repository.getChildNamesByIds([])).toEqual({});
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+  });
+
+  test('child name lookup spans bounded chunks without changing roster eligibility', async () => {
+    const ids = Array.from({ length: 1205 }, (_, i) => 'ref-' + i);
+    for (const id of ids) await insertReference(db, id);
+    const repository = createChildrenRepository({ database: db });
+    const read = jest.spyOn(db, 'getAllAsync');
+    const names = await repository.getChildNamesByIds(ids);
+    expect(read.mock.calls.length).toBeGreaterThan(1);
+    expect(read.mock.calls.every(([, ...bindings]) => bindings.length <= 999)).toBe(true);
+    read.mockRestore();
+    expect(Object.keys(names)).toHaveLength(1205);
+    expect(names['ref-1204']).toEqual({ name: 'Lindiwe Mbeki', hidden: false });
+    expect(await repository.getChildren()).toEqual([]);
+  });
+
   test('history_reference never reaches a push payload', () => {
     const payload = buildSyncPayload('children', {
       id: '00000000-0000-4000-8000-000000000001', first_name: 'A', last_name: 'B', history_reference: 0,

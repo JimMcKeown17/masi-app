@@ -83,6 +83,24 @@ describe('runSessionHistoryPull', () => {
   });
   afterEach(async () => { await db.closeAsync(); });
 
+  test("a fresh phone whose EA never held the session's group keeps the group id", async () => {
+    const session = parent(1, { user_id: 'user-9', group_id: uuid(900) });
+    const server = fakeServer({ parents: [session], attendeesBySession: { [session.id]: [{
+      id: uuid(1001), session_id: session.id, child_id: 'child-1', group_id: uuid(900),
+      attendance_status: 'present', grade_snapshot: null, notes: null,
+      created_at: iso(1), updated_at: iso(1),
+      child_first_name: 'Amahle', child_last_name: 'Dlamini', child_preferred_name: null,
+    }] } });
+
+    expect(await runSessionHistoryPull({ userId: 'user-1', deps: deps({ client: server.client }) }))
+      .toEqual({ status: 'complete', pages: 1 });
+    expect(await db.getFirstAsync('select group_id from sessions where id = ?', session.id))
+      .toEqual({ group_id: uuid(900) });
+    expect(await db.getFirstAsync('select group_id from session_attendees where session_id = ?', session.id))
+      .toEqual({ group_id: null });
+    expect(await db.getFirstAsync('select count(*) as count from groups')).toEqual({ count: 0 });
+  });
+
   test('a complete run logs its start and end without session contents or child identity', async () => {
     const log = jest.spyOn(console, 'log').mockImplementation(() => {});
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});

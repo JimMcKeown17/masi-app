@@ -1,3 +1,9 @@
+jest.mock('../src/services/assessmentHistoryStatus', () => ({
+  ...jest.requireActual('../src/services/assessmentHistoryStatus'),
+  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
+}));
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+
 jest.mock('@react-navigation/native', () => ({
   NavigationContext: require('react').createContext(undefined),
   useFocusEffect: callback => require('react').useEffect(callback, [callback]),
@@ -26,7 +32,11 @@ import RankedBarRow from '../src/components/dashboard/RankedBarRow';
 let fixture;
 let repositories;
 beforeEach(async () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
   fixture = await createFamilySyncFixture();
+  await fixture.db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+    values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
   repositories = {
     assessments: fixture.assessments,
     mastery: createMasteryRepository({ database: fixture.db }),
@@ -42,6 +52,7 @@ afterEach(async () => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
   await fixture.db.closeAsync();
+  jest.useRealTimers();
 });
 
 const renderRanking = () => renderWithProviders(
@@ -49,6 +60,15 @@ const renderRanking = () => renderWithProviders(
     <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
   </SignedInEAContext.Provider>,
 );
+
+test("last year's result does not appear in the ranking", async () => {
+  const saved = await fixture.save(1, { result: questionResult(1, {
+    language: 'xh', item_set_id: 'letter_sounds@2026.1.xh',
+  }) });
+  await fixture.db.runAsync("update assessments set assessment_date = '2025-11-01' where id = ?", saved.id);
+  const screen = renderRanking();
+  expect(await screen.findByLabelText('View details for Amahle D., 0/26')).toBeTruthy();
+});
 
 test.each(['current EA', 'another EA'])(
   'renders mastery from a real stored letter result recorded by %s',
@@ -73,22 +93,23 @@ test.each(['current EA', 'another EA'])(
     });
     bindTestActor(fixture.db, fixture.userId);
 
-    const read = jest.spyOn(repositories.assessments, 'getLetterResults');
+    const read = jest.spyOn(repositories.assessments, 'getLetterEvidenceResults');
+    const masteryRead = jest.spyOn(repositories.mastery, 'getLetterMastery');
     const screen = renderRanking();
     expect(await screen.findByLabelText('View details for Amahle D., 2/26')).toBeTruthy();
     expect(screen.getByText('2/26')).toBeTruthy();
     expect(read).toHaveBeenCalledWith({ userId: fixture.userId });
+    expect(masteryRead).toHaveBeenCalledWith({ childIds: [fixture.childId] });
   },
 );
 
-test.each([null, undefined, 'Afrikaans', 'isiZulu'])(
+test.each([null, undefined, 'isiZulu'])(
   'a class without a supported order (%p) keeps the 26-letter scale without using English evidence',
   async homeLanguage => {
     useClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: homeLanguage }] });
     await fixture.save(1);
-    await repositories.mastery.saveLetterMasteryRecord({
-      id: uuid(), user_id: fixture.userId, child_id: fixture.childId,
-      letter: 'b', language: 'English', source: 'taught',
+    await repositories.mastery.setLetterMastery({
+      childId: fixture.childId, letter: 'b', language: 'en', confirmed: true,
     });
 
     const screen = renderRanking();
@@ -97,3 +118,16 @@ test.each([null, undefined, 'Afrikaans', 'isiZulu'])(
     expect(screen.UNSAFE_getByType(RankedBarRow).props).toMatchObject({ value: 0, maxValue: 26 });
   },
 );
+
+test('a confirmation recorded by another EA counts', async () => {
+  const otherEa = uuid();
+  bindTestActor(fixture.db, otherEa);
+  await repositories.mastery.setLetterMastery({
+    childId: fixture.childId, letter: 'b', language: 'xh', confirmed: true,
+  });
+  bindTestActor(fixture.db, fixture.userId);
+  const read = jest.spyOn(repositories.mastery, 'getLetterMastery');
+  const screen = renderRanking();
+  expect(await screen.findByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  expect(read).toHaveBeenCalledWith({ childIds: [fixture.childId] });
+});

@@ -67,7 +67,7 @@ export const SERVER_COLUMNS = {
     'row_version',
   ],
   sessions: [
-    'id', 'user_id', 'programme_id', 'class_id', 'session_date', 'started_at',
+    'id', 'user_id', 'programme_id', 'class_id', 'group_id', 'session_date', 'started_at',
     'ended_at', 'activities', 'notes', 'created_at', 'updated_at',
   ],
   session_attendees: [
@@ -93,7 +93,7 @@ export const SERVER_COLUMNS = {
     'position', 'metadata', 'created_at', 'updated_at',
   ],
   letter_mastery: [
-    'id', 'user_id', 'child_id', 'programme_id', 'letter', 'language', 'source',
-    'mastered_at', 'deleted_at', 'created_at', 'updated_at',
+    'id', 'child_id', 'letter', 'language', 'confirmed', 'changed_at', 'correction_id',
+    'changed_by', 'programme_id', 'created_at', 'updated_at',
   ],
 };

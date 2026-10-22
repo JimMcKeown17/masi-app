@@ -23,11 +23,16 @@
     "verify:organisation-label:postgres": "node scripts/organisation-label-postgres-harness.cjs",
     "verify:support-incident:postgres": "node scripts/support-incident-postgres-harness.cjs",
     "verify:assessment-results:postgres": "node scripts/assessment-results-postgres-harness.cjs",
+    "verify:assessment-history:postgres": "node scripts/assessment-history-postgres-harness.cjs",
+    "assessment-history:probe": "node scripts/assessment-history-http-probe.cjs",
     "verify:ea-access:postgres": "node scripts/ea-access-postgres-harness.cjs",
+    "verify:letter-mastery:postgres": "node scripts/letter-mastery-postgres-harness.cjs",
+    "verify:session-group:postgres": "node scripts/session-group-postgres-harness.cjs",
     "ea:status": "node scripts/ea-access.cjs status",
     "ea:suspend": "node scripts/ea-access.cjs suspend",
     "ea:restore": "node scripts/ea-access.cjs restore",
     "testers:provision": "node scripts/createTesters.js",
+    "content:xh-test-pack": "node scripts/build-isixhosa-test-pack.cjs",
     "sentry:sourcemaps": "sentry-expo-upload-sourcemaps dist",
     "test": "jest",
     "test:integration": "jest --runInBand --config jest.integration.config.js",
@@ -98,6 +103,7 @@
     "csv-parse": "^6.2.1",
     "dotenv": "^17.4.2",
     "jest": "^29.7.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "yaml": "2.8.2"
   }
 }

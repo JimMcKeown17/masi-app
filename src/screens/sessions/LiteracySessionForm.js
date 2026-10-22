@@ -15,6 +15,7 @@ import InlineNote from '../../components/common/InlineNote';
 import ChildSelector from '../../components/children/ChildSelector';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
 import { languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
+import { pendingChangesLanguageCode } from '../../utils/masteryState';
 import { useClasses } from '../../context/ClassesContext';
 import { useLookupsContext } from '../../context/LookupsContext';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
@@ -143,9 +144,9 @@ export default function LiteracySessionForm({ navigation }) {
   const [childReadingLevels, setChildReadingLevels] = useState({});
   // Track which child's reading-level menu is open (by child id or null)
   const [openChildLevelMenu, setOpenChildLevelMenu] = useState(null);
-  // Letter tracker: { [childId]: { [letter]: true/false } } — pending changes per child
+  // Letter tracker: { [childId]: { [letter]: { mastered, languageCode, madeAt } } } — pending changes per child
   const [letterTrackerChanges, setLetterTrackerChanges] = useState({});
-  const [trackerBottomSheetChild, setTrackerBottomSheetChild] = useState(null);
+  const [trackerSheet, setTrackerSheet] = useState(null);
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -301,19 +302,23 @@ export default function LiteracySessionForm({ navigation }) {
     setLetterTrackerChanges((prev) => ({ ...prev, [childId]: changes }));
   };
 
-  // Determine language code for letter tracker from the first selected child's class
-  const trackerLanguageCode = useMemo(() => {
-    if (selectedChildren.length === 0) return null;
-    const firstChild = selectedChildren[0];
-    const childClass = classes.find(c => c.id === firstChild.class_id);
-    return languageCodeForHomeLanguage(childClass?.home_language);
-  }, [selectedChildren, classes]);
-
   // Count pending tracker changes for a child (for button label)
   const getTrackerChangeCount = (childId) => {
     const changes = letterTrackerChanges[childId] || {};
-    return Object.values(changes).filter(v => v === true).length;
+    return Object.values(changes).filter(change => change?.mastered === true).length;
   };
+
+  const handleOpenLetterTracker = (child) => {
+    setTrackerSheet({
+      childId: child.id,
+      languageCode: pendingChangesLanguageCode(letterTrackerChanges[child.id]) ??
+        languageCodeForHomeLanguage(classes.find(c => c.id === child.class_id)?.home_language),
+    });
+  };
+
+  const trackerBottomSheetChild = trackerSheet
+    ? selectedChildren.find(child => child.id === trackerSheet.childId) ?? null
+    : null;
 
   const handleSubmit = async () => {
     if (submittingRef.current) return;
@@ -356,7 +361,6 @@ export default function LiteracySessionForm({ navigation }) {
 
       await persistLiteracySession({ handle,
         session,
-        trackerLanguageCode,
         letterTrackerChanges,
         nowIso: now,
         idFactory: uuidv4,
@@ -433,7 +437,7 @@ export default function LiteracySessionForm({ navigation }) {
             classes={classes}
             onOpenChildLevelMenu={setOpenChildLevelMenu}
             getTrackerChangeCount={getTrackerChangeCount}
-            onOpenLetterTracker={setTrackerBottomSheetChild}
+            onOpenLetterTracker={handleOpenLetterTracker}
           />
         }
       />
@@ -449,15 +453,15 @@ export default function LiteracySessionForm({ navigation }) {
 
       {/* ── Letter Tracker Bottom Sheet ── */}
       <LetterTrackerBottomSheet
-        visible={trackerBottomSheetChild !== null}
-        onDismiss={() => setTrackerBottomSheetChild(null)}
+        visible={trackerSheet !== null}
+        onDismiss={() => setTrackerSheet(null)}
         child={trackerBottomSheetChild}
         userId={user.id}
-        languageCode={trackerLanguageCode}
-        pendingChanges={trackerBottomSheetChild ? (letterTrackerChanges[trackerBottomSheetChild.id] || {}) : {}}
+        languageCode={trackerSheet?.languageCode ?? null}
+        pendingChanges={trackerSheet ? (letterTrackerChanges[trackerSheet.childId] || {}) : {}}
         onChangesUpdate={(changes) => {
-          if (trackerBottomSheetChild) {
-            handleTrackerChangesUpdate(trackerBottomSheetChild.id, changes);
+          if (trackerSheet) {
+            handleTrackerChangesUpdate(trackerSheet.childId, changes);
           }
         }}
       />

@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { getConnectionActor } from '../../session/signedInHandle';
 import {
   assessmentItemDomainId,
   enqueueDomainOutbox,
@@ -12,7 +13,15 @@ import { chunkArray, sqlPlaceholders } from './sqliteRepositoryUtils';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
+import { pickLatestLetterResult } from '../../utils/letterMastery';
 import { toLocalDateString } from '../../utils/localDate';
+import { SERVER_COLUMNS } from '../../services/syncServerColumns';
+import { createSyncStateRepository } from './syncStateRepository';
+import { resolveHistoryPullState } from './historyCoverage';
+import {
+  assertPulledRunShape, ensureHistoryReferenceChildren, insertOrIgnoreRows,
+  mergePulledRunHeaders, selectRowsByIds,
+} from './historyPageApply';
 
 const ITEM_COLUMNS = [
   'id',
@@ -67,6 +76,19 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   const resolveActiveProgrammeId = async (db, { userId, programmeId }) => (
     programmeId || (userId ? await getActiveProgrammeId(db, userId) : null)
   );
+
+  const readVisibility = (db, userId) => {
+    const readerId = userId ?? database?.userId ?? getConnectionActor(db);
+    if (!readerId) return null;
+    // Resolve the year in the same SQL snapshot, without adding a separate read query.
+    return {
+      clause: `(user_id = ? or exists (
+        select 1 from academic_years y where y.is_active = 1
+          and assessments.assessment_date between y.starts_on and y.ends_on
+      ))`,
+      params: [readerId],
+    };
+  };
 
   const getAssessmentCountsSince = async ({ userId, programmeId } = {}) => {
     const db = await resolveDatabase(database);
@@ -173,15 +195,17 @@ export const createAssessmentsRepository = ({ database } = {}) => {
   };
 
   const getQuestionResults = async ({
-    userId, programmeId, assessmentId, childId, childIds, questionCodes, language, sinceDate,
+    userId, programmeId, assessmentId, childId, childIds, questionCodes, language, sinceDate, untilDate,
     recordedByUserId, includeSkipped = false, order = 'asc',
   } = {}) => {
     if (childIds?.length === 0 || questionCodes?.length === 0) return [];
     const db = await resolveDatabase(database);
     const activeProgrammeId = await resolveActiveProgrammeId(db, { userId, programmeId });
     if (userId && !activeProgrammeId) return [];
-    const clauses = ['question_code is not null'];
-    const params = [];
+    const visibility = readVisibility(db, userId);
+    if (!visibility) return [];
+    const clauses = ['question_code is not null', visibility.clause];
+    const params = [...visibility.params];
     for (const [column, value] of [
       ['programme_id', activeProgrammeId], ['id', assessmentId], ['child_id', childId],
       ['user_id', recordedByUserId], ['language', language],
@@ -189,6 +213,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
       if (value) { clauses.push(`${column} = ?`); params.push(value); }
     }
     if (sinceDate) { clauses.push('assessment_date >= ?'); params.push(sinceDate); }
+    if (untilDate) { clauses.push('assessment_date <= ?'); params.push(untilDate); }
     if (!includeSkipped) clauses.push("substr(coalesce(stopped_reason, ''), 1, 8) <> 'skipped_'");
     const direction = order === 'desc' ? 'desc' : 'asc';
     // Bound both caller filters and item hydration, including large class-roster requests.
@@ -223,21 +248,77 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     ...options, questionCodes: LETTER_EVIDENCE_CODES,
   });
 
-  const latestLetterResult = async ({ userId, childId, language } = {}) => {
-    const results = await getLetterResults({ userId, childId, language, order: 'desc' });
-    return results.find(result => result.items.some(item => item.metadata?.reached !== false)) || null;
+  const getLetterEvidenceResults = async ({ userId, childId, childIds } = {}) => {
+    const db = await resolveDatabase(database);
+    const year = await getActiveAcademicYear(db);
+    if (!year) return [];
+    return getLetterResults({
+      userId, childId, childIds, sinceDate: year.starts_on, untilDate: year.ends_on,
+    });
   };
+
+  const latestLetterResult = async ({ userId, childId, language } = {}) => pickLatestLetterResult(
+    await getLetterEvidenceResults({ userId, childId }), { childId, languageCode: language },
+  );
 
   const countResults = async ({ userId, childId, questionCode } = {}) => {
     const db = await resolveDatabase(database);
     const programmeId = await resolveActiveProgrammeId(db, { userId });
     if (!programmeId) return 0;
+    const visibility = readVisibility(db, userId);
+    if (!visibility) return 0;
     const row = await db.getFirstAsync(`
       select count(*) as count from assessments
       where programme_id = ? and child_id = ? and question_code = ?
         and substr(coalesce(stopped_reason, ''), 1, 8) <> 'skipped_'
-    `, programmeId, childId, questionCode);
+        and ${visibility.clause}
+    `, programmeId, childId, questionCode, ...visibility.params);
     return Number(row?.count || 0);
+  };
+
+  const saveHistoryPage = async (rows, { scope, pullState, admit }) => {
+    // Validate the entire page before acquiring the writer. RPC items omit parent fields.
+    let families;
+    try {
+      families = rows.map((row) => {
+        const family = { ...row, items: row.items.map((item) => ({
+          ...item, assessment_id: row.id, created_at: row.created_at,
+        })) };
+        assertSubmitShape(family);
+        if (row.battery_run != null) assertPulledRunShape(row.battery_run);
+        return family;
+      });
+    } catch (error) {
+      if (error instanceof TypeError) error.kind = 'query';
+      throw error;
+    }
+    return runRepositoryTransaction(database, async (txn) => {
+      if (admit && !admit()) throw Object.assign(new Error('Assessment history run cancelled'), { kind: 'cancelled' });
+      await ensureHistoryReferenceChildren(txn, families);
+      const runs = families.map((family) => family.battery_run).filter(Boolean);
+      const merged = await mergePulledRunHeaders(txn, runs);
+      const existing = await selectRowsByIds(txn, 'assessments', families.map((family) => family.id), ['id']);
+      const absent = families.filter((family) => !existing.has(family.id));
+      await insertOrIgnoreRows(txn, {
+        table: 'assessments', columns: [...SERVER_COLUMNS.assessments, 'sync_status', 'server_updated_at'],
+        rows: absent.map((family) => ({ ...family, derived: JSON.stringify(family.derived),
+          sync_status: 'synced', server_updated_at: family.updated_at })),
+      });
+      await insertOrIgnoreRows(txn, {
+        table: 'assessment_items', columns: ITEM_COLUMNS,
+        rows: absent.flatMap((family) => family.items.map((item) => ({
+          ...item, is_correct: item.is_correct ? 1 : 0, metadata: JSON.stringify(item.metadata),
+          updated_at: family.updated_at, server_updated_at: family.updated_at,
+          sync_status: 'synced', last_sync_error: null,
+        }))),
+      });
+      await createSyncStateRepository({ database }).setPullState(
+        scope, await resolveHistoryPullState(txn, pullState), { transaction: txn }
+      );
+      if (admit && !admit()) throw Object.assign(new Error('Assessment history run cancelled'), { kind: 'cancelled' });
+      return { inserted: absent.length, present: families.length - absent.length,
+        runsInserted: merged.inserted, runsAdvanced: merged.advanced };
+    });
   };
 
   return {
@@ -245,8 +326,10 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     saveQuestionResult,
     getQuestionResults,
     getLetterResults,
+    getLetterEvidenceResults,
     latestLetterResult,
     countResults,
+    saveHistoryPage,
   };
 };
 

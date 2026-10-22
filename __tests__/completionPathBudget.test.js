@@ -99,19 +99,18 @@ describe('completion-path statement budgets', () => {
     expect(owners).toEqual([{ owner_user_id: 'user-1' }]);
   });
 
-  test('literacy persistence prefetches only changed children and preserves mastery transitions', async () => {
+  test('literacy persistence writes each tracker change with one keyed read, one record and one outbox upsert', async () => {
     db = await createDatabase();
     await seedChildren(db, 2);
     const mastery = createMasteryRepository({ database: db });
-    await mastery.saveLetterMasteryRecord({
-      id: 'deleted-a', user_id: 'user-1', child_id: 'child-0', programme_id: 'programme-a',
-      letter: 'a', language: 'English', source: 'taught', _deleted: true, synced: true,
-    });
-    await mastery.saveLetterMasteryRecord({
-      id: 'active-s', user_id: 'user-1', child_id: 'child-0', programme_id: 'programme-a',
-      letter: 's', language: 'English', source: 'taught', synced: true,
-    });
+    for (const [letter, confirmed] of [['a', false], ['s', true]]) {
+      await mastery.setLetterMastery({
+        childId: 'child-0', programmeId: 'programme-a', letter, language: 'en',
+        confirmed, changedAt: '2026-07-11T09:00:00.000Z',
+      });
+    }
     db.resetQueryLog();
+    const writes = jest.spyOn(db, 'runAsync');
 
     await persistLiteracySession({
       database: db,
@@ -119,41 +118,39 @@ describe('completion-path statement budgets', () => {
         id: 'session-mastery', user_id: 'user-1', programme_id: 'programme-a',
         session_date: '2026-07-12', children_ids: ['child-0'], synced: false,
       },
-      trackerLanguageCode: 'en',
-      letterTrackerChanges: { 'child-0': { a: true, m: true, s: false } },
+      letterTrackerChanges: { 'child-0': {
+        a: { mastered: true, languageCode: 'en', madeAt: '2026-07-12T09:55:00.000Z' },
+        m: { mastered: true, languageCode: 'en', madeAt: '2026-07-12T09:56:00.000Z' },
+        s: { mastered: false, languageCode: 'en', madeAt: '2026-07-12T09:57:00.000Z' },
+      } },
       nowIso: '2026-07-12T10:00:00.000Z',
-      idFactory: () => 'ignored-by-deterministic-id',
+      idFactory: () => 'unused',
     });
 
-    const masteryReads = db.getQueryLog().filter(query => (
-      query.method === 'getAllAsync' && compactSql(query.sql).includes('from letter_mastery')
+    const log = db.getQueryLog();
+    const masteryReads = log.filter(query => (
+      query.method === 'getFirstAsync' && compactSql(query.sql).includes('from letter_mastery')
     ));
-    expect(masteryReads).toHaveLength(1);
-    expect(compactSql(masteryReads[0].sql)).toContain('child_id in (?)');
-    expect(compactSql(masteryReads[0].sql)).not.toMatch(/from letter_mastery\s+where programme_id = \? and user_id = \?\s+order by/);
+    expect(masteryReads).toHaveLength(3);
+    for (const query of masteryReads) expect(compactSql(query.sql)).toContain('where lm.id = ?');
+    expect(log.filter(query => query.method === 'getAllAsync' && compactSql(query.sql).includes('from letter_mastery'))).toHaveLength(0);
+    const masteryWrites = writes.mock.calls.filter(([sql, ...params]) =>
+      /(?:into|update) "letter_mastery"/i.test(sql) || (sql.includes('sync_outbox') && params.includes('letter_mastery')));
+    expect(masteryWrites.length).toBeLessThanOrEqual(6);
+    writes.mockRestore();
 
-    db.resetQueryLog();
-    expect(await db.getAllAsync(`
-      select letter, deleted_at
-      from letter_mastery
-      where child_id = 'child-0' and programme_id = 'programme-a'
-      order by letter
-    `)).toEqual([
-      { letter: 'a', deleted_at: null },
-      { letter: 'm', deleted_at: null },
-      { letter: 's', deleted_at: '2026-07-12T10:00:00.000Z' },
-    ]);
-    const masteryOutbox = await db.getAllAsync(`
-      select operation, payload
-      from sync_outbox
-      where table_name = 'letter_mastery'
-      order by operation
-    `);
-    expect(masteryOutbox.map(row => row.operation)).toEqual(['archive', 'insert', 'update']);
-    expect(masteryOutbox.map(row => JSON.parse(row.payload))).toEqual(expect.arrayContaining([
-      expect.objectContaining({ letter: 'a', deleted_at: null }),
-      expect.objectContaining({ letter: 'm', deleted_at: null }),
-      expect.objectContaining({ letter: 's', deleted_at: '2026-07-12T10:00:00.000Z' }),
+    expect(await db.getAllAsync("select letter, language, confirmed from letter_mastery where child_id = 'child-0' order by letter"))
+      .toEqual([
+        { letter: 'a', language: 'en', confirmed: 1 },
+        { letter: 'm', language: 'en', confirmed: 1 },
+        { letter: 's', language: 'en', confirmed: 0 },
+      ]);
+    const slots = await db.getAllAsync("select operation, payload from sync_outbox where table_name = 'letter_mastery'");
+    expect(slots.map(row => row.operation)).toEqual(['update', 'update', 'update']);
+    expect(slots.map(row => JSON.parse(row.payload))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ letter: 'a', language: 'en', confirmed: true }),
+      expect.objectContaining({ letter: 'm', language: 'en', confirmed: true }),
+      expect.objectContaining({ letter: 's', language: 'en', confirmed: false }),
     ]));
   });
 });

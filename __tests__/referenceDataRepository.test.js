@@ -23,6 +23,75 @@ const createDeferred = () => {
   return { promise, resolve, reject };
 };
 
+const Y2025 = { id: 'year-2025', label: '2025', starts_on: '2025-01-15', ends_on: '2025-12-15', is_active: false };
+const Y2026 = { id: 'year-2026', label: '2026', starts_on: '2026-01-15', ends_on: '2026-12-15', is_active: true };
+const Y2027 = { id: 'year-2027', label: '2027', starts_on: '2027-01-15', ends_on: '2027-12-15', is_active: true };
+
+describe('academic year refresh', () => {
+  let db;
+  let repository;
+  beforeEach(async () => {
+    db = createBetterSqliteTestDatabase();
+    await runMigrations(db);
+    repository = createReferenceDataRepository({ database: db, tableName: 'academic_years' });
+  });
+  afterEach(async () => { await db.closeAsync(); });
+
+  test.each([
+    ['the new year first', [Y2027, { ...Y2026, is_active: false }]],
+    ['the old year first', [{ ...Y2026, is_active: false }, Y2027]],
+  ])('a refresh switches the active year whatever order the server lists the years in', async (_label, order) => {
+    await repository.replaceFromServer([Y2026]);
+    await db.runAsync("insert into schools (id, name) values ('school-1', 'Masi Primary')");
+    await db.runAsync(`
+      insert into classes (id, school_id, name, grade, academic_year_id)
+      values ('class-1', 'school-1', 'Grade 1A', '1', 'year-2026')
+    `);
+
+    await expect(repository.replaceFromServer(order)).resolves.toBe(true);
+    expect(await repository.getActive()).toMatchObject({ id: 'year-2027', is_active: true });
+    expect(await db.getAllAsync('select id, is_active from academic_years order by id')).toEqual([
+      { id: 'year-2026', is_active: 0 }, { id: 'year-2027', is_active: 1 },
+    ]);
+    expect(await db.getFirstAsync("select academic_year_id from classes where id = 'class-1'"))
+      .toEqual({ academic_year_id: 'year-2026' });
+  });
+
+  test('a local active year missing from the response is cleared', async () => {
+    await repository.replaceFromServer([{ ...Y2025, is_active: true }]);
+    await expect(repository.replaceFromServer([Y2026])).resolves.toBe(true);
+    expect(await repository.getActive()).toMatchObject({ id: 'year-2026', is_active: true });
+    expect(await db.getAllAsync('select id, is_active from academic_years order by id')).toEqual([
+      { id: 'year-2025', is_active: 0 }, { id: 'year-2026', is_active: 1 },
+    ]);
+  });
+
+  test('a response with no active year changes only the rows it carries', async () => {
+    await repository.replaceFromServer([Y2026]);
+    await expect(repository.replaceFromServer([Y2025])).resolves.toBe(true);
+    expect(await repository.getActive()).toMatchObject({ id: 'year-2026', is_active: true });
+    expect(await db.getAllAsync('select id, is_active from academic_years order by id')).toEqual([
+      { id: 'year-2025', is_active: 0 }, { id: 'year-2026', is_active: 1 },
+    ]);
+    await expect(repository.replaceFromServer([])).resolves.toBe(true);
+    expect(await repository.getActive()).toMatchObject({ id: 'year-2026', is_active: true });
+  });
+
+  test('two active years in one response fail whole', async () => {
+    // The first incoming insert succeeds; the second must roll that insert back too.
+    await repository.replaceFromServer([Y2025]);
+    const before = await db.getAllAsync('select * from academic_years order by id');
+    let failure;
+    try {
+      await repository.replaceFromServer([Y2026, Y2027]);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure?.message).toMatch(/UNIQUE/);
+    expect(await db.getAllAsync('select * from academic_years order by id')).toEqual(before);
+  });
+});
+
 describe('reference data repositories', () => {
 
 

@@ -1,0 +1,1112 @@
+{
+  "version": 1,
+  "defaults": {
+    "computeLessonPlan": {
+      "today": "2026-10-19",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "groupId": "g1",
+      "upNextGroupId": "g1",
+      "languageCode": "xh",
+      "pack": "xh-mini",
+      "alphabet": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],
+      "isEcd": false,
+      "presentChildren": [],
+      "sessions": []
+    }
+  },
+  "cases": [
+    {
+      "name": "pair, both present: the next two unmastered letters",
+      "spec": "§4.4, J5",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          { "id": "A", "readingLevel": null, "knownLetters": ["o","m","l","a"], "historyComplete": true, "masteryComplete": true },
+          { "id": "B", "readingLevel": null, "knownLetters": ["o","m","l","a","k"], "historyComplete": true, "masteryComplete": true }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "present_child_ids": ["A","B"],
+        "known_letters": ["o","m","l","a"],
+        "suggested_letters": ["k","u"],
+        "review_letters": ["o","m","l","a"],
+        "unlocked_letters": ["o","m","l","a","k","u"]
+      }
+    },
+    {
+      "name": "partner absent: the plan follows the child present",
+      "spec": "C1",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          { "id": "B", "readingLevel": null, "knownLetters": ["o","m","l","a","k"], "historyComplete": true, "masteryComplete": true }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "present_child_ids": ["B"],
+        "known_letters": ["o","m","l","a","k"],
+        "suggested_letters": ["u","e"],
+        "review_letters": ["o","m","l","a","k","n"],
+        "unlocked_letters": ["o","m","l","a","k","u","e","n"]
+      }
+    },
+    {
+      "name": "out-of-order mastery is skipped and stays unlocked",
+      "spec": "§4.4, C3",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "t"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "t"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "known_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "t"
+        ],
+        "suggested_letters": [
+          "k",
+          "u"
+        ],
+        "review_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "t"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "t"
+        ]
+      }
+    },
+    {
+      "name": "a child with no data counts as knowing nothing",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k",
+              "u"
+            ],
+            "historyComplete": false,
+            "masteryComplete": true
+          },
+          {
+            "id": "C",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": false,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "known_letters": [],
+        "suggested_letters": [
+          "o",
+          "m"
+        ],
+        "review_letters": [
+          "l",
+          "a"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "three children: one may lag",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "C",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "known_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k"
+        ],
+        "suggested_letters": [
+          "u",
+          "e"
+        ]
+      }
+    },
+    {
+      "name": "five children: 80% or at most one behind",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k",
+              "u"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k",
+              "u"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "C",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k",
+              "u"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "D",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "E",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "known_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k"
+        ],
+        "suggested_letters": [
+          "u",
+          "e"
+        ]
+      }
+    },
+    {
+      "name": "all letters known",
+      "spec": "C9, §4.8",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j",
+              "k",
+              "l",
+              "m",
+              "n",
+              "o",
+              "p",
+              "q",
+              "r",
+              "s",
+              "t",
+              "u",
+              "v",
+              "w",
+              "x",
+              "y",
+              "z"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j",
+              "k",
+              "l",
+              "m",
+              "n",
+              "o",
+              "p",
+              "q",
+              "r",
+              "s",
+              "t",
+              "u",
+              "v",
+              "w",
+              "x",
+              "y",
+              "z"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "all_letters_known",
+        "known_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j",
+          "r"
+        ],
+        "suggested_letters": [],
+        "review_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j",
+          "r"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j",
+          "r"
+        ]
+      }
+    },
+    {
+      "name": "one letter left: one suggestion",
+      "spec": "§4.4",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j",
+              "k",
+              "l",
+              "m",
+              "n",
+              "o",
+              "p",
+              "q",
+              "s",
+              "t",
+              "u",
+              "v",
+              "w",
+              "x",
+              "y",
+              "z"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j",
+              "k",
+              "l",
+              "m",
+              "n",
+              "o",
+              "p",
+              "q",
+              "r",
+              "s",
+              "t",
+              "u",
+              "v",
+              "w",
+              "x",
+              "y",
+              "z"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "suggested_letters": [
+          "r"
+        ],
+        "review_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j",
+          "r"
+        ]
+      }
+    },
+    {
+      "name": "no pack: nothing suggested, known letters in the given alphabet's order",
+      "spec": "C10, §4.8",
+      "fn": "computeLessonPlan",
+      "input": {
+        "pack": null,
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "no_pack",
+        "known_letters": [
+          "a",
+          "l",
+          "m",
+          "o"
+        ],
+        "suggested_letters": [],
+        "review_letters": [],
+        "unlocked_letters": []
+      }
+    },
+    {
+      "name": "Afrikaans code uses the Afrikaans interim order",
+      "spec": "§10, C10",
+      "fn": "computeLessonPlan",
+      "input": {
+        "languageCode": "af",
+        "pack": "af-interim",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "s",
+              "m",
+              "e"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "s",
+              "m",
+              "e"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "ok",
+        "known_letters": [
+          "a",
+          "s",
+          "m",
+          "e"
+        ],
+        "suggested_letters": [
+          "k",
+          "i"
+        ],
+        "review_letters": [
+          "a",
+          "s",
+          "m",
+          "e"
+        ],
+        "unlocked_letters": [
+          "a",
+          "s",
+          "m",
+          "e",
+          "k",
+          "i"
+        ]
+      }
+    },
+    {
+      "name": "a pack for another language counts as no pack",
+      "spec": "§4.1",
+      "fn": "computeLessonPlan",
+      "input": {
+        "languageCode": "af",
+        "pack": "xh-mini",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "no_pack",
+        "known_letters": [
+          "a",
+          "l",
+          "m",
+          "o"
+        ]
+      }
+    },
+    {
+      "name": "English interim order",
+      "spec": "C10",
+      "fn": "computeLessonPlan",
+      "input": {
+        "languageCode": "en",
+        "pack": "en-interim",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "m",
+              "s",
+              "t"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "m",
+              "s",
+              "t"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "suggested_letters": [
+          "n",
+          "i"
+        ],
+        "unlocked_letters": [
+          "a",
+          "m",
+          "s",
+          "t",
+          "n",
+          "i"
+        ]
+      }
+    },
+    {
+      "name": "R6 a class with no language never borrows a pack",
+      "spec": "Review Focus 2, §4.2",
+      "fn": "computeLessonPlan",
+      "input": {
+        "languageCode": null,
+        "pack": "xh-mini",
+        "alphabet": null,
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "no_pack",
+        "known_letters": [],
+        "suggested_letters": [],
+        "review_letters": [],
+        "unlocked_letters": []
+      }
+    },
+    {
+      "name": "R7 isiZulu has a code but no pack",
+      "spec": "Review Focus 2",
+      "fn": "computeLessonPlan",
+      "input": {
+        "languageCode": "zu",
+        "pack": "xh-mini",
+        "alphabet": null,
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "reason": "no_pack",
+        "known_letters": []
+      }
+    },
+    {
+      "name": "everyone absent: no_children",
+      "spec": "C1, §4.8",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": []
+      },
+      "exact": true,
+      "expect": {
+        "engine_version": 1,
+        "made_on": "2026-10-19",
+        "reason": "no_children",
+        "history_complete": true,
+        "mastery_complete": true,
+        "present_child_ids": [],
+        "known_letters": [],
+        "suggested_letters": [],
+        "review_letters": [],
+        "unlocked_letters": [],
+        "blend_tier": null,
+        "suggested_blends": [],
+        "suggested_book": null,
+        "up_next_group_id": "g1"
+      }
+    },
+    {
+      "name": "mastery still downloading: suggestions run, the plan records it",
+      "spec": "§7.3, §7.6",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": false
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "mastery_complete": false,
+        "history_complete": true,
+        "suggested_letters": [
+          "k",
+          "u"
+        ]
+      }
+    },
+    {
+      "name": "plan envelope",
+      "spec": "§6",
+      "fn": "computeLessonPlan",
+      "input": {
+        "today": "2026-10-21",
+        "upNextGroupId": "g2",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "engine_version": 1,
+        "made_on": "2026-10-21",
+        "up_next_group_id": "g2"
+      }
+    },
+    {
+      "name": "R1 letter steps listed out of order are read by step number",
+      "spec": "Review Focus 1",
+      "fn": "computeLessonPlan",
+      "input": {
+        "pack": "xh-letters-reversed",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "suggested_letters": [
+          "k",
+          "u"
+        ],
+        "unlocked_letters": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u"
+        ]
+      }
+    },
+    {
+      "name": "R2 known letters are compared lower-case",
+      "spec": "Review Focus 5",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "O",
+              "M",
+              "L",
+              "A"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "known_letters": [
+          "o",
+          "m",
+          "l",
+          "a"
+        ],
+        "suggested_letters": [
+          "k",
+          "u"
+        ]
+      }
+    },
+    {
+      "name": "R3 a child listed twice counts once",
+      "spec": "Review Focus 5",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "present_child_ids": [
+          "A"
+        ],
+        "suggested_letters": [
+          "k",
+          "u"
+        ]
+      }
+    }
+  ]
+}

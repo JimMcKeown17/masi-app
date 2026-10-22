@@ -8,6 +8,7 @@ import { useToast } from '../../context/ToastContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useAuth } from '../../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import {
@@ -15,7 +16,7 @@ import {
   describeReconcileBreakerNote,
   describeSyncState,
   describeWaitingDetail,
-  describeHistoryState,
+  describeCombinedHistoryState,
 } from '../../utils/syncStatusPresenter';
 
 import BrandButton from '../../components/common/BrandButton';
@@ -65,17 +66,21 @@ export default function SyncStatusScreen() {
 
   const { user } = useAuth();
   const { running, pageVersion, runVersion } = useSessionHistoryStatus();
-  const [pullState, setPullState] = useState(null);
-  const history = describeHistoryState({ running, pullState });
+  const assessmentHistory = useAssessmentHistoryStatus();
+  const [pullStates, setPullStates] = useState([null, null, null, null]);
+  const history = describeCombinedHistoryState({ running: running || assessmentHistory.running, pullStates });
   useFocusEffect(useCallback(() => {
     let active = true;
-    services.sessionHistory.store.getPullState(user?.id).then((state) => {
-      if (active) setPullState(state);
+    Promise.all([
+      services.sessionHistory.store.getPullState(user?.id),
+      services.assessmentHistory.store.getPullStates(user?.id),
+    ]).then(([session, states]) => {
+      if (active) setPullStates([session, states.batteryRuns, states.assessments, states.mastery]);
     }).catch((error) => {
       console.error('Error loading history status:', error);
     });
     return () => { active = false; };
-  }, [user?.id, pageVersion, runVersion]));
+  }, [user?.id, services, pageVersion, runVersion, assessmentHistory.pageVersion, assessmentHistory.runVersion]));
   const {
     isOnline, isSyncing, syncStatus, syncNow, refreshSyncStatus,
     waitingCount, needsAttentionCount, authorizeReconcileBreaker,

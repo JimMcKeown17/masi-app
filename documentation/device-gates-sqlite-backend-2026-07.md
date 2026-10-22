@@ -213,3 +213,29 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 - [ ] **S5. Insights.** Open all three cards and confirm Letter Mastery, Assessment Scores, and Session Count reach their existing ranking screens. Back navigation must return to Insights with the bottom bar intact.
 - [ ] **S6. Zero-class route.** Sign in with a blank tester. Home must route into the existing class/child onboarding flow instead of showing a misleading empty dashboard. Do not expect the future Learners group toggle in this build.
 - [ ] **S7. Offline and pending sync.** Reopen Home offline with cached data. The screen must remain usable, preserve its last SQLite-derived content, and show the correct full sync status rather than green success.
+
+## T. Content packs and the decodability checker (lesson plan A1, 2026-10)
+
+Controller-owned. T1 and T3 passed on 2026-10-22 (build log, "Lesson plan wave 1: Galaxy A03s device run on the integration build"); T2 waits for an iOS build. Run on the first builds carrying A1, with T1 on the combined Android build. These checks must pass before any slice that runs the checker on a field phone (A2, A3, C2–C4) ships in a pilot build. A1 has no screen, so the visual and 1.0x/1.3x text-size checks do not apply. The export path is Profile → **Support tools** → **Share database** → **Export**.
+
+- [x] **T1. Android, Hermes, developer path.** (Passed 2026-10-22, build 27.) Build with `eas build -p android --profile preview-content`, install it on the Galaxy A03s, sign in, and export. Pass means the exported JSON's `content_diagnostics` has `decodabilitySelfCheck` equal to `{ "vectorVersion": 1, "passed": 72, "failed": [] }`, `previewContentAllowed` `true`, and `currentPacks.xh` `"isixhosa-candidates-preview-v1"`.
+- [ ] **T2. iOS, Hermes, field path.** Use the next `pilot` TestFlight build on an iPhone, or an iOS `preview` build, and export the same way. Pass means `decodabilitySelfCheck` matches T1 exactly, `previewContentAllowed` is `false`, `currentPacks` is `{ xh, en, af }` with the three `*-interim-letters-v1` ids, and, on a pilot build, the export's `runtimeDiagnostics.update.channel` is `"preview"`.
+- [x] **T3. Build refusal.** (Passed 2026-10-22: `pilot` and `production` both exit 1 with the C12 message.) With `MASI_PREVIEW_CONTENT=1` and `EAS_BUILD_PROFILE=pilot` set, `node -e "require('./app.config')()"` must exit non-zero with the C12 refusal message. Do not spend an EAS build on this.
+
+If T1 or T2 lists failures, or `content_diagnostics` holds `error`, stop. The vendored checker must not be edited. Report the failing cases to Jim and the books project.
+
+## U. Assessment and mastery history (Assessment Results Plan 3, 2026-10)
+
+Plan 3 Task 14. Galaxy A03s results from 2026-10-22 (build log, part 1 and part 2 of the wave-1
+device run); every iPhone row is still open.
+
+- [x] **U1. New phone** (A03s, reinstall as Test User): History Up to date 47.6 s after Home; 45 results listed, matching the server, none "Unknown child"; trackers as on the original phone; log `complete=true`. Battery-run rows not checked (no run fixture).
+- [x] **U2. Reinstall** (A03s): the lists return. Battery-run `started_here` not checked (no run fixture).
+- [x] **U3. Second EA** (A03s, two EAs in turn): shared child's result and locks appear; own history empty; control child hidden everywhere.
+- [x] **U4. Handover and back** (A03s, two EAs in turn): `k` follows the child, the old holder's row is deleted, the un-confirm wins on return; `mode=rewalk_due` logged.
+- [x] **U5. First commit and volume** (A03s, Wi-Fi only; no SIM for 3G): `firstCommitMs` 1,558 / 1,687 / 1,677.
+- [x] **U6. Interrupted download** (A03s): three force-stops and a Wi-Fi drop; counts match the server; a committed page was kept.
+- [x] **U7. Lesson during the first download** (A03s): confirmation in about 0.7 s; download completed; marks saved as `en` with their own times.
+- [x] **U8. Server switch drill** (A03s): Incomplete since, local data kept, back to Up to date. Log lines lost to the reinstall.
+- [x] **U9. History row at 1.0x and 1.3x** (A03s, 360 dp): Up to date, Downloading, Incomplete since; no clipping. The orphaned "AM" is fixed on the UI-polish branch.
+- [ ] **iPhone:** U1–U4 and U9.

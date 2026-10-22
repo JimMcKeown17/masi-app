@@ -1,5 +1,7 @@
 import { SERVER_COLUMNS } from './syncServerColumns';
 import { toSubmitArgs } from './assessmentFamilyPayload';
+import { toSetLetterMasteryArgs, parseSetLetterMasteryResult } from './letterMasteryCorrection';
+import { applyCorrectionAcknowledgement } from '../db/repositories/masteryRepository';
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
@@ -27,7 +29,6 @@ import {
   ensureServerUuid,
   groupEaAssignmentDomainId,
   LEGACY_PROGRAMME_ID,
-  letterMasteryDomainId,
   sessionAttendeeDomainId,
 } from '../db/repositories/domainRepositoryUtils';
 
@@ -53,12 +54,10 @@ const LEGACY_KEYS_TO_STRIP = {
 };
 
 // Real server columns deliberately withheld from push (reserved strictly for that — NOT a
-// catch-all). sessions.group_id/state are server-RLS-guarded out until the state-machine slice
-// (supabase/migrations/20260529214500_masi_sessions_forward_prep_columns.sql).
+// catch-all). B2 activates sessions.group_id; state stays completed until the state-machine slice.
 const INTENTIONALLY_UNSYNCED = {
   sessions: {
-    group_id: 'Forward-prep; server RLS pins group_id NULL until the state-machine slice (migration 20260529214500).',
-    state: 'Forward-prep; server RLS pins state=completed until the state-machine slice (migration 20260529214500).',
+    state: 'Forward-prep; server RLS keeps state = completed (migration 20261021140000_session_group_authorization).',
   },
   assessments: {
     items_tested: 'Legacy summary field; Question families send assessment_items through submit_assessment.',
@@ -66,7 +65,7 @@ const INTENTIONALLY_UNSYNCED = {
 };
 
 // Local-only bookkeeping columns the engine strips before push — never sent to the server.
-const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference', 'started_here'];
+const LOCAL_ONLY_COLUMNS = ['synced', 'sync_status', 'last_sync_error', 'server_updated_at', 'history_reference', 'started_here', 'server_changed_at', 'server_correction_id'];
 
 export const PUSH_ORDER = [
   'time_entries',
@@ -99,7 +98,7 @@ const TABLE_DEPENDENCIES = {
   groups: ['classes'],
   group_ea_assignments: ['groups'],
   child_group_memberships: ['children', 'groups'],
-  sessions: ['classes'],
+  sessions: ['classes', 'groups'],
   session_attendees: ['sessions', 'children', 'groups'],
   battery_runs: ['children'],
   assessments: ['children', 'battery_runs'],
@@ -149,7 +148,7 @@ const PARENT_FK_COLUMNS = {
   groups: { classes: 'class_id', grouping_versions: 'grouping_version_id' },
   group_ea_assignments: { groups: 'group_id' },
   child_group_memberships: { children: 'child_id', groups: 'group_id', grouping_versions: 'grouping_version_id' },
-  sessions: { classes: 'class_id' },
+  sessions: { classes: 'class_id', groups: 'group_id' },
   session_attendees: { sessions: 'session_id', children: 'child_id', groups: 'group_id' },
   battery_runs: { children: 'child_id' },
   assessments: { children: 'child_id', battery_runs: 'battery_run_id' },
@@ -157,7 +156,8 @@ const PARENT_FK_COLUMNS = {
 };
 
 // The grant(s) each write needs, matching private.current_user_can_write_for_child/class/group
-// (migration 20260521144901 lines 368-517). The created_by half is covered by PARENT_FK_COLUMNS.
+// (migration 20260521144901 lines 368-517) and B2's held-group check.
+// The created_by half is covered by PARENT_FK_COLUMNS.
 // Entry shapes:
 //   { grantTable, subjectColumn, valueColumn? }: a direct active assignment whose subjectColumn
 //     equals this record's valueColumn (default subjectColumn). valueColumn 'id' means the
@@ -165,6 +165,8 @@ const PARENT_FK_COLUMNS = {
 //   { membershipMediatedChild: column }: the child in `column` is reachable through an active
 //     class or group membership joined to an active class or group assignment. The server needs
 //     both rows, so evidence is pending when either half is unacknowledged and not terminal.
+//   { heldGroupAssignment: column }: an owed insert of this EA's assignment to the group in
+//     `column`, even when the local assignment has ended (C19). Only sessions and attendees.
 // staff_programme_assignments is excluded (reference data, never pushed). Used for 42501 and
 // UPDATE_NOT_APPLIED.
 const GRANT_SUBJECTS = {
@@ -188,9 +190,11 @@ const GRANT_SUBJECTS = {
     { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },
     { membershipMediatedChild: 'child_id' },
   ],
+  sessions: [{ heldGroupAssignment: 'group_id' }],
   session_attendees: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { membershipMediatedChild: 'child_id' },
+    { heldGroupAssignment: 'group_id' },
   ],
   assessments: [
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
@@ -200,10 +204,7 @@ const GRANT_SUBJECTS = {
     { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
     { membershipMediatedChild: 'child_id' },
   ],
-  letter_mastery: [
-    { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
-    { membershipMediatedChild: 'child_id' },
-  ],
+  letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
   grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
@@ -235,10 +236,14 @@ const BATCHABLE_UPSERT_TABLES = new Set([
   'children',
   'class_ea_assignments',
   'group_ea_assignments',
-  'letter_mastery',
   'session_attendees',
   'time_entries',
 ]);
+
+// Assignment identity triggers forbid update-capable insert retries. A session's UPDATE policy
+// needs a landed attendee, so its insert retry must never take the UPDATE path either.
+const INSERT_OR_IGNORE_TABLES = new Set([...IMMUTABLE_ASSIGNMENT_TABLES, 'sessions']);
+
 export const SYNC_BATCH_LIMITS = Object.freeze({
   maxBatchRecords: 100,
   maxFallbackRecordsPerPass: 25,
@@ -268,7 +273,6 @@ const ARCHIVE_SERVER_COLUMNS = {
   groups: ['archived_at', 'archived_by_user_id', 'archive_reason'],
   group_ea_assignments: ['unassigned_at', 'handover_reason'],
   child_group_memberships: ['removed_at'],
-  letter_mastery: ['deleted_at'],
 };
 
 // Lifecycle-bearing edits must also avoid single/batched upsert: full snapshots
@@ -290,9 +294,13 @@ const dependenciesForRecord = (outboxRecord) => {
     dependencies.delete('classes');
     return [...dependencies];
   }
-  if ((outboxRecord.table_name === 'groups' || outboxRecord.table_name === 'sessions') && !payload.class_id) {
+  if (outboxRecord.table_name === 'groups' && !payload.class_id) {
     dependencies.delete('classes');
     return [...dependencies];
+  }
+  if (outboxRecord.table_name === 'sessions') {
+    if (!payload.class_id) dependencies.delete('classes');
+    if (!payload.group_id) dependencies.delete('groups');
   }
   if (outboxRecord.table_name === 'session_attendees' && !payload.group_id) {
     dependencies.delete('groups');
@@ -351,6 +359,20 @@ const hasPendingActiveAssignment = async (database, grantTable, subjectColumn, s
        limit 1`,
     subjectValue,
   );
+  return !!row;
+};
+
+const hasOwedHeldGroupAssignmentInsert = async (database, groupId, eaUserId) => {
+  if (!groupId || !eaUserId) return false;
+  const row = await database.getFirstAsync(`
+    select 1 as present
+    from sync_outbox o
+    join group_ea_assignments gea on gea.id = o.record_id
+    where o.table_name = 'group_ea_assignments' and o.operation = 'insert'
+      and o.status in ('pending', 'failed', 'in_flight')
+      and gea.group_id = ? and gea.ea_user_id = ?
+    limit 1
+  `, groupId, eaUserId);
   return !!row;
 };
 
@@ -423,6 +445,13 @@ const computeEvidencePending = async ({
 
   if (includeGrant) {
     for (const grant of GRANT_SUBJECTS[table] || []) {
+      if (grant.heldGroupAssignment) {
+        const groupId = await getField(grant.heldGroupAssignment);
+        if (groupId && await hasOwedHeldGroupAssignmentInsert(db, groupId, outboxRecord.owner_user_id)) {
+          return true;
+        }
+        continue;
+      }
       if (grant.membershipMediatedChild) {
         const childId = await getField(grant.membershipMediatedChild);
         if (childId && await hasPendingMembershipMediatedGrant(db, childId, {
@@ -477,7 +506,7 @@ const classifyError = (
   }
 
   if (code === '23505') {
-    const requiresRpcAcknowledgement = ['assessments', 'battery_runs'].includes(normalizeTableName(tableName));
+    const requiresRpcAcknowledgement = ['assessments', 'battery_runs', 'letter_mastery'].includes(normalizeTableName(tableName));
     return { terminal: true, markAsSynced: duplicateIsSuccess && !requiresRpcAcknowledgement };
   }
 
@@ -528,6 +557,7 @@ const isHealableRlsError = (record) => {
 
 const buildSyncPayload = (tableName, record, operation) => {
   if (tableName === 'assessments') return toSubmitArgs(record);
+  if (tableName === 'letter_mastery') return toSetLetterMasteryArgs(record);
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
   if (tableName === 'battery_runs') keysToStrip.add('updated_at');
@@ -553,20 +583,6 @@ const buildSyncPayload = (tableName, record, operation) => {
         isCorrect: payload.is_correct,
       })
     );
-  }
-  // letter_mastery's identity is its logical key. Force the deterministic id on every push so a
-  // pre-fix random local id (OTA-updated device) still lands on the canonical server row, and
-  // every device/install agrees on the id — making insert-by-id idempotent (no 23505 to repair).
-  // Unlike ensureServerUuid (which passes a valid random uuid through), this always derives it.
-  if (tableName === 'letter_mastery' && payload.id) {
-    payload.id = letterMasteryDomainId({
-      userId: payload.user_id,
-      childId: payload.child_id,
-      programmeId: payload.programme_id,
-      letter: payload.letter,
-      language: payload.language,
-      source: payload.source || 'taught',
-    });
   }
   // Active-pair identity is the server partial-unique key. Only full insert payloads carry every
   // key column; bare archive payloads must keep their original row id.
@@ -675,10 +691,8 @@ const buildOperationPatch = (tableName, operation, payload) => {
   }
   if (operation === 'update' && UPDATE_BY_ID_TABLES.has(tableName)) {
     // Full stored snapshots may predate an archive/restore. Ordinary edits must
-    // not replay that lifecycle state. Mastery reactivation is intentionally an
-    // update with deleted_at:null (masteryRepository.enqueueMasteryWrite).
-    const lifecycleColumns = tableName === 'letter_mastery'
-      ? [] : (ARCHIVE_SERVER_COLUMNS[tableName] || []);
+    // not replay that lifecycle state.
+    const lifecycleColumns = ARCHIVE_SERVER_COLUMNS[tableName] || [];
     return Object.fromEntries(
       Object.entries(payload).filter(([column]) => (
         !UPDATE_PATCH_EXCLUDED_COLUMNS.has(column) && !lifecycleColumns.includes(column)
@@ -720,7 +734,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   try {
     payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
   } catch (error) {
-    if (config.tableName !== 'assessments' || !(error instanceof TypeError)) throw error;
+    if (!['assessments', 'letter_mastery'].includes(config.tableName) || !(error instanceof TypeError)) throw error;
     return { success: false, error: { code: '22023', message: error.message } };
   }
 
@@ -748,6 +762,22 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
         message: `save_battery_run returned an unexpected result: ${String(data)}`,
       },
     };
+  }
+
+  if (config.tableName === 'letter_mastery') {
+    const { data, error } = await supabaseClient.rpc('set_letter_mastery', payload);
+    if (error) return { success: false, error };
+    const acknowledgement = parseSetLetterMasteryResult(data);
+    if (!acknowledgement) {
+      return {
+        success: false,
+        error: {
+          code: 'UNEXPECTED_RPC_RESULT',
+          message: `set_letter_mastery returned an unexpected result: ${String(data)}`,
+        },
+      };
+    }
+    return { success: true, acknowledgement, sentCorrectionId: payload.p_correction_id };
   }
 
   if (outboxRecord.operation === 'hard_delete') {
@@ -797,8 +827,6 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   }
 
   if (outboxRecord.operation === 'update' && UPDATE_BY_ID_TABLES.has(config.tableName)) {
-    // buildSyncPayload has already re-derived deterministic ids (letter_mastery), so the server id
-    // is the payload id, not the outbox record_id.
     const serverId = payload.id || outboxRecord.record_id;
     const patch = buildOperationPatch(config.tableName, outboxRecord.operation, payload);
     const { data, error } = await supabaseClient
@@ -829,7 +857,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
       onConflict: config.onConflict || 'id',
       ignoreDuplicates:
         outboxRecord.operation === 'insert'
-        && IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName),
+        && INSERT_OR_IGNORE_TABLES.has(config.tableName),
     });
 
   return error ? { success: false, error } : { success: true };
@@ -845,7 +873,7 @@ const runBatchServerOperation = async (supabaseClient, config, outboxRecords) =>
     .upsert(payloads, {
       onConflict: config.onConflict || 'id',
       ignoreDuplicates:
-        IMMUTABLE_ASSIGNMENT_TABLES.has(config.tableName)
+        INSERT_OR_IGNORE_TABLES.has(config.tableName)
         && outboxRecords.every((record) => record.operation === 'insert'),
     });
 
@@ -892,7 +920,13 @@ const finalizeSuccess = async ({
   outboxRecord,
   tableName,
   applyAcknowledgedPayload,
+  serverResult,
 }) => runRepositoryTransaction(database, async (txn) => {
+  const correction = tableName === 'letter_mastery' ? {
+    recordId: outboxRecord.record_id,
+    sentCorrectionId: serverResult.sentCorrectionId,
+    result: serverResult.acknowledgement,
+  } : null;
   const deleteResult = await txn.runAsync(`
     delete from sync_outbox
     where id = ?
@@ -901,6 +935,7 @@ const finalizeSuccess = async ({
   `, outboxRecord.id, outboxRecord.updated_at);
 
   if ((deleteResult?.changes || 0) === 0) {
+    if (correction) await applyCorrectionAcknowledgement(txn, { ...correction, outboxDeleted: false });
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
   }
 
@@ -916,7 +951,9 @@ const finalizeSuccess = async ({
       syncStatus: hasRemainingOutbox ? 'pending' : 'synced',
       lastSyncError: null,
     });
-    if (!hasRemainingOutbox && applyAcknowledgedPayload) {
+    if (correction) {
+      await applyCorrectionAcknowledgement(txn, { ...correction, outboxDeleted: true });
+    } else if (!hasRemainingOutbox && applyAcknowledgedPayload) {
       await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
     }
   }
@@ -1189,6 +1226,7 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           applyAcknowledgedPayload,
           outboxRepository,
+          serverResult,
         });
         return { success: true };
       }
@@ -1236,6 +1274,7 @@ export const createOutboxSyncEngine = ({
           outboxRecord: inFlightRecord,
           tableName: config.tableName,
           outboxRepository,
+          serverResult,
         });
         return { success: true };
       }
@@ -1930,6 +1969,7 @@ const pullReferenceDataRows = async ({
     'schools',
     'job_titles',
     'programmes',
+    'assessment_tools',
     'academic_years',
     'assessment_windows',
     'teachers',

@@ -1,0 +1,1975 @@
+{
+  "version": 1,
+  "defaults": {
+    "computeLessonChoices": {
+      "today": "2026-10-19",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "groupId": "g1",
+      "upNextGroupId": "g1",
+      "languageCode": "xh",
+      "pack": "xh-mini",
+      "alphabet": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z"
+      ],
+      "isEcd": false,
+      "presentChildren": [],
+      "sessions": []
+    },
+    "computeLessonPlan": {
+      "today": "2026-10-19",
+      "academicYearStart": "2026-01-14",
+      "programmeId": "p-lit",
+      "groupId": "g1",
+      "upNextGroupId": "g1",
+      "languageCode": "xh",
+      "pack": "xh-mini",
+      "alphabet": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+        "i",
+        "j",
+        "k",
+        "l",
+        "m",
+        "n",
+        "o",
+        "p",
+        "q",
+        "r",
+        "s",
+        "t",
+        "u",
+        "v",
+        "w",
+        "x",
+        "y",
+        "z"
+      ],
+      "isEcd": false,
+      "presentChildren": [],
+      "sessions": []
+    }
+  },
+  "cases": [
+    {
+      "name": "2-letter tier on a first session: unlocked syllables only",
+      "spec": "C5, §4.5",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "Cannot blend",
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A",
+              "B"
+            ],
+            "suggested": [
+              "la",
+              "mo",
+              "ma",
+              "lo"
+            ],
+            "pool": [
+              "la",
+              "mo",
+              "ma",
+              "lo"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a thin 3-letter tier is topped up from 2-letter",
+      "spec": "C4",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "A",
+              "B"
+            ],
+            "suggested": [
+              "alo",
+              "lam",
+              "ala",
+              "la",
+              "mo",
+              "ma"
+            ],
+            "pool": [
+              "alo",
+              "lam",
+              "ala",
+              "la",
+              "mo",
+              "ma",
+              "lo"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "items with today's letters come first",
+      "spec": "§4.6 rank 1",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an item a present child practised in their last 3 sessions drops behind",
+      "spec": "§4.6 rank 2",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [
+                  "kum"
+                ],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "oku",
+              "kum",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "practised four sessions ago is not recent",
+      "spec": "§4.6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-12",
+            "created_at": "2026-10-12T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [
+                  "kum"
+                ],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-13",
+            "created_at": "2026-10-13T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-14",
+            "created_at": "2026-10-14T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          },
+          {
+            "id": "s4",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-15",
+            "created_at": "2026-10-15T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "B6 recent items match after normalising",
+      "spec": "Review Focus 4",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [
+                  "KUM"
+                ],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "oku",
+              "kum",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the rotation moves one place per day",
+      "spec": "§4.6 rank 3",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "today": "2026-10-20"
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "mo",
+              "ma",
+              "lo",
+              "la"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the rotation differs per group",
+      "spec": "§4.6 rank 3",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "groupId": "g2"
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "mo",
+              "ma",
+              "lo",
+              "la"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a word with a multi-letter sound waits for the sound steps",
+      "spec": "§4.5, C9",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "Word Reading",
+            "knownLetters": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j",
+              "k",
+              "l",
+              "m",
+              "n",
+              "o",
+              "p",
+              "q",
+              "r",
+              "s",
+              "t",
+              "u",
+              "v",
+              "w",
+              "x",
+              "y",
+              "z"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "Paragraph Reading",
+            "knownLetters": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j",
+              "k",
+              "l",
+              "m",
+              "n",
+              "o",
+              "p",
+              "q",
+              "r",
+              "s",
+              "t",
+              "u",
+              "v",
+              "w",
+              "x",
+              "y",
+              "z"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "Word Reading",
+            "childIds": [
+              "A",
+              "B"
+            ],
+            "suggested": [
+              "mamela",
+              "oomama",
+              "umama",
+              "kulala",
+              "nalo",
+              "onke"
+            ],
+            "pool": [
+              "mamela",
+              "oomama",
+              "umama",
+              "kulala",
+              "nalo",
+              "onke",
+              "molo",
+              "mama",
+              "lala",
+              "kulo",
+              "lula"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "show higher: one tier per present child's level",
+      "spec": "J7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A"
+            ],
+            "suggested": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo"
+            ],
+            "pool": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          },
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "B"
+            ],
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the default tier is the lowest present child's",
+      "spec": "J7",
+      "fn": "computeLessonPlan",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "blend_tier": "2 Letter Blends",
+        "suggested_blends": [
+          "ku",
+          "ka",
+          "ko",
+          "mu",
+          "lu",
+          "lo"
+        ]
+      }
+    },
+    {
+      "name": "a Word-tier child on a first session cascades down two tiers",
+      "spec": "C4",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "Word Reading",
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "suggested": [
+              "oomama",
+              "lala",
+              "molo",
+              "mama",
+              "alo",
+              "lam"
+            ],
+            "pool": [
+              "oomama",
+              "lala",
+              "molo",
+              "mama",
+              "alo",
+              "lam",
+              "ala"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "items carry display syllables and their own tier",
+      "spec": "§5.2, C11",
+      "fn": "computeLessonChoices",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "pool": [
+              {
+                "text": "alo",
+                "display": "a-lo",
+                "tier": "3 Letter Blends"
+              },
+              {
+                "text": "lam",
+                "display": "lam",
+                "tier": "3 Letter Blends"
+              },
+              {
+                "text": "ala",
+                "display": "a-la",
+                "tier": "3 Letter Blends"
+              },
+              {
+                "text": "la",
+                "display": "la",
+                "tier": "2 Letter Blends"
+              },
+              {
+                "text": "mo",
+                "display": "mo",
+                "tier": "2 Letter Blends"
+              },
+              {
+                "text": "ma",
+                "display": "ma",
+                "tier": "2 Letter Blends"
+              },
+              {
+                "text": "lo",
+                "display": "lo",
+                "tier": "2 Letter Blends"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "B15 a letters-only interim pack has no blend content",
+      "spec": "C10, Review Focus 1",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "languageCode": "en",
+        "pack": "en-interim",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a",
+              "m",
+              "s",
+              "t"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A"
+            ],
+            "suggested": [],
+            "pool": []
+          }
+        ],
+        "contentAvailable": {
+          "blends": false,
+          "books": false
+        }
+      }
+    },
+    {
+      "name": "no pack: no tiers, the alphabet to choose from",
+      "spec": "C10, §4.8",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "languageCode": "af",
+        "pack": null,
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [],
+        "letterChoices": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g",
+          "h",
+          "i",
+          "j",
+          "k",
+          "l",
+          "m",
+          "n",
+          "o",
+          "p",
+          "q",
+          "r",
+          "s",
+          "t",
+          "u",
+          "v",
+          "w",
+          "x",
+          "y",
+          "z"
+        ],
+        "contentAvailable": {
+          "blends": false,
+          "books": false
+        }
+      }
+    },
+    {
+      "name": "B16 no language: no tiers and nothing to choose, never another language's pack",
+      "spec": "Review Focus 2, §4.2",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "languageCode": null,
+        "pack": "xh-mini",
+        "alphabet": null,
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [],
+        "books": [],
+        "letterChoices": [],
+        "contentAvailable": {
+          "blends": false,
+          "books": false
+        }
+      }
+    },
+    {
+      "name": "no children: no tiers",
+      "spec": "§4.8",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": []
+      },
+      "expect": {
+        "tiers": [],
+        "letterChoices": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j",
+          "r"
+        ]
+      }
+    },
+    {
+      "name": "letter choices follow the teaching order",
+      "spec": "§4.2, §5.2",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "letterChoices": [
+          "o",
+          "m",
+          "l",
+          "a",
+          "k",
+          "u",
+          "e",
+          "n",
+          "i",
+          "t",
+          "s",
+          "d",
+          "f",
+          "b",
+          "y",
+          "c",
+          "z",
+          "p",
+          "q",
+          "w",
+          "v",
+          "g",
+          "x",
+          "h",
+          "j",
+          "r"
+        ]
+      }
+    },
+    {
+      "name": "after the plan freezes, choices follow the frozen letters",
+      "spec": "C1",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "today": "2026-10-21",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k",
+              "u",
+              "e",
+              "n"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A"
+            ],
+            "suggested": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo"
+            ],
+            "pool": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          },
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "B"
+            ],
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          }
+        ]
+      },
+      "options": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "suggested_letters": [
+            "k",
+            "u"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ]
+        }
+      }
+    },
+    {
+      "name": "a frozen plan without a usable pack gives no tiers",
+      "spec": "C1, §4.1",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "pack": null,
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": null,
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [],
+        "letterChoices": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g",
+          "h",
+          "i",
+          "j",
+          "k",
+          "l",
+          "m",
+          "n",
+          "o",
+          "p",
+          "q",
+          "r",
+          "s",
+          "t",
+          "u",
+          "v",
+          "w",
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      "options": {
+        "plan": {
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "suggested_letters": [
+            "k",
+            "u"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Z1 a frozen plan keeps its tier after the reading levels change",
+      "spec": "C1, J7, Review Focus 6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [],
+            "suggested": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo"
+            ],
+            "pool": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          },
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "A",
+              "B"
+            ],
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          }
+        ]
+      },
+      "options": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "history_complete": true,
+          "mastery_complete": true,
+          "present_child_ids": [
+            "A",
+            "B"
+          ],
+          "known_letters": [
+            "o",
+            "m",
+            "l",
+            "a"
+          ],
+          "suggested_letters": [
+            "k",
+            "u"
+          ],
+          "review_letters": [
+            "o",
+            "m",
+            "l",
+            "a"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "blend_tier": "2 Letter Blends",
+          "suggested_blends": [
+            "ku",
+            "ka",
+            "ko",
+            "mu",
+            "lu",
+            "lo"
+          ],
+          "suggested_book": "xh-mini-r03",
+          "up_next_group_id": "g1"
+        }
+      }
+    },
+    {
+      "name": "Z2 a frozen plan keeps its six blends after new blend history arrives",
+      "spec": "C1, §4.6 rank 2, Review Focus 6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-16",
+            "created_at": "2026-10-16T08:00:00.000Z",
+            "children_ids": [
+              "A"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [
+                  "ku",
+                  "ka"
+                ],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A"
+            ],
+            "suggested": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo"
+            ],
+            "pool": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          },
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "B"
+            ],
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ko"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ko",
+              "mu",
+              "lu",
+              "ku",
+              "ka",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          }
+        ]
+      },
+      "options": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "history_complete": true,
+          "mastery_complete": true,
+          "present_child_ids": [
+            "A",
+            "B"
+          ],
+          "known_letters": [
+            "o",
+            "m",
+            "l",
+            "a"
+          ],
+          "suggested_letters": [
+            "k",
+            "u"
+          ],
+          "review_letters": [
+            "o",
+            "m",
+            "l",
+            "a"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "blend_tier": "2 Letter Blends",
+          "suggested_blends": [
+            "ku",
+            "ka",
+            "ko",
+            "mu",
+            "lu",
+            "lo"
+          ],
+          "suggested_book": "xh-mini-r03",
+          "up_next_group_id": "g1"
+        }
+      }
+    },
+    {
+      "name": "Z3 a draft resumed on a later day keeps its frozen blends",
+      "spec": "C1, C14, Review Focus 6",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "today": "2026-10-21",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "k"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ],
+        "sessions": [
+          {
+            "id": "s1",
+            "programme_id": "p-lit",
+            "session_date": "2026-10-20",
+            "created_at": "2026-10-20T08:00:00.000Z",
+            "children_ids": [
+              "B"
+            ],
+            "activities": {
+              "letters_focused": [],
+              "lesson": {
+                "version": 1,
+                "blends_done": [
+                  "ko",
+                  "mu"
+                ],
+                "books_read": []
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A"
+            ],
+            "suggested": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo"
+            ],
+            "pool": [
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          },
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "B"
+            ],
+            "suggested": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "alo",
+              "lam",
+              "ala",
+              "ku",
+              "ka",
+              "lu",
+              "ko",
+              "mu",
+              "lo",
+              "la",
+              "mo",
+              "ma"
+            ]
+          }
+        ]
+      },
+      "options": {
+        "plan": {
+          "engine_version": 1,
+          "made_on": "2026-10-19",
+          "reason": "ok",
+          "history_complete": true,
+          "mastery_complete": true,
+          "present_child_ids": [
+            "A",
+            "B"
+          ],
+          "known_letters": [
+            "o",
+            "m",
+            "l",
+            "a"
+          ],
+          "suggested_letters": [
+            "k",
+            "u"
+          ],
+          "review_letters": [
+            "o",
+            "m",
+            "l",
+            "a"
+          ],
+          "unlocked_letters": [
+            "o",
+            "m",
+            "l",
+            "a",
+            "k",
+            "u"
+          ],
+          "blend_tier": "2 Letter Blends",
+          "suggested_blends": [
+            "ku",
+            "ka",
+            "ko",
+            "mu",
+            "lu",
+            "lo"
+          ],
+          "suggested_book": "xh-mini-r03",
+          "up_next_group_id": "g1"
+        }
+      }
+    },
+    {
+      "name": "N1 a letter mastered out of order unlocks later steps' blends and words (sound set, not step)",
+      "spec": "§4.5, C3, Review Focus 7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "2 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "n"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": "3 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "n"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "C",
+            "readingLevel": "4 Letter Blends",
+            "knownLetters": [
+              "o",
+              "m",
+              "l",
+              "a",
+              "n"
+            ],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A"
+            ],
+            "suggested": [
+              "nu",
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu"
+            ],
+            "pool": [
+              "nu",
+              "ku",
+              "ka",
+              "ko",
+              "mu",
+              "lu",
+              "mo",
+              "ma",
+              "lo",
+              "la",
+              "na",
+              "no"
+            ]
+          },
+          {
+            "tier": "3 Letter Blends",
+            "childIds": [
+              "B"
+            ],
+            "suggested": [
+              "kum",
+              "oku",
+              "mna",
+              "lam",
+              "ala",
+              "alo"
+            ],
+            "pool": [
+              "kum",
+              "oku",
+              "mna",
+              "lam",
+              "ala",
+              "alo"
+            ]
+          },
+          {
+            "tier": "4 Letter Blends",
+            "childIds": [
+              "C"
+            ],
+            "suggested": [
+              "kulo",
+              "lula",
+              "nalo",
+              "molo",
+              "mama",
+              "lala"
+            ],
+            "pool": [
+              "kulo",
+              "lula",
+              "nalo",
+              "molo",
+              "mama",
+              "lala"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "B17 a three-letter item in a step's blends never enters the 2-letter tier",
+      "spec": "§4.6, C5, Review Focus 7",
+      "fn": "computeLessonChoices",
+      "view": "summary",
+      "input": {
+        "pack": "xh-long-blend",
+        "presentChildren": [
+          {
+            "id": "A",
+            "readingLevel": "Cannot blend",
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          },
+          {
+            "id": "B",
+            "readingLevel": null,
+            "knownLetters": [],
+            "historyComplete": true,
+            "masteryComplete": true
+          }
+        ]
+      },
+      "expect": {
+        "tiers": [
+          {
+            "tier": "2 Letter Blends",
+            "childIds": [
+              "A",
+              "B"
+            ],
+            "suggested": [
+              "la",
+              "mo",
+              "ma",
+              "lo"
+            ],
+            "pool": [
+              "la",
+              "mo",
+              "ma",
+              "lo"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

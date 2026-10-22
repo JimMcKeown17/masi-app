@@ -725,6 +725,29 @@ describe('LiteracySessionForm', () => {
     ['Reading Levels', 'Letter Tracker', 'Update Child Progress (Optional)'].forEach(copy => expect(screen.queryByText(copy)).toBeNull());
   });
 
+  test('tracker changes reach the save with their own language and tap time, and no session-wide language', async () => {
+    const screen = renderForm();
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+    fireEvent.press(screen.getByLabelText('Amahle Dlamini, letter tracker, Update'));
+    fireEvent.press(await screen.findByLabelText('a, not mastered'));
+    fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByLabelText('Amahle Dlamini, letter tracker, 1 new')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('A, not selected'));
+    fireEvent.press(screen.getByText('Select a level'));
+    fireEvent.press(screen.getByText(READING_LEVELS[0]));
+    fireEvent.press(screen.getByText('Submit session'));
+    await waitFor(() => expect(mockPersistLiteracySession).toHaveBeenCalledTimes(1));
+    const args = mockPersistLiteracySession.mock.calls[0][0];
+    expect(args).not.toHaveProperty('trackerLanguageCode');
+    const tapped = args.letterTrackerChanges['child-1'].a;
+    expect(tapped).toEqual({
+      mastered: true,
+      languageCode: 'en',
+      madeAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/),
+    });
+    expect(Date.parse(tapped.madeAt)).toBeLessThanOrEqual(Date.parse(args.nowIso));
+  });
+
   // Branch review round 1: an open form that crosses programme midnight must not keep calling
   // yesterday "Today" or refuse the new day; the selected date itself stays as chosen.
   test('crossing programme midnight refreshes Today and the calendar without moving the selected date', async () => {

@@ -57,7 +57,9 @@ These horizons summarize the ordered register below. They are not a second backl
    U1's bounded requests and send-order protection shipped in #77 (2026-10-19), applied to
    `masi-app-sqlite`, with D2/D3 passed on the Galaxy A03s (§2). Assessment-family upload is built and locally
    verified in Assessment Results Plan 1 (§1); hosted apply/build/device gates remain Task 14.
-   Complete D1 with the mastery re-key (Assessment Results Plan 2). Multi-writer stale-edit rejection (U3) is deferred until Head Office
+   D1 and the mastery re-key are built in Assessment Results Plan 2 and applied to `masi-app-sqlite`
+   (2026-10-22); its A03s gates passed except the two-phone G1/G1r/G2, which wait for the iPhone, and
+   the mastery pull is built in Plan 3. Multi-writer stale-edit rejection (U3) is deferred until Head Office
    edits EA records. Duplicate-proof submit and one database per EA are built (Plan 2; its
    sign-out UX is Plan 3).
    The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
@@ -148,8 +150,8 @@ shape.
   - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.
   - **Ruling 11: implementation closed for the 11 tables in the upload contract.** Send-time
     versions prevent an uncertain earlier send from overwriting a later one; applied and D2-proved
-    on device 2026-10-19. It stays open for `letter_mastery` until D1 ships with the mastery
-    re-key (§1/§2).
+    on device 2026-10-19. The `letter_mastery` re-key and receipt-backed D1 are built in Assessment
+    Results Plan 2; hosted application and device proof remain Task 7 (§1/§2). Mastery pull remains Plan 3.
   - **Device gates:** D2–D7 on the build intended to ship
     ([actor lifecycle spec §9](../docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-design.md);
     D7 is native close under load, iOS and Android). D3's ten-hour half is now the server-close
@@ -331,18 +333,22 @@ correctly; the missing contract is inbound hydration.
   complete-family behavior; authenticated PostgREST proves the RPC and anonymous denial. Local
   PostgreSQL retains the deeper same-connection, microsecond-cursor, 2,004-row exhaustion, and
   hostile-plan evidence.
-- [ ] Implement the assessment-specific current-year class predicate. **Settled 2026-09-21:** an EA
+- [x] Implement the assessment-specific current-year class predicate (Assessment Results Plan 3
+  Task 1, migration `20261022120000_assessment_history_pull.sql`; controller PostgreSQL and hosted
+  verification remain open, see the build-log entry dated 2026-10-21). **Settled 2026-09-21:** an EA
   with an active class assignment sees a child's assessments from the current academic year if
   the child was a member of that class at any point in the current academic year. After a mid-year
   move, the old-class EA and the new-class EA both see that year's assessments. Do not reuse every
   arm of `current_user_can_read_child`. See ADR-0005's 2026-09-21 follow-up.
-- [ ] Verify and reuse the existing `ClassesContext`/SQLite `class_ea_assignments` hydration for
+- [x] Verify and reuse the existing `ClassesContext`/SQLite `class_ea_assignments` hydration for
   assessment scope. Define one canonical SQLite-derived assessment-eligibility query, including
   inactive/revoked and current-year behavior; do not couple correctness to React context arrival
-  order.
-- [ ] Prove that a server class-assignment row flows through `ClassesContext` into SQLite, survives
+  order. Built in AR Plan 3 Task 7: `readAssessmentScope` in
+  [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js), tested against real SQLite.
+- [x] Prove that a server class-assignment row flows through `ClassesContext` into SQLite, survives
   a fresh read, and is consumed by the canonical assessment-scope query; prove an inactive/revoked
-  assignment does not grant current scope.
+  assignment does not grant current scope. AR Plan 3 Task 7:
+  [ClassesContextPull integration proof](../__tests__/ClassesContextPull.integration.test.js).
 - [x] Add authenticated, Programme-scoped pull for `sessions` and `session_attendees` through the
   corrected delivery-history predicate. Built on `feat/cap-004-session-history-hydration`
   (2026-09-26). Hosted apply and device gates are the remaining items below.
@@ -357,21 +363,30 @@ correctly; the missing contract is inbound hydration.
 - [x] **Server-stamped `updated_at` for assessment uploads.** Built in
   `20261021120000_assessment_results_contract.sql`: INSERT/UPDATE triggers on `assessments`,
   `assessment_items`, `battery_runs` and `letter_mastery`. The phone strips the timestamp from
-  assessment/run RPC payloads; the existing mastery writer still sends it and the trigger overrides
-  it. See [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and the
+  assessment/run RPC payloads. The Plan 2 mastery writer sends only the correction RPC's six
+  arguments, without `updated_at`; the server advances the record timestamp only when a correction applies. See [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md) and the
   [contract map](./rls-sync-contract-map.md). Controller disposable-PG17 verification is GREEN;
   hosted migration remains Assessment Results Task 14, not completed by this checkbox.
-- [ ] Audit other tables' insert timestamps before adding a delta pull
-  ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)); Assessment Results Plan 3 still owns the
-  assessment/run/mastery pull and its cursor/re-walk behavior.
-- [ ] **Cheap page apply before the assessment pull copies the session shape.** Assessment families have
-  variable item counts. Batch the per-page existence and pending-local lookups, skip rows identical to
-  the stored row, and reuse prepared statements. Keep one transaction per page together with its
-  cursor. Zazi went from 300 s to 46 s on a Galaxy A03s this way ([Z2](./zazi-sync-lessons-for-masi-2026-10-08.md);
-  CAP-004 plan Task 9 Step 4e).
-- [ ] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
+- [x] Audit insert timestamps for the new assessment/run/mastery delta pulls
+  ([Z1](./zazi-sync-lessons-for-masi-2026-10-08.md)). Their server-owned INSERT/UPDATE triggers
+  are in `20261021120000_assessment_results_contract.sql`; AR Plan 3 Task 7 uses their raw
+  timestamps with keyset/overlap/re-walks. See the
+  [walk contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  Audit any additional table before adding a future delta pull for it.
+- [x] **Cheap page apply for assessment families and Battery Runs.** Built in Assessment Results
+  Plan 3 Task 5: batched id lookups, whole immutable-family insert-or-ignore, and forward-only run
+  merges in `historyPageApply.js`, using multi-row statements with at most 999 bindings through
+  the signed-in facade. Present families, including pending uploads, stay untouched. Each page
+  commits with its cursor; the 50-family / 3,050-item real-SQLite test uses fewer than 100
+  statements. See [page-apply rules](./rls-sync-contract-map.md#page-apply--assessments-and-runs).
+  Mastery page apply and handover are built in Task 6, traversal in Task 7; A03s timing remains
+  a device gate. The batching rationale is [Z2](./zazi-sync-lessons-for-masi-2026-10-08.md) and CAP-004
+  plan Task 9 Step 4e.
+- [x] Add authenticated, Programme/current-year-class-scoped pull for `assessments`,
   `assessment_items` and `battery_runs` — **Assessment Results Plan 3**, not part of the upload
-  completion below. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
+  completion below. Task 7 supplies all three walks and scope queries in
+  [assessmentHistoryPull.js](../src/services/assessmentHistoryPull.js); the handle-owned store and triggers are built in Task 8.
+  Combined status/readers are built in Task 9; hosted/device gates remain Task 14. See the [Assessment Results design](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md).
 - [x] **Upload the assessment family all-or-nothing ([U2](./zazi-sync-lessons-for-masi-2026-10-08.md)).**
   Built in Assessment Results Plan 1, Tasks 6–9: exclusive `submit_assessment`, one complete
   outbox payload, one call regardless of the 1,000-row ready limit, no per-item fallback, and atomic
@@ -388,33 +403,52 @@ correctly; the missing contract is inbound hydration.
   retries return `already_present` only after identity/item-id-set confirmation. `23505` never
   counts as success. Item identity is unchanged. [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md)
   supersedes the older per-row insert-or-ignore proposal; hosted enforcement awaits Task 14.
-- [ ] **Letter mastery as current state (ADR-0005 2026-09-21 follow-up).** Re-key the stored EA
-  confirmation to one current record per `(child, letter, language)`, recording the last writer.
-  Narrow hosted read to the last writer plus current deliverers, and let current deliverers
-  insert/update/soft-delete. Implement the accepted correction-time ordering (clamped to server time),
-  not arrival-order wins. Resolve the natural key inside the write
-  transaction; Zazi's production crash ZZ-BUG-20260813-006 is the regression case to test. Then
-  add the mastery pull. **Assessment evidence is already moved** in Assessment Results Task 10:
-  the latest non-skipped stored letter result can come from any recorder in the active programme,
-  including WelaPLUS Q1. `userId` scopes that programme, not the assessment recorder. Confirmation
-  identity and language labels remain unchanged until Assessment Results Plan 2. Its accepted
-  correction-time rule is in the [new design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery);
-  its confirmation writer is not implemented in Plan 1.
-  Practice data is wiped at the approved release gate; no field-data re-key is planned.
-- [ ] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
-  and child page from the first implementation. Do not ship an unpaginated intermediate path.
-- [ ] Persist each parent and its children transactionally through typed repositories, with parents
-  applied before dependents.
-- [ ] Preserve pending, failed, and terminal local work when server rows overlap.
-- [ ] Define positive parent/child completeness evidence. Ordinary RLS-filtered, expired, errored,
-  or truncated queries may not mark hydration complete and never authorize history deletion.
-- [ ] Update `rls-sync-contract-map.md` with producer, authorization, ordering, identity, conflict,
-  and reconcile rules.
-- [ ] Cover first install, reinstall, second device, offline restart, pending-local collision, and
-  parent-before-child ordering in real-SQLite tests.
-- [ ] Add two-device physical gates proving device A history appears on device B.
+- [ ] **Release the built letter-mastery current-state contract (ADR-0005 follow-up 2).**
+  Assessment Results Plan 2 implements one current confirmation per child, letter and language
+  code, current-deliverer correction writes, last-writer/current-deliverer SELECT, and D1.
+  `set_letter_mastery` fixes a correction's effective time once in a receipt and resolves the
+  natural key inside SQL, covering the ZZ-BUG-20260813-006 race. Both tracker surfaces write
+  corrections; local acknowledgement displays the winner and terminal refusals do not count.
+  **Remaining: Task 7's hosted apply/practice-data wipe and two-phone device gate.** Each external
+  step needs Jim's yes. The mastery walk is built in Assessment Results Plan 3 Task 7;
+  its handle-owned store and triggers are built in Task 8; combined status/readers are built in Task 9.
+  Assessment evidence already uses the latest non-skipped stored letter result from any recorder
+  in the active Programme, including WelaPLUS Q1; `userId` scopes that Programme, not the recorder.
+  Confirmation reads have no recorder or Programme filter. The correction rule is in the
+  [design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery).
+  Practice data is wiped only at the approved release gate; no field-data re-key is planned.
+- [x] Use bounded keyset pagination with an `id` tie-breaker and request deadline for every parent
+  and child page from the first implementation. Built by CAP-004 and AR Plan 3 Tasks 2/4/7;
+  assessment items arrive embedded as complete families. See the
+  [walk contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+- [x] Persist each parent and its children transactionally through typed repositories, with parents
+  applied before dependents. AR Plan 3 Tasks 5–7:
+  [page apply](./rls-sync-contract-map.md#page-apply--assessments-and-runs).
+- [x] Preserve pending, failed, and terminal local work when server rows overlap. AR Plan 3
+  Tasks 5–7 preserve immutable families and outstanding corrections; a terminal mastery value
+  can recover while its refusal evidence stays. See the
+  [mastery rules](./rls-sync-contract-map.md#page-apply--mastery-and-handover).
+- [x] Define positive parent/child completeness evidence. AR Plan 3 Tasks 4/7 require an exhausted,
+  error-free delta and no due re-walk; coverage is bounded inside the committing transaction.
+  Ordinary queries never authorize history deletion. See the
+  [walk contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  Per-child lesson-input completeness remains Task 11.
+- [x] Update `rls-sync-contract-map.md` with producer, authorization, ordering, identity, conflict,
+  and reconcile rules. AR Plan 3 Task 7:
+  [history contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3)
+  and the four operation rows.
+- [x] Cover first install, reinstall, second device, offline restart, pending-local collision, and
+  parent-before-child ordering in real-SQLite tests. Synthetic remote history/fresh-state/restart
+  proof: `assessmentHistoryPull.test.js`, `letterMasteryHandover.test.js`,
+  `assessmentHistoryPage.test.js` and `batteryRunHistoryMerge.test.js`.
+  Physical-device proof remains the open gates below.
+- [ ] Add two-device physical gates proving device A history appears on device B. (2026-10-22: proven
+  on one A03s with two EAs signed in in turn, AR3 Gates 3–4; the A03s + iPhone run remains.)
 - [x] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
-  Sessions done (CAP-004 History row); assessments follow with their slice.
+  CAP-004 plus AR Plan 3 Task 9: one History row combines sessions, Battery Runs, assessments
+  and mastery; missing or incomplete walks cannot show Up to date. Readers re-read SQLite as
+  pages land, while the open session tracker sheet deliberately keeps its baseline. See the
+  [status and reader contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
 - [x] CAP-004 hosted gate: `20260925120000` applied to `masi-app-sqlite` on 2026-09-26 through the
   isolated helper; hosted six-actor matrix and 1,205-attendee HTTP walk passed.
 - [ ] **CAP-004 device gates (new phone within a minute on iPhone and low-end Android; two-device convergence with a
@@ -433,9 +467,8 @@ correctly; the missing contract is inbound hydration.
 
 Until this lands, a green sync label proves outbound completion only.
 
-Zazi parity: Zazi's letter tracker has the same per-EA identity and author-only correction, and
-its mobile pulls fetch only the EA's own mastery and sessions. Converging Zazi on the same rule is
-separate Zazi work (it has field users). Masi's per-child `children.reading_level` already matches
+Zazi parity: converging Zazi on this current-state correction rule remains separate Zazi work
+(it has field users). Masi's per-child `children.reading_level` already matches
 the current-state model better than Zazi's per-session carry-forward.
 
 ## 2. Correctness and safety
@@ -460,8 +493,10 @@ the current-state model better than Zazi's per-session carry-forward.
   WelaPLUS/durable-draft lifecycle rather than a one-off 60-second EGRA patch.
 - [x] **Session form draft persistence or explicit launch acceptance:** navigate-away or process
   death loses an unfinished submit-and-go session. **Accepted for the pilot (Jim, 2026-10-17).** The
-  SQLite-backed draft/run lifecycle stays with the group-centred workstream. Do not add a second
-  temporary draft mechanism or imply autosave before it exists.
+  local `lesson_drafts` table and handle-bound repository (C1) now provide the session side of the
+  SQLite-backed draft/run lifecycle. They remain inert until C3: `LiteracySessionForm` stays
+  draft-less until C3 replaces it. The storage layer alone does not supply autosave or resume UI;
+  the assessment-draft item above remains separate and open.
 - [ ] **Removed session attendees:** `sessionsRepository` does not delete
   `session_attendees` removed by a later save. No current screen edits submitted sessions, but this
   must be fixed and behavior-tested before edit UI ships.
@@ -488,10 +523,12 @@ the current-state model better than Zazi's per-session carry-forward.
   phone `unassigned_at` (`childrenRepository.js:154`) against a microsecond server `assigned_at`
   under the `unassigned_at >= assigned_at` CHECKs, which `classifyError` treats as terminal
   ([Z14](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- [ ] **When durable session drafts ship (§4), key them per group and refuse a second start;
-  bound any session timer.** Zazi's single active-session key let a second group overwrite an
-  unfinished session (ZZ-BUG-20260922-001), and its unbounded timer saved a 1,140-minute session
-  (ZZ-BUG-20260924-001) ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Finish the durable lesson start/resume flow (§4, C2–C3).** C1 storage already refuses a
+  second start: one lesson in progress per EA (C7), stricter than one per group. The
+  finish-or-discard ask and Home "Lesson in progress" resume action ship with C2–C3; keep this
+  item open until C3. v1 has no session timer (lesson-plan spec §8). Zazi's overwritten unfinished
+  session (ZZ-BUG-20260922-001) and unbounded 1,140-minute session (ZZ-BUG-20260924-001) remain the
+  motivating evidence ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 ### Upload contract (before pilot; priority item 5)
 
@@ -548,20 +585,21 @@ the [Verification Register](./build-log.md#verification-register) owns the local
   base behind the stored version, and make Head Office writes bump `row_version`. The current
   counter only orders one phone's sends; it does not establish multi-writer conflict protection.
   The column and trigger accept that additional comparison without a replacement protocol.
-- [ ] **Letter mastery: the most recently *made* correction wins (D1, decided by Jim
-  2026-10-08; reconfirmed 2026-10-14).**
-  - The server keeps whichever confirmation has the later correction time and treats a future
-    correction time as its own `now()`.
-  - This is a narrow, single-column guard, not the general `stale_base` mechanism.
-  - Build it with the mastery re-key in §1. `CONTEXT.md` is updated.
-  - **Pilot gate (Jim, 2026-10-18).** Until it is built, a late mastery toggle can still overtake a
-    newer one (Ruling 11 for `letter_mastery`); the upload-contract spec does not cover this table.
+- [ ] **Verify the built letter-mastery D1 contract on hosted and both phones (Assessment Results
+  Plan 2 Task 7; decided by Jim 2026-10-08, reconfirmed 2026-10-14).**
+  The re-key, correction receipts/RPC, phone acknowledgement, readers and both writers are built.
+  The most recently *made* correction wins by effective time and UUID. A new future timestamp is
+  clamped once at server arrival; a lost-reply retry retains that receipt's effective time.
+  **Still open before pilot:** hosted application and the two-phone correction-order gate,
+  including the fast-clock/lost-reply case. The upload-contract row-version mechanism does not
+  cover mastery. Plan 3 owns mastery download/completeness; it is not part of this release gate.
 - [x] **Duplicate-proof submit (U5).** Literacy session capture now mints one session id per form,
   reuses it on retry, and uses a synchronous ref lock to prevent double-tap saves; assessment
   submit already guards completion with a ref and reuses its record on retry. This closes the
   per-tap identity risk behind Zazi's 302 extra session copies (ZZ-BUG-20260819-021).
-  LetterMasteryPanel's same-EA/programme double taps already converge through the repository's
-  deterministic mastery id; its broader re-key remains separate.
+  LetterMasteryPanel taps are now corrections through `setLetterMastery`, guarded while a
+  write is pending, with one child/letter/language record and one correction outbox slot.
+  The deterministic per-EA id is retired; hosted/device rollout remains Plan 2 Task 7.
 - [x] Android cloud-backup and device-transfer exclusion is built with `android.allowBackup: false`
   and explicit data-extraction exclusions (U6). A restored database replayed already-accepted work
   in Zazi (ZZ-BUG-20260907-001); the
@@ -574,11 +612,12 @@ generations, client streams, cutover and activation machinery (U7).
 
 ### Deliberate tripwires
 
-- [ ] Extend `GRANT_SUBJECTS` before membership-mediated class/group access ships. It currently
-  models only the direct child-assignment grant and can false-terminal writes whose only valid grant
-  is a pending class or group relationship.
+- [x] Extend `GRANT_SUBJECTS` before membership-mediated class/group access ships. **2026-10-21:**
+  membership-mediated child evidence already existed; B2 Task 5 adds held-group evidence for
+  sessions and attendees, counting this EA's owed assignment insert even after it has ended.
 - [ ] Define collision-proof identity for `grouping_versions`, `groups.display_number`, and
-  `child_group_memberships` before the group-centred slice.
+  `child_group_memberships` before the group-centred slice. **2026-10-21:** lesson-plan C16 keeps
+  this deferred; B2 adds no new kind of group write.
 - [ ] Decide whether leaked-password protection is required before broader external rollout.
 
 ## 3. Sync efficiency and fleet behavior
@@ -602,17 +641,14 @@ Sharpened by Zazi's 2026-09/10 delta-pull, first-install, and measurement work
 ([`zazi-sync-lessons-for-masi-2026-10-08.md`](./zazi-sync-lessons-for-masi-2026-10-08.md), Z3–Z11).
 Order these before the pilot unless marked otherwise:
 
-- [ ] **Server-owned rollout and kill switch (Z8).**
-  - A `private` table holds a per-account row and an "all" row. The RPC answers `rollout_disabled`
-    when the caller sees no row, so a canary is one insert and a rollback is one delete, with no OTA.
-  - The same table can carry the pull interval and a minimum client protocol. This closes the
-    "remotely configurable pull intervals and a sync kill switch" item above.
-  - Disabling a feature never deletes a phone's cursor. The presence of a cursor does not mean the
-    feature is enabled.
-  - Run a rollback drill before the first cohort.
-  - **Scope it explicitly (Codex 2026-10-08):** an RPC-level gate stops only RPC pulls. Masi's
-    roster pulls and uploads are direct table calls, so the client must read the switch before
-    each sync pass, and the switch's behaviour on a read failure must be defined.
+- [x] **Server-owned rollout and kill switch for the three AR history RPCs (Z8).**
+  AR Plan 3 Tasks 1/2/7/8 use `private.history_pull_rollout`: per-EA row, then everyone row,
+  then off; disabled RPCs return `MR001 / rollout_disabled`. The phone preserves rows and cursor
+  position, records incompleteness and resumes from that position when enabled. See the
+  [history switch and trigger contract](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  **Scope:** uploads, roster/reference and session-history pulls are not gated. A broader sync
+  kill switch, remotely configurable intervals/minimum protocol and the cohort rollback drill
+  remain open; this checkbox closes only the three assessment/run/mastery RPC gates.
 - [ ] **Jitter covers cold opens, not only warm caches (Z7).** Use one shared 0–3 minute
   admission window per cold open or offline-to-online transition. Empty-cache bootstrap and
   explicit refresh bypass it.
@@ -620,10 +656,14 @@ Order these before the pilot unless marked otherwise:
   no-progress timer, with Retry/Sign out shown only after a no-progress interval. Pair it with a
   visible "still downloading" state, so an empty screen is never read as "no data". A run budget
   that resumes from its cursor, as CAP-004's does, is not a failure claim and stays as is.
-- [ ] **Pull-trigger budget tests (Z4).** Pin every caller that may start a pull, with its frequency:
-  launch, per save, per foreground, per gesture. Per-save and per-foreground callers must request
-  the narrowest domains. Zazi shipped a save that triggered a full re-download, and Start took
-  22.8 s.
+- [x] **Pull-trigger budget tests for history pulls (Z4).** AR Plan 3 Task 8 pins all seven
+  session/assessment-history service start sites and their frequencies in
+  `historyPullTriggerBudget.test.js`. Repositories, components, hooks, uploads, literacy saves
+  and sync completion never start history. The real-store budget proves zero RPCs at +1/+7/+14
+  minutes and three delta calls at +16. See the
+  [trigger inventory](./rls-sync-contract-map.md#assessment-run-and-mastery-history-ar-plan-3).
+  Broader roster/reference/upload trigger budgets remain open. Zazi's save-triggered full
+  re-download and 22.8 s Start regression are the motivating case.
 - [ ] **Write-wait measurement (Z3).** Add a real-SQLite test that times a user write queued behind
   a pull transaction. Add enqueue/start/end timing lines on the writer queue (`src/db/client.js`),
   tagged with the pull that was active when the write was queued.
@@ -660,6 +700,11 @@ The active specification is
 5. group-first capture and durable session drafts;
 6. device and two-device proof.
 
+Status (2026-10-21): item 3's session-group contract is built on `feat/lesson-plan-b2-session-group`
+(lesson-plan B2: held-group authorization, local history reference, upload and ordering, the
+lost-reply fix). Its hosted migration was applied on 2026-10-22, and its A03s device gates G1 and G2 passed the same
+day; the iPhone rows remain.
+
 Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 - [ ] Model a school pause by Programme and academic year. Schools are not hard-deleted or globally
@@ -670,6 +715,7 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 ## 5. Product and UX
 
+- [ ] **Lesson plan (spec 2026-10-20): A1 content packs built; the Android Hermes check (T1) passed on 2026-10-22; the iOS check (A1 Task 7, T2) remains open.** Record: build log, "Lesson plan A1: content packs".
 - [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Shared look built
   on `feat/bold-red-app` (2026-10-19), following Home (#70). Design source: the Design Round 4
   canvas (https://claude.ai/artifact/8gQRtyqZ5Q1vTCTdSkz6zc, private to Jim), Bold Red (B) boards on
@@ -751,7 +797,9 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   comparison draft was lost with its temporary folder and must be redone.
 - [ ] Yebo (Yeboneer) session form: deferred by Jim on 2026-09-23. Zazi iZandi sessions belong to
   the separate Zazi app, not Masi.
-- [ ] Replace placeholder EGRA word lists with authoritative English and isiXhosa content.
+- [ ] Replace placeholder EGRA word lists with authoritative English, isiXhosa and Afrikaans content
+  (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
+  becomes a new version).
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
   tested synced-table configuration path exists.
@@ -770,6 +818,9 @@ EA's 1–4). Release 1 scope and decisions:
 
 ### Integration and contract work
 
+- [ ] WelaPLUS host (Plan 3): do not offer WelaPLUS to an Afrikaans class until the battery has
+  Afrikaans (`battery/wela_plus_full.ts:49` lists `en`, `xh`). Start shows 'Not available in Afrikaans
+  yet', and the WelaPLUS language picker lists only the battery's languages (lesson-plan spec C22).
 - [ ] Finish design-token, capture-chrome and BottomSheet review for the full Battery Run host.
   The standalone letter/word host, shared sequential capture, family repositories and outbox
   ownership are integrated; this does not close the other Questions' host/device review.

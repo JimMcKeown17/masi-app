@@ -1,11 +1,14 @@
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
+import { describeCombinedHistoryState } from '../../utils/syncStatusPresenter';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
+import { isStaleActorError } from '../../session/staleActor';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet, FlatList } from 'react-native';
+import { View, Pressable, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
@@ -31,8 +34,12 @@ export default function AssessmentHistoryScreen({ navigation }) {
   // The list scrolls inside the card, so the card (not the list) clears the bottom inset.
   const cardBottom = useScrollBottomPadding(spacing.md);
   const toast = useToast();
-  const { repositories } = useSignedInEA();
-  const { assessments: assessmentsRepository, batteryRuns } = repositories;
+  const { repositories, services } = useSignedInEA();
+  const { assessments: assessmentsRepository, batteryRuns, children: childrenRepository } = repositories;
+  const { running, pageVersion, runVersion } = useAssessmentHistoryStatus();
+  const [pullStates, setPullStates] = useState([null, null]);
+  const [referenceNames, setReferenceNames] = useState({});
+  const history = describeCombinedHistoryState({ running, pullStates });
 
   const { user } = useAuth();
   // Use allChildren (includes hidden) so historical assessments still resolve
@@ -41,6 +48,13 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const { allChildren } = useChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void services.assessmentHistory.start({ force: true })
+      .catch((error) => { if (!isStaleActorError(error)) console.error('Assessment history failed:', error); })
+      .finally(() => setRefreshing(false));
+  }, [services]);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,18 +69,24 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
         try {
           setLoading(true);
-          const [results, runs] = await Promise.all([
+          const [results, runs, states] = await Promise.all([
             assessmentsRepository.getQuestionResults({
               userId: user.id, recordedByUserId: user.id, includeSkipped: true, order: 'desc',
             }),
             batteryRuns.getRunsForUser(user.id),
+            services.assessmentHistory.store.getPullStates(user.id),
           ]);
           const cached = [
             ...results.filter(result => result.battery_run_id == null).map(result => ({ ...result, kind: 'result' })),
             ...runs.map(run => ({ ...run, kind: 'run', assessment_date: toLocalDateString(run.started_at) })),
           ].sort((a, b) => b.assessment_date.localeCompare(a.assessment_date)
             || (b.created_at || '').localeCompare(a.created_at || ''));
+          const rosterIds = new Set(allChildren.map(child => child.id));
+          const missingIds = [...new Set(cached.map(row => row.child_id).filter(id => !rosterIds.has(id)))];
+          const names = missingIds.length ? await childrenRepository.getChildNamesByIds(missingIds) : {};
           if (active) {
+            setReferenceNames(names);
+            setPullStates([states.batteryRuns, states.assessments]);
             setAssessments(cached);
           }
         } catch (error) {
@@ -85,11 +105,11 @@ export default function AssessmentHistoryScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [user?.id, toast, assessmentsRepository, batteryRuns])
+    }, [user?.id, toast, assessmentsRepository, batteryRuns, childrenRepository, services, allChildren, pageVersion, runVersion])
   );
 
   const childInfoMap = React.useMemo(() => {
-    const map = {};
+    const map = { ...referenceNames };
     for (const c of allChildren) {
       map[c.id] = {
         name: `${c.first_name} ${c.last_name}`,
@@ -97,7 +117,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
       };
     }
     return map;
-  }, [allChildren]);
+  }, [allChildren, referenceNames]);
 
   const renderItem = ({ item, index }) => {
     const isRun = item.kind === 'run';
@@ -153,6 +173,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.container}>
+        {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text variant="bodyMedium" style={styles.emptyText}>Loading...</Text>
@@ -163,8 +184,10 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
       <ListGroup style={[styles.group, { marginBottom: cardBottom }]}>
         <FlatList onScroll={onScroll} scrollEventThrottle={16}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           data={assessments}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
@@ -183,6 +206,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  historyDetail: { color: colors.textSecondary, marginHorizontal: spacing.md, marginTop: spacing.sm },
   container: {
     flex: 1,
     backgroundColor: colors.background,

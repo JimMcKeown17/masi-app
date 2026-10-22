@@ -35,8 +35,20 @@ describe('classifyError 23514 immutable-identity rejection (#48 part 1)', () => 
 });
 
 const { _testEvidenceMaps } = require('../src/services/offlineSync');
+const { _testUpdateByIdTables } = require('../src/services/offlineSync');
 
 describe('evidence maps (#48 part 2)', () => {
+  test('letter mastery corrections require only direct child assignment evidence and never UPDATE by id', () => {
+    expect(_testEvidenceMaps.GRANT_SUBJECTS.letter_mastery).toEqual([
+      { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
+    ]);
+    expect(_testUpdateByIdTables.has('letter_mastery')).toBe(false);
+  });
+
+  test('a duplicate mastery correction still requires an RPC acknowledgement', () => {
+    expect(_testClassifyError({ code: '23505' }, { tableName: 'letter_mastery', duplicateIsSuccess: true }))
+      .toMatchObject({ terminal: true, markAsSynced: false });
+  });
   test('PARENT_FK_COLUMNS covers every TABLE_DEPENDENCIES FK-parent (no drift)', () => {
     const { TABLE_DEPENDENCIES, PARENT_FK_COLUMNS } = _testEvidenceMaps;
     for (const [child, parents] of Object.entries(TABLE_DEPENDENCIES)) {
@@ -75,11 +87,14 @@ describe('evidence maps (#48 part 2)', () => {
   test('GRANT_SUBJECTS references only device-produced assignments or membership-mediated children', () => {
     const { GRANT_SUBJECTS } = _testEvidenceMaps;
     const allowed = new Set(['child_ea_assignments', 'class_ea_assignments', 'group_ea_assignments']);
-    for (const grants of Object.values(GRANT_SUBJECTS)) {
+    for (const [table, grants] of Object.entries(GRANT_SUBJECTS)) {
       for (const grant of grants) {
         if (grant.grantTable) {
           expect(allowed.has(grant.grantTable)).toBe(true);
           expect(grant.subjectColumn).toEqual(expect.any(String));
+        } else if (grant.heldGroupAssignment) {
+          expect(['sessions', 'session_attendees']).toContain(table);
+          expect(grant).toEqual({ heldGroupAssignment: 'group_id' });
         } else {
           expect(Object.keys(grant)).toEqual(['membershipMediatedChild']);
           expect(['id', 'child_id']).toContain(grant.membershipMediatedChild);
@@ -90,6 +105,8 @@ describe('evidence maps (#48 part 2)', () => {
 
   test('GRANT_SUBJECTS maps the child- and class-scoped grants', () => {
     const { GRANT_SUBJECTS } = _testEvidenceMaps;
+    expect(GRANT_SUBJECTS.sessions).toEqual([{ heldGroupAssignment: 'group_id' }]);
+    expect(GRANT_SUBJECTS.session_attendees).toEqual(expect.arrayContaining([{ heldGroupAssignment: 'group_id' }]));
     expect(GRANT_SUBJECTS.child_group_memberships).toEqual(expect.arrayContaining([
       { grantTable: 'child_ea_assignments', subjectColumn: 'child_id' },
       { grantTable: 'group_ea_assignments', subjectColumn: 'group_id' },

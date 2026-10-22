@@ -1,0 +1,24 @@
+{
+  "id": "isixhosa-interim-letters-v1",
+  "language": "isixhosa",
+  "channel": "release",
+  "sound_inventory": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"],
+  "letter_steps": [
+    { "step": 1, "new_letters": ["o", "m", "l", "a"], "blends": [], "words": [], "readers": [] },
+    { "step": 2, "new_letters": ["k", "u"], "blends": [], "words": [], "readers": [] },
+    { "step": 3, "new_letters": ["e", "n"], "blends": [], "words": [], "readers": [] },
+    { "step": 4, "new_letters": ["i", "t"], "blends": [], "words": [], "readers": [] },
+    { "step": 5, "new_letters": ["s", "d"], "blends": [], "words": [], "readers": [] },
+    { "step": 6, "new_letters": ["f", "b"], "blends": [], "words": [], "readers": [] },
+    { "step": 7, "new_letters": ["y", "c"], "blends": [], "words": [], "readers": [] },
+    { "step": 8, "new_letters": ["z", "p"], "blends": [], "words": [], "readers": [] },
+    { "step": 9, "new_letters": ["q", "w"], "blends": [], "words": [], "readers": [] },
+    { "step": 10, "new_letters": ["v", "g"], "blends": [], "words": [], "readers": [] },
+    { "step": 11, "new_letters": ["x", "h"], "blends": [], "words": [], "readers": [] },
+    { "step": 12, "new_letters": ["j", "r"], "blends": [], "words": [], "readers": [] }
+  ],
+  "sound_steps": [],
+  "readers": {},
+  "word_bank": [],
+  "reader_details": {}
+}

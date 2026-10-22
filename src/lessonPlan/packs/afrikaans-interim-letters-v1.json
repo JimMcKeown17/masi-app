@@ -1,0 +1,24 @@
+{
+  "id": "afrikaans-interim-letters-v1",
+  "language": "afrikaans",
+  "channel": "release",
+  "sound_inventory": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"],
+  "letter_steps": [
+    { "step": 1, "new_letters": ["a", "s", "m", "e"], "blends": [], "words": [], "readers": [] },
+    { "step": 2, "new_letters": ["k", "i"], "blends": [], "words": [], "readers": [] },
+    { "step": 3, "new_letters": ["r", "o"], "blends": [], "words": [], "readers": [] },
+    { "step": 4, "new_letters": ["n", "t"], "blends": [], "words": [], "readers": [] },
+    { "step": 5, "new_letters": ["d", "l"], "blends": [], "words": [], "readers": [] },
+    { "step": 6, "new_letters": ["p", "u"], "blends": [], "words": [], "readers": [] },
+    { "step": 7, "new_letters": ["b", "g"], "blends": [], "words": [], "readers": [] },
+    { "step": 8, "new_letters": ["h", "v"], "blends": [], "words": [], "readers": [] },
+    { "step": 9, "new_letters": ["w", "y"], "blends": [], "words": [], "readers": [] },
+    { "step": 10, "new_letters": ["f", "j"], "blends": [], "words": [], "readers": [] },
+    { "step": 11, "new_letters": ["c", "z"], "blends": [], "words": [], "readers": [] },
+    { "step": 12, "new_letters": ["x", "q"], "blends": [], "words": [], "readers": [] }
+  ],
+  "sound_steps": [],
+  "readers": {},
+  "word_bank": [],
+  "reader_details": {}
+}

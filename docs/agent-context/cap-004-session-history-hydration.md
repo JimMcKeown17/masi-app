@@ -87,7 +87,8 @@ reviewed spec.
    `sessionsRepository.saveHistoryPage` with cursor advance in-transaction; reference-child insert
    and in-place upgrade; real-SQLite tests for atomicity, foreign keys on, pending-local-wins, no
    absence delete, resume after mid-page throw.
-3. **Traversal service** `src/services/sessionHistoryPull.js` with a fake client: page loop,
+3. **Traversal service** `src/services/historyWalk.js`, with the session config in
+   `src/services/sessionHistoryPull.js`, tested with a fake client: page loop,
    attendee pages, incomplete-family handling, deadlines and run budget, overlap rewind, window
    reset on new academic year, raw cursor strings.
 4. **Orchestration + UX.** Trigger after roster/reference pulls; single-flight; History inline line;

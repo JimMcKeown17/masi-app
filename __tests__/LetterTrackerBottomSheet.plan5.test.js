@@ -54,15 +54,15 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
         id: 'mastery-a',
         child_id: 'child-1',
         letter: 'a',
-        language: 'English',
-        _deleted: false,
+        language: 'en',
+        confirmed: true,
       },
       {
         id: 'mastery-s',
         child_id: 'child-1',
         letter: 's',
-        language: 'English',
-        _deleted: false,
+        language: 'en',
+        confirmed: true,
       },
     ]);
   });

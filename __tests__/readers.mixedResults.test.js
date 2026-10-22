@@ -15,6 +15,8 @@ import { renderWithProviders } from '../test-support/renderWithProviders';
 import { createFamilySyncFixture, questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 import { LETTER_SOUNDS_2026_1_EN } from '../src/assessment-questions/itemsets';
 import { AuthContext } from '../src/context/AuthContext';
+import { createAssessmentHistoryStore } from '../src/services/assessmentHistoryStatus';
+import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { useChildren } from '../src/context/ChildrenContext';
 import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistoryScreen';
@@ -101,7 +103,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
 
   const renderReader = element => renderWithProviders(
     <AuthContext.Provider value={{ user: { id: f.userId } }}>
-      <SignedInEAContext.Provider value={{ repositories: { assessments: f.assessments, batteryRuns: f.runs } }}>
+      <SignedInEAContext.Provider value={{ repositories: { assessments: f.assessments, batteryRuns: f.runs, children: createChildrenRepository({ database: f.db }) }, services: { assessmentHistory: { store: createAssessmentHistoryStore({ database: f.db }) } } }}>
         {element}
       </SignedInEAContext.Provider>
     </AuthContext.Provider>

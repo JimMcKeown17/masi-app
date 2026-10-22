@@ -77,8 +77,6 @@ describe('assessment results schema v15', () => {
         ('old-item-2', 'old-assessment', 'b', 1, 'failed');
       insert into time_entries (id, user_id, sign_in_time, sync_status)
       values ('time-1', 'user-1', '2026-10-20T08:00:00.000Z', 'pending');
-      insert into letter_mastery (id, user_id, child_id, programme_id, letter, language)
-      values ('mastery-1', 'user-1', 'child-1', 'programme-a', 'a', 'isiXhosa');
       insert into sync_outbox (id, table_name, record_id, operation, owner_user_id, status, payload)
       values
         ('assessment-outbox', 'assessments', 'old-assessment', 'insert', 'user-1', 'pending', null),
@@ -93,7 +91,6 @@ describe('assessment results schema v15', () => {
     `);
     const children = await db.getAllAsync('select * from children');
     const timeEntries = await db.getAllAsync('select * from time_entries');
-    const mastery = await db.getAllAsync('select * from letter_mastery');
     expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 14 });
     expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 5 });
 
@@ -104,16 +101,16 @@ describe('assessment results schema v15', () => {
     expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(otherOutbox);
     expect(await db.getAllAsync('select * from children')).toEqual(children);
     expect(await db.getAllAsync('select * from time_entries')).toEqual(timeEntries);
-    expect(await db.getAllAsync('select * from letter_mastery')).toEqual(mastery);
-    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 15 });
-    expect(await db.getFirstAsync('select version, name from schema_migrations where version = 15'))
-      .toEqual({ version: 15, name: 'assessment_results' });
+    expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
+    expect(await db.getFirstAsync("select version, name from schema_migrations where name = 'assessment_results'"))
+      .toEqual({ version: MIGRATIONS.find(({ name }) => name === 'assessment_results').version, name: 'assessment_results' });
     expect(await db.getFirstAsync('PRAGMA foreign_keys')).toEqual({ foreign_keys: 1 });
     expect(await db.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
   });
 
-  test('CURRENT_SCHEMA_VERSION is 15', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+  test('assessment_results precedes letter_mastery_current_state', () => {
+    expect(MIGRATIONS.find(({ name }) => name === 'assessment_results').version)
+      .toBeLessThan(MIGRATIONS.find(({ name }) => name === 'letter_mastery_current_state').version);
   });
 
   describe('after upgrading', () => {

@@ -1,0 +1,93 @@
+<style>
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;margin-top:10px}
+  .ph{width:212px;border:2px solid #d9d0cf;border-radius:22px;background:#F8F5F4;overflow:hidden;font:11px/1.35 -apple-system,system-ui,sans-serif;color:#221A1B;flex:none;position:relative}
+  .ph .cap{background:#fff;color:#76696B;font-size:10px;text-align:center;padding:4px;border-bottom:1px solid #ECE5E4;font-weight:600}
+  .hero{background:#C81F3E;color:#fff;padding:10px 10px 34px}
+  .hero b{font-size:15px;display:block}
+  .hero small{color:#FDECEF}
+  .clock{background:#A4182F;border-radius:10px;padding:6px 8px;margin-top:8px;font-size:10px}
+  .scard{background:#fff;border-radius:12px;margin:-26px 10px 6px;padding:8px;border:1px solid #ECE5E4;position:relative;text-align:center}
+  .gauge{height:6px;border-radius:3px;background:linear-gradient(90deg,#E72D4D 33%,#ECE5E4 33%);margin:4px 0}
+  .week{display:flex;justify-content:space-between;padding:4px 12px;color:#76696B;font-size:9.5px}
+  .tabbar{display:flex;justify-content:space-around;align-items:center;border-top:1px solid #ECE5E4;background:#fff;padding:6px 0;font-size:9px;color:#76696B;margin-top:8px}
+  .rec{background:#E72D4D;color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;margin-top:-14px;box-shadow:0 2px 6px rgba(231,45,77,.4)}
+  .hd{background:#E72D4D;color:#fff;padding:10px 10px 12px}
+  .hd b{font-size:14px;display:block}
+  .card{background:#fff;border-radius:10px;margin:7px 8px;padding:7px 8px;border:1px solid #ECE5E4}
+  .next{background:#FDECEF;border:1.5px solid #E72D4D}
+  .lbl{font-size:8.5px;color:#76696B;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:3px}
+  .btn{background:#E72D4D;color:#fff;border-radius:10px;text-align:center;padding:6px;margin-top:6px;font-weight:700}
+  .pr{display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid #F1ECEB}
+  .pr:first-of-type{border-top:0}
+  .muted{color:#76696B}
+  .done{color:#2E7D27;font-weight:700}
+  .arrow{align-self:center;font-size:20px;color:#C81F3E}
+  .opt-note{font-size:13px;color:#555;margin:6px 0 2px}
+  .warn{font-size:12.5px;background:#FFF8E1;color:#8A4B00;border-radius:8px;padding:8px 10px;margin:8px 0}
+</style>
+
+<h2>Where does the EA see the suggested pair?</h2>
+<p class="subtitle">On 2026-10-15 you removed "Who to see next" from Home and said it belongs in the session flow. A respects that; B brings it back to Home in a small way.</p>
+
+<div class="options">
+
+<div class="option" data-choice="a" onclick="toggleSelect(this)">
+  <div class="letter">A</div>
+  <div class="content">
+    <h3>Home unchanged. "+ Record" opens "Who are you teaching?" with the suggested pair on top</h3>
+    <p class="opt-note">Home keeps its calm, status-only job. The suggestion appears at the one moment it's needed. The EA can pick any other pair from the list.</p>
+    <div class="row">
+      <div class="ph"><div class="cap">Home (as built)</div>
+        <div class="hero"><b>Molo, Nomsa.</b><small>Core Literacy · Ntyatyambo Primary</small><div class="clock">● Clocked in 07:52</div></div>
+        <div class="scard"><b>1 of 3</b> sessions today<div class="gauge"></div><span class="muted">2 to go</span></div>
+        <div class="week"><span>M ●</span><span>T ●</span><span>W ●</span><span>T ○</span><span>F ○</span></div>
+        <div style="height:40px"></div>
+        <div class="tabbar"><span>Home</span><span>Learners</span><div class="rec">+</div><span>Insights</span><span>Profile</span></div></div>
+      <div class="arrow">→</div>
+      <div class="ph"><div class="cap">Tap + Record</div>
+        <div class="hd"><b>Who are you teaching?</b></div>
+        <div class="card next"><div class="lbl" style="color:#A4182F">Up next</div>
+          <b style="font-size:13px">Amahle &amp; Lulu</b><br><span class="muted">Not seen since Mon · letters k u</span>
+          <div class="btn">Start lesson</div></div>
+        <div class="card"><div class="lbl">Other pairs</div>
+          <div class="pr"><span>Sipho &amp; Thabo</span><span class="muted">Tue · e n</span></div>
+          <div class="pr"><span>Ayanda &amp; Zola</span><span class="muted">Tue · k u</span></div>
+          <div class="pr"><span>Lindo &amp; Asa</span><span class="done">Today ✓</span></div>
+          <div class="pr"><span>Iviwe &amp; Esona</span><span class="muted">Wed · o m</span></div>
+          <div class="pr"><span>Bulela &amp; Owam</span><span class="muted">Wed · i t</span></div>
+        </div></div>
+      <div class="arrow">→</div>
+      <div class="ph"><div class="cap">Lesson screen (option B you chose)</div>
+        <div class="hd"><b>Amahle &amp; Lulu</b><small>Gr 1 · isiXhosa · last seen Mon</small></div>
+        <div class="card muted" style="height:150px">Letters · Blending · Pair reading …</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="option" data-choice="b" onclick="toggleSelect(this)">
+  <div class="letter">B</div>
+  <div class="content">
+    <h3>Same as A, plus a one-line "Up next" on Home's session card</h3>
+    <p class="opt-note">The EA sees who's next as soon as they open the app, and can start straight from Home. Reverses part of the 10-15 decision: the session card becomes tappable.</p>
+    <div class="row">
+      <div class="ph"><div class="cap">Home with "Up next"</div>
+        <div class="hero"><b>Molo, Nomsa.</b><small>Core Literacy · Ntyatyambo Primary</small><div class="clock">● Clocked in 07:52</div></div>
+        <div class="scard"><b>1 of 3</b> sessions today<div class="gauge"></div>
+          <div style="border-top:1px solid #F1ECEB;margin-top:6px;padding-top:6px;text-align:left;display:flex;justify-content:space-between;align-items:center">
+            <span><span class="muted">Up next</span><br><b>Amahle &amp; Lulu</b></span>
+            <span style="background:#E72D4D;color:#fff;border-radius:8px;padding:4px 8px;font-weight:700">Start ›</span></div></div>
+        <div class="week"><span>M ●</span><span>T ●</span><span>W ●</span><span>T ○</span><span>F ○</span></div>
+        <div style="height:10px"></div>
+        <div class="tabbar"><span>Home</span><span>Learners</span><div class="rec">+</div><span>Insights</span><span>Profile</span></div></div>
+      <div class="arrow">→</div>
+      <div class="ph"><div class="cap">Start › goes straight to</div>
+        <div class="hd"><b>Amahle &amp; Lulu</b><small>Gr 1 · isiXhosa · last seen Mon</small></div>
+        <div class="card muted" style="height:150px">Lesson screen …</div></div>
+    </div>
+    <p class="opt-note">"+ Record" still opens the same "Who are you teaching?" list as A.</p>
+  </div>
+</div>
+
+</div>
+
+<div class="warn"><b>How "up next" is picked (my guess):</b> the pair whose children were seen least recently, skipping pairs already taught today; ties go to the pair with the fewest sessions this week. Learners tab names like "Learners" and the school are placeholders.</div>

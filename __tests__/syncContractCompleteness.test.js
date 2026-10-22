@@ -34,9 +34,10 @@ it('every pushed table and family-member column is synced, intentionally-unsynce
   }
 });
 
-it('sessions.group_id and sessions.state are documented as intentionally unsynced', () => {
-  const { INTENTIONALLY_UNSYNCED } = __contract;
-  expect(INTENTIONALLY_UNSYNCED.sessions?.group_id).toBeTruthy();
+it('sessions.group_id is synced and sessions.state stays intentionally unsynced', () => {
+  const { SERVER_COLUMNS, INTENTIONALLY_UNSYNCED } = __contract;
+  expect(SERVER_COLUMNS.sessions).toContain('group_id');
+  expect(INTENTIONALLY_UNSYNCED.sessions.group_id).toBeUndefined();
   expect(INTENTIONALLY_UNSYNCED.sessions?.state).toBeTruthy();
 });
 

@@ -1,8 +1,8 @@
-import { ENGLISH_PEDAGOGICAL_ORDER, ISIXHOSA_PEDAGOGICAL_ORDER } from '../constants/egraConstants';
+import { ENGLISH_PEDAGOGICAL_ORDER, ISIXHOSA_PEDAGOGICAL_ORDER, AFRIKAANS_PEDAGOGICAL_ORDER } from '../constants/egraConstants';
 
 export const LETTER_EVIDENCE_CODES = ['letter_sounds'];
 
-export const LANGUAGE_LABELS = { en: 'English', xh: 'isiXhosa', zu: 'isiZulu' };
+export const LANGUAGE_LABELS = { en: 'English', xh: 'isiXhosa', zu: 'isiZulu', af: 'Afrikaans' };
 
 export function languageCodeForHomeLanguage(text) {
   if (typeof text !== 'string') return null;
@@ -12,6 +12,7 @@ export function languageCodeForHomeLanguage(text) {
     case 'isixhosa': return 'xh';
     case 'zulu':
     case 'isizulu': return 'zu';
+    case 'afrikaans': return 'af';
     default: return null;
   }
 }
@@ -19,6 +20,7 @@ export function languageCodeForHomeLanguage(text) {
 export const PEDAGOGICAL_ORDERS = {
   en: ENGLISH_PEDAGOGICAL_ORDER,
   xh: ISIXHOSA_PEDAGOGICAL_ORDER,
+  af: AFRIKAANS_PEDAGOGICAL_ORDER,
 };
 
 export const STANDALONE_TESTS = [

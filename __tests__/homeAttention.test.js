@@ -1,5 +1,7 @@
 // __tests__/homeAttention.test.js
-import { deriveHomeAttentionItems, MAX_ATTENTION_ITEMS } from '../src/utils/homeAttention';
+import fs from 'fs';
+import path from 'path';
+import { deriveHomeAttentionItems, lessonInProgressFromDraft, MAX_ATTENTION_ITEMS } from '../src/utils/homeAttention';
 
 const NOW = new Date('2026-10-15T08:00:00.000Z'); // Thu 15 Oct, 10:00 SAST
 
@@ -19,6 +21,40 @@ const base = {
   assessmentDismissedOn: null,
   now: NOW,
 };
+
+const lesson = { draftId: 'draft-1', childNames: ['Amahle', 'Lulu'] };
+
+test('a lesson in progress comes first and offers Resume', () => {
+  expect(deriveHomeAttentionItems({ ...base, lessonInProgress: lesson })).toEqual([{
+    key: 'lesson_in_progress:draft-1', kind: 'lesson_in_progress', tone: 'neutral',
+    title: 'Lesson in progress', subtitle: 'Amahle & Lulu · Resume',
+    accessibilityLabel: 'Lesson in progress with Amahle and Lulu. Resume',
+    route: 'Lesson', params: { draftId: 'draft-1' }, dismissible: false,
+  }]);
+});
+test('the lesson card stays inside the two-item cap and pushes lower items out', () => {
+  expect(deriveHomeAttentionItems({ ...base, lessonInProgress: lesson, needsAttentionCount: 2,
+    autoClockOut: notice(), coverage: { assessed: 11, total: 12 } }).map((i) => i.kind))
+    .toEqual(['lesson_in_progress', 'sync_attention']);
+});
+test('three names, or none known, still read naturally', () => {
+  const [three] = deriveHomeAttentionItems({ ...base, lessonInProgress: { draftId: 'd', childNames: ['Amahle', 'Lulu', 'Sipho'] } });
+  expect(three.subtitle).toBe('Amahle, Lulu & Sipho · Resume');
+  const [none] = deriveHomeAttentionItems({ ...base, lessonInProgress: { draftId: 'd', childNames: [] } });
+  expect(none).toMatchObject({ subtitle: 'Resume', accessibilityLabel: 'Lesson in progress. Resume' });
+});
+test('lessonInProgressFromDraft names the present children this phone knows', () => {
+  const draft = { id: 'draft-1', attendance: { childIds: ['c1', 'c2', 'c3'], absentChildIds: ['c2'], addedChildIds: [] } };
+  const children = [{ id: 'c1', first_name: 'Amahle' }, { id: 'c2', first_name: 'Lulu' }];
+  expect(lessonInProgressFromDraft(draft, children)).toEqual({ draftId: 'draft-1', childNames: ['Amahle'] });
+  expect(lessonInProgressFromDraft({ ...draft, attendance: { childIds: ['c2'], absentChildIds: ['c2'], addedChildIds: [] } }, children))
+    .toEqual({ draftId: 'draft-1', childNames: [] }); // everyone absent: still a lesson in progress
+  expect(lessonInProgressFromDraft(null, children)).toBeNull();
+});
+test('Home does not read lesson drafts until the Lesson route ships', () => {
+  const home = fs.readFileSync(path.join(__dirname, '../src/screens/main/HomeScreen.js'), 'utf8');
+  expect(home).not.toMatch(/lessonDrafts|lessonInProgress/); // C3 removes this test when it registers Lesson
+});
 
 describe('deriveHomeAttentionItems', () => {
   test('a normal day has no items', () => {

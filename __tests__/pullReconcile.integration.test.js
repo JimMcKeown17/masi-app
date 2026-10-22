@@ -14,6 +14,7 @@ import {
 import { runBatchWithPerRowFallback } from '../src/db/repositories/repositoryRuntime';
 import { createCountingSqliteTestDatabase } from '../test-support/countingSqliteAdapter';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
+import { letterMasteryDomainId } from '../src/db/domainId';
 
 const CREATED_AT = '2026-07-01T09:00:00.000Z';
 const PULLED_AT = '2026-07-13T12:00:00.000Z';
@@ -165,7 +166,158 @@ const seedChildEaAssignments = async (db, count = 15) => {
   return { repository, assignments };
 };
 
+const seedHandoverMastery = async (db, childId, letter = 'a', syncStatus = 'synced', outboxStatus = null) => {
+  const id = letterMasteryDomainId({ childId, letter, language: 'en' });
+  await db.runAsync(`insert into letter_mastery
+    (id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by, programme_id,
+      created_at, updated_at, sync_status, server_changed_at, server_correction_id)
+    values (?, ?, ?, 'en', 1, ?, ?, 'user-1', 'programme-a', ?, ?, ?, ?, ?)`,
+  id, childId, letter, CREATED_AT, '10000000-0000-4000-8000-000000000000', CREATED_AT, CREATED_AT,
+  syncStatus, CREATED_AT, '10000000-0000-4000-8000-000000000000');
+  if (outboxStatus) await db.runAsync(`insert into sync_outbox
+    (id, table_name, record_id, operation, payload, status, owner_user_id)
+    values (?, 'letter_mastery', ?, 'update', '{}', ?, 'user-1')`, `letter_mastery:${id}:update`, id, outboxStatus);
+  return id;
+};
+const seedMasteryCoverage = async (db, childIds) => {
+  const cursor = { windowStart: null, updatedAt: CREATED_AT, id: 'saved-id', deltaComplete: true, complete: true,
+    firstWalk: false, firstWalkChildIds: null, rescanAfter: { updatedAt: CREATED_AT, id: 'rescan-id' },
+    rewalkChildIds: [...childIds], rescanCompletedAt: CREATED_AT, nextRewalkAt: '2026-10-30T08:00:00Z',
+    rescanChildIds: [...childIds], lastFailureAt: null };
+  await db.runAsync("insert into sync_state (scope, last_pulled_at, cursor, updated_at) values ('letter_mastery_pull:user-1', 'L', ?, ?)", JSON.stringify(cursor), CREATED_AT);
+  return cursor;
+};
+const masteryCoverageRow = (db) => db.getFirstAsync("select * from sync_state where scope = 'letter_mastery_pull:user-1'");
+
 describe('relationship-scoped pull reconcile', () => {
+  test('a failed mastery coverage write rolls back the assignment end and mastery delete', async () => {
+    const db = await createDatabase();
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveServerChildRows([childRow('child-absent')]);
+      await repository.saveServerStaffChildRows([childEaAssignmentRow({ id: 'cea-absent', childId: 'child-absent' })]);
+      await seedHandoverMastery(db, 'child-absent');
+      await seedMasteryCoverage(db, ['child-absent']);
+      const assignment = await db.getFirstAsync("select * from child_ea_assignments where id = 'cea-absent'");
+      const rows = await db.getAllAsync('select * from letter_mastery');
+      const cursor = await masteryCoverageRow(db);
+      await db.execAsync(`create trigger reject_mastery_cursor before update on sync_state
+        when new.scope = 'letter_mastery_pull:user-1' begin select raise(abort, 'coverage unavailable'); end`);
+      expect(await repository.saveServerStaffChildRows([], { reconcile: {
+        acknowledgedIds: [], userId: 'user-1', pulledAt: PULLED_AT,
+      } })).toMatchObject({ ended: 0, fallbackUsed: true, reconcileCompleted: false });
+      expect(await db.getFirstAsync("select * from child_ea_assignments where id = 'cea-absent'")).toEqual(assignment);
+      expect(await db.getAllAsync('select * from letter_mastery')).toEqual(rows);
+      expect(await masteryCoverageRow(db)).toEqual(cursor);
+      expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+    } finally { log.mockRestore(); await db.closeAsync(); }
+  });
+
+  test("child EA reconcile deletes the ended child's synced letter mastery and keeps what is owed or refused", async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveServerChildRows([childRow('child-kept'), childRow('child-absent')]);
+      await repository.saveServerStaffChildRows([
+        childEaAssignmentRow({ id: 'cea-kept', childId: 'child-kept' }),
+        childEaAssignmentRow({ id: 'cea-absent', childId: 'child-absent' }),
+      ]);
+      for (const [letter, status, outbox] of [['a', 'synced', null], ['b', 'pending', 'pending'],
+        ['c', 'synced', 'in_flight'], ['d', 'failed', 'failed'], ['e', 'terminal', 'terminal'], ['f', 'synced', 'terminal']]) {
+        await seedHandoverMastery(db, 'child-absent', letter, status, outbox);
+      }
+      await seedHandoverMastery(db, 'child-kept');
+      const cursor = await seedMasteryCoverage(db, ['child-absent', 'child-kept']);
+      await db.runAsync("insert into sync_state (scope, last_pulled_at, cursor, updated_at) values ('assessment_history_pull:user-1:programme-a', 'A', ?, ?)",
+        JSON.stringify({ rescanChildIds: ['child-absent'] }), CREATED_AT);
+      const assessmentBefore = await db.getFirstAsync("select * from sync_state where scope = 'assessment_history_pull:user-1:programme-a'");
+      const outboxBefore = await db.getAllAsync('select * from sync_outbox order by id');
+      expect(await repository.saveServerStaffChildRows([], { reconcile: {
+        acknowledgedIds: ['cea-kept'], pulledAt: PULLED_AT, userId: 'user-1',
+      } })).toEqual({ applied: 0, skipped: 0, failed: 0, ended: 1, fallbackUsed: false, reconcileCompleted: true });
+      expect(await db.getAllAsync('select letter, child_id from letter_mastery order by child_id, letter')).toEqual([
+        ...['b', 'c', 'd', 'e'].map((letter) => ({ letter, child_id: 'child-absent' })),
+        { letter: 'a', child_id: 'child-kept' },
+      ]);
+      expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(outboxBefore);
+      const after = await masteryCoverageRow(db);
+      expect(JSON.parse(after.cursor)).toEqual({ ...cursor, rewalkChildIds: ['child-kept'], rescanChildIds: ['child-kept'] });
+      expect(after.last_pulled_at).toBe('L');
+      expect(await db.getFirstAsync("select * from sync_state where scope = 'assessment_history_pull:user-1:programme-a'")).toEqual(assessmentBefore);
+      expect(await db.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
+    } finally { await db.closeAsync(); }
+  });
+
+  test("a tripped breaker deletes no letter mastery, and Apply's bypass deletes it", async () => {
+    const db = await createDatabase();
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { repository, assignments } = await seedChildEaAssignments(db);
+      for (const assignment of assignments) await seedHandoverMastery(db, assignment.child_id);
+      await seedMasteryCoverage(db, assignments.map((a) => a.child_id));
+      const before = await masteryCoverageRow(db);
+      const reconcile = { acknowledgedIds: assignments.slice(0, 3).map((a) => a.id), pulledAt: PULLED_AT, userId: 'user-1' };
+      expect(await repository.saveServerStaffChildRows([], { reconcile })).toMatchObject({ ended: 0, reconcileCompleted: false });
+      expect(await db.getFirstAsync('select count(*) as n from letter_mastery')).toEqual({ n: 15 });
+      expect(await masteryCoverageRow(db)).toEqual(before);
+      expect(await repository.saveServerStaffChildRows([], { reconcile: { ...reconcile, bypassBreaker: true } }))
+        .toMatchObject({ ended: 12, reconcileCompleted: true });
+      expect(await db.getAllAsync('select child_id from letter_mastery order by child_id'))
+        .toEqual(assignments.slice(0, 3).map((a) => ({ child_id: a.child_id })));
+      expect(JSON.parse((await masteryCoverageRow(db)).cursor).rescanChildIds).toEqual(assignments.slice(0, 3).map((a) => a.child_id));
+    } finally { error.mockRestore(); await db.closeAsync(); }
+  });
+
+  test('a same-pair supersede deletes no letter mastery', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveServerChildRows([childRow('child-ea-supersede')]);
+      await repository.saveServerStaffChildRows([childEaAssignmentRow({ id: 'cea-stale-id', childId: 'child-ea-supersede' })]);
+      await seedHandoverMastery(db, 'child-ea-supersede');
+      await seedMasteryCoverage(db, ['child-ea-supersede']);
+      const cursorBefore = await masteryCoverageRow(db);
+      const masteryBefore = await db.getAllAsync('select * from letter_mastery');
+      expect(await repository.saveServerStaffChildRows([childEaAssignmentRow({ id: 'cea-server-id', childId: 'child-ea-supersede' })], {
+        reconcile: { acknowledgedIds: ['cea-server-id'], pulledAt: PULLED_AT, userId: 'user-1' },
+      })).toMatchObject({ ended: 0, reconcileCompleted: true });
+      expect(await db.getAllAsync('select * from letter_mastery')).toEqual(masteryBefore);
+      expect(await masteryCoverageRow(db)).toEqual(cursorBefore);
+    } finally { await db.closeAsync(); }
+  });
+
+  test('a pending local end is not a reconcile', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveServerChildRows([childRow('child-absent')]);
+      await repository.saveServerStaffChildRows([childEaAssignmentRow({ id: 'cea-absent', childId: 'child-absent' })]);
+      await seedHandoverMastery(db, 'child-absent');
+      await seedMasteryCoverage(db, ['child-absent']);
+      const cursorBefore = await masteryCoverageRow(db);
+      const masteryBefore = await db.getAllAsync('select * from letter_mastery');
+      await repository.deleteStaffChild('user-1', 'child-absent');
+      expect(await db.getAllAsync('select * from letter_mastery')).toEqual(masteryBefore);
+      expect(await masteryCoverageRow(db)).toEqual(cursorBefore);
+    } finally { await db.closeAsync(); }
+  });
+
+  test('a reconcile with no mastery cursor creates none', async () => {
+    const db = await createDatabase();
+    try {
+      const repository = createChildrenRepository({ database: db });
+      await repository.saveServerChildRows([childRow('child-absent')]);
+      await repository.saveServerStaffChildRows([childEaAssignmentRow({ id: 'cea-absent', childId: 'child-absent' })]);
+      await seedHandoverMastery(db, 'child-absent');
+      expect(await repository.saveServerStaffChildRows([], { reconcile: { acknowledgedIds: [], pulledAt: PULLED_AT, userId: 'user-1' } }))
+        .toMatchObject({ ended: 1, reconcileCompleted: true });
+      expect(await db.getAllAsync('select * from letter_mastery')).toEqual([]);
+      expect(await db.getFirstAsync("select count(*) as n from sync_state where scope like 'letter_mastery_pull:%'"))
+        .toEqual({ n: 0 });
+    } finally { await db.closeAsync(); }
+  });
+
   test('child EA reconcile ends only an absent synced assignment and enqueues nothing', async () => {
     const db = await createDatabase();
     try {

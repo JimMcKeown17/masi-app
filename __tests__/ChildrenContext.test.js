@@ -1,5 +1,7 @@
 jest.mock('../test-support/handleServiceMocks', () => ({
 startSessionHistoryPull: jest.fn(),
+startAssessmentHistoryPull: jest.fn(),
+resetAssessmentHistoryStatusForActorChange: jest.fn(),
 resetSessionHistoryStatusForActorChange: jest.fn()
 }));
 import React from 'react';
@@ -15,7 +17,7 @@ import { groupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssi
 import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { ensureReferenceData } from '../src/services/offlineSync';
-import { startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../test-support/handleServiceMocks';
+import { startAssessmentHistoryPull, resetAssessmentHistoryStatusForActorChange, startSessionHistoryPull, resetSessionHistoryStatusForActorChange } from '../test-support/handleServiceMocks';
 
 
 
@@ -180,6 +182,7 @@ const pulledBundle = (options = {}) => {
 describe('ChildrenContext Plan 5 hydration', () => {
   beforeEach(() => {
     startSessionHistoryPull.mockResolvedValue(null);
+    startAssessmentHistoryPull.mockReset().mockResolvedValue(null);
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({
       isOnline: true,
@@ -273,6 +276,28 @@ describe('ChildrenContext Plan 5 hydration', () => {
     rerender();
     expect(resetSessionHistoryStatusForActorChange).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(result.current.loading).toBe(false));
+  });
+
+  test('a persisted roster pull starts assessment history once', async () => {
+    let release;
+    childrenRepository.saveServerStaffChildRows.mockImplementationOnce(() => new Promise(done => { release = done; }));
+    startAssessmentHistoryPull.mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(release).toBeDefined());
+    expect(startAssessmentHistoryPull).not.toHaveBeenCalled();
+    await act(async () => { release({ applied: 1, skipped: 0 }); });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(startAssessmentHistoryPull).toHaveBeenCalledTimes(1);
+    expect(startAssessmentHistoryPull).toHaveBeenCalledWith();
+  });
+
+  test('an actor change resets the assessment history store', async () => {
+    const { result, rerender } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(resetAssessmentHistoryStatusForActorChange).not.toHaveBeenCalled();
+    useAuth.mockReturnValue({ user: null });
+    rerender();
+    expect(resetAssessmentHistoryStatusForActorChange).toHaveBeenCalledTimes(1);
   });
 
   test('mount performs one preloaded child-data pull and persists the result', async () => {

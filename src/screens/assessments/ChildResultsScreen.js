@@ -1,3 +1,4 @@
+import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import BrandButton from '../../components/common/BrandButton';
@@ -27,6 +28,7 @@ function getFeedbackColor(accuracy) {
 }
 
 export default function ChildResultsScreen({ navigation, route }) {
+  const { pageVersion, runVersion } = useAssessmentHistoryStatus();
   const onScroll = useHeaderHairline();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository } = repositories;
@@ -70,7 +72,7 @@ export default function ChildResultsScreen({ navigation, route }) {
         }
         setLatestByType(byType);
       })();
-    }, [assessmentsRepository, child.id, user.id])
+    }, [assessmentsRepository, child.id, user.id, pageVersion, runVersion])
   );
 
   return (

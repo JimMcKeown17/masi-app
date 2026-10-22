@@ -5,10 +5,9 @@
  * No React, no side effects — just data in, stats out.
  */
 
-import { computeAssessmentMastery } from './letterMastery';
+import { computeAssessmentMastery, pickLatestLetterResult } from './letterMastery';
 import {
   languageCodeForHomeLanguage,
-  LANGUAGE_LABELS,
   LETTER_EVIDENCE_CODES,
   PEDAGOGICAL_ORDERS,
 } from './assessmentRegistry';
@@ -195,30 +194,15 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
     }
 
     // Stored letter results count regardless of recorder or battery membership.
-    const childAssessments = assessments
-      .filter(a => (
-        a.child_id === child.id
-        && a.language === languageCode
-        && LETTER_EVIDENCE_CODES.includes(a.question_code)
-        && !a.stopped_reason?.startsWith('skipped_')
-        && a.items?.some(item => item.metadata?.reached !== false)
-      ))
-      .sort((a, b) => {
-        const dateCmp = (b.assessment_date || '').localeCompare(a.assessment_date || '');
-        if (dateCmp !== 0) return dateCmp;
-        return (b.created_at || '').localeCompare(a.created_at || '');
-      });
-    const latest = childAssessments[0] || null;
+    const latest = pickLatestLetterResult(assessments, { childId: child.id, languageCode });
 
     // Assessment-mastered letters
     const assessmentMastered = computeAssessmentMastery(latest, pedOrder);
 
-    // Coach-taught letters (not deleted, matching language)
-    // Plan 2 re-keys letter_mastery to codes
-    const confirmationLanguage = LANGUAGE_LABELS[languageCode];
+    // Confirmed letters in the child's class language, regardless of recorder or programme.
     const taughtLetters = new Set();
     for (const r of letterMastery) {
-      if (r.child_id === child.id && r.language === confirmationLanguage && !r._deleted) {
+      if (r.child_id === child.id && r.language === languageCode && r.confirmed) {
         taughtLetters.add(r.letter);
       }
     }

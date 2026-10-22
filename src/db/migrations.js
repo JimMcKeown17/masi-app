@@ -1,3 +1,5 @@
+import { letterMasteryDomainId } from './domainId';
+
 const LOCAL_SYNC_COLUMNS = `
   sync_status text not null default 'synced'
     check (sync_status in ('pending', 'synced', 'failed', 'terminal')),
@@ -794,6 +796,145 @@ alter table class_grouping_state add column row_version integer not null default
       alter table programmes add column default_battery_version text;
     `,
   },
+  {
+    version: 16,
+    name: 'letter_mastery_current_state',
+    sql: `
+      create table letter_mastery_v2 (
+        id text primary key,
+        child_id text not null references children(id) on delete cascade,
+        letter text not null check (length(letter) = 1 and letter = lower(letter)),
+        language text not null check (language glob '[a-z][a-z]'),
+        confirmed integer not null check (confirmed in (0, 1)),
+        changed_at text not null,
+        correction_id text not null,
+        changed_by text not null,
+        programme_id text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        server_changed_at text,
+        server_correction_id text
+      );
+
+      -- Rank before checking sync_status: an unsynced winner clears the whole key.
+      with codes as (
+        select *,
+          lower(letter) as l,
+          case lower(trim(language))
+            when 'english' then 'en'
+            when 'isixhosa' then 'xh'
+            when 'xhosa' then 'xh'
+            when 'isizulu' then 'zu'
+            when 'zulu' then 'zu'
+            when 'afrikaans' then 'af'
+            else case when language glob '[a-z][a-z]' then language else null end
+          end as code
+        from letter_mastery
+      ), ranked as (
+        select *, row_number() over (
+          partition by child_id, l, code order by updated_at desc, id desc
+        ) as rn
+        from codes
+      )
+      insert into letter_mastery_v2 (
+        id, child_id, letter, language, confirmed, changed_at, correction_id, changed_by,
+        programme_id, created_at, updated_at, sync_status, server_updated_at,
+        server_changed_at, server_correction_id
+      )
+      select id, child_id, l, code, (deleted_at is null), updated_at, id, user_id,
+        programme_id, created_at, updated_at, 'synced', server_updated_at, null, null
+      from ranked
+      where rn = 1 and code is not null and length(l) = 1 and sync_status = 'synced';
+
+      delete from sync_outbox where table_name = 'letter_mastery';
+      drop table letter_mastery;
+      alter table letter_mastery_v2 rename to letter_mastery;
+      create unique index idx_letter_mastery_child_key on letter_mastery(child_id, letter, language);
+    `,
+    transform: async (txn) => {
+      const rows = await txn.getAllAsync('select id, child_id, letter, language from letter_mastery');
+      for (const row of rows) {
+        await txn.runAsync('update letter_mastery set id = ? where id = ?', letterMasteryDomainId({
+          childId: row.child_id,
+          letter: row.letter,
+          language: row.language,
+        }), row.id);
+      }
+    },
+  },
+  // C7 allows one lesson in progress per EA. As with the v12 owner trigger,
+  // the database backstops the repository-level check.
+  {
+    version: 17,
+    name: 'lesson_drafts',
+    sql: `
+create table if not exists lesson_drafts (
+  id text primary key,
+  slot integer not null default 1 unique check (slot = 1),
+  session_id text not null unique,
+  programme_id text not null,
+  group_id text not null,
+  class_id text,
+  language_code text,
+  pack_id text,
+  lesson_date text not null,
+  attendance text not null default '{}',
+  plan text,
+  plan_fixed_at text,
+  ticks text not null default '{}',
+  tracker_changes text not null default '{}',
+  reading_level_changes text not null default '{}',
+  notes text,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+    `,
+  },
+  {
+    version: 18,
+    name: 'sessions_group_history_reference',
+    // A pulled session can name a group outside this phone's roster. Rebuild
+    // under the runner's FK-off transaction, keeping all other constraints.
+    // Drop before renaming so the attendee FK continues to name sessions.
+    sql: `
+      create table sessions_new (
+        id text primary key,
+        user_id text not null,
+        programme_id text not null references programmes(id) on delete restrict,
+        class_id text references classes(id) on delete set null,
+        session_date text not null,
+        started_at text,
+        ended_at text,
+        activities text not null default '{}',
+        notes text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        group_id text,
+        state text not null default 'completed'
+          check (state in ('completed', 'in_progress', 'paused', 'discarded'))
+      );
+      insert into sessions_new (
+        id, user_id, programme_id, class_id, session_date, started_at, ended_at,
+        activities, notes, created_at, updated_at, sync_status, last_sync_error,
+        server_updated_at, group_id, state
+      ) select
+        id, user_id, programme_id, class_id, session_date, started_at, ended_at,
+        activities, notes, created_at, updated_at, sync_status, last_sync_error,
+        server_updated_at, group_id, state
+      from sessions;
+      drop table sessions;
+      alter table sessions_new rename to sessions;
+      create index if not exists idx_sessions_programme_date on sessions(programme_id, session_date);
+      create index if not exists idx_sessions_class_id
+        on sessions(class_id)
+        where class_id is not null;
+      create index if not exists idx_sessions_group_id
+        on sessions(group_id)
+        where group_id is not null;
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.
@@ -850,6 +991,7 @@ async function runMigrationsNow(database) {
     for (const migration of pending) {
       await runInTransaction(db, async (txn) => {
         await txn.execAsync(migration.sql);
+        if (migration.transform) await migration.transform(txn);
         await txn.runAsync(
           'insert or ignore into schema_migrations (version, name) values (?, ?)',
           migration.version,
