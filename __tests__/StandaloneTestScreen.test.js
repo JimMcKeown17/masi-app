@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContext, usePreventRemoveContext } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
@@ -350,3 +351,9 @@ test('native dismissal is free before Start, then stays prevented through save f
 });
 
 function EmptyScreen() { return null; }
+
+test('the container leaves the bottom inset to the Question', () => {
+  const screen = renderHost();
+  const root = screen.UNSAFE_getByType(StandaloneTestScreen).findAllByType(View)[0];
+  expect(StyleSheet.flatten(root.props.style).paddingBottom).toBeUndefined();
+});

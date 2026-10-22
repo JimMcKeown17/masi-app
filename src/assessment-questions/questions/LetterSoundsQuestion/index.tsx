@@ -5,6 +5,7 @@ import { resolveItemSet } from '../../itemsets/resolveItemSet';
 import { LETTER_SOUNDS_2026_2_EN } from '../../itemsets/letter_sounds@2026.2.en';
 import { LETTER_SOUNDS_2026_2_XH } from '../../itemsets/letter_sounds@2026.2.xh';
 import { MissingItemSet } from '../../progress/MissingItemSet';
+import { LETTER_PAGE_LAYOUT } from '../../ui';
 import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 function isFullItemSet(value: unknown): value is LetterSoundsItemSet {
@@ -37,5 +38,5 @@ function LetterSoundsQuestionContent(props: QuestionProps & { itemSet: LetterSou
       }))),
     );
   }, [props.itemSet.rows]);
-  return <SequentialCapture {...props} {...card} stopRule={props.itemSet.stop_rule} testIDPrefix="letter" />;
+  return <SequentialCapture {...props} {...card} layout={LETTER_PAGE_LAYOUT} stopRule={props.itemSet.stop_rule} testIDPrefix="letter" />;
 }

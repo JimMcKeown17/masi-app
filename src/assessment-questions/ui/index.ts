@@ -9,6 +9,7 @@ export { DecisionBar, ToggleBar } from './ActionBar';
 export { LETTER_PAGE_LAYOUT, WORD_PAGE_LAYOUT, paginate, pageIndexOf, pageLabel, rowsFromLengths, type PageLayout, type DisplayRow, type Page } from './paginate';
 export { PageIndicator } from './PageIndicator';
 export { MarkTile, type TileState, type TileVariant } from './MarkTile';
-export { PagedGrid } from './PagedGrid';
+export { PagedGrid, type TileSize } from './PagedGrid';
 export { TileGroups } from './TileGroups';
 export { TimerBar } from './TimerBar';
+export { Canvas } from './Canvas';

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { monotonicNow } from './clock';
 import type { QuestionProps } from '../types/QuestionProps';
 import type { ItemSetMeta } from '../types/ItemSet';
@@ -9,6 +9,7 @@ import { StopCard } from './StopCard';
 import { Countdown } from './Countdown';
 import { SkipReasonPicker } from '../skip/SkipReasonPicker';
 import { tokens } from '../theme/tokens';
+import { paginate, pageIndexOf, PageIndicator, PagedGrid, MarkTile, DecisionBar, QuestionIntro, ConfirmSheet, Canvas, type PageLayout } from '../ui';
 
 type Phase = 'intro' | 'active' | 'end-confirmation' | 'skip-picker' | 'finished';
 type SequentialPrompt = { item_key: string; prompt: string };
@@ -26,12 +27,13 @@ export function buildSequentialCard(promptRows: SequentialPrompt[][]) {
 }
 
 export function SequentialCapture({
-  language, itemSet, items: cardItems, rows, stopRule, testIDPrefix,
+  language, itemSet, items: cardItems, rows, layout, stopRule, testIDPrefix,
   instructions, durationSec, childName, allowSkip = true, onItemMarked, onStart, onComplete,
 }: QuestionProps & {
   itemSet: ItemSetMeta;
   items: SequentialItem[];
   rows: number[][];
+  layout: PageLayout;
   stopRule: StopRule | null;
   testIDPrefix: 'letter' | 'word';
 }) {
@@ -42,8 +44,9 @@ export function SequentialCapture({
   const hasFinishedRef = useRef(false);
   const startTimeMsRef = useRef<number | null>(null);
   const stopTimeMsRef = useRef<number | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
-  const rowOffsetsRef = useRef<Record<number, number>>({});
+  const pages = useMemo(() => paginate(rows, layout), [rows, layout]);
+  const focus = state.stopped ? state.cursor - 1 : Math.min(state.cursor, cardItems.length - 1);
+  const pageIndex = pageIndexOf(pages, focus);
 
   // Phase and decision refs are updated before React commits, guarding queued taps.
   const transition = useCallback((next: Phase) => {
@@ -143,12 +146,6 @@ export function SequentialCapture({
     if (!next.stopped && next.cursor === cardItems.length) finish('completed');
   }, [finish, finishIfExpired, cardItems, stopRule, onItemMarked]);
 
-  const currentRow = cardItems[state.cursor]?.row;
-  useEffect(() => {
-    const y = currentRow === undefined ? undefined : rowOffsetsRef.current[currentRow];
-    if (phase === 'active' && y !== undefined) scrollRef.current?.scrollTo({ y, animated: true });
-  }, [currentRow, phase]);
-
   const handleEnd = () => {
     if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped) return;
     if (finishIfExpired()) return;
@@ -157,15 +154,12 @@ export function SequentialCapture({
   };
 
   if (phase === 'intro') {
-    return <View testID={`${testIDPrefix}-intro`} style={styles.intro}>
-      {instructions ? <Text style={styles.instructions}>{instructions}</Text> : null}
-      <Pressable accessibilityRole="button" onPress={() => {
-        if (phaseRef.current !== 'intro') return;
-        startTimeMsRef.current = monotonicNow();
-        onStart?.();
-        transition('active');
-      }} style={[styles.primaryButton, styles.startButton]}><Text style={styles.onPrimary}>Start</Text></Pressable>
-    </View>;
+    return <QuestionIntro testID={`${testIDPrefix}-intro`} instructions={instructions} onStart={() => {
+      if (phaseRef.current !== 'intro') return;
+      startTimeMsRef.current = monotonicNow();
+      onStart?.();
+      transition('active');
+    }} />;
   }
   if (phase === 'finished') return <View />;
   if (phase === 'skip-picker') {
@@ -174,123 +168,52 @@ export function SequentialCapture({
 
   const covered = state.stopped || phase === 'end-confirmation';
   return (
-    <View style={styles.root}>
+    <Canvas>
       <View style={styles.root} pointerEvents={covered ? 'none' : 'auto'}
         accessibilityElementsHidden={covered} importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
-        <View style={styles.statusRow}>
-          {durationSec === undefined ? null : <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />}
-          <Text style={styles.progress}>{state.cursor} / {cardItems.length}</Text>
-        </View>
-        <ScrollView ref={scrollRef} style={styles.root}
-          contentContainerStyle={[styles.grid, testIDPrefix === 'word' && styles.wordGrid]}
-          testID={`${testIDPrefix}-grid`}>
-          {rows.map((row, rowIndex) => (
-            <View key={rowIndex} testID={`${testIDPrefix}-row-${rowIndex}`}
-              style={[styles.row, testIDPrefix === 'word' && styles.wordRow]} onLayout={(event) => {
-              const y = event.nativeEvent.layout.y;
-              rowOffsetsRef.current[rowIndex] = y;
-              if (cardItems[stateRef.current.cursor]?.row === rowIndex) scrollRef.current?.scrollTo({ y, animated: true });
-            }}>
-              {row.map((position) => {
-                const { prompt } = cardItems[position];
-                const decision = state.decisions[position];
-                const current = position === state.cursor;
-                const label = current ? 'current' : decision === true ? 'correct' : decision === false ? 'incorrect' : 'not reached';
-                return <View key={position} accessible accessibilityRole="text" accessibilityLabel={`${prompt}, ${label}`}
-                  accessibilityState={{ selected: current }}
-                  style={[styles.tile, testIDPrefix === 'letter' ? styles.letterTile : styles.wordTile,
-                    decision === true && styles.correctTile, decision === false && styles.incorrectTile,
-                    current && styles.currentTile]}>
-                  <Text numberOfLines={1}
-                    adjustsFontSizeToFit={testIDPrefix === 'letter'} minimumFontScale={testIDPrefix === 'letter' ? 0.7 : undefined}
-                    style={[styles.prompt, testIDPrefix === 'word' && styles.wordPrompt, current && styles.currentPrompt]}>
-                    {prompt}
-                  </Text>
-                </View>;
-              })}
-            </View>
-          ))}
-        </ScrollView>
-        <View style={styles.controls}>
-          <View style={styles.decisionRow} testID={`${testIDPrefix}-decisions`}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Correct" onPress={() => dispatch({ type: 'decide', correct: true })}
-              style={[styles.decisionButton, styles.correctButton]}><Text style={styles.onPrimary}>Correct</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Incorrect" onPress={() => dispatch({ type: 'decide', correct: false })}
-              style={[styles.decisionButton, styles.incorrectButton]}><Text style={styles.onPrimary}>Incorrect</Text></Pressable>
-          </View>
-          <View testID={`${testIDPrefix}-navigation`} style={styles.navigationRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={state.cursor === 0}
-              accessibilityState={{ disabled: state.cursor === 0 }} onPress={() => dispatch({ type: 'back' })}
-              style={styles.backButton}><Text style={[styles.link, state.cursor === 0 && styles.disabled]}>Back</Text></Pressable>
-            {allowSkip ? <Pressable accessibilityRole="button" style={styles.backButton} onPress={() => {
-              if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped) return;
-              transition('skip-picker');
-            }}><Text style={styles.link}>Skip question</Text></Pressable> : null}
-            <Pressable testID={`${testIDPrefix}-end`} accessibilityRole="button" onPress={handleEnd} style={styles.backButton}>
-              <Text style={styles.link}>End test</Text>
-            </Pressable>
-          </View>
-        </View>
+        {durationSec === undefined ? null : <View style={styles.timerSpacing}>
+          <Countdown getRemainingMs={getRemainingMs} durationMs={durationSec * 1000} />
+        </View>}
+        <PageIndicator pages={pages} current={pageIndex} />
+        {pages[pageIndex] ? <PagedGrid page={pages[pageIndex]} layout={layout} variant={testIDPrefix} testID={`${testIDPrefix}-grid`}
+          groupTestID={testIDPrefix === 'letter' ? (row) => `letter-row-${row}` : undefined}
+          renderTile={(position, size) => {
+            const { prompt } = cardItems[position];
+            const decision = state.decisions[position];
+            const tileState = position === state.cursor ? 'current'
+              : decision === true ? 'correct' : decision === false ? 'incorrect' : 'idle';
+            const label = tileState === 'idle' ? 'not reached' : tileState;
+            return <MarkTile variant={testIDPrefix} state={tileState} text={prompt} {...size}
+              accessibilityLabel={`${prompt}, ${label}`} />;
+          }} /> : <View style={styles.root} />}
+        <DecisionBar testIDPrefix={testIDPrefix}
+          onCorrect={() => dispatch({ type: 'decide', correct: true })}
+          onIncorrect={() => dispatch({ type: 'decide', correct: false })}
+          onBack={() => dispatch({ type: 'back' })} backDisabled={state.cursor === 0}
+          onEnd={handleEnd}
+          onSkip={allowSkip ? () => {
+            if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped) return;
+            transition('skip-picker');
+          } : undefined} />
       </View>
       {state.stopped && stopRule ? <StopCard childName={childName} stopAt={stopRule.stop_at}
         onSave={() => { if (stateRef.current.stopped) finish('stop_rule'); }}
         onUndo={() => dispatch({ type: 'undoStop' })} /> : null}
-      {phase === 'end-confirmation' ? (
-        <View testID="end-confirmation" style={styles.sheetOverlay} accessibilityViewIsModal>
-          <View style={styles.sheetPanel}>
-            <Text style={styles.heading}>End the test?</Text>
-            <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={() => {
-              if (phaseRef.current === 'end-confirmation') finish('ea_ended');
-            }}><Text style={styles.onPrimary}>End test</Text></Pressable>
-            <Pressable accessibilityRole="button" style={styles.backButton} onPress={() => {
-              if (phaseRef.current !== 'end-confirmation') return;
-              stopTimeMsRef.current = null;
-              transition('active');
-            }}><Text style={styles.link}>Cancel</Text></Pressable>
-          </View>
-        </View>
-      ) : null}
-    </View>
+      {phase === 'end-confirmation' ? <ConfirmSheet testID="end-confirmation"
+        title="End the test?" confirmLabel="End test" confirmTone="danger" cancelLabel="Cancel"
+        onConfirm={() => {
+          if (phaseRef.current === 'end-confirmation') finish('ea_ended');
+        }} onCancel={() => {
+          if (phaseRef.current !== 'end-confirmation') return;
+          stopTimeMsRef.current = null;
+          transition('active');
+        }} /> : null}
+    </Canvas>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  intro: { flex: 1, padding: tokens.space.lg },
-  instructions: { color: tokens.color.ink, fontSize: tokens.font.body, lineHeight: 24 },
-  startButton: { marginTop: 'auto' },
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.sm },
-  progress: { marginLeft: 'auto', color: tokens.color.muted, fontSize: tokens.font.caption },
-  grid: { gap: tokens.space.xs, paddingHorizontal: tokens.space.lg },
-  wordGrid: { gap: tokens.space.sm },
-  row: { flexDirection: 'row', flexWrap: 'nowrap' },
-  wordRow: { flexWrap: 'wrap', gap: tokens.space.xs },
-  tile: { alignItems: 'center', justifyContent: 'center', paddingVertical: tokens.space.lg,
-    borderWidth: 1, borderColor: tokens.color.line, backgroundColor: tokens.color.surface },
-  letterTile: { flex: 1, minWidth: 0 },
-  wordTile: { minWidth: 56, paddingHorizontal: tokens.space.md },
-  correctTile: { backgroundColor: tokens.color.markedSoft },
-  incorrectTile: { backgroundColor: tokens.color.errorSoft },
-  currentTile: { backgroundColor: tokens.color.ink },
-  prompt: { fontSize: tokens.font.markingItem, fontWeight: '600', color: tokens.color.ink },
-  wordPrompt: { fontSize: tokens.font.markingWord },
-  currentPrompt: { color: tokens.color.surface },
-  controls: { padding: tokens.space.lg, gap: tokens.space.sm, backgroundColor: tokens.color.surface },
-  decisionRow: { flexDirection: 'row', gap: tokens.space.md },
-  decisionButton: { flex: 1, minHeight: 56, borderRadius: tokens.radius.pill, padding: tokens.space.md,
-    alignItems: 'center', justifyContent: 'center' },
-  correctButton: { backgroundColor: tokens.color.marked },
-  incorrectButton: { backgroundColor: tokens.color.error },
-  backButton: { minHeight: 44, padding: tokens.space.sm, alignItems: 'center', justifyContent: 'center' },
-  link: { color: tokens.color.primary, fontSize: tokens.font.body, fontWeight: '600' },
-  disabled: { color: tokens.color.notReached },
-  navigationRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  sheetOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: tokens.color.scrim },
-  sheetPanel: { padding: tokens.space.xl, gap: tokens.space.md, backgroundColor: tokens.color.surface,
-    borderTopLeftRadius: tokens.radius.card, borderTopRightRadius: tokens.radius.card },
-  heading: { color: tokens.color.ink, fontSize: tokens.font.heading, fontWeight: '600' },
-  primaryButton: { backgroundColor: tokens.color.primary, borderRadius: tokens.radius.pill,
-    minHeight: 56, padding: tokens.space.md, alignItems: 'center', justifyContent: 'center' },
-  onPrimary: { color: tokens.color.onPrimary, fontSize: tokens.font.body, fontWeight: '600' },
+  // TimerBar already supplies 8dp above its content; bring the total to 12dp.
+  timerSpacing: { paddingTop: tokens.space.xs },
 });

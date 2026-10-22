@@ -75,3 +75,14 @@ test('picture tiles show the caption above the content letter using the supplied
   expect(r.getByText('ball')).toHaveStyle({ fontFamily: 'Figtree_400Regular', fontSize: tokens.font.caption });
   expect(r.getByText('b')).toHaveStyle({ fontFamily: 'Andika_400Regular', fontSize: tokens.font.tileWord });
 });
+
+test.each(['letter', 'word'] as const)('%s tile accepts a fitted height without changing its fit text', variant => {
+  const r = render(<MarkTile variant={variant} state="idle" text="a" accessibilityLabel="fitted" width={100} height={45} />);
+  expect(r.getByLabelText('fitted')).toHaveStyle({ width: 100, height: 45 });
+  expect(r.getByText('a').props).toMatchObject({ adjustsFontSizeToFit: true, minimumFontScale: 0.6 });
+});
+
+test('a height override does not alter non-grid variants', () => {
+  const r = render(<MarkTile variant="pill" state="idle" text="a" accessibilityLabel="pill" height={45} />);
+  expect(StyleSheet.flatten(r.getByLabelText('pill').props.style).height).toBeUndefined();
+});

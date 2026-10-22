@@ -14,10 +14,12 @@ const looks: Record<TileState, ViewStyle> = {
   incorrect: { backgroundColor: tokens.color.error, borderColor: tokens.color.error, borderWidth: 1 },
 };
 
+export const GRID_TILE_HEIGHTS = { letter: 60, word: 58 } as const;
+
 const styles = StyleSheet.create({
   tile: { borderRadius: tokens.radius.tile, alignItems: 'center', justifyContent: 'center', padding: tokens.space.sm, gap: tokens.space.xs },
-  letter: { height: 60, alignSelf: 'stretch' },
-  word: { height: 58, alignSelf: 'stretch' },
+  letter: { height: GRID_TILE_HEIGHTS.letter, alignSelf: 'stretch' },
+  word: { height: GRID_TILE_HEIGHTS.word, alignSelf: 'stretch' },
   pill: { minHeight: 48, paddingHorizontal: 14 },
   promptCard: { minHeight: 72, alignSelf: 'stretch', padding: tokens.space.lg },
   picture: { minHeight: 88 },
@@ -28,7 +30,7 @@ const contentSize = {
   letter: 'tileLetter', word: 'tileWord', pill: 'markingWord', promptCard: 'promptCard', picture: 'tileWord',
 } as const;
 
-export function MarkTile({ variant, state, text, gloss, caption, accessibilityLabel, onPress, testID, width }: {
+export function MarkTile({ variant, state, text, gloss, caption, accessibilityLabel, onPress, testID, width, height }: {
   variant: TileVariant;
   state: TileState;
   text: string;
@@ -38,10 +40,12 @@ export function MarkTile({ variant, state, text, gloss, caption, accessibilityLa
   onPress?: () => void;
   testID?: string;
   width?: number;
+  height?: number;
 }): React.JSX.Element {
   const filled = state === 'correct' || state === 'incorrect';
   const tone: Tone = filled ? 'onInk' : state === 'notReached' ? 'notReached' : 'ink';
-  const style = [styles.tile, styles[variant], looks[state], width === undefined ? undefined : { width }];
+  const style = [styles.tile, styles[variant], looks[state], width === undefined ? undefined : { width },
+    height !== undefined && (variant === 'letter' || variant === 'word') ? { height } : undefined];
   const accessibility = { accessible: true, accessibilityLabel, accessibilityState: { selected: state === 'current' }, testID };
   const content = <>
     {variant === 'picture' && caption !== undefined && <UiText variant="caption" tone={filled ? 'onInk' : 'muted'} align="center" numberOfLines={2}>{caption}</UiText>}

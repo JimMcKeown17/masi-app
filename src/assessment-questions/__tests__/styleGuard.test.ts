@@ -7,8 +7,6 @@ const ROOT = path.resolve(__dirname, '..');
 // Delete entries as shared typography/primitives replace each file's styling.
 export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
   'progress/LastAttemptedSheet.tsx',
-  'progress/SequentialCapture.tsx',
-  'progress/StopCard.tsx',
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
   'questions/ListenAndAnswerStoryQuestion/index.tsx',
   'questions/ListenFirstSoundQuestion/index.tsx',
@@ -24,8 +22,6 @@ export const FONT_RATCHET: ReadonlySet<string> = new Set<string>([
 export const STYLE_RATCHET: ReadonlySet<string> = new Set<string>([
   'progress/LastAttemptedSheet.tsx',
   'progress/MissingItemSet.tsx',
-  'progress/SequentialCapture.tsx',
-  'progress/StopCard.tsx',
   'questions/LetterWritingFromPicturesQuestion/index.tsx',
   'questions/ListenAndAnswerStoryQuestion/index.tsx',
   'questions/ListenFirstSoundQuestion/index.tsx',
@@ -286,4 +282,14 @@ test('ratchet validation rejects deleted paths and cleaned files', () => {
     .toEqual(['deleted.tsx: missing or outside guard scope']);
   expect(staleRatchetEntries(fontFiles, new Set(['types/ItemSet.ts']), fontViolations))
     .toEqual(['types/ItemSet.ts: no longer violates; remove ratchet entry']);
+});
+
+test('theme contains only its canonical files and their tests', () => {
+  const entries = fs.readdirSync(path.join(ROOT, 'theme'), { withFileTypes: true });
+  expect(entries.map(entry => entry.name).sort()).toEqual([
+    'AssessmentTheme.tsx', '__tests__', 'tokens.ts', 'typography.ts',
+  ]);
+  for (const entry of entries) {
+    expect(entry.name === '__tests__' ? entry.isDirectory() : entry.isFile()).toBe(true);
+  }
 });

@@ -51,17 +51,13 @@ test('renders instructions and starts the timer only on Start', () => {
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
 });
 
-test('intro uses a padded full-height layout with instructions above a bottom-pinned Start', () => {
+test('intro uses the shared instructions card and bottom Start', () => {
   const r = render(<LetterSoundsQuestion language="en" itemSet={SET}
     instructions="Read the sounds." onComplete={jest.fn()} />);
-
-  expect(StyleSheet.flatten(r.getByTestId('letter-intro').props.style)).toMatchObject({
-    flex: 1, padding: tokens.space.lg,
-  });
-  expect(StyleSheet.flatten(r.getByText('Read the sounds.').props.style)).toMatchObject({
-    color: tokens.color.ink, fontSize: tokens.font.body, lineHeight: 24,
-  });
-  expect(StyleSheet.flatten(r.getByRole('button', { name: 'Start' }).props.style).marginTop).toBe('auto');
+  expect(r.getByTestId('letter-intro')).toHaveStyle({ flex: 1, backgroundColor: tokens.color.canvas });
+  expect(r.getByTestId('letter-intro-scroll').props.contentContainerStyle).toMatchObject({ padding: 16 });
+  expect(r.getByText('Read the sounds.')).toHaveStyle({ color: tokens.color.ink, lineHeight: 24 });
+  expect(r.getByRole('button', { name: 'Start' })).toHaveStyle({ backgroundColor: tokens.color.ink, minHeight: 52 });
 });
 
 test('active capture shows the timed status row and updates its countdown', () => {
@@ -69,14 +65,14 @@ test('active capture shows the timed status row and updates its countdown', () =
 
   expect(r.getByText('60s')).toBeTruthy();
   expect(r.getByLabelText('Time left, 60 seconds')).toBeTruthy();
-  expect(r.getByText('0 / 60')).toBeTruthy();
+  expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
 
   act(() => jest.advanceTimersByTime(10000));
 
   expect(r.getByText('50s')).toBeTruthy();
   expect(r.getByLabelText('Time left, 50 seconds')).toBeTruthy();
   decide(r, true, 13);
-  expect(r.getByText('13 / 60')).toBeTruthy();
+  expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
 });
 
 test('Start notifies the host exactly once', () => {
@@ -331,20 +327,16 @@ test('untimed End freezes reading time and reports was_timed=false', () => {
 test('unequal rows stay intact, highlight the current letter, and preserve duplicate positions', () => {
   const { r, onComplete } = startQ({ itemSet: { ...SET, rows: [['a', 'b'], ['c', 'a', 'd'], ['e']], stop_rule: null } });
   const rows = r.getAllByTestId(/^letter-row-/);
-  expect(StyleSheet.flatten(r.getByTestId('letter-grid').props.contentContainerStyle).paddingHorizontal)
-    .toBe(tokens.space.lg);
+  expect(r.getByTestId('letter-grid')).toHaveStyle({ flex: 1, paddingHorizontal: 16, justifyContent: 'center' });
   expect(rows).toHaveLength(3);
   expect(rows.map((row) => within(row).getAllByLabelText(/, (current|not reached)$/).length)).toEqual([2, 3, 1]);
-  rows.forEach((row) => expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'nowrap' }));
   const current = r.getByLabelText('a, current');
   expect(current.props.accessibilityState.selected).toBe(true);
-  expect(StyleSheet.flatten(current.props.style)).toMatchObject({
-    backgroundColor: tokens.color.ink, flex: 1,
-  });
+  expect(current).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 3, borderColor: tokens.color.ink });
   expect(r.getAllByText('a')[0].props).toMatchObject({
-    numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.7,
+    numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6, maxFontSizeMultiplier: 1.2,
   });
-  expect(StyleSheet.flatten(r.getAllByText('a')[0].props.style).fontSize).toBe(tokens.font.markingItem);
+  expect(r.getAllByText('a')[0]).toHaveStyle({ fontSize: tokens.font.tileLetter });
   expect(within(r.getByTestId('letter-grid')).queryAllByRole('button')).toHaveLength(0);
   decide(r, false, 3);
   decide(r, true);
@@ -355,35 +347,105 @@ test('unequal rows stay intact, highlight the current letter, and preserve dupli
   expect(result.items[3]).toMatchObject({ position: 3, prompt: 'a', is_correct: true });
 });
 
-test('the current row scrolls into view when the cursor moves forward or Back', () => {
+test('no progress counter; no row auto-scroll', () => {
   const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
   const { r } = startQ();
-  fireEvent(r.getByTestId('letter-row-0'), 'layout', { nativeEvent: { layout: { y: 0 } } });
-  fireEvent(r.getByTestId('letter-row-1'), 'layout', { nativeEvent: { layout: { y: 80 } } });
-  decide(r, true, 10);
-  expect(scrollTo).toHaveBeenLastCalledWith({ y: 80, animated: true });
+  expect(r.queryByText(/^\d+ \/ \d+$/)).toBeNull();
+  decide(r, true, 20);
   fireEvent.press(r.getByRole('button', { name: 'Back' }));
-  expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });
+  expect(r.queryByText(/^\d+ \/ \d+$/)).toBeNull();
+  expect(r.UNSAFE_queryAllByType(ScrollView)).toHaveLength(0);
+  expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('Correct/Incorrect stay side by side and Back/End test share one navigation row', () => {
-  const { r } = startQ();
+test('decision layout: Correct/Incorrect side by side, full-width Back, End test centred below', () => {
+  const { r } = startQ({ allowSkip: false });
   const row = r.getByTestId('letter-decisions');
-  expect(StyleSheet.flatten(row.props.style).flexDirection).toBe('row');
+  expect(row).toHaveStyle({ flexDirection: 'row' });
   for (const name of ['Correct', 'Incorrect']) {
-    expect(StyleSheet.flatten(within(row).getByRole('button', { name }).props.style)).toMatchObject({ flex: 1, minHeight: 56, borderRadius: tokens.radius.pill });
+    expect(within(row).getByRole('button', { name })).toHaveStyle({ flex: 1, minHeight: 52, borderRadius: tokens.radius.pill });
   }
   expect(within(row).queryByRole('button', { name: 'Back' })).toBeNull();
+  const back = r.getByRole('button', { name: 'Back' });
+  expect(back).toBeDisabled();
+  expect(back).toHaveStyle({ alignSelf: 'stretch', borderWidth: 1.5, borderColor: tokens.color.ink });
   const navigation = r.getByTestId('letter-navigation');
-  expect(StyleSheet.flatten(navigation.props.style)).toMatchObject({
-    flexDirection: 'row', justifyContent: 'space-between',
-  });
-  expect(within(navigation).getByRole('button', { name: 'Back' })).toBeDisabled();
-  expect(within(navigation).getByText('End test')).toBeTruthy();
-  for (const name of ['Back', 'End test']) {
-    expect(StyleSheet.flatten(within(navigation).getByRole('button', { name }).props.style).minHeight)
-      .toBeGreaterThanOrEqual(44);
+  expect(navigation).toHaveStyle({ flexDirection: 'row', justifyContent: 'center' });
+  expect(within(navigation).queryByRole('button', { name: 'Back' })).toBeNull();
+  expect(within(navigation).getByRole('button', { name: 'End test' })).toHaveStyle({ minHeight: 44 });
+});
+
+test('Skip question shows beside End test only when allowSkip', () => {
+  const { r } = startQ();
+  const navigation = r.getByTestId('letter-navigation');
+  expect(within(navigation).getByRole('button', { name: 'Skip question' })).toBeTruthy();
+  expect(within(navigation).getByRole('button', { name: 'End test' })).toBeTruthy();
+});
+
+test('Grid A shows card rows 1–2 as page 1 of 3, twenty letter tiles in rows of five', () => {
+  const { r } = startQ();
+  expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
+  expect(r.getAllByLabelText(/, (current|not reached)$/)).toHaveLength(20);
+  const rows = r.getAllByTestId(/^letter-row-/);
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    expect(within(row).getAllByLabelText(/, (current|not reached)$/)).toHaveLength(10);
+    expect(row.children).toHaveLength(2);
+    for (const displayRow of row.children) {
+      expect(typeof displayRow).not.toBe('string');
+      expect(within(displayRow as typeof row).getAllByLabelText(/, (current|not reached)$/)).toHaveLength(5);
+    }
   }
+  expect(r.getByLabelText('l, current')).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
+  expect(r.queryByRole('button', { name: 'Previous page' })).toBeNull();
+  expect(r.queryByRole('button', { name: 'Next page' })).toBeNull();
+  fireEvent(r.getByTestId('letter-grid'), 'layout', { nativeEvent: { layout: { width: 360 } } });
+  expect(r.getByLabelText('l, current')).toHaveStyle({ width: 57.6 });
+});
+
+test('marking the twentieth letter moves to page 2; Back from its first letter returns to page 1 with letter 20 current and unmarked', () => {
+  const { r } = startQ();
+  decide(r, true, 19);
+  expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
+  decide(r, true);
+  expect(r.getByText('Card rows 3–4 · page 2 of 3')).toBeTruthy();
+  expect(r.getByLabelText(`${SET.rows[2][0]}, current`)).toBeTruthy();
+  fireEvent.press(r.getByRole('button', { name: 'Back' }));
+  expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
+  expect(r.getByLabelText(`${SET.rows[1][9]}, current`)).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 3 });
+  expect(r.getAllByLabelText(/, correct$/)).toHaveLength(19);
+});
+
+test('earlier marks stay visible after Back', () => {
+  const { r } = startQ();
+  decide(r, true);
+  decide(r, false);
+  decide(r, true);
+  fireEvent.press(r.getByRole('button', { name: 'Back' }));
+  expect(r.getByLabelText('l, correct')).toHaveStyle({ backgroundColor: tokens.color.marked });
+  expect(r.getByLabelText('a, incorrect')).toHaveStyle({ backgroundColor: tokens.color.error });
+  expect(r.getByLabelText('m, current')).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 3 });
+});
+
+test('a stop on the last letter of a page leaves that page showing under the stop card', () => {
+  const { r, onComplete } = startQ();
+  decide(r, true, 10);
+  decide(r, false, 10);
+  expect(r.getByTestId('stop-card')).toBeTruthy();
+  expect(r.getByText('Card rows 1–2 · page 1 of 3', { includeHiddenElements: true })).toBeTruthy();
+  expect(r.getAllByLabelText(/, (correct|incorrect)$/, { includeHiddenElements: true })).toHaveLength(20);
+  expect(r.queryByRole('button', { name: 'Correct' })).toBeNull();
+  expect(onComplete).not.toHaveBeenCalled();
+});
+
+test('a stop on the final letter of the card does not blank the grid', () => {
+  const { r, onComplete } = startQ();
+  decide(r, true, 50);
+  decide(r, false, 10);
+  expect(r.getByTestId('stop-card')).toBeTruthy();
+  expect(r.getByText('Card rows 5–6 · page 3 of 3', { includeHiddenElements: true })).toBeTruthy();
+  expect(r.getAllByLabelText(/, (correct|incorrect)$/, { includeHiddenElements: true })).toHaveLength(20);
+  expect(onComplete).not.toHaveBeenCalled();
 });
 
 test('an incomplete override resolves to the requested bundled set', () => {

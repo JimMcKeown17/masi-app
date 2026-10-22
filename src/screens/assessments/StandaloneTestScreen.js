@@ -116,7 +116,7 @@ export default function StandaloneTestScreen({ navigation, route }) {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <IconCircleButton icon="close" accessibilityLabel="Close test" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>

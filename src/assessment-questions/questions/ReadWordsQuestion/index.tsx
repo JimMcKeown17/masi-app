@@ -23,6 +23,7 @@ import { SkipReasonPicker } from '../../skip/SkipReasonPicker';
 import type { ManualSkipReason } from '../../skip/skipReasons';
 import { applyProgress, NO_ATTEMPT } from '../../progress/applyProgress';
 import { LastAttemptedSheet } from '../../progress/LastAttemptedSheet';
+import { WORD_PAGE_LAYOUT } from '../../ui';
 import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
@@ -98,7 +99,7 @@ function ReadWordsSequentialContent(props: QuestionProps & { itemSet: FullItemSe
     chunkByLengths(words, row_lengths ?? [words.length]).map((row) =>
       row.map((word) => ({ item_key: word.item_key, prompt: word.word }))),
   ), [words, row_lengths]);
-  return <SequentialCapture {...props} {...card} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
+  return <SequentialCapture {...props} {...card} layout={WORD_PAGE_LAYOUT} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
 }
 
 function ReadWordsQuestionContent(
