@@ -3552,6 +3552,49 @@ prints its credentials only on Jim's terminal; the A03 has no SIM, so Gate 5 can
 throttled); battery-run rows in Gates 1–2 (no run fixture); the log lines for Gates 1 and 8 (release
 logs need Share logs).
 
+### 2026-10-22 — Lesson plan wave 1: A03 device run, part 2 (second EA, volume, handover)
+
+Continues the part 1 record above, same day, same Galaxy A03s, staging `segygjzpujphwvrubusm` only.
+Jim approved each external step at the time: TestB's password reset, the volume fixture (he ran
+`seed-volume` in his own terminal; Claude ran `cleanup-volume`), the staging fixtures below, and
+two more server-switch drills. Jim emailed every export and log. Gates 6 and 7 ran on build 28
+(`5055da54…`, the UI-polish branch, which carries all of wave 1 and changes only the first-failure
+rule on the sync path); everything else ran on build 27. Per-step evidence and screenshots:
+`scratchpad/evidence.md`, `scratchpad/device/`.
+
+**Second EA.** TestB's password was reset through the admin API and stored in `.env.local`, never
+printed. ADR 0008 keeps each EA's database across sign-out, so two EAs on one phone stand in for two
+phones (a shared-phone run, not concurrent). Fixtures: a session by Test User with `group_id` =
+Test User's Group 1 and Asanda attending (`2111a0a7…`); TestB co-delivering Asanda (`adeefe67…`);
+TestB on class 1A (`93c6b2e1…`). These stay for the iPhone pass.
+
+| Gate | Result |
+| --- | --- |
+| B2 G2 (fresh database for TestB, group never on the phone) | PASS: first download finished with no sync failure; the ranking counts all 13 of Asanda's sessions, the grouped one included; TestB's export shows sessions 16, `groups` 0, `group_ea_assignments` 0, `child_group_memberships` 0, outbox 0 |
+| AR3 Gate 3 (second EA on a shared class) | PASS: class 1A shows "1 child, 0 groups" (Asanda only); her tracker shows Test User's assessment locks (3 / 26); Child Results shows Test User's 3 / 60; TestB's own Assessment history is empty; the control child (Gua) is in no roster, test picker or session picker; Home "1 of 9 children assessed" |
+| AR3 Gate 4 (handover and back) | PASS: Test User confirmed `k` for Kunaal; Head Office moved him to TestB; Test User's export then held no letter row for him; TestB showed `k` taught, un-confirmed it and synced; moved back, Test User's tracker shows `k` not mastered; the log shows `[LetterMasteryHistory] start forced=false mode=rewalk_due` at 10:59:42Z |
+
+**Volume account** (2 English classes, 70 children, 30 delivered, 140 results, 8,540 items, 780
+confirmations; namespace `9508002b…`, removed afterwards with zero residue).
+
+| Gate | Result |
+| --- | --- |
+| AR3 Gate 5 (first commit, volume) | PASS on Wi-Fi (no SIM, so not throttled): `[AssessmentHistory] end … pages=7 durationMs=19977 complete=true rpcMs=6284 saveMs=13419 firstCommitMs=1558`; two later fresh runs 1,687 ms and 1,677 ms |
+| AR3 Gate 6 (interrupted download) | PASS: three force-stops about 5 s into a download and one Wi-Fi drop mid-walk; History reached Up to date; the export matches the server exactly (140 / 8,540 / 780), every cursor complete with no `lastFailureAt`; the resumed assessment walk took 6 pages against 7 fresh, so a committed page was kept, not refetched. The start lines carry no cursor position, and the lines from the first two killed runs were lost (see the logger row) |
+| AR3 Gate 7 (lesson during the first download) | PASS on the second attempt: marks at 13:09:30Z during the assessment walk and the submit at 13:09:33.4Z during the letter-mastery walk (13:09:31.337–34.525Z); the confirmation appeared about 0.7 s after the tap (screen recording at 10 fps); the download completed; the marks reached the server as `en` with their own times (13:09:30.343, 13:09:30.945) and showed after a reopen. The first attempt submitted 51 s after the download ended, because a dump-driven script was too slow; the rerun replayed learned coordinates |
+| AR3 Gates 1, 4, 5, 8 log lines | Gate 1 `[AssessmentHistory] end status=complete pages=3 … complete=true`; Gate 4 and 5 as above. Gate 8's lines were lost: the log starts at the 09:27Z reinstall, after the drill. Its on-screen criteria passed in part 1, and a second drill on build 28 passed again |
+
+**Not run:** every iPhone row (AF, A1 T2, B2 G1/G2, C1, AR2 G1–G3, AR3 Gates 1–4 and 9); AR2 G1, G1r
+and G2, which need two phones at once; AR3 Gate 5 throttled to 3G (no SIM); the battery-run rows
+in AR3 Gates 1–2 (no run fixture).
+
+**Observations** (no gate failed on them): a fresh sign-in waits about 35 s for the domain pull
+before any history walk starts, and that pull logs no timing; with Wi-Fi off, the in-flight
+battery-run request failed after about 13 s and the walks then restarted and failed nine times in
+5 s while NetInfo reported offline, until the budget stopped them; on the volume account, an empty
+battery-run page took 21.6 s and 12.0 s to save after the restarts, against 245 ms on a clean run,
+which points at writer contention.
+
 ### 2026-10-22 — Wave-1 UI polish from the A03 device run
 
 Fixed the six defects recorded on the Galaxy A03s (360 dp) on `fix/wave1-ui-polish`:
@@ -3667,6 +3710,17 @@ command was required for this UI follow-up):
 Automated renderer checks establish the stat-layout decisions, not Android glyph layout.
 The changed screens and the U+00A0 label still need a Galaxy A03s visual recheck at 1.0x and
 1.3x; no new device, EAS build, hosted operation or release was performed in this task.
+
+
+**Device check of items 1–5 (Galaxy A03s, EAS build `5055da54…`, versionCode 28 from `c93132f`,
+installed over build 27).** NL1's class detail reads "Language: Not set"; its row reads "Grade 1 • Ms
+Nolang" with the accessibility label "NL1, Aaron Gqadu, Grade 1, Ms Nolang, 1 child, 0 groups. Open
+class"; the language picker's Start reports `enabled=false` with nothing chosen, a tap leaves the
+sheet open, and choosing Afrikaans enables it. With the history switch off (staging row inserted and
+then deleted, Jim's yes), a forced failure at 13:14 and another at 13:16 both showed "Incomplete since
+Oct 22, 1:14 PM"; the label carries U+00A0 before PM, and it renders without a box on one line at
+360 dp / 1.3x. The fallback commit `df72cf5` came after this build and is covered by renderer tests
+only.
 
 ## Decision Register
 
@@ -3856,6 +3910,7 @@ The changed screens and the U+00A0 label still need a Galaxy A03s visual recheck
 | 2026-10-21 | Lesson plan A3: save retains a plan exactly when lesson date equals `made_on`, however late; an unfrozen plan recomputes only on its own day. Class resolution uses the group's class or its current members, never children added for the day. | C14 preserves dated advice as evidence; C18 prevents attendance from switching language. Missing plans are programmer errors, not invented advice. | Lesson-date, class or language ownership changes. |
 | 2026-10-21 | Historical group reference: rebuild local `sessions` without the group FK (v 16); rejected a history-reference `groups` row. | Authorized session history can name a group the EA never held or no longer holds, while the roster pull downloads only currently assigned groups. A synthetic group needs a name the history API lacks and makes group readers, edits, archive, reconcile and ownership repair reason about a new access-bearing row kind. A plain id preserves history without creating a group or assignment, matching `battery_runs.class_id` in #90; local capture validation belongs in `saveSession` (B2 Task 4). | A screen needs a session's group name offline. |
 | 2026-10-22 | **Accepted risk A3 stays accepted (Jim).** A letter correction made on a phone whose clock is slow, after it has observed another phone's newer correction, loses to that winner. | Rare: it needs two phones correcting the same child and letter and a clock slow beyond the gap; fast clocks are already clamped. The root fix (a causal base carried in `set_letter_mastery`) changes the approved server contract. | A field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. |
+| 2026-10-22 | **AR3 Gates 3–4 ran with two EAs signed in in turn on one Galaxy A03s (plan call).** ADR 0008 keeps each EA's database across sign-out, so the run exercises the shared-phone path end to end. | It proves visibility, handover delete and rewalk on real hardware, but not two phones writing at the same moment. | Run the same gates on the A03s and the iPhone together, with AR2 G1, G1r and G2, before the field build. |
 
 ---
 
@@ -3863,6 +3918,9 @@ The changed screens and the U+00A0 label still need a Galaxy A03s visual recheck
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-22 | **The app log loses its last 30 s when Android kills the app.** `logger.js` flushes every 30 s (`FLUSH_INTERVAL`) and on backgrounding only, so a force-stop, crash or low-memory kill drops the buffered lines. On the A03s, two killed runs lost every line, including `Running "main"`. | Open. | Write warnings and errors straight through, flush on a shorter cycle, or persist incrementally, so a killed or crashed run keeps its last lines. |
+| 2026-10-22 | **A brand-new sign-in blocks Record for 35–45 s with "No active programme… contact your supervisor".** The EA's programme simply has not downloaded yet; the copy blames a missing assignment. | Open. | Distinguish "still loading" from "not assigned"; consider loading the staff programme first in the domain pull. |
+| 2026-10-22 | **A Head Office reassignment appeared on the receiving phone only after Sync now** in the Gate 4 run; a cold start and a pull-to-refresh on Children did not bring the moved child in on either EA. | Open; needs a reproduction with logs. | A roster change should reach the phone on its next ordinary pull. |
 | 2026-10-22 | **Capital `I` and lower-case `l` cannot be told apart on the Afrikaans letter card** (A03, 360 dp): `l` is a 42 px bar, `I` a 39 px bar, both 6–7 px wide, in the capture grid and the saved detail grid. | Open, non-blocking for AF (plan call, 2026-10-20). Belongs to the test-screen redesign; `contentStatus.ts` already records the typeface need. Tracker tiles are lower case only. | Any sans-serif card mixing `I` and `l` needs a typeface with a serif `I` or a tailed `l`; check it on the phone. |
 | 2026-10-22 | **"Incomplete since" shows the latest failure, not when history became incomplete,** and its time can wrap with "AM" alone on a line at 1.3x. `historyWalk.js:285` restamps `lastFailureAt` on each failed run (as `main`'s `sessionHistoryPull.js:283` did); `syncStatusPresenter.js` formats with `toLocaleString`, which on Hermes puts a breaking space before AM/PM. | Fixed on fix/wave1-ui-polish: retain the first failure until a successful page clears it; both history labels use U+00A0 before AM/PM. | A "since" timestamp must keep the first event of the streak, not the latest. |
 | 2026-10-22 | **A class with no language shows three UI flaws** (all on `main`, from Bold Red #81–#82): Class detail prints "Language: null" (`ClassDetailScreen.js:107`); the class row ends in a stray "•" and its accessibility label holds ", ," (`ClassRow.js:25` joins without dropping empties); the language picker's Start looks enabled with nothing chosen and closes the sheet (`SelectSheet.js:83-86`). | Fixed on fix/wave1-ui-polish: show Language: Not set, omit empty class metadata and spoken slots, and disable Start until a language is selected. | Join display parts with `.filter(Boolean)`; a confirm button with no selection should be disabled, not silently dismiss. |

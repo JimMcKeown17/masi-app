@@ -57,8 +57,9 @@ These horizons summarize the ordered register below. They are not a second backl
    U1's bounded requests and send-order protection shipped in #77 (2026-10-19), applied to
    `masi-app-sqlite`, with D2/D3 passed on the Galaxy A03s (§2). Assessment-family upload is built and locally
    verified in Assessment Results Plan 1 (§1); hosted apply/build/device gates remain Task 14.
-   D1 and the mastery re-key are built in Assessment Results Plan 2; hosted apply and device proof
-   remain its Task 7 release gate, and mastery pull remains Plan 3. Multi-writer stale-edit rejection (U3) is deferred until Head Office
+   D1 and the mastery re-key are built in Assessment Results Plan 2 and applied to `masi-app-sqlite`
+   (2026-10-22); its A03s gates passed except the two-phone G1/G1r/G2, which wait for the iPhone, and
+   the mastery pull is built in Plan 3. Multi-writer stale-edit rejection (U3) is deferred until Head Office
    edits EA records. Duplicate-proof submit and one database per EA are built (Plan 2; its
    sign-out UX is Plan 3).
    The newer-schema guard and minimum revocation tooling are built, and the revocation migration is
@@ -441,7 +442,8 @@ correctly; the missing contract is inbound hydration.
   proof: `assessmentHistoryPull.test.js`, `letterMasteryHandover.test.js`,
   `assessmentHistoryPage.test.js` and `batteryRunHistoryMerge.test.js`.
   Physical-device proof remains the open gates below.
-- [ ] Add two-device physical gates proving device A history appears on device B.
+- [ ] Add two-device physical gates proving device A history appears on device B. (2026-10-22: proven
+  on one A03s with two EAs signed in in turn, AR3 Gates 3–4; the A03s + iPhone run remains.)
 - [x] Make sync status distinguish "all local writes uploaded" from "local history fully hydrated."
   CAP-004 plus AR Plan 3 Task 9: one History row combines sessions, Battery Runs, assessments
   and mastery; missing or incomplete walks cannot show Up to date. Readers re-read SQLite as
@@ -700,7 +702,8 @@ The active specification is
 
 Status (2026-10-21): item 3's session-group contract is built on `feat/lesson-plan-b2-session-group`
 (lesson-plan B2: held-group authorization, local history reference, upload and ordering, the
-lost-reply fix). Its hosted migration and device gates are still pending.
+lost-reply fix). Its hosted migration was applied on 2026-10-22, and its A03s device gates G1 and G2 passed the same
+day; the iPhone rows remain.
 
 Additional Head Office behavior retained from the Sprint 4 follow-up:
 
@@ -712,7 +715,7 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 ## 5. Product and UX
 
-- [ ] **Lesson plan (spec 2026-10-20): A1 content packs built; the Hermes decodability device check (A1 Task 7, T1 Android and T2 iOS) remains open.** Record: build log, "Lesson plan A1: content packs".
+- [ ] **Lesson plan (spec 2026-10-20): A1 content packs built; the Android Hermes check (T1) passed on 2026-10-22; the iOS check (A1 Task 7, T2) remains open.** Record: build log, "Lesson plan A1: content packs".
 - [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Shared look built
   on `feat/bold-red-app` (2026-10-19), following Home (#70). Design source: the Design Round 4
   canvas (https://claude.ai/artifact/8gQRtyqZ5Q1vTCTdSkz6zc, private to Jim), Bold Red (B) boards on
