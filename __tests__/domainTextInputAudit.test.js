@@ -8,7 +8,7 @@ const readSource = (filePath) => (
 
 describe('domain text input audit', () => {
   test('literacy session comments disable keyboard suggestions', () => {
-    const source = readSource('src/screens/sessions/LiteracySessionForm.js');
+    const source = readSource('src/screens/lessons/LessonWrapUpScreen.js');
 
     expect(source).toMatch(/placeholder="Add session notes…"[\s\S]*\{\.\.\.NO_TEXT_SUGGESTIONS\}/);
   });
