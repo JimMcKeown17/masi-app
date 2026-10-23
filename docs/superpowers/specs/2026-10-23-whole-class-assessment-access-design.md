@@ -1,7 +1,7 @@
 # Whole-class assessment access — Design
 
 **Date:** 2026-10-23
-**Status:** Decisions by Jim, 2026-10-23 (in conversation). Revision 3 after Codex design review rounds 1–2.
+**Status:** Decisions by Jim, 2026-10-23 (in conversation). Revision 4 after Codex design review rounds 1–3.
 **Implements:** ADR-0005's two-tier access model. Assessment scope is the class; delivery scope
 is a subset. Today the phone only implements delivery scope.
 **Consumed by:** WelaPLUS Plan 3 (`docs/superpowers/plans/2026-10-23-welaplus-plan-3-host-run-flow.md`).
@@ -103,18 +103,27 @@ class foreign key holds.
   (`:674-683`) is harmless.
 - Roster rows are written as `synced`, with no outbox rows.
 
-**A superseded membership is closed before its replacement is saved** (rev 3, Codex round 2).
+**Class moves converge from server rows, never from inference** (rev 4, Codex rounds 2–3).
 - The server allows one open membership per child per academic year, and so does the phone
-  (`src/db/migrations.js:389-391`).
-- So when a pulled open membership `mB` arrives for `(child, year)` while the phone holds a
-  different open `mA`, `mA` has ended on the server.
-- In the same transaction as the upsert of `mB`, `saveChildClassMembership` sets
-  `mA.exited_at = mB.enrolled_at`, only if `mA` is `synced`. If `mA` is pending, failed or
-  terminal, it keeps `mA`, skips `mB` and logs, so a local edit is never overwritten.
-- This applies to every pull path, delivery included. It is the server's uniqueness rule, not
-  an inference from assignment loss.
-- Test: an EA and a control child both move from class A to class B in one year. After A leaves
-  `roster_class_ids`, B's membership lands and the child stays assessable.
+  (`src/db/migrations.js:389-391`). So a child who moves A → B needs the old row closed before
+  the new one can be saved.
+- The roster query therefore fetches, **in one query**, every membership in the **active academic
+  year** for the roster's children, open and closed, with `row_version`/`updated_at`.
+  RLS allows it, because the child is readable through the current membership
+  (`…alignment_schema.sql:855-859`).
+- Persistence writes the closed rows first, carrying their real server `exited_at`, then the
+  open rows. Every row goes through the existing per-id version guard
+  (`domainRepositoryUtils.js:143-155`). So a stale older snapshot of either row can never
+  reopen or override a newer one, whichever pull path arrives first.
+- No exit date is ever inferred. If an open local `synced` row still conflicts after the closed
+  rows are applied, the incoming open row is skipped and logged, and the next pull converges.
+  The same applies when the conflicting row is pending, failed or terminal.
+- Tests:
+  - A → B in one year, with delivery and class responses applied in both orders: the
+    server-current membership ends up open and the old one closed with its server `exited_at`;
+  - equal `enrolled_at` values;
+  - a replacement whose `enrolled_at` is earlier than the old row's;
+  - a pending local row that blocks the replacement.
 
 **Publishing.** `ChildrenContext` bumps a `rosterVersion` after the scope persists.
 `useAssessableChildren` (5.3) reloads on that version and on `ClassesContext`'s assignment
