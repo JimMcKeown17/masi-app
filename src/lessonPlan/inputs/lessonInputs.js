@@ -19,7 +19,7 @@ export const loadLessonBase = async ({ handle, repositories, today, programmeId 
   const sessions = await repositories.sessions.getSessions({
     userId: handle.userId, programmeId: programme, sinceDate: year.starts_on,
   });
-  return { today, academicYearStart: year.starts_on, programmeId: programme, sessions };
+  return { today, academicYear: year, academicYearStart: year.starts_on, programmeId: programme, sessions };
 };
 
 const describeGroups = ({ groups, membersByGroup, classes }) => {
@@ -86,30 +86,67 @@ export const shapePickerModel = input => shapeResolvedPickerModel({
   ...input, descriptions: describeGroups(input),
 });
 
-export const loadPickerModel = async ({ handle, repositories, services, base, groups,
+export const loadPickerRanking = async ({ handle, repositories, base, today, groups,
   getChildrenInGroup, children, childrenGroups }) => {
-  const memberIdsByGroup = Object.fromEntries(groups.map(group => [group.id,
-    [...new Set(getChildrenInGroup(group.id).map(child => child.id))],
+  const draft = await repositories.lessonDrafts.getActive();
+  if (draft) return { draftId: draft.id };
+  const loadedBase = base ?? await loadLessonBase({ handle, repositories, today });
+  if (loadedBase.missing) return loadedBase;
+  const membersByGroup = Object.fromEntries(groups.map(group => [group.id,
+    [...new Map(getChildrenInGroup(group.id).map(child => [child.id, child])).values()],
   ]));
+  const ranked = rankGroups({ ...loadedBase, groups: groups.map(group => ({
+    id: group.id, name: group.name, displayNumber: groupNumber(group),
+    memberIds: membersByGroup[group.id].map(child => child.id),
+  })), children: {} });
+  const groupsById = new Map(groups.map(group => [group.id, group]));
+  const dotIndices = new Map([...groups].sort(compareGroups).map((group, index) => [group.id, index]));
+  return {
+    base: loadedBase, groups, upNextGroupId: ranked.upNextGroupId,
+    rows: ranked.rows.map(row => {
+      const group = groupsById.get(row.groupId);
+      return { groupId: group.id, name: group.name, number: groupNumber(group),
+        dotColor: getGroupDotColor(dotIndices.get(group.id)),
+        members: membersByGroup[group.id].map(child => ({ id: child.id, firstName: child.first_name })),
+        lastSeenOn: row.lastSeenOn, taughtToday: row.taughtToday, nextLetters: null };
+    }),
+    ungrouped: ungroupedChildren({ children, childrenGroups }),
+  };
+};
+
+export const loadPickerLetters = async ({ handle, repositories, services, base, ranking }) => {
+  const memberIdsByGroup = Object.fromEntries(ranking.rows.map(row => [row.groupId, row.members.map(child => child.id)]));
   const childIds = [...new Set(Object.values(memberIdsByGroup).flat())];
   const [childrenById, classes, historyByChild, masteryByChild] = await Promise.all([
     repositories.children.getChildrenByIds(childIds), repositories.classes.getClasses(),
-    services.sessionHistory.completenessByChild({ childIds, programmeId: base.programmeId }),
-    services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId: base.programmeId }),
+    services.sessionHistory.completenessByChild({ childIds, programmeId: base.programmeId,
+      academicYearStart: base.academicYearStart }),
+    services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId: base.programmeId,
+      academicYear: base.academicYear }),
   ]);
-  const membersByGroup = Object.fromEntries(groups.map(group => [group.id,
+  const membersByGroup = Object.fromEntries(ranking.groups.map(group => [group.id,
     memberIdsByGroup[group.id].map(id => childrenById[id] ?? { id }),
   ]));
-  const descriptions = describeGroups({ groups, membersByGroup, classes });
-  const knownLettersByLanguage = Object.fromEntries(await Promise.all(
-    [...new Set(descriptions.map(row => row.languageCode))].map(async languageCode => {
-      const ids = [...new Set(descriptions.filter(row => row.languageCode === languageCode)
-        .flatMap(row => row.members.map(child => child.id)))];
-      return [languageCode, await loadKnownLetters({ repositories, userId: handle.userId, childIds: ids, languageCode })];
-    })
-  ));
-  return shapeResolvedPickerModel({ base, groups, descriptions, children, childrenGroups,
-    historyByChild, masteryByChild, knownLettersByLanguage, allowPreview: isPreviewContentEnabled() });
+  const descriptions = describeGroups({ groups: ranking.groups, membersByGroup, classes });
+  const lettersByGroup = {};
+  await Promise.all([...new Set(descriptions.map(row => row.languageCode))].map(async languageCode => {
+    const languageGroups = descriptions.filter(row => row.languageCode === languageCode);
+    const ids = [...new Set(languageGroups.flatMap(row => row.members.map(child => child.id)))];
+    const knownLetters = await loadKnownLetters({ repositories, userId: handle.userId, childIds: ids,
+      languageCode, programmeId: base.programmeId, academicYear: base.academicYear });
+    const result = rankGroups({ ...base, groups: languageGroups.map(({ group, members }) => ({
+      id: group.id, name: group.name, displayNumber: groupNumber(group), memberIds: members.map(child => child.id),
+      languageCode, pack: packFor(languageCode, null, isPreviewContentEnabled()),
+    })), children: Object.fromEntries(languageGroups.flatMap(({ members }) => members.map(child => [child.id,
+      childInput(child, knownLetters[child.id], historyByChild, masteryByChild),
+    ]))) });
+    for (const row of result.rows) {
+      const { classId, isEcd } = languageGroups.find(item => item.group.id === row.groupId);
+      lettersByGroup[row.groupId] = { classId, languageCode, isEcd,
+        nextLetters: row.nextLetters, lettersReason: row.lettersReason };
+    }
+  }));
+  return { lettersByGroup, historyComplete: childIds.every(id => historyByChild[id] === true) };
 };
 
 export const loadLessonParticipants = async ({ handle, repositories, services, programmeId,

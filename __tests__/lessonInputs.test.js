@@ -9,7 +9,9 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { serverFamily } from '../test-support/assessmentHistoryFixtures';
 import { loadKnownLetters } from '../src/lessonPlan/inputs/knownLetters';
-import { loadLessonBase, loadPickerModel, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
+import * as domainReads from '../src/db/repositories/domainRepositoryUtils';
+import * as pickerInputs from '../src/lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadPickerRanking, loadPickerLetters, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
 import { computeLessonPlan, rankGroups } from '../src/lessonPlan/engine';
 import * as lessonClasses from '../src/lessonPlan/engine/lessonClass';
 import * as groupEngine from '../src/lessonPlan/engine/groups';
@@ -62,7 +64,13 @@ const input = async (extra = {}) => {
     languageCode: selected.languageCode, packId: selected.packId, participantChildIds: selected.presentChildIds });
   return presentLessonInput({ base: loadedBase, lesson: selected, loaded, presentChildIds: selected.presentChildIds });
 };
-const picker = async () => loadPickerModel({ handle, repositories, services, base: await base(), ...await roster() });
+const fullPicker = async options => {
+  const ranking = await loadPickerRanking({ handle, repositories, ...options });
+  const letters = await loadPickerLetters({ handle, repositories, services, base: ranking.base, ranking });
+  return { ...ranking, historyComplete: letters.historyComplete,
+    rows: ranking.rows.map(row => ({ ...row, ...letters.lettersByGroup[row.groupId] })) };
+};
+const picker = async () => fullPicker({ today, ...await roster() });
 const result = async (n, childId, letters, extra = {}) => {
   const family = { ...serverFamily(n, { childId, items: letters.length }), user_id: USER,
     programme_id: 'programme-a', language: 'xh', ...extra };
@@ -148,7 +156,7 @@ test('reads do not grow with the number of children', async () => {
   const load = participantChildIds => loadLessonParticipants({ handle, repositories, services,
     programmeId: loadedBase.programmeId, languageCode: 'en', packId: null, participantChildIds });
   const data = await roster();
-  const loadPicker = childIds => loadPickerModel({ handle, repositories, services, base: loadedBase,
+  const loadPicker = childIds => fullPicker({ base: loadedBase,
     ...data, groups: [data.groups[0]], getChildrenInGroup: () => data.children.filter(child => childIds.includes(child.id)) });
   for (const run of [known, load, loadPicker]) {
     const two = await measure(() => run(ids.slice(0, 2)));
@@ -257,7 +265,8 @@ test('a mixed-class group has classId null and no letters until the class is cho
 
 test('lesson base reports missing dependencies and honours an explicit programme', async () => {
   expect(await loadLessonBase({ handle, repositories, today, programmeId: 'programme-b' }))
-    .toEqual({ today, academicYearStart: '2026-01-15', programmeId: 'programme-b', sessions: [] });
+    .toEqual({ today, academicYear: expect.objectContaining({ id: 'year-2026', starts_on: '2026-01-15' }),
+      academicYearStart: '2026-01-15', programmeId: 'programme-b', sessions: [] });
   await write(db => db.runAsync('update staff_programme_assignments set ended_at = assigned_at'));
   expect(await base()).toEqual({ missing: 'programme' });
   await write(db => db.runAsync('update academic_years set is_active = 0'));
@@ -297,4 +306,62 @@ test('participant facts include absentees and project present children in screen
   expect(() => presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['missing'] }))
     .toThrow('Lesson participant facts missing: missing');
   expect(statements).toEqual([]);
+});
+
+const seedPickerBudget = async () => {
+  for (let i = 3; i <= 25; i += 1) await addChild(`c${i}`);
+  await write(async db => {
+    await db.runAsync('delete from child_group_memberships');
+    await db.runAsync('delete from group_ea_assignments');
+    await db.runAsync('delete from groups');
+  });
+  for (let i = 0; i < 8; i += 1) {
+    const ids = Array.from({ length: 25 }, (_, n) => `c${n + 1}`).filter((_, n) => n % 8 === i);
+    await addGroup(`budget-${i}`, `Group ${i + 1}`, ids, 'class-1');
+  }
+  for (let i = 1; i <= 25; i += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await result(i * 3 + attempt, `c${i}`, Array.from({ length: 60 }, (_, n) => n % 2 ? 'm' : 'a'),
+        { language: 'en', assessment_date: `2026-0${attempt + 2}-01` });
+    }
+  }
+  for (let i = 0; i < 80; i += 1) await saveSession(`budget-session-${i}`, `c${i % 25 + 1}`,
+    { session_date: '2026-10-19' });
+  await completeWalks();
+  return roster();
+};
+const countPickerReads = async task => {
+  const reader = await handle.getReader();
+  const calls = [];
+  const countedReader = Object.fromEntries(['getAllAsync', 'getFirstAsync', 'runAsync'].map(method => [method,
+    async (...args) => {
+      const value = await reader[method](...args);
+      calls.push({ sql: args[0], rows: Array.isArray(value) ? value.length : method === 'getFirstAsync' && value ? 1 : 0 });
+      return value;
+    },
+  ]));
+  const spy = jest.spyOn(handle, 'getReader').mockResolvedValue(countedReader);
+  try {
+    const value = await task();
+    return { value, statements: calls.length, rows: calls.reduce((sum, call) => sum + call.rows, 0), calls };
+  } finally { spy.mockRestore(); }
+};
+
+test('picker ranking stays within six statements and shares programme and year with letters', async () => {
+  const data = await seedPickerBudget();
+  const programme = jest.spyOn(domainReads, 'getActiveProgrammeId');
+  const year = jest.spyOn(domainReads, 'getActiveAcademicYear');
+  const ranked = await countPickerReads(() => pickerInputs.loadPickerRanking({ handle, repositories, today, ...data }));
+  expect(ranked.statements).toBeLessThanOrEqual(6);
+  expect(ranked.value.rows).toHaveLength(8);
+  expect(ranked.value.rows.every(row => row.nextLetters === null)).toBe(true);
+  expect(ranked.calls.some(call => /from (children|classes|assessments|assessment_items|letter_mastery|sync_state)\b/i.test(call.sql))).toBe(false);
+  const letters = await countPickerReads(() => pickerInputs.loadPickerLetters({ handle, repositories, services,
+    base: ranked.value.base, ranking: ranked.value }));
+  expect(Object.keys(letters.value.lettersByGroup)).toHaveLength(8);
+  expect(letters.value.historyComplete).toBe(true);
+  expect(programme).toHaveBeenCalledTimes(1);
+  expect(year).toHaveBeenCalledTimes(1);
+  console.log('D5 split picker', { ranking: { statements: ranked.statements, rows: ranked.rows },
+    letters: { statements: letters.statements, rows: letters.rows } });
 });

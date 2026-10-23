@@ -130,8 +130,8 @@ export const createHandleServices = (handle) => {
     sessionHistory: {
       start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }),
       store,
-      completenessByChild: ({ childIds, programmeId } = {}) => sessionHistoryCompletenessByChild({
-        database: handle, userId: handle.userId, childIds, programmeId,
+      completenessByChild: ({ childIds, programmeId, academicYearStart } = {}) => sessionHistoryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds, programmeId, academicYearStart,
       }),
     },
     assessmentHistory: {
@@ -140,8 +140,8 @@ export const createHandleServices = (handle) => {
       masteryInputsComplete: ({ childIds } = {}) => isMasteryInputsComplete({
         database: handle, userId: handle.userId, childIds,
       }),
-      masteryCompletenessByChild: ({ childIds, programmeId } = {}) => masteryCompletenessByChild({
-        database: handle, userId: handle.userId, childIds, programmeId,
+      masteryCompletenessByChild: ({ childIds, programmeId, academicYear } = {}) => masteryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds, programmeId, academicYear,
       }),
     },
     deviceProfile: {

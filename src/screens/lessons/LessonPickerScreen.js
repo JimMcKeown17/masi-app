@@ -6,7 +6,7 @@ import { useChildren } from '../../context/ChildrenContext';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { useProgrammeTodayKey } from '../../hooks/useProgrammeTodayKey';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
-import { loadLessonBase, loadPickerModel } from '../../lessonPlan/inputs/lessonInputs';
+import { loadPickerRanking, loadPickerLetters } from '../../lessonPlan/inputs/lessonInputs';
 import { isStaleActorError } from '../../session/staleActor';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
@@ -49,16 +49,16 @@ export default function LessonPickerScreen({ navigation }) {
     let active = true;
     const load = async () => {
       try {
-        const draft = await repositories.lessonDrafts.getActive();
-        if (!active || !handle.isCurrent()) return;
-        if (draft) { navigation.replace('Lesson', { draftId: draft.id }); return; }
-        const base = await loadLessonBase({ handle, repositories, today });
-        if (!active || !handle.isCurrent()) return;
-        // Without a programme or school year there is nothing to rank; say so rather than spin.
-        if (base.missing) { setMissing(base.missing); setModel(null); setError(null); return; }
-        const picker = await loadPickerModel({ handle, repositories, services, base, groups,
+        const picker = await loadPickerRanking({ handle, repositories, today, groups,
           getChildrenInGroup, children, childrenGroups });
-        if (active && handle.isCurrent()) { setModel(picker); setError(null); setMissing(null); }
+        if (!active || !handle.isCurrent()) return;
+        if (picker.draftId) { navigation.replace('Lesson', { draftId: picker.draftId }); return; }
+        if (picker.missing) { setMissing(picker.missing); setModel(null); setError(null); return; }
+        setModel(picker); setError(null); setMissing(null);
+        const letters = await loadPickerLetters({ handle, repositories, services, base: picker.base, ranking: picker });
+        if (!active || !handle.isCurrent()) return;
+        setModel({ ...picker, historyComplete: letters.historyComplete,
+          rows: picker.rows.map(row => ({ ...row, ...letters.lettersByGroup[row.groupId] })) });
       } catch (caught) {
         if (!active || !handle.isCurrent() || isStaleActorError(caught)) return;
         if (caught.name === 'LessonDraftCorruptError') navigation.replace('Lesson', { draftId: caught.draftId });
@@ -108,7 +108,7 @@ export default function LessonPickerScreen({ navigation }) {
         {error ? <InlineNote>{error}</InlineNote> : null}
         {missing === 'academic_year' ? <InlineNote>The school year hasn't downloaded yet. Connect to the internet, then open this again.</InlineNote> : null}
         {!model && !error && !missing ? <ActivityIndicator color={colors.primary} /> : null}
-        {model && !model.historyComplete ? <InlineNote tone="warning">Still downloading past lessons. Suggestions may repeat.</InlineNote> : null}
+        {model && model.historyComplete === false ? <InlineNote tone="warning">Still downloading past lessons. Suggestions may repeat.</InlineNote> : null}
         {upNext ? <UpNextCard row={upNext} today={today} onStart={start} /> : null}
       </View>}
       ListEmptyComponent={model && children.length === 0 ? <EmptyState title="No children yet"
