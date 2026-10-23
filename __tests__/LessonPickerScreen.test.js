@@ -27,10 +27,18 @@ const wrapper = ({ children }) => <AllProviders>
   </SignedInEAContext.Provider>
 </AllProviders>;
 const Stub = () => <Text>Lesson route</Text>;
-const mount = () => renderInTestStack({ wrapper, initialIndex: 1,
-  motion: { tier: 'static', motionLevel: 'still', reduceMotion: true },
-  routes: [{ name: 'Home', component: Stub }, { name: 'SessionForm', component: LessonPickerScreen },
-    { name: 'Lesson', component: Stub }] });
+const mount = ({ keepMounted = false } = {}) => {
+  let pickerNavigation;
+  const Picker = props => {
+    pickerNavigation = props.navigation;
+    return <LessonPickerScreen {...props} />;
+  };
+  const view = renderInTestStack({ wrapper, initialIndex: 1, keepMounted,
+    motion: { tier: 'static', motionLevel: 'still', reduceMotion: true },
+    routes: [{ name: 'Home', component: Stub }, { name: 'SessionForm', component: Picker },
+      { name: 'Lesson', component: Stub }] });
+  return { ...view, getPickerNavigation: () => pickerNavigation };
+};
 const ready = view => waitFor(() => expect(view.getByRole('button', { name: 'Start lesson' })).toBeTruthy());
 
 beforeEach(async () => {
@@ -81,7 +89,7 @@ testPicker('Up next shows the top-ranked group with its letters and Start lesson
   const view = mount();
   await ready(view);
   expect(view.getByText('Up next')).toBeTruthy();
-  expect(view.getByText('Not seen yet · letters a m s t')).toBeTruthy();
+  await waitFor(() => expect(view.getByText('Not seen yet · letters a m s t')).toBeTruthy());
   fireEvent.press(view.getByRole('button', { name: 'Start lesson' }));
   await waitFor(() => expect(view.routeNames()).toEqual(['Home', 'SessionForm', 'Lesson']));
   expect(view.navigationRef.getCurrentRoute().params).toEqual({ groupId: 'g2', upNextGroupId: 'g2' });
@@ -91,7 +99,7 @@ testPicker('other groups follow the ranking; a group taught today reads Today �
   await ready(view);
   const rows = view.getAllByRole('button').filter(row => /^(Thando|Amahle),/.test(row.props.accessibilityLabel));
   expect(rows.map(row => row.props.accessibilityLabel.split(',')[0])).toEqual(['Thando', 'Amahle']);
-  expect(view.getByText(/^Today ✓ · letters/)).toBeTruthy();
+  await waitFor(() => expect(view.getByText(/^Today ✓ · letters/)).toBeTruthy());
   fireEvent.press(rows[1]);
   await waitFor(() => expect(view.navigationRef.getCurrentRoute().params).toEqual({ groupId: 'g1', upNextGroupId: 'g2' }));
 });
@@ -133,17 +141,20 @@ testPicker('incomplete history shows the downloading note', async () => {
   await handle.withTransaction(db => db.runAsync('delete from sync_state'));
   const view = mount();
   await ready(view);
-  expect(view.getByText('Still downloading past lessons. Suggestions may repeat.')).toBeTruthy();
+  await waitFor(() => expect(view.getByText('Still downloading past lessons. Suggestions may repeat.')).toBeTruthy());
 });
 testPicker('the picker computes the ranking once per load', async () => {
   const ranking = jest.spyOn(groupEngine, 'rankGroups');
-  const base = jest.spyOn(inputs, 'loadLessonBase');
-  const picker = jest.spyOn(inputs, 'loadPickerModel');
+  const base = jest.spyOn(handle.repositories.sessions, 'getSessions');
+  const letters = jest.spyOn(inputs, 'loadPickerLetters');
+  const picker = jest.spyOn(inputs, 'loadPickerRanking');
   const view = mount();
   await ready(view);
   expect(base).toHaveBeenCalledTimes(1);
   expect(picker).toHaveBeenCalledTimes(1);
-  expect(picker.mock.calls[0][0].services).toBe(handle.services);
+  await waitFor(() => expect(view.getByText(/Not seen yet · letters/)).toBeTruthy());
+  expect(letters).toHaveBeenCalledTimes(1);
+  expect(letters.mock.calls[0][0].services).toBe(handle.services);
   expect(ranking).toHaveBeenCalledTimes(3); // One ordering pass plus English and isiXhosa.
   expect(ranking.mock.calls.map(([input]) => input.groups.map(group => group.id))).toEqual([
     ['g1', 'g2', 'g3'], ['g1', 'g2'], ['g3'],
@@ -195,7 +206,7 @@ testPicker('a Put in a group failure stays in the sheet', async () => {
   expect(view.getByRole('button', { name: 'Group 2' })).toBeTruthy();
 });
 testPicker('session history page and run versions each reload the picker', async () => {
-  const picker = jest.spyOn(inputs, 'loadPickerModel');
+  const picker = jest.spyOn(inputs, 'loadPickerRanking');
   const store = handle.services.sessionHistory.store;
   let snapshot = store.getSnapshot();
   jest.spyOn(store, 'getSnapshot').mockImplementation(() => snapshot);
@@ -251,6 +262,58 @@ testPicker('a group with no letters to suggest shows only when it was seen', asy
   await handle.withTransaction(db => db.runAsync("update classes set home_language = 'isiZulu' where id = 'xh-class'"));
   const view = mount();
   await ready(view);
+  await waitFor(() => expect(view.getByText('Not seen yet · letters a m s t')).toBeTruthy());
   expect(view.getByText('Wed')).toBeTruthy();
   expect(view.queryByText(/^Wed · letters/)).toBeNull();
+});
+
+const delayedLetters = () => ({ lettersByGroup: {
+  g1: { nextLetters: ['o'] }, g2: { nextLetters: ['o'] }, g3: { nextLetters: ['o'] },
+}, historyComplete: false });
+
+testPicker('ranking renders before letters and letters enrich details without reordering', async () => {
+  const gate = deferred();
+  const letters = jest.spyOn(inputs, 'loadPickerLetters').mockReturnValue(gate.promise);
+  try {
+    const view = mount();
+    await ready(view);
+    expect(letters).toHaveBeenCalledTimes(1);
+    expect(view.getByText('Up next')).toBeTruthy();
+    expect(view.getByText('Not seen yet')).toBeTruthy();
+    expect(view.getByText('Wed')).toBeTruthy();
+    expect(view.getByText('Today ✓')).toBeTruthy();
+    expect(view.queryByText(/letters/)).toBeNull();
+    expect(view.queryByText('Still downloading past lessons. Suggestions may repeat.')).toBeNull();
+    const order = () => view.getAllByRole('button').filter(row => /^(Thando|Amahle),/.test(row.props.accessibilityLabel))
+      .map(row => row.props.accessibilityLabel.split(',')[0]);
+    expect(order()).toEqual(['Thando', 'Amahle']);
+    await act(async () => gate.resolve(delayedLetters()));
+    expect(view.getByText('Not seen yet · letters o')).toBeTruthy();
+    expect(view.getByText('Wed · letters o')).toBeTruthy();
+    await waitFor(() => expect(view.getByText('Still downloading past lessons. Suggestions may repeat.')).toBeTruthy());
+    expect(order()).toEqual(['Thando', 'Amahle']);
+    expect(view.getByText('Lulu')).toBeTruthy();
+  } finally { gate.resolve(delayedLetters()); }
+});
+
+testPicker('a row starts while letters are pending and a late result is dropped after blur', async () => {
+  const gate = deferred();
+  const letters = jest.spyOn(inputs, 'loadPickerLetters').mockReturnValue(gate.promise);
+  try {
+    const view = mount({ keepMounted: true });
+    await ready(view);
+    expect(letters).toHaveBeenCalledTimes(1);
+    const navigate = jest.spyOn(view.getPickerNavigation(), 'navigate');
+    const replace = jest.spyOn(view.getPickerNavigation(), 'replace');
+    fireEvent.press(view.getByRole('button', { name: /^Thando,/ }));
+    await waitFor(() => expect(view.navigationRef.getCurrentRoute().name).toBe('Lesson'));
+    const before = view.navigationRef.getRootState();
+    await act(async () => gate.resolve(delayedLetters()));
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('Lesson', { groupId: 'g3', upNextGroupId: 'g2' });
+    expect(replace).not.toHaveBeenCalled();
+    expect(view.navigationRef.getRootState()).toEqual(before);
+    expect(view.queryByText(/letters/, { includeHiddenElements: true })).toBeNull();
+    expect(view.queryByText('Still downloading past lessons. Suggestions may repeat.', { includeHiddenElements: true })).toBeNull();
+  } finally { gate.resolve(delayedLetters()); }
 });

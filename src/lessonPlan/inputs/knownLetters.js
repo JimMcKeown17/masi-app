@@ -1,11 +1,13 @@
 import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
 import { pickLatestLetterResult, computeAssessmentMastery } from '../../utils/letterMastery';
 
-export const loadKnownLetters = async ({ repositories, userId, childIds, languageCode }) => {
+export const loadKnownLetters = async ({ repositories, userId, childIds, languageCode, programmeId, academicYear }) => {
   const order = PEDAGOGICAL_ORDERS[languageCode];
   if (!Array.isArray(order) || childIds.length === 0) return Object.fromEntries(childIds.map(id => [id, []]));
   const [results, marks] = await Promise.all([
-    repositories.assessments.getLetterEvidenceResults({ userId, childIds }),
+    repositories.assessments.getLetterEvidenceResults({ userId, childIds,
+      ...(programmeId === undefined ? {} : { programmeId }),
+      ...(academicYear === undefined ? {} : { academicYear }) }),
     repositories.mastery.getLetterMastery({ childIds, language: languageCode }),
   ]);
   const resultsByChild = new Map();

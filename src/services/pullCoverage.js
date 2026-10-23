@@ -85,12 +85,12 @@ export const sessionHistoryCompletenessByChild = async ({
   return Object.fromEntries(childIds.map(id => [id, covered?.has(id) ?? false]));
 };
 
-export const masteryCompletenessByChild = async ({ database, userId, programmeId, childIds = [] }) => {
+export const masteryCompletenessByChild = async ({ database, userId, programmeId, childIds = [], academicYear }) => {
   const incomplete = Object.fromEntries(childIds.map(id => [id, false]));
   if (!userId) return incomplete;
   const db = await resolveDatabase(database);
   const programme = programmeId === undefined ? await getActiveProgrammeId(db, userId) : programmeId;
-  const year = await getActiveAcademicYear(db);
+  const year = academicYear === undefined ? await getActiveAcademicYear(db) : academicYear;
   if (!programme || !year?.id || !year.starts_on) return incomplete;
 
   const stateRepository = createSyncStateRepository({ database });
