@@ -99,8 +99,13 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
   - `get_reconcile_acknowledgments` returns only the caller's active-programme class ids and
     every open membership in them, including another EA's delivery children in a shared class.
 - [ ] **Step 2: Run the harness and confirm it fails**
-  - Run: `HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres npm run verify:assessment-results:postgres`
-    against a local disposable Postgres 17, as CI does.
+  - Run against a local disposable Postgres 17, with the same three variables CI sets
+    (`.github/workflows/tests.yml`; the checks are in
+    `history-authorization-postgres-harness.cjs:57-71`):
+    `export HISTORY_RLS_ADMIN_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres HISTORY_RLS_DATABASE_NAME=masi_history_rls_whole_class HISTORY_RLS_DISPOSABLE_CONFIRM=<the DISPOSABLE_CONFIRMATION value in that file>`,
+    then `npm run verify:assessment-results:postgres`.
+  - Keep these exports for Step 4 too.
+  - RED must fail on a new behavioural assertion, not on setup.
   - Expected: the new cases FAIL.
 - [ ] **Step 3: Write the migration**
   - Redefine both RPCs with `create or replace`, copying their latest bodies from
@@ -109,8 +114,11 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
 - [ ] **Step 4: Run the harnesses and the probe's offline checks**
   - Run: `npm run verify:assessment-results:postgres && npm run verify:assessment-history:postgres && npm run verify:upload-contract:postgres`
   - Expected: PASS.
-  - `rls:probe` is interactive against a hosted project, so only its static rule list and unit
-    test run here: `npx jest __tests__/rlsVisibilityProbe*`.
+  - `rls:probe` is credential-driven against a hosted project. Here, run only its unit test
+    (`npx jest __tests__/rlsVisibilityProbe*`). Its hosted run belongs to Task 9's staging gate.
+  - Re-run the migration twice on the disposable database to prove it is idempotent.
+  - Keep the RPCs' existing signatures, SECURITY DEFINER settings, `search_path` and
+    authenticated-only execute grants, and keep the harness's grant assertions.
 - [ ] **Step 5: Commit** with the message `feat(access): roster acknowledgment keys and date-aware upload grace`.
 
 ### Task 2: Roster memberships converge from server rows
@@ -133,8 +141,9 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
 - [ ] **Step 1: Write the failing tests**
   - A → B in one year, with B's open row plus A's closed row in one batch: A is closed with its
     server `exited_at`, and B is saved.
-  - The same rows split across two batches in both orders, simulating the delivery and class
-    responses: same end state.
+  - The same rows split across two batches. B first: B is skipped as
+    `conflicting_open_membership` and A is then closed. Replaying the complete server batch
+    lands B (eventual convergence, design §5.1). Closed A first: B lands in the same call.
   - A stale older open A (lower `row_version`) arriving after the closed A is rejected by the
     guard.
   - Equal `enrolled_at` values.
@@ -162,17 +171,34 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
   style of the existing preloaded-data tests)
 
 **Interfaces:**
-- Consumes: the persisted own active-programme `class_ea_assignments`
-  (`preloadedChildData.js:439-444`).
-- Produces:
-  - a scope named `classRoster` with `{ ok, rows: { children, memberships }, complete }`. The
-    memberships are every **active-academic-year** membership, open or closed, of the roster's
-    children, from one query, persisted through Task 2's `persistRosterMemberships`;
-  - `complete` is false if either query errors or returns `PULL_SCOPE_COMPLETENESS_LIMIT` rows;
-  - `.in()` lists are chunked at 200;
-  - persist order: classes, then children (via `saveServerChildRow`, full row), then
-    memberships (via `saveChildClassMembership`);
+- Consumes: nothing persisted. The scope is **self-contained**, so it never races
+  `ClassesContext` (`ClassesContext.js:329-350`) or the children-before-classes manual refresh
+  (`ChildrenListScreen.js:171-173`).
+- Produces a scope named `classRoster` with `{ ok, rows: { classEaAssignments, classes, children, memberships }, complete }`,
+  built in one pass from four queries:
+  1. **Class assignments:** the EA's own active, active-programme `class_ea_assignments`, with
+     their classes (`select('*, classes(*)')`, as `preloadedChildData.js:439-444` does).
+  2. **Roster memberships:** every **open** membership, in **any** academic year, in those
+     classes. These establish roster access, including an open prior-year membership (design C3).
+  3. **Children:** the full rows for those memberships' children.
+  4. **Move memberships:** every **active-year** membership, open or closed, of those children,
+     with `classes(*)`. These are needed for move convergence (Task 2).
+
+  Rules for the result:
+  - The parent class of every membership comes from its `classes(*)` join. If a closed
+    membership's class is neither returned nor already local, that membership is dropped from
+    `rows` and is **not** an incomplete scope. It is a historical row with nothing local to
+    close. If an open roster membership's class is missing, the scope is incomplete.
+  - `complete` is false if any query errors or returns `PULL_SCOPE_COMPLETENESS_LIMIT` rows.
+  - `.in()` lists are chunked at 200.
+  - Persist order: class assignments (via `classEaAssignmentsRepository`, idempotent with
+    `ClassesContext`), then classes, then children (via `saveServerChildRow`, full row), then
+    memberships (via Task 2's `persistRosterMemberships`).
   - `ChildrenContext` exposes `rosterVersion: number`, incremented after a persist.
+  - It runs on sign-in, on every pull, and after `ClassesContext` persists a changed assignment
+    set. `ClassesContext` gains an `assignmentsVersion: number` in its value
+    (`ClassesContext.js:586-604`), and `ChildrenContext` triggers a roster pull when that
+    version changes.
 
 - [ ] **Step 1: Write the failing tests**
   - Both pull paths persist the class's control children and their open memberships.
@@ -181,6 +207,14 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
   - A history-reference stub is promoted to a full row.
   - An errored query gives `complete: false`, and persisted rows are kept.
   - A class the EA doesn't hold is never queried.
+  - **Fresh phone:** with no local class assignments, the roster still downloads (self-contained).
+  - **New class:** a newly granted class appears after `assignmentsVersion` changes.
+  - **Pull order:** both completion orders of the `ClassesContext` and `ChildrenContext` pulls
+    give the same result, tested through the real providers.
+  - **Prior year:** a control child whose only open membership is prior-year is persisted and
+    is assessable (pull → read model).
+  - **Move on a fresh phone:** A → B with only B held and cached locally lands B and drops closed
+    A without failing.
   - The scope is derived from `class_ea_assignments`, not from the `classes` table.
 - [ ] **Step 2: Run and confirm they fail**
   - Run: `npx jest __tests__/classRosterPull.test.js`
@@ -196,6 +230,12 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
 
 **Files:**
 - Modify: `src/db/repositories/childrenRepository.js`, adding `buildClassRosterMembershipReconcile`
+- Modify: `src/services/preloadedChildData.js:124-138` (`pullReconcileAcknowledgments`).
+  - It decodes optional `roster_class_ids` → `rosterClassIds` and `roster_membership_ids` →
+    `rosterMembershipIds`.
+  - An absent key decodes to `undefined` (old server, skip the pass), and `[]` to `[]`
+    (authoritative empty).
+  - Do **not** add them to the mandatory key list.
 - Modify: `src/services/preloadedChildData.js` and `src/context/ChildrenContext.js`, to call it
   in the same transaction as the delivery pass, from the same acknowledgment snapshot
 - Modify: `documentation/rls-sync-contract-map.md` ("Pull Persistence & Reconcile")
@@ -222,6 +262,10 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
       class pass ends 0 of those 12. Run in both orders.
     - A year-end mass exit of control children trips the `classRosterMemberships` breaker.
   - **Missing or incomplete input:** absent keys, or an incomplete scope, end nothing.
+  - **Wire to reconcile:** start from a raw server JSON snapshot and pass it through the decoder
+    into **both** persistence paths:
+    - an old-server snapshot without the keys skips the class pass;
+    - `[]` keys reconcile against an empty roster.
   - **Shared class:** in a co-EA class, another EA's delivery child's membership is kept while
     it is open on the server.
 - [ ] **Step 2: Run and confirm they fail**
@@ -279,17 +323,26 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
 
 **Files:**
 - Modify: `src/db/repositories/classesRepository.js:219-257` (`archiveClass` cascade)
-- Modify: `src/context/ChildrenContext.js:507-520` (`deleteChild`)
+- Modify: `src/db/repositories/childrenRepository.js`: `archiveChild` (`:769-810`),
+  `deleteIfNoHistory` (`:816-874`) and `updateChild`. Each gets a transactional,
+  actor-scoped check that the child has an active local delivery row or `created_by = me`.
+- Modify: `src/context/ChildrenContext.js:507-533` (`deleteChild`). It keeps its
+  `{ success: false, error }` result contract, and maps the repository code into `error.code`.
 - Modify: `src/db/repositories/masteryRepository.js:96-135` (`setLetterMastery`)
-- Modify: `src/components/children/LetterMasteryPanel.js`, so confirm taps are hidden when
+- Modify: `src/components/assessment/LetterMasteryPanel.js`, so confirm taps are hidden when
   `isDelivery` is false
+- Modify: `__tests__/masteryRepository.test.js` and every other direct `setLetterMastery`
+  fixture (`rg setLetterMastery __tests__`). Seed real delivery assignments for the authorised
+  success cases, and keep explicit unauthorised cases.
 - Test: `__tests__/nonDeliveryGuards.test.js` (new, real SQLite); extend `LetterMasteryPanel` tests
 
 **Interfaces:**
 - Produces:
   - `archiveClass` touches only children with an active local delivery row or
     `created_by = me`;
-  - `deleteChild` throws `error.code = 'NOT_DELIVERY_CHILD'`;
+  - `archiveChild`, `deleteIfNoHistory` and `updateChild` throw
+    `error.code = 'NOT_DELIVERY_CHILD'`, with zero domain or outbox changes. `deleteChild`
+    returns `{ success: false, error }` with that code;
   - `setLetterMastery` throws `error.code = 'NOT_DELIVERY_CHILD'` for a child with no active
     local `child_ea_assignments` row;
   - `LetterMasteryPanel` takes an `isDelivery` prop (default `true`).
@@ -302,7 +355,7 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
 - [ ] **Step 2: Run and confirm they fail.**
 - [ ] **Step 3: Implement the guards.**
 - [ ] **Step 4: Run the tests**
-  - Run: `npx jest __tests__/nonDeliveryGuards.test.js __tests__/LetterMasteryPanel*.test.js __tests__/classesRepository*.test.js`
+  - Run: `npx jest __tests__/nonDeliveryGuards.test.js __tests__/LetterMasteryPanel*.test.js __tests__/classesRepository*.test.js __tests__/masteryRepository.test.js && npm test`
   - Expected: PASS.
 - [ ] **Step 5: Commit** with the message `fix(roster): guard shared control-child records from delivery-only writes`.
 
@@ -320,6 +373,11 @@ Decisions W1–W4 are Jim's. Read §5 in full before any task.
   assessableChildren, classes, assessments, academicYear)`: the delivery list gives the child
   count, the assessable list gives coverage.
 - Modify: `src/screens/insights/AssessmentRankingScreen.js:58, 87-91`
+- Modify every direct `getChildrenTabStats` caller in the same task:
+  `__tests__/readers.mixedResults.test.js:94, 156` and
+  `__tests__/dashboardStats.hiddenChildren.test.js:107, 117, 125`. Add a direct test with
+  different delivery and assessable populations that pins child count, class count and
+  unassessed count independently.
 - Modify: `src/screens/assessments/AssessmentHistoryScreen.js:48`, which uses the assessable
   roster for names and keeps the `getChildNamesByIds` fallback
 - Modify: `ChildResultsScreen`/`LetterTrackerScreen`, so they pass
