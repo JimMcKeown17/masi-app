@@ -52,7 +52,7 @@ export const EGRA_GALLERY_ENTRIES = EGRA_FORMS.flatMap(form =>
   egraBatteryFor('egra', form.id).questions.map(question => ({
     entryKey: `egra:${form.id}:${question.question_code}`, questionCode: question.question_code,
     title: `${form.title} · ${question.title}`, formId: form.id, formTitle: form.title,
-    fixedLanguage: form.languageCode, itemSet: egraItemSetFor(question.question_code, form.id, form.languageCode),
+    fixedLanguage: form.languageCode, itemSet: egraItemSetFor(question.question_code, question.question_version, form.languageCode),
     durationSec: question.durationSec, instructions: question.instructions,
   })),
 );

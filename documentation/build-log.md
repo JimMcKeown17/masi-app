@@ -3847,10 +3847,52 @@ Evidence class: everything above is local (jest with real SQLite through `better
 device, hosted Supabase or sync-to-server check was run; none is possible until the Plan 3 host
 can start an EGRA run.
 
+### 2026-10-23 — EGRA follow-up: 60-letter minimum and story-questions auto-skip
+
+After reviewing the integration, Jim decided:
+- **Story questions auto-skip** when the child read no story words. Each EGRA battery now declares
+  `prerequisites.reading_comprehension = { depends_on: 'oral_reading', minScore: 1 }`, which the
+  existing `evaluateBatteryState` turns into a `skipped_prerequisite_unmet` auto-skip. A story
+  with "Nothing attempted" scores 0, and a skipped story has no score; both trigger the skip.
+  Persisting the skip is the Plan 3 host's job, as for every prerequisite.
+- **Stronger skip rules later.** Letters 0 → no words or story. This is recorded on the roadmap,
+  not built, because one dependency per Question can't express the full rule set.
+- **The story first-line stop rule is wanted.** It needs printed line data the pack lacks
+  (roadmap).
+- **No Masi letter card under 60 letters.** The four Grade 1 forms (xh/en HL/en FAL/af, 40
+  letters each) get 20 Masi letters appended. Selection rules:
+  - 20 different letters, least-used first;
+  - skip letters DBE leaves off both its Grade 1 and Grade 2 cards in that language (Afrikaans c
+    and q, English HL q);
+  - 10 capitals, preferring letters whose capital looks different;
+  - a seeded shuffle with no repeated or easily confused neighbours.
+
+  The selection script was run once, and its output is committed as data in
+  `src/assessment-questions/egra/letterExtensions.ts`. The pack is untouched. Extended cards use
+  version `<form id>-masi60`. The adapter rejects any future short card that has no extension.
+  Resulting cards:
+  - isiXhosa, English FAL: all 26 letters;
+  - English HL: 25 letters (no q);
+  - Afrikaans: 24 letters (no c, q);
+  - at most 4 of any one letter, which equals DBE's own maximum on these cards.
+
+  **Field consequence:** the printed DBE charts show 40 letters, so Masi must print 60-letter
+  cards for these four forms before field use (roadmap).
+
+Tests: adapter (extension identity, balance and neighbour rules, short-card rejection, the
+prerequisite through the real `evaluateBatteryState`), gallery lookups by question version.
+
+Verification (Node 20, local):
+- `npm run test:content`: 5/5 pass.
+- `npm run test:types`: clean.
+- `npx jest --maxWorkers=3 --testTimeout=30000 --silent`: **405/405 suites, 5,678/5,678 tests**.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-23 | Masi letter cards are never shorter than 60 letters; the four 40-letter DBE Grade 1 EGRA cards get 20 fixed Masi letters, versioned `<form id>-masi60`. | Letter results are ranked on raw 60-second score; a 40-letter card caps a fast reader at 40. A new version keeps DBE positions 0–39 comparable and labels the change. | DBE publishes 60+-letter Grade 1 cards, or EGRA results need DBE-norm comparison. |
+| 2026-10-23 | EGRA story questions auto-skip when the story scored 0 or was skipped (battery `prerequisites`). Stronger skip rules (letters 0 → no words/story) are deferred to a designed rule set. | Asking story questions of a child who read nothing is pointless and embarrassing; the existing prerequisite mechanism expresses this exactly. | Design of the full EGRA skip rule set. |
 | 2026-10-21 | AR Plan 3 review round 2 enforces cached assessment owner/year visibility in the canonical parent SQL and count aggregate. The active-year test stays inside the same statement; nested run reads supply their bound reading EA. The plan's two-round adversarial-review cap is reached. | A cached, once-authorized co-EA result must not remain readable after its year expires. Retaining rows preserves owner history, and a SQL predicate protects every accessor path before item hydration without weakening query budgets or relying on caller date filters. | A release/device gate exposes a concrete remaining visibility mismatch; further work requires explicit scope beyond this completed review cap. |
 | 2026-10-21 | AR Plan 3 review round 1 uses outbox ownership for mastery acknowledgement, permits equal-watermark display repair without owed work, hydrates tools through the existing full reference refresh, and restarts both Programme walks after a recovery year change. Combined status checks read-time active-window context. | A restored display id cannot own a refused payload's Retry, a watermark must describe the displayed accepted value, a valid FK must be hydrated before page apply, and a completed cursor from the previous year cannot establish current completeness. Existing CAS, one-refresh budget and session semantics remain load-bearing. | Controller adversarial review or physical refusal/Retry, non-null tool, or between-walk year-change gates expose a further convergence or authority mismatch. |
 | 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |

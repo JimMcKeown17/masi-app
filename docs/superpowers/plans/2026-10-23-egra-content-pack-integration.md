@@ -1,5 +1,11 @@
 # EGRA content pack integration (package and data side)
 
+> **Status 2026-10-23 (after build):** Jim made two changes after this plan was built. (1) The four
+> 40-letter Grade 1 letter cards are extended to 60 with fixed Masi letters, versioned
+> `<form id>-masi60` (see `src/assessment-questions/egra/letterExtensions.ts`). This replaces the
+> plan's "letter version = pack id" for those four forms. (2) Story questions auto-skip when the
+> story scored 0 or was skipped, through the battery's `prerequisites`. See CONTEXT.md "EGRA form".
+
 **Date:** 2026-10-23. **Branch:** `feat/egra-content-pack`, stacked on PR #98 (`content/egra-pack`).
 **Design source:** Assessment Results spec §12 (`docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md`),
 ADR-0009 (one type-agnostic write call), and the pack's `content/egra/README.md`.
