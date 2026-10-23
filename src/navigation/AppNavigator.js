@@ -50,6 +50,7 @@ import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
 import ChildResultsScreen from '../screens/assessments/ChildResultsScreen';
 import BatteryOverviewScreen from '../screens/assessments/battery/BatteryOverviewScreen';
 import BatteryQuestionScreen from '../screens/assessments/battery/BatteryQuestionScreen';
+import BatteryRunSummaryScreen from '../screens/assessments/battery/BatteryRunSummaryScreen';
 
 // Insight screens
 import LetterMasteryRankingScreen from '../screens/insights/LetterMasteryRankingScreen';
@@ -287,6 +288,7 @@ export function MainNavigator() {
       />
       <Stack.Screen name="BatteryOverview" component={BatteryOverviewScreen} options={{ title: '' }} />
       <Stack.Screen name="BatteryQuestion" component={BatteryQuestionScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="BatteryRunSummary" component={BatteryRunSummaryScreen} options={{ title: 'Review run' }} />
       <Stack.Screen
         name="AssessmentHistory"
         component={AssessmentHistoryScreen}
