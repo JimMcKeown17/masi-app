@@ -27,3 +27,14 @@ export const holdDraftWrite = async ({ fail = false } = {}) => {
   };
   return { entered: entered.promise, release: () => release.resolve(), restore: () => { db.runAsync = original; } };
 };
+// Fail every lesson draft update at the native adapter, as a full disk would, until restored.
+export const failDraftUpdates = async () => {
+  const db = await getTestWriter();
+  const original = db.runAsync;
+  const failed = { attempts: 0 };
+  db.runAsync = async (sql, ...params) => {
+    if (/update lesson_drafts/i.test(sql)) { failed.attempts += 1; throw new Error('Disk full'); }
+    return original(sql, ...params);
+  };
+  return { failed, restore: () => { db.runAsync = original; } };
+};
