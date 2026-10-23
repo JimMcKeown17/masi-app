@@ -95,3 +95,16 @@ export const planForSave = ({ plan, lessonDate }) => {
 export const isPlanRecomputable = ({ lessonDate, today, frozen }) => (
   !frozen && lessonDate === today
 );
+
+// A stored plan gives way only to inputs that are as complete on both counts and more complete on
+// one. Each such write raises the stored plan, so screens holding the same lesson with different
+// inputs stop after at most two writes; inputs that fall (a failed download) never write.
+export const isPlanSuperseded = (plan, input) => {
+  const present = uniquePresentChildren(input?.presentChildren);
+  const history = present.every((child) => child?.historyComplete === true);
+  const mastery = present.every((child) => child?.masteryComplete === true);
+  const storedHistory = plan?.history_complete === true;
+  const storedMastery = plan?.mastery_complete === true;
+  return (history || !storedHistory) && (mastery || !storedMastery)
+    && ((history && !storedHistory) || (mastery && !storedMastery));
+};

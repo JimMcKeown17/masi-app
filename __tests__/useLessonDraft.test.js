@@ -160,9 +160,11 @@ testHook('a failed history refresh keeps the shown plan and no error', async () 
   expect(result.current.choices).toBe(previous.choices);
 });
 
-testHook('resuming a same-day unfrozen plan keeps it until a new history base arrives', async () => {
+testHook('a resumed same-day unfrozen plan is replaced only when its inputs become more complete', async () => {
   const bump = historyVersions();
-  const row = await handle.repositories.lessonDrafts.create(draftStart());
+  const fixture = draftStart();
+  const row = await handle.repositories.lessonDrafts.create({ ...fixture,
+    plan: { ...fixture.plan, history_complete: false, mastery_complete: false } });
   const compute = jest.spyOn(engine, 'computeLessonPlan');
   const { result } = mount({ draftId: row.id });
   await ready(result);
@@ -175,6 +177,49 @@ testHook('resuming a same-day unfrozen plan keeps it until a new history base ar
   expect(result.current.plan.history_complete).toBe(true);
   expect(result.current.lessonInput.sessions.map(session => session.id)).toEqual(['previous-lesson']);
   expect(result.current.draft.plan_fixed_at).toBeNull();
+});
+
+testHook('a history refresh that adds nothing keeps a resumed complete plan', async () => {
+  const bump = historyVersions();
+  const row = await handle.repositories.lessonDrafts.create(draftStart());
+  const { result } = mount({ draftId: row.id });
+  await ready(result);
+  await finishLessonHistory();
+  const load = jest.spyOn(inputs, 'loadLessonBase');
+  await act(async () => { bump(); });
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.lessonInput.sessions.map(session => session.id)).toEqual(['previous-lesson']));
+  expect(result.current.plan).toEqual(row.plan);
+  expect((await handle.repositories.lessonDrafts.getActive()).plan).toEqual(row.plan);
+});
+
+testHook('two mounted lessons with different facts converge on one plan after a history refresh', async () => {
+  // Lesson stays mounted under Wrap up; each loads its own facts, so mastery can differ between them.
+  const bump = historyVersions();
+  let masteryDone = false;
+  jest.spyOn(handle.services.assessmentHistory, 'masteryCompletenessByChild')
+    .mockImplementation(async ({ childIds }) => Object.fromEntries(childIds.map(id => [id, masteryDone])));
+  const lesson = mount();
+  await ready(lesson.result);
+  await change(lesson.result, transitions.setNotes, 'Unfrozen persisted lesson');
+  masteryDone = true;
+  const apply = jest.spyOn(handle.services.lessonDraft, 'apply');
+  const wrapUp = mount({ draftId: lesson.result.current.draft.id });
+  await ready(wrapUp.result);
+  await finishLessonHistory();
+  await act(async () => { bump(); });
+  await waitFor(() => expect(lesson.result.current.base.sessions.map(session => session.id)).toEqual(['previous-lesson']));
+  await waitFor(() => expect(wrapUp.result.current.base.sessions.map(session => session.id)).toEqual(['previous-lesson']));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  const stored = (await handle.repositories.lessonDrafts.getActive()).plan;
+  expect(stored).toMatchObject({ history_complete: true, mastery_complete: true });
+  expect(lesson.result.current.plan).toEqual(stored);
+  expect(wrapUp.result.current.plan).toEqual(stored);
+  // At most one upgrade per screen (mastery from Wrap up, then history), and never the same plan twice.
+  const written = apply.mock.calls.filter(([transition]) => transition === transitions.setPlan)
+    .map(call => JSON.stringify(call[1]));
+  expect(written.length).toBeLessThanOrEqual(2);
+  expect(new Set(written).size).toBe(written.length);
 });
 
 testHook('attendance projects loaded participants without blanking or reading again', async () => {
