@@ -367,6 +367,7 @@ export const pullPreloadedChildData = async ({
 
   const classRoster = await pullClassRoster({
     userId, activeProgrammeId, supabaseClient, queryScope: queuedQueryScope,
+    downloadedChildren: children.ok ? children.rows : [],
   });
 
   return {

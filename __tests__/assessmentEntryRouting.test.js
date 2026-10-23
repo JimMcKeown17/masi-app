@@ -1,3 +1,7 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => {
+  const { children } = require('../src/context/ChildrenContext').useChildren();
+  return { all: children, yourChildren: children, restOfClass: [], loading: false };
+} }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -116,6 +120,7 @@ const makeNavigation = () => ({
 describe('assessment entry routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    delete child.home_language;
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useChildren.mockReturnValue({ children: [child] });
     useClasses.mockReturnValue({ classes: [classItem] });
@@ -124,6 +129,7 @@ describe('assessment entry routing', () => {
 
   test.each(['letter_sounds', 'word_reading'])(
     'child select launches %s once without waiting for its history preload', async (testCode) => {
+      child.home_language = 'English';
       assessmentsRepository.getQuestionResults.mockReturnValue(new Promise(() => {}));
       const navigation = makeNavigation();
       const screen = render(<AssessmentChildSelectScreen navigation={navigation} route={{ params: { testCode } }} />);

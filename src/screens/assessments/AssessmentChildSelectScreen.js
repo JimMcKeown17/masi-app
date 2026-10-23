@@ -2,12 +2,13 @@ import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, FlatList, Pressable } from 'react-native';
+import { View, StyleSheet, SectionList, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { useChildren } from '../../context/ChildrenContext';
-import { useClasses } from '../../context/ClassesContext';
+import { useAssessableChildren } from '../../hooks/useAssessableChildren';
+import SectionHeader from '../../components/common/SectionHeader';
+import InlineLoading from '../../components/common/InlineLoading';
 import { CURRENT_ITEM_SETS } from '../../assessment-questions';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
@@ -32,8 +33,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   const { testCode } = route.params;
   const itemSets = CURRENT_ITEM_SETS[testCode] ?? {};
   const languageOptions = Object.keys(itemSets).map(code => ({ key: code, label: LANGUAGE_LABELS[code] }));
-  const { children } = useChildren();
-  const { classes } = useClasses();
+  const { yourChildren, restOfClass, loading } = useAssessableChildren();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChild, setSelectedChild] = useState(null);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
@@ -59,7 +59,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     }, [assessmentsRepository, testCode, user.id])
   );
 
-  const sortedChildren = [...children].sort((a, b) => {
+  const compareChildren = (a, b) => {
     const aInfo = assessmentMap[a.id];
     const bInfo = assessmentMap[b.id];
     if (!aInfo && !bInfo) return a.first_name.localeCompare(b.first_name);
@@ -69,13 +69,17 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       return aInfo.assessment_date < bInfo.assessment_date ? -1 : 1;
     }
     return a.first_name.localeCompare(b.first_name);
-  });
+  };
 
-  const filteredChildren = sortedChildren.filter((child) => {
+  const matchesSearch = (child) => {
     const query = searchQuery.toLowerCase();
     const fullName = `${child.first_name} ${child.last_name}`.toLowerCase();
     return fullName.includes(query);
-  });
+  };
+  const sections = [
+    { title: 'Your children', data: [...yourChildren].sort(compareChildren).filter(matchesSearch) },
+    { title: 'Rest of the class', data: [...restOfClass].sort(compareChildren).filter(matchesSearch) },
+  ].filter(section => section.data.length > 0);
 
   const navigateToAssessment = (child, languageCode) => {
     if (launchingRef.current || !child || !itemSets[languageCode]) return;
@@ -85,8 +89,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
 
   const handleChildPress = (child) => {
     if (launchingRef.current) return;
-    const childClass = classes.find(classItem => classItem.id === child.class_id);
-    const languageCode = languageCodeForHomeLanguage(childClass?.home_language);
+    const languageCode = languageCodeForHomeLanguage(child.home_language);
     if (languageCode !== null && itemSets[languageCode]) {
       navigateToAssessment(child, languageCode);
       return;
@@ -137,18 +140,21 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       />
       </View>
 
-      <FlatList onScroll={onScroll} scrollEventThrottle={16}
-        data={filteredChildren}
+      <SectionList onScroll={onScroll} scrollEventThrottle={16}
+        sections={sections}
+        stickySectionHeadersEnabled={false}
+        keyboardShouldPersistTaps="handled"
+        renderSectionHeader={({ section }) => <SectionHeader title={section.title} />}
         keyExtractor={(item) => item.id}
         renderItem={renderChild}
         contentContainerStyle={[styles.listContent, { paddingBottom }]}
-        ListEmptyComponent={
+        ListEmptyComponent={loading ? <InlineLoading label="Loading children…" /> : (
           <View style={styles.emptyContainer}>
             <Text variant="bodyMedium" style={styles.emptyText}>
               {searchQuery ? 'No children match your search.' : 'No children found. Add children first.'}
             </Text>
           </View>
-        }
+        )}
       />
 
       <SelectSheet

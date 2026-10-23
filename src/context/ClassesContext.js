@@ -353,14 +353,16 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         await stampPullIfComplete();
       }
 
-      const assignmentSet = JSON.stringify((await classEaAssignmentsRepository.getAll())
-        .filter(row => row.ea_user_id === activeUserId && row.programme_id === activeProgrammeId && !row.unassigned_at)
+      const activeAssignments = (await classEaAssignmentsRepository.getAll())
+        .filter(row => row.ea_user_id === activeUserId && row.programme_id === activeProgrammeId && !row.unassigned_at);
+      const assignmentClassIds = [...new Set(activeAssignments.map(row => row.class_id))].sort();
+      const assignmentSet = JSON.stringify(activeAssignments
         .map(row => [row.id, row.class_id, row.programme_id]).sort((a, b) => a[0].localeCompare(b[0])));
       if (activeUserIdRef.current !== activeUserId) return;
       if (publishedAssignmentSetRef.current !== assignmentSet) {
         publishedAssignmentSetRef.current = assignmentSet;
         setAssignmentsVersion(version => version + 1);
-        notifyClassAssignmentsChanged?.();
+        notifyClassAssignmentsChanged?.(assignmentClassIds);
       }
       const freshClasses = await classesRepository.getClasses({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;

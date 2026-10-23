@@ -5,6 +5,16 @@ resetSessionHistoryStatusForActorChange: jest.fn()
 
 
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../test-support/actorTestUtils', () => ({
+  ...jest.requireActual('../test-support/actorTestUtils'),
+  TEST_ACTOR_ID: 'user-1',
+}));
+// This legacy suite uses a readable actor alias and an in-memory SQLite factory.
+// Keep the real handle/connection actor; only adapt its fixture database name.
+jest.mock('../src/db/client', () => ({
+  ...jest.requireActual('../src/db/client'),
+  databaseNameForUser: userId => `masi-${userId}.db`,
+}));
 
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';

@@ -6,7 +6,7 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
-import { useChildren } from '../../context/ChildrenContext';
+import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 
 import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
@@ -23,7 +23,7 @@ export default function AssessmentsScreen({ navigation }) {
   const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
 
   const { user } = useAuth();
-  const { children: childrenList } = useChildren();
+  const { all: assessableChildren } = useAssessableChildren();
   const [stats, setStats] = useState(null);
   const [programmeGate, setProgrammeGate] = useState(null);
 
@@ -43,10 +43,10 @@ export default function AssessmentsScreen({ navigation }) {
           academicYearsRepository.getAll(),
         ]);
         const activeAcademicYear = academicYears.find(year => year.is_active === true || year.is_active === 1) ?? null;
-        setStats(getAssessmentsTabStats(childrenList, results, activeAcademicYear));
+        setStats(getAssessmentsTabStats(assessableChildren, results, activeAcademicYear));
       };
       loadStats();
-    }, [childrenList, user.id, pageVersion, runVersion])
+    }, [assessableChildren, user.id, pageVersion, runVersion])
   );
 
   // Hold the capture UI until the programme check resolves, so an unassigned EA

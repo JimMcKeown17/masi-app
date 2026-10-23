@@ -77,7 +77,16 @@ const makeClient = () => {
     if (query.table === 'classes') rows = dataset.classes.filter(row => dataset.assignments.some(grant => (
       grant.class_id === row.id && grant.ea_user_id === (dataset.userId || 'user-1') && grant.programme_id === 'programme-a' && grant.unassigned_at == null
     ))).map(row => ({ ...row, class_ea_assignments: dataset.assignments.filter(grant => grant.class_id === row.id && grant.ea_user_id === (dataset.userId || 'user-1') && grant.programme_id === 'programme-a' && grant.unassigned_at == null) }));
-    if (query.table === 'children' && !query.select.includes('child_ea_assignments')) rows = dataset.children;
+    if (query.table === 'children') rows = query.select.includes('child_ea_assignments')
+      ? dataset.deliveryChildren || [] : dataset.children;
+    if (query.table === 'child_ea_assignments') rows = (dataset.deliveryChildren || []).map(child => ({
+      id: `delivery-${child.id}`, user_id: 'user-1', child_id: child.id, children: child,
+      assigned_at: '2026-01-01T00:00:00Z', unassigned_at: null,
+    }));
+    if (query.table === 'child_programme_enrollments') rows = (dataset.deliveryChildren || []).map(child => ({
+      id: `enrollment-${child.id}`, child_id: child.id, programme_id: 'programme-a',
+      enrolled_at: '2026-01-01T00:00:00Z', ended_at: null,
+    }));
     if (query.table === 'child_class_memberships') rows = dataset.memberships.map(joinedMember);
     for (const [op, key, value] of query.filters) {
       if (key.includes('.') && key !== 'academic_years.is_active') continue;
@@ -216,6 +225,24 @@ it('chunks every roster in-list at 200 and treats any query-limit hit as incompl
   expect((await pull()).scopes.classRoster.complete).toBe(false);
 });
 
+it.each([false, true])('reuses full delivery rows and fetches only missing roster children (control present: %s)', async hasControl => {
+  dataset.deliveryChildren = [dataset.children[0]];
+  if (hasControl) {
+    dataset.children.push(control('extra-control'));
+    dataset.memberships.push(member('extra-membership', 'extra-control'));
+  }
+  const pulled = await pull();
+  expect(pulled.scopes.classRoster.complete).toBe(true);
+  const rosterGets = client.requests.filter(query => query.table === 'children' && !query.select.includes('child_ea_assignments'));
+  expect(rosterGets).toHaveLength(hasControl ? 1 : 0);
+  if (hasControl) expect(rosterGets[0].filters).toEqual([['in', 'id', ['extra-control']]]);
+  await persist(pulled);
+  expect(await assessable()).toEqual(expect.arrayContaining(dataset.children.map(child => expect.objectContaining({
+    id: child.id, first_name: child.first_name, preferred_name: child.preferred_name,
+    date_of_birth: child.date_of_birth, reading_level: child.reading_level,
+  }))));
+});
+
 it.each(['children', 'classes'])('converges through the real providers when %s persistence completes first', async first => {
   const held = deferred();
   const reached = deferred();
@@ -246,6 +273,35 @@ it.each(['children', 'classes'])('converges through the real providers when %s p
   expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
 });
 
+it.each(['children', 'classes'])('does not repeat the children GET when ClassesContext publishes the covered set (%s persists first)', async first => {
+  const held = deferred();
+  const reached = deferred();
+  if (first === 'children') {
+    const save = repositories.classes.saveServerClassRows;
+    jest.spyOn(repositories.classes, 'saveServerClassRows').mockImplementation(async rows => {
+      if (rows.some(row => row.id === 'class-remote')) { reached.resolve(); await held.promise; }
+      return save(rows);
+    });
+  } else {
+    const transaction = repositories.children.withTransaction;
+    jest.spyOn(repositories.children, 'withTransaction').mockImplementationOnce(async task => {
+      reached.resolve(); await held.promise; return transaction(task);
+    });
+  }
+  const { result } = renderHook(useBoth, { wrapper });
+  await act(async () => { await reached.promise; });
+  await waitFor(() => expect(first === 'children' ? result.current.children.rosterVersion : result.current.classes.assignmentsVersion).toBeGreaterThan(0));
+  await act(async () => { held.resolve(); });
+  await waitFor(() => {
+    expect(result.current.children.loading).toBe(false);
+    expect(result.current.classes.loading).toBe(false);
+    expect(result.current.children.rosterVersion).toBeGreaterThan(0);
+    expect(result.current.classes.assignmentsVersion).toBeGreaterThan(0);
+  });
+  expect(client.requests.filter(query => query.table === 'children' && query.select.includes('child_ea_assignments'))).toHaveLength(1);
+  expect((await assessable()).map(row => row.id)).toEqual(['control']);
+});
+
 it('pulls a newly assigned class after the class provider publishes a changed assignment version', async () => {
   const { result } = renderHook(useBoth, { wrapper });
   await waitFor(() => {
@@ -271,6 +327,35 @@ it('pulls a newly assigned class after the class provider publishes a changed as
   const settled = result.current.classes.assignmentsVersion;
   await act(async () => { await result.current.classes.loadClasses(); });
   expect(result.current.classes.assignmentsVersion).toBe(settled);
+});
+
+it('pulls an uncovered grant published while an older roster is still persisting', async () => {
+  const held = deferred();
+  const reached = deferred();
+  const transaction = repositories.children.withTransaction;
+  jest.spyOn(repositories.children, 'withTransaction').mockImplementationOnce(async task => {
+    reached.resolve(); await held.promise; return transaction(task);
+  });
+  const { result } = renderHook(useBoth, { wrapper });
+  await act(async () => { await reached.promise; });
+  await waitFor(() => {
+    expect(result.current.classes.loading).toBe(false);
+    expect(result.current.classes.assignmentsVersion).toBeGreaterThan(0);
+  });
+  dataset.classes.push(remoteClass('class-new'));
+  dataset.assignments.push(assignment('class-new'));
+  dataset.children.push(control('new-control', 'class-new'));
+  dataset.memberships.push(member('new-member', 'new-control', 'class-new'));
+  await act(async () => { await result.current.classes.loadClasses(); });
+  expect(result.current.children.rosterVersion).toBe(0);
+  expect(client.requests.filter(query => query.table === 'children' && query.select.includes('child_ea_assignments'))).toHaveLength(1);
+  await act(async () => { held.resolve(); });
+  await waitFor(() => {
+    expect(result.current.children.rosterVersion).toBe(2);
+    expect(result.current.children.loading).toBe(false);
+  });
+  expect((await assessable()).map(row => row.id).sort()).toEqual(['control', 'new-control']);
+  expect(client.requests.filter(query => query.table === 'children' && query.select.includes('child_ea_assignments'))).toHaveLength(2);
 });
 
 it('rolls all four row kinds back together if a server child fails local validation', async () => {

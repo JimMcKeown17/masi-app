@@ -1,3 +1,6 @@
+jest.mock('../src/context/ChildrenContext', () => ({ useChildren: jest.fn() }));
+import { useChildren } from '../src/context/ChildrenContext';
+beforeEach(() => useChildren.mockReturnValue({ children: [{ id: 'child-1' }] }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
@@ -89,4 +92,20 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
     await waitFor(() => expect(queryByText('1 / 26 letters mastered')).toBeTruthy());
     expect(queryByText(/Letter update was not saved/i)).toBeNull();
   });
+});
+
+test('a class-only route uses membership language and shows no confirmation controls', async () => {
+  useChildren.mockReturnValue({ children: [] });
+  useAuth.mockReturnValue({ user: { id: 'user-1' } });
+  useOffline.mockReturnValue({ refreshSyncStatus: jest.fn() });
+  assessmentsRepository.latestLetterResult.mockResolvedValue(null);
+  masteryRepository.getLetterMastery.mockResolvedValue([]);
+  const child = { id: 'control', first_name: 'Control', last_name: 'Child',
+    class_id: 'membership-class', grade: '2', home_language: 'Afrikaans', is_delivery: true };
+  const screen = render(<LetterTrackerScreen route={{ params: {
+    child, classItem: { id: 'stale-class', home_language: 'English' },
+  } }} />);
+  expect(await screen.findByText('0 / 26 letters mastered')).toBeTruthy();
+  expect(assessmentsRepository.latestLetterResult).toHaveBeenLastCalledWith({ userId: 'user-1', childId: 'control', language: 'af' });
+  expect(screen.queryAllByRole('button')).toHaveLength(0);
 });

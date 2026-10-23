@@ -45,7 +45,10 @@ export const ChildrenProvider = ({ children }) => {
   const [childrenGroups, setChildrenGroups] = useState([]);
   const [rosterVersion, setRosterVersion] = useState(0);
   const [classAssignmentsVersion, setClassAssignmentsVersion] = useState(0);
-  const notifyClassAssignmentsChanged = useCallback(() => setClassAssignmentsVersion(version => version + 1), []);
+  const classRosterCoverageRef = useRef(null);
+  if (classRosterCoverageRef.current?.handle !== handle || classRosterCoverageRef.current?.userId !== user?.id) {
+    classRosterCoverageRef.current = { handle, userId: user?.id, coveredSet: null, pendingClassIds: null };
+  }
   const [loading, setLoading] = useState(true);
   const activeUserIdRef = useRef(null);
   const historyActorRef = useRef(user?.id || null);
@@ -66,6 +69,20 @@ export const ChildrenProvider = ({ children }) => {
   refreshSyncStatusRef.current = refreshSyncStatus;
   hasReconcileBreakerAuthorizationRef.current = hasReconcileBreakerAuthorization;
   consumeReconcileBreakerAuthorizationRef.current = consumeReconcileBreakerAuthorization;
+
+  const notifyClassAssignmentsChanged = useCallback((assignmentClassIds) => {
+    const coverage = classRosterCoverageRef.current;
+    if (coverage.handle !== handle || coverage.userId !== user?.id || !handle.isCurrent()) return;
+    // A publish can precede this flight's roster commit. Compare after the
+    // flight settles, when we know which classes it actually persisted.
+    if (activePullRef.current?.userId === user?.id) {
+      coverage.pendingClassIds = assignmentClassIds;
+      return;
+    }
+    if (coverage.coveredSet !== JSON.stringify(assignmentClassIds)) {
+      setClassAssignmentsVersion(version => version + 1);
+    }
+  }, [handle, user?.id]);
 
   // Active children only — hidden_at IS NULL. This is what every list view,
   // picker, and stats helper should consume. Hidden children stay in
@@ -310,6 +327,12 @@ export const ChildrenProvider = ({ children }) => {
       const rosterPersisted = await persistClassRoster({
         scope: scopes.classRoster, repositories, deletedChildIds: pendingChildDeleteIds,
       });
+      if (rosterPersisted && scopes.classRoster.ok && scopes.classRoster.complete
+        && classRosterCoverageRef.current.handle === handle && activeUserIdRef.current === activeUserId) {
+        classRosterCoverageRef.current.coveredSet = JSON.stringify([...new Set(scopes.classRoster.rows.classEaAssignments
+          .filter(row => row.ea_user_id === activeUserId && row.programme_id === activeProgrammeId && !row.unassigned_at)
+          .map(row => row.class_id))].sort());
+      }
       const membershipResults = await reconcilePulledClassMemberships({
         pulled, repositories, pulledAt, authorizedBreakerScopes,
       });
@@ -364,7 +387,7 @@ export const ChildrenProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  }, [user?.id, isOnline, refreshFromCache]);
+  }, [user?.id, isOnline, refreshFromCache, handle]);
 
   const pullFromServer = useCallback(() => {
     const userId = user?.id;
@@ -397,11 +420,19 @@ export const ChildrenProvider = ({ children }) => {
           pass = flight.pending || (authorizedFollowUpNeeded ? flight.inputs : null);
         }
       } finally {
-        if (activePullRef.current === flight) activePullRef.current = null;
+        if (activePullRef.current === flight) {
+          activePullRef.current = null;
+          const coverage = classRosterCoverageRef.current;
+          if (coverage.handle === handle && coverage.userId === userId && coverage.pendingClassIds !== null) {
+            const pendingClassIds = coverage.pendingClassIds;
+            coverage.pendingClassIds = null;
+            notifyClassAssignmentsChanged(pendingClassIds);
+          }
+        }
       }
     })();
     return flight.promise;
-  }, [user?.id, isOnline, domainPullNonce, classAssignmentsVersion, performPullFromServer, handle]);
+  }, [user?.id, isOnline, domainPullNonce, classAssignmentsVersion, performPullFromServer, handle, notifyClassAssignmentsChanged]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { useChildren } from '../../context/ChildrenContext';
 import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import SurfaceCard from '../../components/common/SurfaceCard';
@@ -34,7 +35,14 @@ export default function ChildResultsScreen({ navigation, route }) {
   const { assessments: assessmentsRepository } = repositories;
 
   const { user } = useAuth();
-  const { child, classItem } = route.params;
+  const { child, classItem: routeClassItem } = route.params;
+  const { children: deliveryChildren } = useChildren();
+  const isDelivery = deliveryChildren.some(deliveryChild => deliveryChild.id === child.id);
+  // Assessment routes carry the chosen membership's class metadata. Older
+  // delivery routes still supply their class separately.
+  const classItem = child.home_language !== undefined ? {
+    ...routeClassItem, id: child.class_id, grade: child.grade, home_language: child.home_language,
+  } : routeClassItem;
   const childName = `${child.first_name} ${child.last_name}`;
   const [latestByType, setLatestByType] = useState({});
   const launchingRef = useRef(false);
@@ -142,7 +150,7 @@ export default function ChildResultsScreen({ navigation, route }) {
         <Text variant="bodySmall" style={styles.cardDescription}>
           Tap letters to mark them as taught
         </Text>
-        <LetterMasteryPanel child={child} classItem={classItem} />
+        <LetterMasteryPanel child={child} classItem={classItem} isDelivery={isDelivery} />
       </SurfaceCard>
     </ScrollView>
   );

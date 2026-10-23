@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'),
   useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
@@ -248,4 +255,13 @@ test('list padding clears the Record button and supports the keyboard and refres
   expect(screen.UNSAFE_getByType(RefreshControl).props).toMatchObject({ tintColor: colors.primary, colors: [colors.primary] });
   fireEvent.scroll(list, { nativeEvent: { contentOffset: { y: 20 } } });
   expect(navigation.setOptions).toHaveBeenCalledWith({ headerScrolled: true });
+});
+
+test('Unassessed uses class scope without widening child counts or class rows', async () => {
+  useAssessableChildren.mockReturnValue({ all: [...children, { id: 'control', first_name: 'Cora', last_name: 'Control' }], loading: false });
+  const screen = await renderScreen();
+  expect(await screen.findByRole('button', { name: '20 unassessed children. Open Assess' })).toBeTruthy();
+  expect(screen.getByLabelText('19 children')).toBeTruthy();
+  expect(screen.getByLabelText('2 classes')).toBeTruthy();
+  expect(screen.queryByText('Cora Control')).toBeNull();
 });

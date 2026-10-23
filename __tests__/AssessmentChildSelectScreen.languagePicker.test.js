@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 const mockUseAuth = jest.fn();
 const mockUseChildren = jest.fn();
 const mockUseClasses = jest.fn();
@@ -67,6 +74,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
         first_name: 'Amahle',
         last_name: 'Dlamini',
         class_id: 'class-1',
+        home_language: null,
       }],
     });
     mockUseClasses.mockReturnValue({
@@ -115,6 +123,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
   });
 
   test('normalizes an isiXhosa class language and starts with its code', async () => {
+    mockUseChildren().children[0].home_language = 'isiXhosa';
     mockUseClasses.mockReturnValue({
       classes: [{ id: 'class-1', name: 'Grade 1A', home_language: 'isiXhosa' }],
     });
@@ -139,6 +148,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
   });
 
   test.each(['letter_sounds', 'word_reading'])('an Afrikaans class starts %s in Afrikaans without asking', async (testCode) => {
+    mockUseChildren().children[0].home_language = 'Afrikaans';
     mockUseClasses.mockReturnValue({ classes: [{ id: 'class-1', name: 'Grade 1A', home_language: 'Afrikaans' }] });
     const navigation = { navigate: jest.fn() };
     const screen = render(<PaperProvider settings={{ icon: () => null }}><AssessmentChildSelectScreen
@@ -154,7 +164,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
     ['isiZulu', 'class-1'],
     [undefined, null],
   ])('asks for an available language for %s and class %s without preselecting English', async (homeLanguage, classId) => {
-    const child = { ...mockUseChildren().children[0], class_id: classId };
+    const child = { ...mockUseChildren().children[0], class_id: classId, home_language: homeLanguage };
     mockUseChildren.mockReturnValue({ children: [child] });
     mockUseClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: homeLanguage }] });
     const navigation = { navigate: jest.fn() };

@@ -12,7 +12,7 @@ export const classRosterDependencyScope = () => ({
 
 // queryScope is the caller's existing queuedQueryScope. Each query releases the
 // signed-in handle queue before the next dependent query is enqueued.
-export async function pullClassRoster({ userId, activeProgrammeId, supabaseClient, queryScope }) {
+export async function pullClassRoster({ userId, activeProgrammeId, supabaseClient, queryScope, downloadedChildren = [] }) {
   if (!activeProgrammeId) return classRosterDependencyScope();
   const scope = { ok: true, complete: true, failureKind: null, rows: emptyRows() };
   const read = async task => {
@@ -42,9 +42,15 @@ export async function pullClassRoster({ userId, activeProgrammeId, supabaseClien
   }
   addClasses(roster);
   const childIds = [...new Set(roster.map(row => row.child_id))];
+  // Reuse full rows downloaded by this pass's delivery scope. Cached identities
+  // cannot establish a full roster row, and missing control rows still need a GET.
+  const downloadedById = new Map(downloadedChildren.map(row => [row.id, row]));
+  scope.rows.children = childIds.filter(id => downloadedById.has(id)).map(id => synced(downloadedById.get(id)));
+  for (const ids of chunks(childIds.filter(id => !downloadedById.has(id)))) {
+    scope.rows.children.push(...(await read(() => supabaseClient.from('children').select('*').in('id', ids))).map(synced));
+  }
   const moveMemberships = [];
   for (const ids of chunks(childIds)) {
-    scope.rows.children.push(...(await read(() => supabaseClient.from('children').select('*').in('id', ids))).map(synced));
     // The reference-table join resolves the active year on the server, so this
     // scope needs no cached class assignments or active-year lookup to start.
     moveMemberships.push(...await read(() => supabaseClient.from('child_class_memberships')
