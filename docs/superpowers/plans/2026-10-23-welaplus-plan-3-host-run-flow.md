@@ -68,6 +68,29 @@ in tests via `test-support/expoSQLiteMock`), Jest + React Native Testing Library
 5. **A run started on another phone** (`started_here = 0`), opened from History. It shows the
    read-only summary, with no Finalize, no checklist and no Abandon. Test: Task 10.
 
+## Known Limits (accepted, from Codex plan review round 2)
+
+- **Roster is delivery scope, as for the letter and word tests.**
+  - Battery child select and the `childAssigned` check use `useChildren()`, which is delivery
+    scope (`getMyChildren`, active `child_ea_assignments`).
+  - `CONTEXT.md` defines assessment scope as the whole class, including control children. The
+    phone does not hold those children today.
+  - Whole-class access is the planned group-centric item. It needs an RLS/sync expansion first:
+    `GRANT_SUBJECTS` must cover class-membership grants (see
+    `rls-sync-contract-map.md`, Error Classification).
+  - When that lands, battery child select and `childAssigned` switch to the class-scoped roster
+    in the same change. Ruling: keep Plan 3 on the shipped roster. If wrong, WelaPLUS cannot
+    reach control children until the group-centric item.
+- **A run whose programme assignment ends is not reachable from the tab.**
+  - `getUnfinishedRunsForUser` and History are scoped to the active programme, so a run started
+    under a programme the EA has since lost stays `in_progress` on the server.
+  - Its saved Questions are kept. This is the same outcome as AR §11.4's orphaned run, which is
+    accepted for Release 1.
+  - A run whose **child** leaves the roster while the programme stays is still listed, and opens
+    read-only with Abandon (Task 8).
+  - Ruling: no recovery query for a rare event. If wrong, the cost is open runs in reporting,
+    which reporting already tolerates.
+
 ---
 
 ### Task 1: Package battery surface
