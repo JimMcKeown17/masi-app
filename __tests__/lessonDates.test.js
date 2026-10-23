@@ -1,4 +1,4 @@
-import { lastSeenLabel, startedLabel } from '../src/utils/lessonDates';
+import { lastSeenLabel, startedLabel, lessonHeaderSeenLabel } from '../src/utils/lessonDates';
 
 const today = '2026-10-22';
 test('today reads Today ✓', () => expect(lastSeenLabel(today, today)).toBe('Today ✓'));
@@ -15,4 +15,16 @@ test('lessonRowDetail leaves out letters when there are none', () => {
   const { lessonRowDetail } = require('../src/utils/lessonDates');
   expect(lessonRowDetail('Mon', ['a', 'm'])).toBe('Mon · letters a m');
   expect(lessonRowDetail('Not seen yet', [])).toBe('Not seen yet');
+});
+
+
+test.each([
+  [null, 'not seen yet'],
+  ['2026-10-22', 'seen today'],
+  ['2026-10-19', 'last seen Mon'],
+  ['2026-10-16', 'last seen Fri'],
+  ['2026-10-15', 'last seen Thu 15 Oct'],
+  ['2026-10-12', 'last seen Mon 12 Oct'],
+])('lesson header labels %s as %s', (seen, expected) => {
+  expect(lessonHeaderSeenLabel(seen, today)).toBe(expected);
 });

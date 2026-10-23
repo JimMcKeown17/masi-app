@@ -9,7 +9,7 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { serverFamily } from '../test-support/assessmentHistoryFixtures';
 import { loadKnownLetters } from '../src/lessonPlan/inputs/knownLetters';
-import { loadLessonBase, loadPickerModel, loadLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadPickerModel, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
 import { computeLessonPlan, rankGroups } from '../src/lessonPlan/engine';
 import * as lessonClasses from '../src/lessonPlan/engine/lessonClass';
 import * as groupEngine from '../src/lessonPlan/engine/groups';
@@ -55,7 +55,13 @@ const roster = async () => {
 const lesson = (extra = {}) => ({ groupId: 'g2', upNextGroupId: 'g2', languageCode: 'en',
   packId: null, isEcd: false, presentChildIds: ['c1', 'c2'], ...extra });
 const base = () => loadLessonBase({ handle, repositories, today });
-const input = async (extra = {}) => loadLessonInput({ handle, repositories, services, base: await base(), lesson: lesson(extra) });
+const input = async (extra = {}) => {
+  const selected = lesson(extra);
+  const loadedBase = await base();
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: loadedBase.programmeId,
+    languageCode: selected.languageCode, packId: selected.packId, participantChildIds: selected.presentChildIds });
+  return presentLessonInput({ base: loadedBase, lesson: selected, loaded, presentChildIds: selected.presentChildIds });
+};
 const picker = async () => loadPickerModel({ handle, repositories, services, base: await base(), ...await roster() });
 const result = async (n, childId, letters, extra = {}) => {
   const family = { ...serverFamily(n, { childId, items: letters.length }), user_id: USER,
@@ -139,7 +145,8 @@ test('reads do not grow with the number of children', async () => {
   const loadedBase = await base();
   const measure = async task => { statements.length = 0; await task(); return statements.length; };
   const known = childIds => loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode: 'en' });
-  const load = presentChildIds => loadLessonInput({ handle, repositories, services, base: loadedBase, lesson: lesson({ presentChildIds }) });
+  const load = participantChildIds => loadLessonParticipants({ handle, repositories, services,
+    programmeId: loadedBase.programmeId, languageCode: 'en', packId: null, participantChildIds });
   const data = await roster();
   const loadPicker = childIds => loadPickerModel({ handle, repositories, services, base: loadedBase,
     ...data, groups: [data.groups[0]], getChildrenInGroup: () => data.children.filter(child => childIds.includes(child.id)) });
@@ -271,4 +278,23 @@ test('lesson input uses a pinned pack and respects preview eligibility and unsup
     expect(loaded.presentChildren.map(child => child.knownLetters)).toEqual([[], []]);
   }
   expect((await input({ languageCode: 'af' })).alphabet).toEqual(PEDAGOGICAL_ORDERS.af);
+});
+
+
+test('participant facts include absentees and project present children in screen order without reads', async () => {
+  await confirm('c2', 'm', 'en');
+  const loadedBase = await base();
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: loadedBase.programmeId,
+    languageCode: 'en', packId: null, participantChildIds: ['c1', 'c2'] });
+  expect(loaded.participants.map(child => child.id)).toEqual(['c1', 'c2']);
+  expect(loaded.participants[1].knownLetters).toEqual(['m']);
+  statements.length = 0;
+  const projected = presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['c2', 'c1'] });
+  expect(projected.presentChildren).toEqual([loaded.participants[1], loaded.participants[0]]);
+  expect(projected.packIndex).toBe(loaded.packIndex);
+  expect(presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['c1'] }).presentChildren)
+    .toEqual([loaded.participants[0]]);
+  expect(() => presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['missing'] }))
+    .toThrow('Lesson participant facts missing: missing');
+  expect(statements).toEqual([]);
 });

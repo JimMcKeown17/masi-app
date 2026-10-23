@@ -15,6 +15,11 @@ export const lastSeenLabel = (lastSeenOn, today) => {
   const shortDate = formatSessionDate(lastSeenOn, 'pill');
   return age > 0 && age <= 6 ? shortDate.split(' ')[0] : shortDate;
 };
+export const lessonHeaderSeenLabel = (lastSeenOn, today) => {
+  if (lastSeenOn == null) return 'not seen yet';
+  if (lastSeenOn === today) return 'seen today';
+  return `last seen ${lastSeenLabel(lastSeenOn, today)}`;
+};
 // A group with no suggested letters (isiZulu, a class still to choose) shows only when it was seen.
 export const lessonRowDetail = (seen, letters = []) => (letters.length
   ? `${seen} · letters ${letters.join(' ')}` : seen);

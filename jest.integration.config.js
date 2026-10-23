@@ -8,6 +8,7 @@ module.exports = {
     '<rootDir>/__tests__/HomeScreen.test.js',
     '<rootDir>/__tests__/LessonWrapUp.save.test.js',
     '<rootDir>/__tests__/LessonScreen.test.js',
+    '<rootDir>/__tests__/LessonFlowNavigation.test.js',
     '<rootDir>/__tests__/LessonPickerScreen.test.js',
     '<rootDir>/__tests__/lessonDraftController.test.js',
     '<rootDir>/__tests__/lessonSave.test.js',

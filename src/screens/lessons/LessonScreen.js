@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
+import { CommonActions, useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useLessonDraft } from '../../hooks/useLessonDraft';
 import { useProgrammeTodayKey } from '../../hooks/useProgrammeTodayKey';
@@ -8,7 +8,7 @@ import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
-import { lastSeenLabel } from '../../utils/lessonDates';
+import { lessonHeaderSeenLabel } from '../../utils/lessonDates';
 import { groupLastSeenOn } from '../../lessonPlan/engine';
 import { visibleRosterChildren } from '../../utils/childVisibility';
 import { isStaleActorError } from '../../session/staleActor';
@@ -36,7 +36,7 @@ export default function LessonScreen({ navigation, route }) {
   const { draftId, groupId, upNextGroupId } = route.params ?? {};
   const start = useMemo(() => draftId ? undefined : { groupId, upNextGroupId }, [draftId, groupId, upNextGroupId]);
   const lesson = useLessonDraft({ draftId, start });
-  const { status, draft, plan, choices, needs, lessonInput, apply, ensureDraft, discard } = lesson;
+  const { status, draft, plan, choices, needs, lessonInput, base, inputError, retry, apply, ensureDraft, discard } = lesson;
   const today = useProgrammeTodayKey();
   const onScroll = useHeaderHairline(navigation);
   const [metadata, setMetadata] = useState(null);
@@ -47,9 +47,23 @@ export default function LessonScreen({ navigation, route }) {
   const [leaveAction, setLeaveAction] = useState(null);
   const [pendingExit, setPendingExit] = useState(null);
   const childKey = JSON.stringify(draft?.attendance.childIds ?? []);
-  const error = typeof lesson.error === 'string' ? lesson.error : lesson.error?.message ?? actionError;
+  const error = lesson.error && lesson.error !== inputError
+    ? typeof lesson.error === 'string' ? lesson.error : lesson.error.message : actionError;
 
   usePreventRemove(status === 'ready', ({ data }) => setLeaveAction(data.action));
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const state = navigation.getState();
+    const index = state.routes.findIndex(item => item.key === route.key);
+    if (state.routes[index - 1]?.name !== 'SessionForm') return;
+    // A kept lesson leaves to where the EA started; the picker below would reopen it on focus.
+    navigation.dispatch(current => {
+      const lessonIndex = current.routes.findIndex(item => item.key === route.key);
+      if (lessonIndex < 1 || current.routes[lessonIndex - 1].name !== 'SessionForm') return CommonActions.reset(current);
+      const routes = current.routes.filter((_, i) => i !== lessonIndex - 1);
+      return CommonActions.reset({ ...current, routes, index: current.index - 1 });
+    });
+  }, [status, navigation, route.key]);
   // These actions run after the committed empty render has released usePreventRemove.
   useEffect(() => {
     if (status === 'missing') navigation.goBack();
@@ -119,13 +133,17 @@ export default function LessonScreen({ navigation, route }) {
   const classOptions = metadata?.classes.filter(row => childrenClasses.has(row.id)) ?? [];
   const lessonClass = metadata?.classes.find(row => row.id === draft?.class_id);
   const originalIds = draft?.attendance.childIds.filter(id => !draft.attendance.addedChildIds.includes(id)) ?? [];
-  const seen = lessonInput ? groupLastSeenOn({ today, academicYearStart: lessonInput.academicYearStart,
-    programmeId: lessonInput.programmeId, sessions: lessonInput.sessions, memberIds: originalIds }) : null;
+  const seen = base ? groupLastSeenOn({ today, academicYearStart: base.academicYearStart,
+    programmeId: base.programmeId, sessions: base.sessions, memberIds: originalIds }) : null;
   const grade = lessonClass?.grade?.replace(/^Grade\s*/i, '');
   const presentCount = draft ? draft.attendance.childIds.length - draft.attendance.absentChildIds.length : 0;
   const confirmDiscard = <ConfirmSheet visible={discardVisible} title="Discard this lesson?"
     body="Its ticks and notes will be deleted." confirmLabel="Discard lesson" cancelLabel="Keep lesson"
     onConfirm={() => discardAndExit(false)} onCancel={() => setDiscardVisible(false)} />;
+  const suggestionsStatus = inputError ? <View>
+    <InlineNote>Couldn't load this lesson's suggestions.</InlineNote>
+    <BrandButton label="Try again" variant="tertiary" onPress={retry} />
+  </View> : !lessonInput || !metadata ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /></View> : null;
 
   if (status === 'exists') return <InProgressSheet visible onDismiss={navigation.goBack}
     onResume={() => navigation.replace('Lesson', { draftId: lesson.existingDraftId })}
@@ -139,11 +157,13 @@ export default function LessonScreen({ navigation, route }) {
       {error ? <InlineNote>{error}</InlineNote> : null}
       {draft && metadata ? <>
         {draft.class_id && draft.language_code ? <Text style={styles.detail}>
-          {`${grade ? `Gr ${grade} · ` : ''}${LANGUAGE_LABELS[draft.language_code]} · last seen ${lastSeenLabel(seen, today)}`}
+          {[grade ? `Gr ${grade}` : null, LANGUAGE_LABELS[draft.language_code],
+            base ? lessonHeaderSeenLabel(seen, today) : null].filter(Boolean).join('\u00a0· ')}
         </Text> : null}
         <AttendanceChips children={participants} attendance={draft.attendance} authority={metadata.authority}
           onToggle={toggleAttendance} onRemove={remove} />
         <BrandButton label="+ Add a child" variant="tertiary" onPress={() => setAddVisible(true)} />
+        {suggestionsStatus}
         {!needs && plan && choices ? <>
           {!plan.history_complete ? <InlineNote tone="warning">Still downloading past lessons. Suggestions may repeat.</InlineNote> : null}
           {!plan.mastery_complete ? <InlineNote tone="warning">Still downloading what children know. Suggestions may repeat.</InlineNote> : null}
@@ -153,7 +173,7 @@ export default function LessonScreen({ navigation, route }) {
           <LessonBookSection draft={draft} choices={choices} isEcd={lessonInput?.isEcd ?? lessonClass?.grade === 'ECD'} onToggle={toggleBook} />
         </> : null}
         {draft.id ? <BrandButton label="Discard lesson" variant="tertiary" onPress={() => setDiscardVisible(true)} /> : null}
-      </> : <ActivityIndicator color={colors.primary} />}
+      </> : suggestionsStatus}
     </ScrollView>
     <StickyActionFooter><BrandButton label="Wrap up →" onPress={wrapUp}
       disabled={!draft || !!needs || !plan || !choices || !metadata || presentCount === 0 || status === 'saving'} /></StickyActionFooter>
@@ -176,5 +196,6 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg },
   detail: { ...typeRoles.textBody, color: colors.textSecondary },
+  loading: { alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   empty: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
 });

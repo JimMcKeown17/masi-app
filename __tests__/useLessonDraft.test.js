@@ -3,13 +3,14 @@ import { renderHook, act, waitFor, cleanupAsync } from '@testing-library/react-n
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
-import { draftStart, holdDraftWrite } from '../test-support/lessonDraftTestUtils';
+import { draftStart, holdDraftWrite, deferred } from '../test-support/lessonDraftTestUtils';
 import { MON } from '../test-support/lessonSaveFixtures';
 import { useLessonDraft } from '../src/hooks/useLessonDraft';
 import * as transitions from '../src/lessonPlan/lessonDraftState';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { planForSave } from '../src/lessonPlan/engine';
 import { saveLesson } from '../src/services/lessonSave';
+import * as inputs from '../src/lessonPlan/inputs/lessonInputs';
 
 let handle, start;
 // Dispose mounted screens before the global default-handle teardown publishes closed.
@@ -43,7 +44,7 @@ beforeEach(async () => {
     await db.runAsync('update staff_programme_assignments set user_id = ?', handle.userId);
     await db.runAsync("update classes set home_language = 'English'");
     await db.runAsync("insert into classes (id, school_id, name, grade, academic_year_id, home_language) values ('class-2', 'school-1', 'Other', '2', 'year-2026', 'isiXhosa')");
-    for (const id of ['c1', 'c2']) {
+    for (const id of ['c1', 'c2', 'c3']) {
       await db.runAsync("insert into children (id, first_name, last_name, class_id, reading_level, created_by) values (?, ?, 'Child', 'class-1', 'Letter Knowledge', ?)", id, id, handle.userId);
       await db.runAsync("insert into child_ea_assignments (id, user_id, child_id) values (?, ?, ?)", id, handle.userId, id);
     }
@@ -53,6 +54,29 @@ beforeEach(async () => {
     members: [{ id: 'c1', class_id: 'class-1' }, { id: 'c2', class_id: 'class-1' }], upNextGroupId: 'group-1' };
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+
+testHook('attendance projects loaded participants without blanking or reading again', async () => {
+  const baseLoad = jest.spyOn(inputs, 'loadLessonBase');
+  jest.spyOn(inputs, 'loadLessonParticipants');
+  const renders = [];
+  const { result } = renderHook(() => {
+    const lesson = useLessonDraft({ start });
+    renders.push(lesson);
+    return lesson;
+  }, { wrapper });
+  await ready(result);
+  renders.length = 0;
+  await change(result, transitions.toggleAbsent, 'c2');
+  await change(result, transitions.toggleAbsent, 'c2');
+  expect(renders.length).toBeGreaterThan(0);
+  for (const lesson of renders) {
+    expect(lesson.lessonInput).not.toBeNull();
+    expect(lesson.plan).not.toBeNull();
+    expect(lesson.choices).not.toBeNull();
+  }
+  expect(baseLoad).toHaveBeenCalledTimes(1);
+  expect(inputs.loadLessonParticipants).toHaveBeenCalledTimes(1);
+});
 
 testHook('attendance before the first tick recomputes the plan; after it, it does not', async () => {
   const { result } = mount();
@@ -227,4 +251,93 @@ testHook('a frozen version-1 draft keeps its stored review letters when resumed 
   const sessions = await handle.repositories.sessions.getSessions({ userId: handle.userId });
   expect(sessions.find(session => session.id === row.session_id).activities.lesson.plan).toEqual(storedPlan);
   expect(planSpy).not.toHaveBeenCalled();
+});
+
+
+testHook('an added child holds suggestions and refuses ticks until its facts arrive', async () => {
+  const realLoad = inputs.loadLessonParticipants;
+  const load = jest.spyOn(inputs, 'loadLessonParticipants');
+  const { result } = mount();
+  await ready(result);
+  const held = deferred();
+  load.mockImplementationOnce(async options => { await held.promise; return realLoad(options); });
+  await change(result, transitions.addChildForToday, 'c3');
+  expect(result.current.lessonInput).toBeNull();
+  expect(result.current.plan).toBeNull();
+  expect(result.current.choices).toBeNull();
+  const before = await handle.repositories.lessonDrafts.getActive();
+  await expect(result.current.apply(transitions.toggleTick, 'letters', 'a'))
+    .rejects.toThrow('Lesson suggestions are still loading.');
+  expect(await handle.repositories.lessonDrafts.getActive()).toEqual(before);
+  await act(async () => { held.resolve(); });
+  await ready(result);
+  expect(result.current.plan.present_child_ids).toEqual(['c1', 'c2', 'c3']);
+});
+
+testHook('failed added-child facts refuse ticks and retry the current participants', async () => {
+  const load = jest.spyOn(inputs, 'loadLessonParticipants');
+  const baseLoad = jest.spyOn(inputs, 'loadLessonBase');
+  const { result } = mount();
+  await ready(result);
+  load.mockRejectedValueOnce(new Error('Read failed'));
+  await change(result, transitions.addChildForToday, 'c3');
+  await waitFor(() => expect(result.current.error?.message).toBe('Read failed'));
+  expect(result.current.plan).toBeNull();
+  const before = await handle.repositories.lessonDrafts.getActive();
+  await expect(result.current.apply(transitions.toggleTick, 'letters', 'a'))
+    .rejects.toThrow('Lesson suggestions are still loading.');
+  expect(await handle.repositories.lessonDrafts.getActive()).toEqual(before);
+  act(() => result.current.retry());
+  await ready(result);
+  expect(result.current.error).toBeNull();
+  expect(result.current.plan.present_child_ids).toEqual(['c1', 'c2', 'c3']);
+  expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ participantChildIds: ['c1', 'c2', 'c3'] }));
+  expect(baseLoad).toHaveBeenCalledTimes(1);
+});
+
+for (const transition of [transitions.chooseClass, transitions.chooseLanguage]) {
+  for (const resumed of [false, true]) {
+    testHook(`${transition.name} persists only present children${resumed ? ' on yesterday\'s resumed draft' : ''}`, async () => {
+      const choosingClass = transition === transitions.chooseClass;
+      start = { ...start, group: { ...start.group, class_id: choosingClass ? null : 'class-1' },
+        members: [{ id: 'c1', class_id: 'class-1' }, { id: 'c2', class_id: choosingClass ? 'class-2' : 'class-1' }] };
+      if (!choosingClass) await handle.withTransaction(db => db.runAsync('update classes set home_language = null'));
+      let options;
+      if (resumed) {
+        const row = await handle.repositories.lessonDrafts.create(draftStart({ lesson_date: '2026-10-18',
+          class_id: choosingClass ? null : 'class-1', language_code: null, pack_id: null, plan: null }));
+        options = { draftId: row.id };
+      }
+      const { result } = mount(options);
+      await waitFor(() => expect(result.current.needs).toBe(choosingClass ? 'class' : 'language'));
+      await change(result, transitions.toggleAbsent, 'c2');
+      await change(result, transition, transition === transitions.chooseClass
+        ? { classId: 'class-2' } : { languageCode: 'xh' });
+      const saved = await handle.repositories.lessonDrafts.getActive();
+      expect(saved.plan.present_child_ids).toEqual(['c1']);
+      expect(saved.plan.reason).not.toBe('no_children');
+      expect(saved.lesson_date).toBe(resumed ? '2026-10-18' : '2026-10-19');
+    });
+  }
+}
+
+
+testHook('a frozen draft hides its stored plan while added-child facts load', async () => {
+  const realLoad = inputs.loadLessonParticipants;
+  const load = jest.spyOn(inputs, 'loadLessonParticipants');
+  const { result } = mount();
+  await ready(result);
+  await change(result, transitions.toggleTick, 'letters', 'a');
+  const frozen = result.current.plan;
+  const held = deferred();
+  load.mockImplementationOnce(async options => { await held.promise; return realLoad(options); });
+  await change(result, transitions.addChildForToday, 'c3');
+  expect(result.current.plan).toBeNull();
+  expect(result.current.choices).toBeNull();
+  await expect(result.current.apply(transitions.toggleTick, 'letters', 'm'))
+    .rejects.toThrow('Lesson suggestions are still loading.');
+  await act(async () => { held.resolve(); });
+  await ready(result);
+  expect(result.current.lessonInput.presentChildren.map(child => child.id)).toEqual(['c1', 'c2', 'c3']);
+  expect(result.current.plan).toEqual(frozen);
 });

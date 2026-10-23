@@ -112,19 +112,31 @@ export const loadPickerModel = async ({ handle, repositories, services, base, gr
     historyByChild, masteryByChild, knownLettersByLanguage, allowPreview: isPreviewContentEnabled() });
 };
 
-export const loadLessonInput = async ({ handle, repositories, services, base, lesson }) => {
-  const childIds = [...new Set(lesson.presentChildIds)];
+export const loadLessonParticipants = async ({ handle, repositories, services, programmeId,
+  languageCode, packId, participantChildIds }) => {
+  const childIds = [...new Set(participantChildIds)];
   const [childrenById, knownLetters, historyByChild, masteryByChild] = await Promise.all([
     repositories.children.getChildrenByIds(childIds),
-    loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode: lesson.languageCode }),
-    services.sessionHistory.completenessByChild({ childIds, programmeId: base.programmeId }),
-    services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId: base.programmeId }),
+    loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode }),
+    services.sessionHistory.completenessByChild({ childIds, programmeId }),
+    services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId }),
   ]);
-  const pack = packFor(lesson.languageCode, lesson.packId, isPreviewContentEnabled());
+  const pack = packFor(languageCode, packId, isPreviewContentEnabled());
+  return {
+    participants: childIds.map(id => childInput(childrenById[id] ?? { id }, knownLetters[id], historyByChild, masteryByChild)),
+    pack, packIndex: packIndexFor(pack), alphabet: PEDAGOGICAL_ORDERS[languageCode] ?? null,
+  };
+};
+
+export const presentLessonInput = ({ base, lesson, loaded, presentChildIds }) => {
+  const byId = new Map(loaded.participants.map(child => [child.id, child]));
   return {
     ...base, groupId: lesson.groupId, upNextGroupId: lesson.upNextGroupId,
-    languageCode: lesson.languageCode, pack, packIndex: packIndexFor(pack),
-    alphabet: PEDAGOGICAL_ORDERS[lesson.languageCode] ?? null, isEcd: lesson.isEcd,
-    presentChildren: childIds.map(id => childInput(childrenById[id] ?? { id }, knownLetters[id], historyByChild, masteryByChild)),
+    languageCode: lesson.languageCode, isEcd: lesson.isEcd,
+    pack: loaded.pack, packIndex: loaded.packIndex, alphabet: loaded.alphabet,
+    presentChildren: presentChildIds.map(id => {
+      if (!byId.has(id)) throw new Error(`Lesson participant facts missing: ${id}`);
+      return byId.get(id);
+    }),
   };
 };
