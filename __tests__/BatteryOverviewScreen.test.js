@@ -265,6 +265,29 @@ test('reloads on focus after returning from a Question', async () => {
   expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(2);
 });
 
+test('refocus refresh keeps previous rows visible and prevents Start until the refresh completes', async () => {
+  const screen = await ready(renderOverview());
+  const pending = deferred();
+  act(() => screen.navigationRef.navigate('Away'));
+  repositories.batteryRuns.getRunWithResults.mockReturnValueOnce(pending.promise);
+  act(() => screen.navigationRef.goBack());
+  expect(screen.getByText(`${BATTERY.title} · isiXhosa · 4 of 11 decided`)).toBeTruthy();
+  expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(11);
+  expect(screen.queryByLabelText('Loading assessment run')).toBeNull();
+  const start = screen.getByRole('button', { name: 'Start Letter writing' });
+  expect(start).toBeDisabled();
+  fireEvent.press(start);
+  expect(screen.navigation.navigate).not.toHaveBeenCalled();
+  run.results = decide(5);
+  await act(async () => pending.resolve(clone(run)));
+  await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
+  fireEvent.press(screen.getByRole('button', { name: 'Start Reading words' }));
+  expect(screen.navigation.navigate).toHaveBeenCalledTimes(1);
+  expect(screen.navigation.navigate).toHaveBeenCalledWith('BatteryQuestion', {
+    runId: ID, questionCode: BATTERY.questions[5].question_code,
+  });
+});
+
 test('double tap on Start next pushes one screen', async () => {
   const screen = await ready(renderOverview());
   const button = screen.getByRole('button', { name: 'Start Letter writing' });
