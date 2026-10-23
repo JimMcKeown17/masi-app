@@ -248,12 +248,12 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     ...options, questionCodes: LETTER_EVIDENCE_CODES,
   });
 
-  const getLetterEvidenceResults = async ({ userId, childId, childIds } = {}) => {
+  const getLetterEvidenceResults = async ({ userId, programmeId, childId, childIds, academicYear } = {}) => {
     const db = await resolveDatabase(database);
-    const year = await getActiveAcademicYear(db);
+    const year = academicYear === undefined ? await getActiveAcademicYear(db) : academicYear;
     if (!year) return [];
     return getLetterResults({
-      userId, childId, childIds, sinceDate: year.starts_on, untilDate: year.ends_on,
+      userId, programmeId, childId, childIds, sinceDate: year.starts_on, untilDate: year.ends_on,
     });
   };
 

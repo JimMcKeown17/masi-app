@@ -9,7 +9,11 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { runMigrations } from '../src/db/migrations';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
-import { persistLiteracySession } from '../src/services/literacySessionPersistence';
+import { saveLesson } from '../src/services/lessonSave';
+import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
+import { createLessonDraftsRepository } from '../src/db/repositories/lessonDraftsRepository';
+import { runRepositoryTransaction } from '../src/db/repositories/repositoryRuntime';
+import { lessonDraftInput } from '../test-support/lessonSaveFixtures';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
 // runMigrations leaves foreign_keys ON (Task 2 ensures migrations run outside the
@@ -58,31 +62,21 @@ it('POSITIVE: real capture flows commit through public interfaces with FK ON', a
       synced: false,
     }, { actorUserId: userId });
 
-    // --- Persist a literacy session (sessions → session_attendees → letter_mastery) ---
-    await persistLiteracySession({
-      database: db,
-      session: {
-        id: 'session-1',
-        user_id: userId,
-        programme_id: programmeId,
-        class_id: 'class-1',
-        session_date: '2026-06-16',
-        children_ids: [childId],
-        group_ids: [],
-        activities: { letters_focused: ['a', 'm'] },
-        synced: false,
-      },
-      letterTrackerChanges: {
+    // --- Save a lesson (group → session → attendees → mastery; draft deleted) ---
+    await createGroupsRepository({ database: db }).saveGroup({ id: 'lesson-group', name: 'Group 1', programme_id: programmeId, class_id: 'class-1', created_by: userId });
+    const draft = await createLessonDraftsRepository({ database: db }).create(lessonDraftInput({
+      programme_id: programmeId, group_id: 'lesson-group', lesson_date: '2026-06-16',
+      attendance: { childIds: [childId], absentChildIds: [], addedChildIds: [] }, reading_level_changes: {},
+      tracker_changes: {
         [childId]: {
           a: { mastered: true, languageCode: 'en', madeAt: '2026-06-16T08:55:00.000Z' },
           m: { mastered: true, languageCode: 'en', madeAt: '2026-06-16T08:56:00.000Z' },
         },
       },
+    }));
+    const handle = { userId, withTransaction: task => runRepositoryTransaction(db, task) };
+    await saveLesson({ handle, draft, sessionTypeFields: {},
       nowIso: '2026-06-16T09:00:00.000Z',
-      idFactory: (() => {
-        let n = 0;
-        return () => `mastery-fk-test-${++n}`;
-      })(),
     });
 
     // --- Save an assessment (assessments → assessment_items) ---
@@ -96,12 +90,13 @@ it('POSITIVE: real capture flows commit through public interfaces with FK ON', a
 
     // Each ordered parent→child chain must commit fully, including every actual item.
     // sessions → session_attendees → letter_mastery
-    expect(await db.getAllAsync("select id from sessions where id = 'session-1'")).toHaveLength(1);
+    expect(await db.getAllAsync('select id from sessions where id = ?', draft.session_id)).toHaveLength(1);
     const attendees = await db.getAllAsync(
-      "select session_id, child_id from session_attendees where session_id = 'session-1'"
+      'select session_id, child_id from session_attendees where session_id = ?', draft.session_id
     );
     expect(attendees).toHaveLength(1);
-    expect(attendees[0]).toMatchObject({ session_id: 'session-1', child_id: childId });
+    expect(attendees[0]).toMatchObject({ session_id: draft.session_id, child_id: childId });
+    expect(await db.getAllAsync('select * from lesson_drafts')).toEqual([]);
     expect(await db.getAllAsync(
       "select letter, language, confirmed from letter_mastery where child_id = ? order by letter", childId
     )).toEqual([

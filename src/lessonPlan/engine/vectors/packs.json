@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "note": "Synthetic fixtures in the spec §4.1 shape (lesson plan engine vectors). Not reviewed vocabulary.",
   "packs": {
     "xh-mini": {

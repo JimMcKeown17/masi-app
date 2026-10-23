@@ -13,6 +13,24 @@ import {
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
 describe('classesRepository', () => {
+  test('getClassById returns an archived class that getClasses leaves out', async () => {
+    const db = await createMigratedDatabase(runMigrations);
+    try {
+      await seedCoreData(db);
+      const repository = createClassesRepository({ database: db });
+      const [seeded] = await repository.getClasses();
+      await db.runAsync("update classes set archived_at = '2026-10-21T08:00:00Z' where id = ?", seeded.id);
+      expect(await repository.getClasses()).toEqual([]);
+      expect(await repository.getClassById(seeded.id)).toEqual(expect.objectContaining({
+        id: seeded.id, grade: seeded.grade, archived_at: '2026-10-21T08:00:00Z',
+      }));
+      expect(await repository.getClassById('no-such-class')).toBeNull();
+      expect(await repository.getClassById(null)).toBeNull();
+    } finally {
+      await db.closeAsync();
+    }
+  });
+
   test('editing a full mapped synced class ignores caller sync bookkeeping and queues one update', async () => {
     const db = await createMigratedDatabase(runMigrations);
 

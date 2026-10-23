@@ -41,9 +41,9 @@ jest.mock('@react-native-community/netinfo', () => ({ fetch: async () => mockNet
 jest.mock('@react-navigation/native', () => ({ NavigationContext: require('react').createContext(null), useIsFocused: () => true, useFocusEffect: fn => require('react').useEffect(fn, [fn]) }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('../src/hooks/useTimeTracking', () => ({ useTimeTracking: () => ({ isSignedIn: false }) }));
-jest.mock('../src/screens/sessions/LiteracySessionForm', () => {
+jest.mock('../src/screens/lessons/LessonPickerScreen', () => {
   const React = require('react'); const { Text } = require('react-native');
-  return () => <Text>Literacy session form</Text>;
+  return () => <Text>Lesson picker</Text>;
 });
 
 function Roster() {
@@ -160,7 +160,7 @@ test.each(['TOKEN_REFRESHED', 'INITIAL_SESSION'])('%s wakes profile and referenc
   expect(view.getByText('Loading your profile...')).toBeTruthy();
   await act(async () => { deliverAuth(event, session(A)); });
 
-  await waitFor(() => expect(view.getByText('Literacy session form')).toBeTruthy());
+  await waitFor(() => expect(view.getByText('Lesson picker')).toBeTruthy());
   await waitFor(async () => expect(await handle.repositories.localState.get('reference_data_complete_at')).toBeTruthy());
   expect((await handle.services.deviceProfile.get()).id).toBe(A);
   expect(pull).toHaveBeenCalledTimes(1);
@@ -1035,7 +1035,7 @@ test('a failed initial profile request leaves New Session retryable and Retry op
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(1);
   fail = false;
   fireEvent.press(view.getByText('Retry'));
-  await waitFor(() => expect(view.getByText('Literacy session form')).toBeTruthy());
+  await waitFor(() => expect(view.getByText('Lesson picker')).toBeTruthy());
   expect(view.queryByText('Loading your profile...')).toBeNull();
   expect(transport.mock.calls.filter(([url]) => String(url).includes('/rest/v1/users'))).toHaveLength(2);
 });

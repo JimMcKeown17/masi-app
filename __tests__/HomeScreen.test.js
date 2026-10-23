@@ -17,6 +17,7 @@ const mockStatusBar = jest.fn();
 const mockGetAssessmentDismissedOn = jest.fn();
 const mockDismissAssessmentForDay = jest.fn();
 const mockUseSessionHistoryStatus = jest.fn();
+const mockGetActiveDraft = jest.fn();
 
 jest.mock('@expo/vector-icons', () => new Proxy({}, {
   get: (target, prop) => {
@@ -76,11 +77,33 @@ jest.mock('../src/services/sessionHistoryStatus', () => ({
 
 import React from 'react';
 import { AppState } from 'react-native';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, cleanupAsync, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { PaperProvider, Snackbar } from 'react-native-paper';
 import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
 import { StaleActorError } from '../src/session/staleActor';
+import { LessonDraftCorruptError } from '../src/db/repositories/lessonDraftsRepository';
+import { deferred, draftStart } from '../test-support/lessonDraftTestUtils';
+import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
+import { renderInTestStack } from '../test-support/renderInTestStack';
+import { AllProviders } from '../test-support/renderWithProviders';
+import { SignedInEAContext } from '../src/context/SignedInEAContext';
+import LessonScreen from '../src/screens/lessons/LessonScreen';
+import { saveLesson } from '../src/services/lessonSave';
+import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
 import HomeScreen from '../src/screens/main/HomeScreen';
+
+const lessonDraft = { id: 'draft-1', attendance: {
+  childIds: ['c1', 'c2'], absentChildIds: [], addedChildIds: [],
+} };
+const lessonChildren = [{ id: 'c1', first_name: 'Amahle' }, { id: 'c2', first_name: 'Lulu' }];
+const foregroundEvents = () => {
+  const listeners = new Set();
+  AppState.addEventListener.mockImplementation((type, fn) => {
+    listeners.add(fn);
+    return { remove: () => listeners.delete(fn) };
+  });
+  return async () => { await act(async () => { listeners.forEach(fn => fn('active')); }); };
+};
 
 const renderHome = (navigation = { navigate: jest.fn() }) => render(
   <PaperProvider>
@@ -114,6 +137,8 @@ describe('HomeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetSessions.mockReset();
+    mockGetActiveDraft.mockReset().mockResolvedValue(null);
+    jest.spyOn(getDefaultTestHandle().repositories.lessonDrafts, 'getActive').mockImplementation(mockGetActiveDraft);
     AppState.addEventListener.mockImplementation(() => ({ remove: jest.fn() }));
     Object.assign(getDefaultTestHandle().services.homeAttention, {
       getAssessmentDismissedOn: mockGetAssessmentDismissedOn,
@@ -165,9 +190,190 @@ describe('HomeScreen', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await cleanupAsync();
     jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  test('a lesson in progress is the first card and resumes with its draft id', async () => {
+    mockGetActiveDraft.mockResolvedValue(lessonDraft);
+    mockUseChildren.mockReturnValue({ children: lessonChildren });
+    mockUseOffline.mockReturnValue({ needsAttentionCount: 2 });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    const resume = await screen.findByRole('button', { name: 'Lesson in progress with Amahle and Lulu. Resume' });
+    const area = screen.getByLabelText('Needs your attention');
+    expect(within(area).getAllByRole('button').map(button => button.props.accessibilityLabel))
+      .toEqual(['Lesson in progress with Amahle and Lulu. Resume', '2 items need attention. Open sync status to sort it out']);
+    expect(screen.queryByLabelText('Dismiss: Lesson in progress')).toBeNull();
+    fireEvent.press(resume);
+    expect(navigation.navigate).toHaveBeenCalledWith('Lesson', { draftId: 'draft-1' });
+    expect(mockUseSessionLaunchGuard).not.toHaveBeenCalled();
+    expect(defaultTimeTracking.handleSignIn).not.toHaveBeenCalled();
+  });
+  test('a failed draft read leaves the stats and other cards alone', async () => {
+    const error = new Error('draft reader unavailable');
+    const report = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetActiveDraft.mockRejectedValue(error);
+    mockUseChildren.mockReturnValue({ children: lessonChildren });
+    const screen = renderHome();
+    await screen.findByText('2 of 3 sessions today');
+    expect(screen.getByText('2 children to assess')).toBeTruthy();
+    expect(screen.queryByText('Couldn’t load today’s sessions')).toBeNull();
+    expect(report).toHaveBeenCalledWith('Error loading lesson in progress:', error);
+    expect(report).not.toHaveBeenCalledWith('Error loading Home statistics:', expect.anything());
+  });
+  test('a stats failure keeps the lesson card', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const foreground = foregroundEvents();
+    mockGetActiveDraft.mockResolvedValue(lessonDraft);
+    const screen = renderHome();
+    await screen.findByText('Lesson in progress');
+    mockGetSessions.mockRejectedValueOnce(new Error('stats unavailable'));
+    await foreground();
+    expect(screen.getByText('Lesson in progress')).toBeTruthy();
+    expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
+  });
+  test('a draft read that settles after the stats still shows the card', async () => {
+    const pending = deferred();
+    mockGetActiveDraft.mockReturnValue(pending.promise);
+    const screen = renderHome();
+    await screen.findByText('2 of 3 sessions today');
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+    await act(async () => pending.resolve(lessonDraft));
+    expect(screen.getByText('Lesson in progress')).toBeTruthy();
+  });
+  test('a corrupt draft still shows Resume', async () => {
+    const report = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetActiveDraft.mockRejectedValue(new LessonDraftCorruptError('corrupt-1', ['attendance']));
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    fireEvent.press(await screen.findByRole('button', { name: 'Lesson in progress. Resume' }));
+    expect(navigation.navigate).toHaveBeenCalledWith('Lesson', { draftId: 'corrupt-1' });
+    expect(screen.getByText('Resume')).toBeTruthy();
+    expect(report).not.toHaveBeenCalled();
+  });
+  test('the sync card still navigates with no params', async () => {
+    mockGetActiveDraft.mockResolvedValue(lessonDraft);
+    mockUseOffline.mockReturnValue({ needsAttentionCount: 2 });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    fireEvent.press(await screen.findByLabelText('2 items need attention. Open sync status to sort it out'));
+    expect(navigation.navigate.mock.calls).toEqual([['SyncStatus']]);
+  });
+  test('a later failed draft read keeps the previous lesson card and logs only the draft error', async () => {
+    const foreground = foregroundEvents();
+    const report = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetActiveDraft.mockResolvedValueOnce(lessonDraft);
+    const screen = renderHome();
+    await screen.findByText('Lesson in progress');
+    const error = new Error('temporary draft failure');
+    mockGetActiveDraft.mockRejectedValueOnce(error);
+    await foreground();
+    expect(screen.getByText('Lesson in progress')).toBeTruthy();
+    expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
+    expect(report.mock.calls).toEqual([['Error loading lesson in progress:', error]]);
+  });
+  test('a stale draft read stays quiet and keeps the previous lesson card', async () => {
+    const foreground = foregroundEvents();
+    const report = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetActiveDraft.mockResolvedValueOnce(lessonDraft);
+    const screen = renderHome();
+    await screen.findByText('Lesson in progress');
+    mockGetActiveDraft.mockRejectedValueOnce(new StaleActorError());
+    await foreground();
+    expect(screen.getByText('Lesson in progress')).toBeTruthy();
+    expect(report).not.toHaveBeenCalled();
+  });
+  test('a later null draft read that settles after the stats removes the card', async () => {
+    const foreground = foregroundEvents();
+    mockGetActiveDraft.mockResolvedValueOnce(lessonDraft);
+    const screen = renderHome();
+    await screen.findByText('Lesson in progress');
+    const pending = deferred();
+    mockGetActiveDraft.mockReturnValueOnce(pending.promise);
+    mockGetSessionsTodayGoal.mockResolvedValueOnce({ target: 3, ceiling: 5, count: 3, state: 'met' });
+    await foreground();
+    await screen.findByText('3 of 3 sessions today');
+    expect(screen.getByText('Lesson in progress')).toBeTruthy();
+    await act(async () => pending.resolve(null));
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+  });
+  test('a superseded draft read cannot resurrect a lesson removed by a newer load', async () => {
+    const foreground = foregroundEvents();
+    const pending = deferred();
+    mockGetActiveDraft.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(null);
+    const screen = renderHome();
+    await screen.findByText('2 of 3 sessions today');
+    await foreground();
+    expect(mockGetActiveDraft).toHaveBeenCalledTimes(2);
+    await act(async () => pending.resolve(lessonDraft));
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+  });
+  test('Resume still opens Lesson while clocked out and without an active programme', async () => {
+    mockGetActiveDraft.mockResolvedValue(lessonDraft);
+    mockGetSessionsTodayGoal.mockResolvedValue(null);
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: false, programme: null });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    await screen.findByText('No active programme');
+    fireEvent.press(screen.getByRole('button', { name: 'Lesson in progress. Resume' }));
+    expect(navigation.navigate.mock.calls).toEqual([['Lesson', { draftId: 'draft-1' }]]);
+    expect(mockGetActiveProgrammeGate).toHaveBeenCalledTimes(1);
+    expect(mockUseSessionLaunchGuard).not.toHaveBeenCalled();
+    expect(defaultTimeTracking.handleSignIn).not.toHaveBeenCalled();
+  });
+  test.each(['discard', 'save'])('a stored draft resumes through the stack onto Lesson and its %s disappears on foreground', async (action) => {
+    jest.useFakeTimers({ doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'performance'] });
+    jest.setSystemTime(new Date('2026-10-22T09:00:00.000Z'));
+    const handle = getDefaultTestHandle();
+    handle.repositories.lessonDrafts.getActive.mockRestore();
+    await handle.withTransaction(async db => {
+      await seedCoreData(db);
+      await db.runAsync('update staff_programme_assignments set user_id = ?', handle.userId);
+      await db.runAsync("update classes set home_language = 'English'");
+      await db.runAsync("insert into children (id, first_name, last_name, class_id, created_by) values ('c1', 'Amahle', 'Child', 'class-1', ?)", handle.userId);
+      await db.runAsync("insert into child_ea_assignments (id, user_id, child_id, assigned_at) values ('child-ea', ?, 'c1', '2026-01-15')", handle.userId);
+      await db.runAsync("insert into groups (id, name, programme_id, class_id, created_by) values ('group-1', 'Group 1', 'programme-a', 'class-1', ?)", handle.userId);
+      await db.runAsync("insert into group_ea_assignments (id, group_id, ea_user_id, programme_id) values ('group-ea', 'group-1', ?, 'programme-a')", handle.userId);
+      await db.runAsync("insert into child_group_memberships (id, child_id, group_id, joined_at) values ('member', 'c1', 'group-1', '2026-01-15')");
+    });
+    const stored = await handle.repositories.lessonDrafts.create(draftStart({
+      attendance: { childIds: ['c1'], absentChildIds: [], addedChildIds: [] },
+    }));
+    mockUseChildren.mockReturnValue({ children: [lessonChildren[0]] });
+    const foreground = foregroundEvents();
+    const wrapper = ({ children }) => <AllProviders><SignedInEAContext.Provider value={{
+      handle, repositories: handle.repositories, services: handle.services,
+    }}>{children}</SignedInEAContext.Provider></AllProviders>;
+    const screen = renderInTestStack({ wrapper, initialIndex: 0, keepMounted: true,
+      motion: { tier: 'static', motionLevel: 'still', reduceMotion: true },
+      routes: [{ name: 'Home', component: HomeScreen }, { name: 'Lesson', component: LessonScreen }],
+    });
+    fireEvent.press(await screen.findByRole('button', { name: 'Lesson in progress with Amahle. Resume' }));
+    await waitFor(() => expect(screen.navigationRef.getCurrentRoute()).toMatchObject({ name: 'Lesson', params: { draftId: stored.id } }));
+    expect(await screen.findByRole('checkbox', { name: 'Amahle, here' })).toBeTruthy();
+    expect((await handle.repositories.lessonDrafts.getActive()).id).toBe(stored.id);
+    if (action === 'discard') {
+      fireEvent.press(screen.getByRole('button', { name: 'Discard lesson' }));
+      await screen.findByText('Discard this lesson?');
+      fireEvent.press(screen.getByRole('button', { name: 'Discard lesson' }));
+    } else {
+      // Another screen saves through the same controller/service hand-off as Wrap up.
+      await act(async () => {
+        const snapshot = await handle.services.lessonDraft.beginSave();
+        await saveLesson({ handle, draft: snapshot, sessionTypeFields: buildSessionTypeFields() });
+        handle.services.lessonDraft.endSave({ saved: true });
+      });
+      act(() => screen.navigationRef.goBack());
+      expect(await handle.repositories.sessions.getSessions({ userId: handle.userId })).toHaveLength(1);
+    }
+    await waitFor(() => expect(screen.navigationRef.getCurrentRoute().name).toBe('Home'));
+    await foreground();
+    await waitFor(() => expect(screen.queryByText('Lesson in progress')).toBeNull());
+    expect(await handle.repositories.lessonDrafts.getActive()).toBeNull();
+    expect(mockUseSessionLaunchGuard).not.toHaveBeenCalled();
   });
 
   test.each(['pageVersion', 'runVersion'])('%s refreshes Home sessions and statistics without leaving', async (version) => {

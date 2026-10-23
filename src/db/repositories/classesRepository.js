@@ -79,6 +79,14 @@ export const createClassesRepository = ({ database } = {}) => {
     return rows.map(mapDomainRow);
   };
 
+  // Archived included: a resumed lesson keeps the class it was pinned to.
+  const getClassById = async (id) => {
+    if (!id) return null;
+    const db = await resolveDatabase(database);
+    const row = await db.getFirstAsync('select * from classes where id = ?', id);
+    return row ? mapDomainRow(row) : null;
+  };
+
   const saveClass = async (classData, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const incomingSyncStatus = classData.sync_status || syncStatusFromSynced(classData.synced);
     const isLocalWrite = !['synced', 'terminal'].includes(incomingSyncStatus);
@@ -264,6 +272,7 @@ export const createClassesRepository = ({ database } = {}) => {
 
   return {
     getClasses,
+    getClassById,
     saveClass,
     saveServerClassRows,
     updateClass,

@@ -1,6 +1,9 @@
 import {
   nextGroupNumber,
   compareGroups,
+  groupNumber,
+  ungroupedChildren,
+  sharedClassId,
 } from '../src/utils/groupHelpers';
 
 describe('nextGroupNumber', () => {
@@ -103,6 +106,26 @@ describe('getGroupDotColor', () => {
 // Pin the public API so the retired palette cannot acquire new consumers.
 test('only the dot colour helper is exported', () => {
   expect(Object.keys(require('../src/utils/groupHelpers')).sort()).toEqual([
-    'compareGroups', 'getGroupDotColor', 'nextGroupNumber',
+    'compareGroups', 'getGroupDotColor', 'groupNumber', 'nextGroupNumber', 'sharedClassId', 'ungroupedChildren',
   ]);
+});
+
+test('groupNumber prefers display_number, then Group N, otherwise null', () => {
+  expect(groupNumber({ display_number: 7, name: 'Group 2' })).toBe(7);
+  expect(groupNumber({ name: 'Group 10' })).toBe(10);
+  expect(groupNumber({ name: 'Lions' })).toBeNull();
+});
+
+test('ungroupedChildren includes children whose membership was removed', () => {
+  const children = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }];
+  expect(ungroupedChildren({ children, childrenGroups: [
+    { child_id: 'c1', group_id: 'g1', removed_at: null },
+    { child_id: 'c2', group_id: 'g1', removed_at: '2026-10-19' },
+  ] })).toEqual([children[1], children[2]]);
+});
+
+test('sharedClassId is the one class every child shares, otherwise null', () => {
+  expect(sharedClassId([{ class_id: 'class-1' }, { class_id: 'class-1' }])).toBe('class-1');
+  for (const children of [[], [{ class_id: null }], [{ class_id: 'class-1' }, {}],
+    [{ class_id: 'class-1' }, { class_id: 'class-2' }]]) expect(sharedClassId(children)).toBeNull();
 });

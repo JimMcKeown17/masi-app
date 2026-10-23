@@ -90,6 +90,42 @@ test('masteryInputsComplete reads only the captured handle and EA without starti
   expect(bTransport).not.toHaveBeenCalled();
 });
 
+test.each(['sessionHistory', 'assessmentHistory'])('%s per-child completeness reads only the captured handle and EA without starting a pull', async kind => {
+  const read = (handle, options) => kind === 'sessionHistory'
+    ? handle.services.sessionHistory.completenessByChild(options)
+    : handle.services.assessmentHistory.masteryCompletenessByChild(options);
+  const transport = jest.fn(async url => response(referenceRows(new URL(url).pathname.split('/').pop(), A)));
+  const a = await open(A, transport);
+  await a.services.referenceDataReady();
+  await a.withTransaction(async tx => {
+    await tx.runAsync("insert into children (id, first_name, last_name, sync_status) values (?, 'Test', 'Child', 'synced')", CHILD);
+    await tx.runAsync("insert into classes (id, school_id, name, grade, academic_year_id) values ('held', 'school', 'Held', '1', 'year')");
+    await tx.runAsync("insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, sync_status) values ('class-ea', 'held', ?, ?, 'synced')", A, PROGRAMME);
+    await tx.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, sync_status) values ('membership', ?, 'held', 'year', 'synced')", CHILD);
+    await tx.runAsync("insert into child_ea_assignments (id, user_id, child_id, sync_status) values ('delivery', ?, ?, 'synced')", A, CHILD);
+  });
+  transport.mockClear();
+  expect(await read(a, { childIds: [CHILD] })).toEqual({ [CHILD]: false });
+  expect(transport).not.toHaveBeenCalled();
+  await a.services[kind].start({ force: true });
+  const before = await (await a.getReader()).getAllAsync('select * from sync_state order by scope');
+  transport.mockClear();
+  expect(await read(a, { childIds: [CHILD, SECOND], userId: B })).toEqual({ [CHILD]: true, [SECOND]: false });
+  expect(await read(a, { childIds: [CHILD], programmeId: PROGRAMME })).toEqual({ [CHILD]: true });
+  expect(await read(a, { childIds: [CHILD], programmeId: 'another-programme' })).toEqual({ [CHILD]: false });
+  expect(await read(a)).toEqual({});
+  await a.withTransaction(tx => tx.runAsync('update staff_programme_assignments set ended_at = assigned_at'));
+  expect(await read(a, { childIds: [CHILD] })).toEqual({ [CHILD]: false });
+  expect(await read(a, { childIds: [CHILD], programmeId: PROGRAMME })).toEqual({ [CHILD]: true });
+  expect(await (await a.getReader()).getAllAsync('select * from sync_state order by scope')).toEqual(before);
+  expect(transport).not.toHaveBeenCalled();
+  const bTransport = jest.fn(async () => response());
+  const b = await open(B, bTransport);
+  expect(await read(b, { childIds: [CHILD] })).toEqual({ [CHILD]: false });
+  await expect(read(a, { childIds: [CHILD] })).rejects.toMatchObject({ name: 'StaleActorError' });
+  expect(bTransport).not.toHaveBeenCalled();
+});
+
 test.each(['update', 'batch'])('T3 / whole-pass: stale %s stops the pass without retries, fallback, metadata or sending the next record', async (mode) => {
   const entered = deferred();
   const release = deferred();
@@ -289,6 +325,11 @@ test("close during an in-flight assessment history pull writes no failure marker
 test('the complete repository graph, composite onboarding and profile cache are bound to one handle', async () => {
   const a = await open(A, async () => response());
   expect(a.services.repositories).toBe(a.repositories);
+  expect(Object.keys(a.services).sort()).toEqual([
+    'repositories', 'homeAttention', 'syncEngine', 'referenceDataReady', 'pullReferenceData',
+    'pullRoster', 'pullClasses', 'pullLookups', 'fetchAndCacheSchools', 'sessionHistory',
+    'assessmentHistory', 'deviceProfile', 'lessonDraft',
+  ].sort());
   expect(Object.keys(a.repositories).sort()).toEqual([
     'children', 'classes', 'groups', 'classEaAssignments', 'groupEaAssignments',
     'childClassMemberships', 'classOnboarding', 'classGroupingState', 'groupingVersions',

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "defaults": {
     "computeLessonChoices": {
       "today": "2026-10-19",
@@ -1215,7 +1215,7 @@
       },
       "exact": true,
       "expect": {
-        "engine_version": 1,
+        "engine_version": 2,
         "made_on": "2026-10-19",
         "reason": "ok",
         "history_complete": true,

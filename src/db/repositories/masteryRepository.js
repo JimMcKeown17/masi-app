@@ -9,7 +9,7 @@ import {
   mapDomainRow,
 } from './domainRepositoryUtils';
 import { chunkArray, sqlPlaceholders, upsertRecord } from './sqliteRepositoryUtils';
-import { serverTimestampMicros, compareServerTuples } from '../../utils/serverTimestamps';
+import { serverTimestampMicros, compareServerTuples, compareServerTimestamps } from '../../utils/serverTimestamps';
 import { ensureHistoryReferenceChildren, insertOrIgnoreRows, selectRowsByIds } from './historyPageApply';
 import { removeFromHistoryCoverage, resolveHistoryPullState } from './historyCoverage';
 import { createSyncStateRepository } from './syncStateRepository';
@@ -192,6 +192,33 @@ export const createMasteryRepository = ({ database } = {}) => {
     return rows.map(mapMastery);
   };
 
+  const getCorrectionTimes = async ({ childIds, language, transaction }) => {
+    const times = Object.fromEntries(childIds.map(id => [id, {}]));
+    if (!childIds.length) return times;
+    const db = transaction || await resolveDatabase(database);
+    const ids = JSON.stringify([...new Set(childIds)]);
+    // A refused correction's payload can be newer than the row restored by a pull.
+    // Neither row nor outbox status may hide that ordering evidence.
+    const rows = await db.getAllAsync(`
+      select child_id, letter, changed_at from letter_mastery
+      where child_id in (select value from json_each(?)) and language = ?
+      union all
+      select json_extract(payload, '$.child_id') as child_id,
+        json_extract(payload, '$.letter') as letter, json_extract(payload, '$.changed_at') as changed_at
+      from sync_outbox
+      where table_name = 'letter_mastery'
+        and json_extract(payload, '$.child_id') in (select value from json_each(?))
+        and json_extract(payload, '$.language') = ?
+    `, ids, language, ids, language);
+    for (const row of rows) {
+      const previous = times[row.child_id][row.letter];
+      if (previous === undefined || compareServerTimestamps(row.changed_at, previous) === 1) {
+        times[row.child_id][row.letter] = row.changed_at;
+      }
+    }
+    return times;
+  };
+
   const getUnsyncedRecords = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync("select * from letter_mastery where sync_status <> 'synced' order by created_at");
@@ -265,7 +292,7 @@ export const createMasteryRepository = ({ database } = {}) => {
     });
   };
 
-  return { setLetterMastery, getLetterMastery, getUnsyncedRecords, saveHistoryPage };
+  return { setLetterMastery, getLetterMastery, getCorrectionTimes, getUnsyncedRecords, saveHistoryPage };
 };
 
 export const masteryRepository = createMasteryRepository();

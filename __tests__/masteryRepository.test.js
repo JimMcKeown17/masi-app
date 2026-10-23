@@ -70,7 +70,7 @@ test('setLetterMastery stores one pending record under the uuidv5 id and queues 
     changed_at: result.changed_at, correction_id: result.correction_id, changed_by: 'user-1', programme_id: 'programme-a',
   });
   expect(Object.keys(repository).sort()).toEqual([
-    'getLetterMastery', 'getUnsyncedRecords', 'saveHistoryPage', 'setLetterMastery',
+    'getCorrectionTimes', 'getLetterMastery', 'getUnsyncedRecords', 'saveHistoryPage', 'setLetterMastery',
   ]);
 });
 

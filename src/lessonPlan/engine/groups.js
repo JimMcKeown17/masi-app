@@ -15,6 +15,21 @@ const compareRows = (left, right) => (
   || compareValues(left.group.id, right.group.id)
 );
 
+const attendedBy = (windowed, memberIds) => {
+  const members = new Set(memberIds);
+  return windowed.filter((session) => (
+    Array.isArray(session.children_ids) && session.children_ids.some((id) => members.has(id))
+  ));
+};
+const newestDate = (sessions) => sessions.reduce((latest, session) => (
+  latest === null || session.session_date > latest ? session.session_date : latest
+), null);
+
+// The picker row and the Lesson header both read "last seen" here, so they never disagree.
+export const groupLastSeenOn = ({ today, academicYearStart, programmeId, sessions, memberIds }) => newestDate(
+  attendedBy(windowSessions(sessions, { programmeId, academicYearStart, today }), memberIds),
+);
+
 const mondayOf = (today) => {
   const dayStart = Date.parse(`${today}T00:00:00Z`);
   const daysSinceMonday = (new Date(dayStart).getUTCDay() + 6) % 7;
@@ -27,13 +42,8 @@ export const rankGroups = ({ today, academicYearStart, programmeId, groups, chil
   const monday = mondayOf(today);
   const ranked = groups.map((group) => {
     const memberIds = [...new Set(group.memberIds)];
-    const members = new Set(memberIds);
-    const attended = windowed.filter((session) => (
-      Array.isArray(session.children_ids) && session.children_ids.some((id) => members.has(id))
-    ));
-    const lastSeenOn = attended.reduce((latest, session) => (
-      latest === null || session.session_date > latest ? session.session_date : latest
-    ), null);
+    const attended = attendedBy(windowed, memberIds);
+    const lastSeenOn = newestDate(attended);
     const taughtToday = lastSeenOn === today;
     const letters = planLetters({
       languageCode: group.languageCode,

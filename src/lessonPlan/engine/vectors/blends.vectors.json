@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "defaults": {
     "computeLessonChoices": {
       "today": "2026-10-19",

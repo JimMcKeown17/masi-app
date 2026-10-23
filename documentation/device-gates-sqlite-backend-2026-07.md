@@ -239,3 +239,31 @@ device run); every iPhone row is still open.
 - [x] **U8. Server switch drill** (A03s): Incomplete since, local data kept, back to Up to date. Log lines lost to the reinstall.
 - [x] **U9. History row at 1.0x and 1.3x** (A03s, 360 dp): Up to date, Downloading, Incomplete since; no clipping. The orphaned "AM" is fixed on the UI-polish branch.
 - [ ] **iPhone:** U1–U4 and U9.
+
+## V. Lesson flow (C2–C3, 2026-10)
+
+Task 12 device acceptance is controller-owned and **not yet run**. It needs Jim's yes for four
+EAS builds **from `feat/lesson-flow`**: `preview` and `preview-content`, each on Android and iOS.
+`preview` exercises letters-only release packs; `preview-content` exercises isiXhosa blends and
+a reader (P11). Run on the Galaxy A03s at 360 dp (`wm density 320`) and an iPhone, at 1.0x and
+1.3x text. Record build ids, source revision, platform, text size and evidence with the results.
+Main's wave-1 Android 32 / iOS 16 builds from `0c5d161` do not carry this lesson flow.
+
+| Gate | Check | Builds needed | Result |
+|---|---|---|---|
+| V1 | Picker: Up next, other groups, last seen, "Today ✓" after a lesson; rows within 500 ms, measured by screen recording | `preview` + `preview-content`, Android + iOS | **A03 2026-10-23: content pass, timing fail.** Up next, other groups, last seen (checked against server attendance for all 7 groups) and "Today ✓" correct on 33 and 34. Rows 470–530 ms after the picker appears on 33 (4 runs), **550–620 ms on 34** (3 runs, more data by then). iPhone pending. |
+| V2 | Make a group and Put in a group; the new group's class; both upload | `preview` + `preview-content`, Android + iOS | **A03 33: pass.** Group 5 (Nwabisa 1A + Xola 1B) made with no class; Alunamida put in it; group, assignment and memberships on the server. Polish: Put in a group lists "Group 1, Group 1, Group 2…" instead of the children's names. iPhone pending. |
+| V3 | Lesson screen: attendance redraw within 300 ms; ticks freeze the plan; Add a child; mixed-class and no-language choices; ECD hides pair reading; leave warning on Close, Android back and native iOS swipe | `preview` + `preview-content`, Android + iOS | **A03: fail.** Pass: chip flips at once; recompute before the first tick (tier 2→3-letter with only Amanda) and freeze after it; Add a child; class and language questions; warning on Back and Android back. **Fail:** each attendance change blanks the plan and disables Wrap up for 330 ms (33) / **3.2 s (34)**; the first "Leave lesson" on a lesson started from the picker returns to that lesson (3/3). ECD not testable (no ECD class on staging). iOS swipe pending. |
+| V4 | Blends and book on `preview-content`; language-specific no-blends/no-books states on `preview` | `preview` + `preview-content`, Android + iOS | **A03: pass.** 33: "No blends/books for isiXhosa yet" and "…for English yet". 34: six blends (syllable hyphens on 3-letter), "+ more", "Show 3-letter (Amanda is ahead)", book "Molo, Lolo!" with Read. iPhone pending. |
+| V5 | Wrap up: chips, locked letters, tracker sheet in lesson language, reading levels, date, notes, empty-lesson confirmation | `preview` + `preview-content`, Android + iOS | **A03: pass with polish.** Chips, assessment-locked m, tracker sheet in isiXhosa (old order until Letter order), reading-level ladder, date, notes, "Save without letters, blends or a book?". Polish: "No one new yet" selected state looks like an unpressed button and has no selected state for TalkBack. iPhone pending. |
+| V6 | Save offline, then online: one session with the group, attendees and marks; server rows match | `preview` + `preview-content`, Android + iOS | **A03: pass.** 33 offline: "5 will sync", nothing on the server; online: session `4ba29800` (group, class, attendees incl. added Kunaal, plan, `tracker_check` marked), Amanda's o mark at its tap time, Kunaal's level. 34: `6b06cb1c`, `session_reading_level` 3 Letter Blends from "olu", book read. iPhone pending. |
+| V7 | Force-quit mid-lesson, airplane-mode relaunch: Home's first card reads "Lesson in progress · {names} · Resume", chevron and no ✕; TalkBack/VoiceOver reads "Lesson in progress with Amahle and Lulu. Resume"; ticks return. Yesterday's lesson shows "Started {day}" and saves with its date | `preview` + `preview-content`, Android + iOS | **A03 33: pass.** Card and label "Lesson in progress with Amanda and Kunaal. Resume" after force-quit offline; ticks and attendance returned. Clock +1 day: "Started Fri 23 Oct", saved as 2026-10-23 (`e3cd3c71`). iPhone pending. |
+| V8 | "+ Record" with a lesson in progress opens it after the gates | `preview` + `preview-content`, Android + iOS | **A03 33: pass** (clock-in sheet, then the lesson). iPhone pending. |
+
+A03 run details, artefacts and the fixes these results call for: build log, "2026-10-23 — Lesson flow
+device run, Galaxy A03s".
+
+Jest navigation and real-SQLite durability coverage do not establish native iOS back-swipe
+behaviour, A03s timing or phone-to-server convergence. Record results here and in the lesson-flow
+Verification Register subsection of the build log. Task 12's ADR and PR/review closure are separate
+from these physical-device gates.

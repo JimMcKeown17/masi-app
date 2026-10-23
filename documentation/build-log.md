@@ -3722,10 +3722,292 @@ Oct 22, 1:14 PM"; the label carries U+00A0 before PM, and it renders without a b
 360 dp / 1.3x. The fallback commit `df72cf5` came after this build and is covered by renderer tests
 only.
 
+### 2026-10-22 — Lesson flow C2–C3: implementation, review fixes and documentation
+
+The literacy route is now **Who are you teaching? → Lesson → Wrap up → Session complete**, with
+one durable draft per signed-in EA, first-change creation, Home Resume, dated/frozen advice and
+one-transaction Save. The old Record form is retired. Sources: `src/screens/sessions/SessionFormScreen.js:8`,
+`src/navigation/AppNavigator.js:248`, `src/session/handleServices.js:99`,
+`src/services/lessonDraftController.js:114`, `src/services/lessonSave.js:32`.
+
+**Implementation commits after the rebase onto main `0c5d161` (#96).** Read from
+`git log --oneline origin/main..HEAD`; Task 8 landed after Task 11 and early review fixes:
+
+| Task | Commit | Delivered |
+|---|---|---|
+| 1 | `102513b` | Per-child history and mastery completeness on the handle |
+| 2 | `4ce2548` | Lesson inputs from the phone |
+| 3 | `64fbab3` | Group, assignment and members in one transaction |
+| 4 | `8f4dc64` | Atomic lesson save and draft deletion |
+| 5 | `3da0929` | One draft controller per EA and lesson hook |
+| 6 | `c0655e7` | Who are you teaching? behind + Record |
+| 7 | `2113965` | Lesson attendance and letters |
+| 8 | `328d033` | Blending and pair reading |
+| 9 | `8b94937` | Wrap up saves the lesson |
+| 10 | `67cd75a` | Home Lesson in progress resumes the lesson |
+| 11 | `de32276` | Retired old Record form and unused helpers |
+
+**Orchestrator review of task output.** Historical fix/RED evidence is supplied by the orchestrator;
+this documentation task inspects the current implementation and reruns the regressions, without
+reverting fixes to recreate historical RED runs.
+
+| Fix | Current source | Regression evidence |
+|---|---|---|
+| Replace a child's whole tracker map: merging retained an undone mark | `src/lessonPlan/lessonDraftState.js:42` | `lessonDraftState.test.js:58`, "an undone mark is gone: the sheet's map without it replaces the stored one" |
+| Group-creation refusal matches visible memberships, including archived/other-Programme exclusions | `src/db/repositories/groupsRepository.js:394` | `groupsRepository.test.js:125`, parameterized removed membership, ended assignment, other EA, archived group, other Programme cases |
+| Picker shows NoActiveProgrammeNotice or the school-year note rather than spinning; no dangling "letters" | `src/screens/lessons/LessonPickerScreen.js:57`, `src/utils/lessonDates.js:19` | `LessonPickerScreen.test.js:239`, `:245`, `:250`; `lessonDates.test.js:14` |
+| Picker and Lesson header use the same last-seen calculation | `src/lessonPlan/engine/groups.js:18`, `src/screens/lessons/LessonScreen.js:122` | `lessonPlanGroupLastSeen.test.js:8` (shared member/window agreement) |
+| `classes.getClassById` replaces raw SQL and retains an archived class's grade/ECD flag | `src/hooks/useLessonDraft.js:79`, `src/screens/lessons/LessonScreen.js:74` | `LessonScreen.test.js:334`, `:499` (archived grade and ECD) |
+| Failed Save releases the controller even if Wrap up has gone | `src/screens/lessons/LessonWrapUpScreen.js:142` | Current navigation regression `LessonWrapUp.save.test.js:248` verifies failed-save release and return to editing; the subsequent Back guard keeps this screen mounted during ordinary saves |
+
+**Codex adversarial review (`gpt-6-astra`, branch against origin/main; orchestrator-run).**
+The orchestrator reports that the findings below had regressions that fail without the fixes.
+The current source/test references identify the retained protection; Task 12 does not repeat the
+adversarial review or claim new mutation-test evidence.
+
+| Round | Finding and correction | Commit / retained regression |
+|---|---|---|
+| 1, high | New lesson read group membership outside the visible roster, marking hidden/handed-over children present. `visibleRosterChildren` now serves ChildrenContext, the hook and Add a child | `9a218ec`; `useLessonDraft.test.js:181`, "a new lesson takes only group members on the visible roster, as the picker does" |
+| 1, medium | Untouched lesson opened before midnight took next day's plan but kept yesterday's date, losing advice as `past_date`. First change now dates an untouched lesson | `9a218ec`; `useLessonDraft.test.js:163` |
+| 2, medium | Leaving Wrap up during a successful Save stranded Lesson. Wrap up now holds Back while saving | `77b6271`; `LessonWrapUp.save.test.js:248`, `:264` (failure and success with Back pressed) |
+| 2, medium | One failed draft read made Resume unusable until restart. Failed open is forgotten so Resume retries | `77b6271`; `lessonDraftController.test.js:267` |
+| 3, medium | Ticked blend vanished from view but stayed saved when attendance removed its tier. All ticked blends remain visible/correctable; vanished chosen tier initially reset to default | `fe5e514`; current `LessonScreen.test.js:403`, `:434` |
+| 4, medium | That reset looped on persistent write failure (651 writes in the reported test). One attempt per lesson/tier/attendance fixed it; the first guard still looped because the optimistic cleared view erased its memory | `80e2afa`; historical regression superseded by the Save-boundary correction below |
+| 5, medium | Narrow check of the round-4 fix: one failed reset followed by recovered storage and unchanged attendance let Save record the stale chosen tier. Fixed by moving the correction to Save (below) rather than adding another guard | `5052cd7`; `LessonScreen.test.js:434`, failed correction blocks Save, retry saves the tier on screen (fails against the pre-fix hook) |
+| 6 | Narrow check of `5052cd7`: **approve, no material findings** (reset admitted before the save lock, failure barrier blocks Save, Wrap up's own hook refuses Save until inputs load, frozen and backdated plans keep the default tier) | Review closed |
+
+**Subsequent source correction during Task 12:** `5052cd7`, "settle a vanished blend tier at Save,
+behind the failure barrier". The screen preserves the chosen tier if its child returns; it displays
+the default while the tier is absent. `useLessonDraft.beginSave` queues the correction and blocks
+Save if it fails, eliminating the render-driven repair loop (`src/hooks/useLessonDraft.js:169`).
+`LessonScreen.test.js:403` verifies the chosen tier returns with attendance; `:434` verifies no
+session after a failed correction and the displayed tier plus retained ticks after retry. This is
+current behaviour, superseding rounds 3–4's automatic-reset mechanism. Review round 6 approved it.
+Lesson learned: three stacked fixes to one render-driven write (rounds 3–5) were the signal to move
+the write to the one place it matters, Save, where the existing failure barrier already gives the
+guarantee.
+
+**Task 12 Step 1:** CONTEXT, PRD, workflow, contract map, design system, analytics, open decisions,
+roadmap and device gates now describe the source. LEARNING explains the single-writer queue,
+confirmed-row patches, failure isolation, generation fence and attach-not-reload rule. No product
+code, schema, server or dependency change in this documentation task; no behavioural RED/GREEN
+cycle applies. The plan/spec bodies are unchanged. The ADR **"advice from the children, record with
+the group"** remains open: draft with Jim through `grill-with-docs` before merge.
+
+**Local gates (Node v20.19.4).** All commands carry
+`PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH"`. First full run during source correction:
+`npm test -- --silent --maxWorkers=25%`: **405 suites, 5,835 tests passed** (119.324 s);
+`npm run test:integration`: **81 suites, 1,110 tests passed** (101.455 s);
+`npm run test:types`: **exit 0**. Because source changed during this run, the final run is the
+acceptance evidence for the final source revision.
+
+Final focused commands (each with that Node-20 prefix):
+
+```sh
+npx jest __tests__/lessonDraftState.test.js __tests__/lessonRecord.test.js __tests__/lessonDates.test.js __tests__/lessonPlanGroupLastSeen.test.js __tests__/homeAttention.test.js __tests__/designSystemGuard.test.js __tests__/lessonPlanEnginePurity.test.js __tests__/productionBindingStatic.test.js __tests__/historyPullTriggerBudget.test.js __tests__/moduleStateAllowlist.test.js --silent --maxWorkers=25%
+npm run test:integration -- __tests__/lessonDraftController.test.js __tests__/useLessonDraft.test.js __tests__/LessonPickerScreen.test.js __tests__/LessonScreen.test.js __tests__/LessonWrapUp.save.test.js __tests__/lessonSave.test.js __tests__/lessonInputs.test.js __tests__/groupsRepository.test.js --silent
+npx jest __tests__/useLessonDraft.test.js __tests__/LessonWrapUpScreen.test.js --silent --maxWorkers=25%
+```
+
+| Gate on final source `5052cd7` | Result |
+|---|---|
+| Focused pure rules and static guards (first command) | **10 suites, 359 tests passed**, 7.616 s, exit 0 |
+| Focused real SQLite (second command) | **7 suites, 169 tests passed**, 19.249 s, exit 0. `useLessonDraft.test.js` is outside integration `testMatch`; it runs with the third command, without changing configuration in this documentation task |
+| Focused hook and Wrap up UI (third command) | **2 suites, 39 tests passed**, 5.436 s, exit 0 |
+| `npx jest --silent --maxWorkers=25%` | **405 suites, 5,834 tests passed**, 115.327 s, exit 0 |
+| `npm run test:integration --silent` | **81 suites, 1,110 tests passed**, 99.946 s, exit 0 |
+| `npm run test:types` | **exit 0**, no diagnostics |
+| `git diff --check` | **exit 0** |
+| Documentation structure/source-reference audit | **PASS**: only the 11 allowed docs changed; one lesson-flow Verification subsection immediately before Decision Register; P1–P12 present; V1–V8 all Not yet run; added source file/line targets exist and are nonblank |
+
+The final unit count is one lower than the first run because `5052cd7` replaces the automatic
+tier-reset regressions with the Save-boundary cases; this task changed no tests. No failing gate
+or unrelated-file retry occurred. Local tests do not close the physical or hosted gates below.
+
+**Build provenance and open physical gates.** Per orchestrator-supplied build record, main's wave-1
+iPhone gates use EAS `preview` from main `0c5d161` after its CI passed: Android build **32**, iOS
+build **16**, version **1.3.0**, SQLite backend **segygjzpujphwvrubusm**. These are **not lesson-flow
+builds**; no EAS/network call was made here. Section V1–V8 is **not yet run** and requires Jim's yes
+for `preview` and `preview-content`, Android and iOS, from this branch. Task 8 blends/books require
+`preview-content`; release packs are letters-only (P11, `src/lessonPlan/packs/index.js:62`). Native
+iOS back swipe and Galaxy A03s 500 ms picker / 300 ms attendance timing are device checks, not
+Jest proof. A2 tracker-order alignment must precede a field build; C4 reader and C5 blend/book
+receipt remain separate. The code review closed at round 6. ADR-0010 (advice from the children
+present, record with the group; absence derived; last seen follows the children) was worked
+through with Jim on 2026-10-23. Draft PR #97 is open; device section V remains, on builds from
+`94748df`: `preview` Android 33 / iOS 17, `preview-content` Android 34 / iOS 18.
+
+### 2026-10-23 — Lesson flow device run, Galaxy A03s (builds 33 and 34)
+
+**Setup.** Galaxy A03s (R9WWA0G3H8R, Android 13), test@masinyusane.org on `segygjzpujphwvrubusm`.
+Build 33 (`preview`, `previewContent: false` in the embedded app config) installed over 31, then
+build 34 (`preview-content`, `previewContent: true`, no update channel) over 33; data kept. 360 dp
+(`wm density 320`) at 1.0× and 1.3× text, cold relaunch after each change. Offline = airplane mode
+plus a Wi-Fi watchdog (this phone re-enables Wi-Fi in airplane mode); ping to 8.8.8.8 unreachable
+throughout. Timing from `screenrecord` frames at 60 fps. Server checks read-only through the IPv4
+pooler. Afterwards: density reset, font 1.0, auto time on, airplane off, Wi-Fi on, stay-awake off;
+the phone keeps build 34. Results per gate: device-gates §V.
+
+**Bugs (block merge).**
+
+| # | Finding | Root cause | Evidence |
+|---|---|---|---|
+| D1 | The first **Leave lesson** on a lesson started from the picker returns to the same lesson; the second leave works. Every field lesson starts this way. | The picker opens the lesson with `navigate` (`LessonPickerScreen.js:73`), so it stays underneath. On refocus its focus effect sees the draft and replaces itself with the lesson (`:54`, the "+ Record opens the lesson in progress" rule). Resumed lessons have no picker underneath, which is why replays from Home passed. | 3 of 3 picker starts; video `v3-leave-fresh-lesson.mp4`: lesson pops 2.30 s, picker 2.43 s, lesson again 2.80 s. |
+| D2 | Every attendance change blanks the plan sections and disables Wrap up, and the header reads "last seen Not seen yet", until inputs reload: **330 ms on 33, 3.2 s on 34**. The same blank shows on first open. | `useLessonDraft` keys its input load on the present children (`inputKey` includes `presentKey`), so a toggle discards the loaded input and `lessonInput` is null until a full reload; `choices` and `seen` derive from it. | Videos `v3-plan-absent.mp4` (33), `v3-b34-samia-back.mp4` (34: chip 1.30 s, plan back 4.52 s). |
+| D3 | With a content pack the lesson engine is slow: on the A03 each attendance change runs ~3 s of JavaScript, during which the app ignores taps. | `blendChoices` rebuilds `blendItems(pack)` from all 3,328 word-bank entries and calls `soundsFor` twice per word on every call; `computeLessonPlan` and `computeLessonChoices` both do it. Node 20 on the Mac: 18.0 ms + 18.6 ms per change with the preview pack vs 0.1 ms with the letters-only pack (scratch timing test, not committed). | D2's 34 video; Node timings above. |
+| D4 | The header reads "last seen Not seen yet" for a never-taught group (and "last seen Today ✓" for one taught today). | `LessonScreen.js:142` prefixes the picker's label with "last seen ". | Nola's English lesson, `v-47-english-lesson.png`. |
+| D5 | Picker rows take 470–530 ms after the screen appears on 33 and 550–620 ms on 34 (budget 500 ms); a spinner shows each time. | Not yet profiled. The picker reloads everything on each focus (drafts, base, sessions since the year start, children, classes, two completeness reads, known letters per language) in several sequential rounds. | `v1_trials.py` runs, 4 on 33 and 3 on 34. |
+
+**Polish (fix with the bugs).** "No one new yet" toggles between two button styles and exposes no
+selected state (`WrapUpChildRow.js`); use a selectable chip. Add a child, Make a group and the
+ungrouped list show first names only, so the test account's two Amanda Manqinas and two Aviwe
+McKeowns are indistinguishable; Put in a group lists "Group 1, Group 1, Group 2…" where the picker
+names groups by their children. The Wrap up heading does not set the letters apart ("Who knows o
+without help?"). "2 · Blending · 15 min ·" leaves a dangling dot when it wraps at 1.3×. "Ênê" sorts
+after "Xola" (code-point order). Row dividers in the Make a group and Add a child sheets start at
+x = 184 px with nothing to their left. Adjacent groups can share a dot colour (Nola, Plan).
+
+**Passed as specified.** Last seen follows the children (all 7 groups matched server attendance;
+"Aviwe & Sinoxolo" stays Mon because Aviwe's last lesson was in July). "letters o" on every row was
+correct: every child's latest letter result was l a m and none had a lesson-plan session, so the
+first-lesson rule taught the unknown step-1 letter. Plan recompute before the first tick and freeze
+after it; Add a child; class and language questions; leave warning on Back and Android back (which
+also closes it); Wrap up chips, locked letters, ladder, date, notes and empty-lesson confirmation;
+offline save then sync with matching server rows; force-quit offline resume with the TalkBack label;
+a lesson started yesterday saving with its own date; + Record opening the lesson in progress;
+Discard lesson; blends, tiers, syllable hyphens, "ahead" link and book on 34; 1.3× layouts.
+
+**Questions for Jim, not bugs.** Review lists step letters nobody knows yet ("Review: m l a u" when
+k is suggested), as spec §4.4 and C3 define. The tracker sheet still uses the old order until
+Letter order lands. At 1.3× the lesson card sits under the + button until Home is scrolled (pre-existing
+Home layout, as is "Not clocked in" wrapping to three lines).
+
+**Dead ends.** Group 5 was first logged as missing from the picker after Make a group; the text filter
+matched only rows containing "· letters", and Group 5 (no class, so no letters) was there all along
+(`v-34-picker-new-group.png`). A text-matched tap hit the sheet row under a background row and made
+a group of Ênê instead of Nola; kept as test data (it showed never-seen groups ranking first).
+
+**Staging data created.** Sessions `4ba29800` (Amanda, Kunaal; o m), `e3cd3c71` (Nwabisa, Xola;
+dated 2026-10-23, created with the clock +1 day), `6b06cb1c` (Amanda, Aviwe, Plan; olu, book);
+Group 5 (Nwabisa, Xola, Alunamida), groups for Ênê and Nola; Amanda's o mark; Kunaal's level
+2 Letter Blends. Three test lessons were discarded on the phone. Screenshots and videos:
+session scratchpad `device/v-*.png`, `device/*.mp4`.
+
+### 2026-10-23 — Lesson flow device fixes (after the A03 run)
+
+**Plan.** `docs/superpowers/plans/2026-10-23-lesson-flow-device-fixes.md` (`47b1d2f`), one Codex
+adversarial plan round (`8207d76`: the class/language choice paths must project the present
+children before computing a plan, and a failed participant load needs a retry). Codex built
+each task (gpt-6.1-sol, high); Claude reviewed each diff and reran the suites before committing.
+
+| Bug | Fix | Commit | Evidence |
+|---|---|---|---|
+| D1 first Leave bounced back into a picker-started lesson | Once the lesson has a draft, `LessonScreen` removes the picker route directly below it with one functional `CommonActions.reset`, keeping every other route and key. Before the first change Back still returns to the picker. | `91768b1` | New `LessonFlowNavigation.test.js` (real container and native stack): 3 of 5 cases failed on the old code (header Back and hardware Back landed in `Lesson`, Discard in `SessionForm`); 7/7 now. |
+| D2 attendance change blanked the plan | `useLessonDraft` loads base (programme, today) and participant facts (everyone in the attendance) separately; `presentLessonInput` projects the present children in the same render as the chip. Adding a child reloads with a spinner; a failed load shows "Couldn't load this lesson's suggestions." and **Try again**. Class/language choices project the present children too. | `91768b1` | Hook test: toggles keep plan and choices in every render with one base and one participant load. |
+| D3 engine re-analysed 3,328 words per call | Pure `indexPack` (blend sounds, reader tokens) in the engine; `packIndexFor` caches one index per frozen pack object in the inputs layer; the engine uses it only for the same pack object. | `ed41c28` | Node 20, preview pack, 3 children, plan + choices, median of 20: **29.6 ms → 0.30 ms**. Vector and real-pack suites run with and without an index: identical output. |
+| D4 header "last seen Not seen yet" | `lessonHeaderSeenLabel`: "not seen yet", "seen today", "last seen Mon", "last seen Mon 12 Oct"; from the base, never from who is present. | `91768b1` | `lessonDates`, `LessonScreen` tests. |
+| D5 picker rows 470–620 ms | `loadPickerRanking` (draft check, base, in-memory groups) draws rows and Up next; `loadPickerLetters` fills in letters afterwards without reordering; a late result after blur is dropped. Programme and year are read once. | `0de220f` | Fixture (8 groups, 25 children, 4,500 letter items, 80 sessions): before rows **20 statements / 4,821 rows → 5 / 162**; whole load 20 → 16 statements. |
+
+**J24 (Jim, 2026-10-23).** "We should only be reviewing letters that are known, though if it's the
+first level, it's harmless to learn and review at the same time." Review = letters the group
+knows plus step 1, minus today's letters; unlocked (blends, books) keeps the whole-step rule
+(C3). `ENGINE_VERSION` 2; stored version-1 plans keep their review letters (`ed41c28`, spec §4.4).
+
+**Polish (`2f41bf4`).** No one new yet is a `ToggleChip`; full names with the class in Add a
+child, Make a group and Not in a group yet; Put in a group names groups by their children with
+the group dot; locale name order (Ênê before Xola), also for a new lesson's chips and title;
+Wrap up letters in red; `SelectableRow` divider at 16 without a lead. `joinDetail` binds each dot
+to the detail after it with a no-break space and keeps spaces inside a detail unbroken. The plan
+first said the opposite (no-break space before the dot), which keeps the dot at the end of a
+wrapped line, the bug itself; caught in review. **Known limit, not changed:** group dot colours
+are a group's identity across the app (six colours by `compareGroups` order), so groups six apart
+share a colour.
+
+**Review notes.** Codex wrote audit reports and build-log entries unasked in two tasks; removed
+(the plan's last task writes this one section). Claude's fixes in review: null-prototype reader
+map and `undefined`-tolerant pack cache; a guarded reset callback; separator direction; a nested
+heading style that shrank the letters; the lesson member order.
+
+**Code review round 1 (Codex, gpt-6-astra): one medium finding, reproduced.** Splitting the base
+load (sessions) from the participant load (session-history completeness) let the two come from
+different moments. Open a lesson while past lessons are still downloading (no sessions, history
+incomplete); the download finishes with an earlier lesson for an attendee; add a child. The
+participant load now reads history as complete, the base still has no sessions, the engine
+infers `first_session`, and the first tick freezes that plan. Fix (Codex built, Claude
+reviewed): the base reads session-history coverage **before** the sessions and carries both
+(`sessionHistoryCoveredChildIds`); the pull writes pages and cursor in one transaction, so the
+sessions read afterwards are at least as new as the coverage claim. `presentLessonInput` takes
+each child's `historyComplete` from that coverage, and mastery completeness is read before known
+letters for the same reason. The hook's base key includes the session-history store's
+`pageVersion` and `runVersion`; a refresh keeps the shown base, plan and choices until the new
+base lands, and an unfrozen same-day plan then follows it. Codex's first patch also recomputed a
+resumed plan on mount (caught by the midnight save test; narrowed). Claude added: a failed
+background refresh keeps the shown suggestions and logs, instead of showing "Couldn't load" over
+working suggestions. The picker uses the same coverage (ranking 6 statements). Committed `96da985`.
+
+**Code review round 2 (Codex, gpt-6-astra): one high finding, reproduced.** Round 1's fix let any
+refreshed base recompute a stored unfrozen plan, through a `refreshed` flag each hook kept for
+good. Lesson stays mounted under Wrap up, and each screen loads its own facts, so the two can
+hold different mastery completeness. After one history refresh each screen computed a different
+plan and overwrote the other's through the shared draft controller, forever. Our test of the
+reviewer's scenario ran Node out of memory on that code. Fix (Claude): a stored plan is replaced
+only by an attendance change (as before) or by inputs at least as complete on both counts and
+more complete on one (`isPlanSuperseded`, pure, in the engine). Both tests read the stored plan,
+so whichever screen writes first settles it for the other: at most two writes, and a fall in
+completeness never writes. Two hook copies with different facts now converge in 2 distinct
+writes; a refresh that adds nothing leaves a resumed plan alone. Measuring writes needs care: the
+controller runs each transition about three times per write (check, optimistic view, save), so
+counting `setPlan` calls reads 6 for 2 writes; the test counts `controller.apply` calls instead.
+Committed `1d2eda1`.
+
+**Code review round 3 (Codex, gpt-6-astra; the last round): one medium finding, reproduced.**
+Round 2's rule ends when writes succeed, but a failed automatic plan write retried without end.
+The controller drops a failed write and republishes the stored plan; the screen still sees that
+plan as superseded, so it writes again. On a phone whose storage fails (a full disk), a resumed
+lesson churns SQLite and React with no one touching it. Our test (Lesson and Wrap up both
+mounted, every draft update failing at the native adapter) hung on that code. Fix (Claude, one
+condition): the automatic write waits while the controller holds "Couldn't save your last
+change", which only a successful write clears, so the upgrade follows the EA's next change. Now
+at most 2 failed attempts, then the next change stores the upgrade. A second change, Save adding
+the plan on screen when it differs from the stored one, was built and then removed by the
+simplicity check below. **Accepted known risk:** a Save with no ticks straight after a failed
+upgrade records the older plan, with its own completeness flags; any tick already stores the
+plan on screen. Rounds found 1, 1 and 1 issue, each with one fix; round 3 was the last.
+Committed `dea72c6`.
+
+**Simplicity check (`check-solution`, because the finding count stopped falling).** Coverage read
+before sessions: keep (the picker and the lesson both use it). History refresh: keep (an
+untouched lesson's suggestions and its "Still downloading past lessons" note update when history
+lands). Upgrading a stored unfrozen plan, with its failure gate: keep, because `LessonScreen`
+shows that note from the stored plan's `history_complete`, so without the upgrade the note stays
+after the download ends; `isPlanSuperseded` is the smallest rule found that stops. Save adding
+the plan on screen: removed, since no one can tell which of two consistent plans a no-tick record
+holds.
+
+**Verification.** Host load averaged 40–130 during the session (other sessions' Jest runs), and
+parallel runs timed out in unchanged suites; every such suite passed serially. Final gates on
+`dea72c6`: unit **411/411 suites, 5,920 tests** (`--maxWorkers=25%`); integration **82/82
+suites, 1,127 tests**; `npm run test:types` clean. Earlier: `96da985` 410 / 5,905 and 82 / 1,127;
+`1d2eda1` 411 / 5,919 and 82 / 1,127.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-23 | Lesson flow device fixes: once a lesson has a draft, the picker leaves the back history, so leaving goes to the screen before it (`src/screens/lessons/LessonScreen.js:54`). | The picker reopens a kept lesson on focus ("+ Record" resumes); leaving onto it bounced back (A03, 3/3). The leave copy already promises "finish it later from Home". | iOS swipe or a new entry point shows a different stack shape. |
+| 2026-10-23 | J24 (Jim): Review = known letters plus step 1, minus today's letters; `ENGINE_VERSION` 2 (`src/lessonPlan/engine/letters.js:124`). | Reviewing a step letter nobody knows ("m l a u") is not review; step 1 is learnt and reviewed together. Blends and books keep the whole-step rule (C3). | Jim's pedagogy pass or the real isiXhosa pack. |
+| 2026-10-22 | Lesson flow P1: picker uses the standard white stack header, "Who are you teaching?", with Close (`src/navigation/AppNavigator.js:248`). | Fits the existing stack and retains Record's gates. | Jim's wording/visual pass. |
+| 2026-10-22 | Lesson flow P2: Wrap up is its own screen; Back returns to Lesson and waits during Save (`src/screens/lessons/LessonWrapUpScreen.js:78`). | Gives knowledge capture and Save one clear place. | Native navigation gates V3/V5. |
+| 2026-10-22 | Lesson flow P3: create draft on first change or Wrap up; opening writes nothing (`src/hooks/useLessonDraft.js:150`, `:154`). Untouched lessons take the first-change date (`:15`). | Persist editing intent without creating empty drafts or mismatching date and plan. | Cross-midnight or durability evidence. |
+| 2026-10-22 | Lesson flow P4 (Jim): leaving asks "Leave this lesson?" and keeps it; Discard lesson is separate (`src/screens/lessons/LessonScreen.js:52`, `:126`). | Protect a lesson from accidental Back/swipe without deleting work. | iOS swipe and Android Back gate V3. |
+| 2026-10-22 | Lesson flow P5: Home Resume bypasses clock-in; + Record retains both gates (`src/utils/homeAttention.js:21`, `src/hooks/useSessionLaunchGuard.js:36`). | Resume should return directly to existing work. | Jim's product pass or V8. |
+| 2026-10-22 | Lesson flow P6: ask once when class language is missing; isiZulu has no letter suggestions/tracker but can save (`src/components/lessons/LessonChoiceSheet.js:9`, `src/screens/lessons/LessonWrapUpScreen.js:84`). | No invented language or unsupported letter order. | A supported isiZulu pack/order or V3/V5. |
+| 2026-10-22 | Lesson flow P7: Make a group uses ungrouped children, next Group N and their shared class; Put in a group adds an ungrouped child (`src/context/ChildrenContext.js:578`; `src/db/repositories/groupsRepository.js:394`). | Avoid double-booking within the visible held groups; commit all relationships together. | Wider group editor or V2. |
+| 2026-10-22 | Lesson flow P8: No one new yet is per child; `tracker_check` is marked if any present child has changes, none if all present children confirmed none, otherwise null (`src/lessonPlan/lessonRecord.js:11`). | Aggregate the per-child actions without treating a skipped check as none. | Analytics interpretation changes. |
+| 2026-10-22 | Lesson flow P9: last seen is Today ✓, weekday in the last six days, Not seen yet, otherwise short date (`src/utils/lessonDates.js:12`). | Concrete recency wording shared by picker and header. | Jim's wording pass or V1. |
+| 2026-10-22 | Lesson flow P10: retire old Record form, child selector and unused validation/persistence helpers (`de32276`; `src/screens/sessions/SessionFormScreen.js:8`). | One literacy capture path. | A separately specified capture mode. |
+| 2026-10-22 | Lesson flow P11: release packs remain letters-only; no-blends/no-books copy is expected. Use preview-content on both platforms to exercise Task 8 (`src/lessonPlan/packs/index.js:62`). | Developer content remains gated; release content is not fabricated. | Real pack release or V4. |
+| 2026-10-22 | Lesson flow P12: Session complete keeps its params and adds languageCode; blend/book receipt is C5 (`src/screens/lessons/LessonWrapUpScreen.js:137`). | Keep receipt changes in their own plan. | C5 implementation. |
 | 2026-10-21 | AR Plan 3 review round 2 enforces cached assessment owner/year visibility in the canonical parent SQL and count aggregate. The active-year test stays inside the same statement; nested run reads supply their bound reading EA. The plan's two-round adversarial-review cap is reached. | A cached, once-authorized co-EA result must not remain readable after its year expires. Retaining rows preserves owner history, and a SQL predicate protects every accessor path before item hydration without weakening query budgets or relying on caller date filters. | A release/device gate exposes a concrete remaining visibility mismatch; further work requires explicit scope beyond this completed review cap. |
 | 2026-10-21 | AR Plan 3 review round 1 uses outbox ownership for mastery acknowledgement, permits equal-watermark display repair without owed work, hydrates tools through the existing full reference refresh, and restarts both Programme walks after a recovery year change. Combined status checks read-time active-window context. | A restored display id cannot own a refused payload's Retry, a watermark must describe the displayed accepted value, a valid FK must be hydrated before page apply, and a completed cursor from the previous year cannot establish current completeness. Existing CAS, one-refresh budget and session semantics remain load-bearing. | Controller adversarial review or physical refusal/Retry, non-null tool, or between-walk year-change gates expose a further convergence or authority mismatch. |
 | 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |
