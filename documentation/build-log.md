@@ -4883,8 +4883,10 @@ for `preview` and `preview-content`, Android and iOS, from this branch. Task 8 b
 `preview-content`; release packs are letters-only (P11, `src/lessonPlan/packs/index.js:62`). Native
 iOS back swipe and Galaxy A03s 500 ms picker / 300 ms attendance timing are device checks, not
 Jest proof. A2 tracker-order alignment must precede a field build; C4 reader and C5 blend/book
-receipt remain separate. The code review closed at round 6; the ADR, device section V and the PR
-remain open.
+receipt remain separate. The code review closed at round 6. ADR-0010 (advice from the children
+present, record with the group; absence derived; last seen follows the children) was worked
+through with Jim on 2026-10-23. Draft PR #97 is open; device section V remains, on builds from
+`94748df`: `preview` Android 33 / iOS 17, `preview-content` Android 34 / iOS 18.
 
 ## Decision Register
 
