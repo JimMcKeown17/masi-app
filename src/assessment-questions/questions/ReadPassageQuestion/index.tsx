@@ -256,7 +256,7 @@ function ReadPassageQuestionContent(
 
   if (phase === 'intro') {
     return (
-      <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />
+      <QuestionIntro instructions={instructions} onStart={() => { props.onStart?.(); setPhase('active'); }} />
     );
   }
 
