@@ -1,8 +1,8 @@
 import { evaluateBatteryState } from '../evaluateBatteryState';
 import type { BatteryConfig } from '../../types/BatteryConfig';
 
-const q = (code: string) => ({ question_code: code, question_version: '1', materials: null });
-const LINEAR: BatteryConfig = { battery_code: 'b', battery_version: '1', languages: ['en'], questions: [q('q1'), q('q2'), q('q3')], prerequisites: {} };
+const q = (code: string) => ({ title: code, question_code: code, question_version: '1', materials: null });
+const LINEAR: BatteryConfig = { title: 'Test battery', aboutMinutes: 1, battery_code: 'b', battery_version: '1', languages: ['en'], questions: [q('q1'), q('q2'), q('q3')], prerequisites: {} };
 const GATED: BatteryConfig = { ...LINEAR, prerequisites: { q3: { depends_on: 'q1', minScore: 10, on_unmet_reason: 'skipped_prerequisite_unmet' } } };
 
 test('fresh run: next is the first question; not eligible', () => {
