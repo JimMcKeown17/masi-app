@@ -3,7 +3,7 @@ import { renderHook, act, waitFor, cleanupAsync } from '@testing-library/react-n
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
-import { draftStart, holdDraftWrite, deferred } from '../test-support/lessonDraftTestUtils';
+import { draftStart, holdDraftWrite, deferred, failDraftUpdates } from '../test-support/lessonDraftTestUtils';
 import { MON } from '../test-support/lessonSaveFixtures';
 import { useLessonDraft } from '../src/hooks/useLessonDraft';
 import * as transitions from '../src/lessonPlan/lessonDraftState';
@@ -220,6 +220,36 @@ testHook('two mounted lessons with different facts converge on one plan after a 
     .map(call => JSON.stringify(call[1]));
   expect(written.length).toBeLessThanOrEqual(2);
   expect(new Set(written).size).toBe(written.length);
+});
+
+const resumeIncompletePlan = async () => {
+  const fixture = draftStart();
+  return handle.repositories.lessonDrafts.create({ ...fixture,
+    plan: { ...fixture.plan, history_complete: false, mastery_complete: false } });
+};
+
+testHook('a failed plan upgrade waits for the next change that saves instead of retrying', async () => {
+  // Lesson stays mounted under Wrap up, so both screens see the upgrade and its failure.
+  const bump = historyVersions();
+  const row = await resumeIncompletePlan();
+  const lesson = mount({ draftId: row.id });
+  const wrapUp = mount({ draftId: row.id });
+  await ready(lesson.result);
+  await ready(wrapUp.result);
+  const disk = await failDraftUpdates();
+  try {
+    await finishLessonHistory();
+    await act(async () => { bump(); });
+    await waitFor(() => expect(lesson.result.current.error).toBe("Couldn't save your last change."));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+    expect(disk.failed.attempts).toBeLessThanOrEqual(2);
+    expect(lesson.result.current.plan.history_complete).toBe(true);
+    expect(wrapUp.result.current.plan).toEqual(lesson.result.current.plan);
+  } finally { disk.restore(); }
+  await change(lesson.result, transitions.setNotes, 'Room on the phone again');
+  await waitFor(() => expect(lesson.result.current.draft.plan.history_complete).toBe(true));
+  expect(lesson.result.current.error).toBeNull();
+  expect((await handle.repositories.lessonDrafts.getActive()).plan).toEqual(lesson.result.current.plan);
 });
 
 testHook('attendance projects loaded participants without blanking or reading again', async () => {

@@ -166,9 +166,11 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   useEffect(() => {
     // Opening alone never creates a draft. Fold the initial plan into the first user change.
     // A persisted, unfrozen plan is replaced only on the lesson's own day (see needsCurrentPlan).
+    // After a failed write the controller keeps its error until a write succeeds, so the plan
+    // waits for the EA's next change instead of retrying on every render.
     if (!draft?.plan || !plan || !recomputable || storedPlanKey === planKey) return;
     const current = controller.getSnapshot();
-    if (current.status === 'saving' || current.draft !== draft) return;
+    if (current.status === 'saving' || current.draft !== draft || current.error) return;
     void controller.apply(transitions.setPlan, plan).catch(() => {});
   }, [controller, draft, plan, recomputable, storedPlanKey, planKey]);
 
