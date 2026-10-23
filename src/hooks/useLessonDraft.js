@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useSignedInEA } from '../context/SignedInEAContext';
 import { useProgrammeTodayKey } from './useProgrammeTodayKey';
 import { loadLessonBase, loadLessonParticipants, presentLessonInput } from '../lessonPlan/inputs/lessonInputs';
-import { computeLessonPlan, computeLessonChoices, isPlanRecomputable, resolveLessonClass } from '../lessonPlan/engine';
+import {
+  computeLessonPlan, computeLessonChoices, isPlanRecomputable, isPlanSuperseded, resolveLessonClass,
+} from '../lessonPlan/engine';
 import { getPack } from '../lessonPlan/packs';
 import { isPreviewContentEnabled } from '../lessonPlan/packs/previewContent';
 import { languageCodeForHomeLanguage } from '../utils/assessmentRegistry';
@@ -49,8 +51,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
         repositories.classes.getClasses(),
       ]);
       if (nextBase.missing) throw new Error(`Lesson inputs missing: ${nextBase.missing}`);
-      if (active) setBaseLoaded({ base: nextBase, classes, retryCount: baseRetryCount,
-        pageVersion, runVersion, refreshed: baseInScope });
+      if (active) setBaseLoaded({ base: nextBase, classes, retryCount: baseRetryCount, pageVersion, runVersion });
     };
     void load().catch(error => {
       if (!active) return;
@@ -143,9 +144,11 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const recomputable = draft && isPlanRecomputable({
     lessonDate: draft.lesson_date, today, frozen: !!draft.plan_fixed_at,
   });
-  // Keep a resumed plan on initial load; attendance changes and a replacement base refresh it before freezing.
+  // A stored plan stays unless it can still change and attendance changed or inputs became more complete.
+  // Both tests read the stored plan, so Lesson and Wrap up, each with its own inputs, cannot trade writes.
   const needsCurrentPlan = !draft?.plan || recomputable
-    && (JSON.stringify(draft.plan.present_child_ids) !== presentKey || baseLoaded?.refreshed === true);
+    && (JSON.stringify(draft.plan.present_child_ids) !== presentKey
+      || (!!lessonInput && isPlanSuperseded(draft.plan, lessonInput)));
   const currentPlan = useMemo(() => lessonInput && !needs && needsCurrentPlan ? computeLessonPlan(lessonInput) : null,
   [lessonInput, needs, needsCurrentPlan]);
   const plan = useMemo(() => {
@@ -162,7 +165,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   [lessonInput, planKey, needs]);
   useEffect(() => {
     // Opening alone never creates a draft. Fold the initial plan into the first user change.
-    // A persisted, unfrozen plan follows refreshed inputs only on the lesson's own day.
+    // A persisted, unfrozen plan is replaced only on the lesson's own day (see needsCurrentPlan).
     if (!draft?.plan || !plan || !recomputable || storedPlanKey === planKey) return;
     const current = controller.getSnapshot();
     if (current.status === 'saving' || current.draft !== draft) return;
