@@ -70,18 +70,21 @@ const coveredChildren = (cursor, windowStart) => {
   return isCoverageWalkComplete(state, { windowStart }) ? new Set(state.rescanChildIds) : null;
 };
 
-export const sessionHistoryCompletenessByChild = async ({
-  database, userId, programmeId, childIds = [], academicYearStart,
+export const sessionHistoryCoveredChildIds = async ({
+  database, userId, programmeId, academicYearStart,
 }) => {
-  const incomplete = Object.fromEntries(childIds.map(id => [id, false]));
-  if (!userId) return incomplete;
+  if (!userId) return null;
   const db = await resolveDatabase(database);
   const programme = programmeId === undefined ? await getActiveProgrammeId(db, userId) : programmeId;
   const windowStart = academicYearStart === undefined
     ? (await getActiveAcademicYear(db))?.starts_on : academicYearStart;
-  if (!programme || !windowStart) return incomplete;
+  if (!programme || !windowStart) return null;
   const pullState = await createSyncStateRepository({ database }).getPullState(sessionHistoryScope(userId, programme));
-  const covered = coveredChildren(pullState?.cursor, windowStart);
+  return coveredChildren(pullState?.cursor, windowStart);
+};
+
+export const sessionHistoryCompletenessByChild = async ({ childIds = [], ...options }) => {
+  const covered = await sessionHistoryCoveredChildIds(options);
   return Object.fromEntries(childIds.map(id => [id, covered?.has(id) ?? false]));
 };
 

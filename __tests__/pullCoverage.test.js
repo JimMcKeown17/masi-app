@@ -4,7 +4,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 
 import {
   isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete,
-  sessionHistoryCompletenessByChild, masteryCompletenessByChild,
+  sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
 } from '../src/services/pullCoverage';
 import * as syncStateRepositories from '../src/db/repositories/syncStateRepository';
 import * as assessmentHistoryPull from '../src/services/assessmentHistoryPull';
@@ -72,6 +72,16 @@ describe('isSessionHistoryComplete', () => {
   afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
 
   const complete = (childIds) => isSessionHistoryComplete({ database: db, userId: 'user-1', childIds });
+
+  test('covered child ids are null until the window is complete, then contain only walked children', async () => {
+    const options = { database: db, userId: 'user-1', programmeId: 'programme-a', academicYearStart: '2026-01-15' };
+    expect(await sessionHistoryCoveredChildIds(options)).toBeNull();
+    await pull(emptyServer);
+    expect(await sessionHistoryCoveredChildIds(options)).toEqual(new Set(['child-a', 'child-b']));
+    expect(await sessionHistoryCoveredChildIds({ ...options, academicYearStart: '2027-01-13' })).toBeNull();
+    await pull(failingServer);
+    expect(await sessionHistoryCoveredChildIds(options)).toBeNull();
+  });
 
   test('per-child history answers match the single-child predicate', async () => {
     await pull(emptyServer);
