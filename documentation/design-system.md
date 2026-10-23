@@ -375,9 +375,24 @@ cannot reopen Reset. Recovery and Reset's native D10 gate are tracked in
 | `ListRow variant='nested'` | Min 56, left padding 68, 24dp lead and strong-body title. Dividers start at 104 for nested, otherwise 68 with a lead or 16 without. |
 | `IconTile({ icon, tone='canvas', iconSize })` | Decorative 40dp tile, radius 14. canvas: background/ink/20dp; red: red50/red700/22dp; warning: warningBg/warningText/22dp. iconSize preserves Home's 22dp canvas glyph. |
 | `StatusBadge({ label, tone='neutral' })` | Min 22, pill, textBadge, horizontal padding 8. Tones: neutral border/ink; warning warningBg/warningText; success successBg/successText; successStrong successText/white; error errorBg/error. |
+| `assessments/ChecklistRow({ label, checked, onToggle })` | One explicit acknowledgment, currently the Writing Sheet run-code/name check before finalize. Checkbox role, spoken label and checked state; omitting onToggle disables both interaction and the accessibility control. Min height 48, vertical padding/gap spacing.ms, wrapping textBodySemi/colors.text label. Box 22 × 22, 1dp edge, borderRadius.sm; unchecked colors.fieldEdge/colors.surface, checked colors.primary for both edge and fill, 16dp colors.onDark checkmark. |
+| `assessments/MaterialsBlock({ firstName, materials })` | Host Question intro handoff; materials is the { item, side, footer } returned by materialsLine(question, language, battery), or null for “No materials, oral”. Printed materials use colors.heroDark, borderRadius.lg, padding/marginHorizontal spacing.md, marginBottom spacing.sm and gap spacing.xs. “Hand {firstName}”: textSectionLabel/onDarkMuted; item plus optional side: displayHeading/onDark; “Footer: {footer}”: textCaption/onDarkMuted. Oral copy uses textCaption/textSecondary and the same outer margins. |
 | `EmptyState({ title, body, footnote, action })` | Left-aligned, type-led state without an illustration. displaySheetTitle/header, paragraph body; footnote accepts text (caption styling) or a React element rendered directly. action forwards BrandButton props, including icon, variant and style; size is always md, primary by default, with action.style composed after the default top margin. NoActiveProgrammeNotice uses this. |
 | `SectionHeader({ title, hint, action, style })` | Caps textSectionLabel/header and optional caption hint. action is BrandButton props, forced tertiary with negative vertical margin to retain its 44dp target without enlarging the label row. Use hint, not the retired subtitle prop. |
 | `dashboard/StatBar({ items })` | Bare stat columns. Items: { label, value, color?, onPress?, accessibilityLabel? }. An explicit accessibilityLabel groups a column into one accessible element; onPress gives it the button role, with the existing “View {label}: {value}” fallback when no label is supplied. displayTitle/tabular numeral, caps textLabel; actions use primary plus an 18dp chevron. color overrides the numeral for score meaning. Current compact labels retain one line, fit-to-size (floor 0.85), and 1.2 scaling caps on label/value. |
+
+The [ChecklistRow](../src/components/assessments/ChecklistRow.js) label comes from the run code
+and child's first name: “Write run code {code} and {firstName}'s name on the Writing Sheet”.
+The summary shows this one check for an eligible writable run when `view.hasWritingSheet`; until
+checked, Finalize stays disabled with “Tick the box to finalize”. Do not add a filing check.
+The row does not own persistence or finalization.
+
+The [MaterialsBlock](../src/components/assessments/MaterialsBlock.js) belongs above the package's
+Question intro. The host hides it on the Question's first `onStart` transition into capture;
+re-reading, reviewing or cancelling a review does not restore the intro handoff. Keep material
+labels and footers derived from [materialsLine](../src/utils/batteryRun.js), rather than
+assembling them in a screen. Package Questions remain free of host imports. Physical footer
+text omits the UI's “Footer:” prefix; see the [printout brief](./welaplus-printout-pack.md).
 
 ### Settings lists (Bold Red Profile)
 
