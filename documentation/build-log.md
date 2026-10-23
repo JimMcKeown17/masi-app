@@ -3800,8 +3800,52 @@ The final full gate above runs every suite after that correction with the matchi
 Scope audit: no content-pack, standalone test/item-set, WelaPLUS definition, migration, Supabase,
 repository, sync, outbox or dependency-manifest changes. Concurrent edits to CONTEXT, the
 roadmap and the design-spec status note were preserved; they were not authored by this build.
-Changes remain uncommitted. Host battery-registry wiring/form selection and native device,
+Committed as `87c104b` after Claude review. Host battery-registry wiring/form selection and native device,
 force-quit, hosted-sync and results-screen gates remain the explicit Plan 3 follow-up.
+
+**Claude review and independent verification (2026-10-23).** Claude reviewed the full diff against
+the plan. It confirmed:
+- the content SHA-256 is unchanged;
+- `consecutive_wrong` is behaviorally identical;
+- `CURRENT_ITEM_SETS` and the WelaPLUS definition are untouched;
+- no reader pins `letter_sounds` to a card version;
+- the instruction copy matches the real button labels (Correct, Incorrect, End test).
+
+The standalone detail screen refuses battery-run results, and EGRA results always belong to a run.
+So its letter/word grid can't mislabel story or comprehension results; the run view is Plan 3's job.
+
+Claude fixed one copy nit: a single unmarked comprehension question now reads "1 question not
+marked. Save it as Not asked?", with a new test.
+
+Claude re-ran the checks under Node 20:
+
+| Command | Result |
+| --- | --- |
+| `npm run test:content` | 5/5 pass |
+| `npm run test:types` | clean |
+| Package + EGRA + gallery + navigator suites | 69/70 suites, 891/892 tests |
+| `__tests__/QuestionGalleryScreen.test.js` alone | 23/23 |
+| `npx jest --maxWorkers=3 --testTimeout=30000 --silent` (full, after the copy fix) | **405/405 suites, 5,675/5,675 tests**, exit 0 |
+
+The single failure was the existing story-writing gallery test timing out at load average ~58.
+
+Local `node_modules` here is a set of per-package symlinks into the `assessment-style` worktree.
+The lockfiles are byte-identical (`cmp`), but if that worktree is removed, run `npm ci` here.
+
+Codex adversarial review (`gpt-6-astra`, base `81e47ef`) returned **approve** with no material
+findings. It independently checked:
+- TypeScript;
+- the content tests;
+- the adapter's exactness across all 13 forms;
+- 1,376 first-row decision patterns.
+
+Its two Plan 3 follow-ups are now on the roadmap:
+- real-screen stop → Undo → timer and End → cancel;
+- a run results view that shows Not asked separately and uses the asked count.
+
+Evidence class: everything above is local (jest with real SQLite through `better-sqlite3`). No
+device, hosted Supabase or sync-to-server check was run; none is possible until the Plan 3 host
+can start an EGRA run.
 
 ## Decision Register
 

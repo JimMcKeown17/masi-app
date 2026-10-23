@@ -806,7 +806,10 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   - register `EGRA_BATTERIES` and `egraItemSetFor` in its battery registry;
   - add a form picker that keeps English HL and FAL distinct, with `fixedLanguage` per form;
   - run the device gate: selection, capture, save, force-quit resume, finalize, offline then sync,
-    and results.
+    and results;
+  - on the real screens, check first-row stop → Undo → timer expiry, and End → cancel;
+  - make the run results view show comprehension "Not asked" separately and use the asked count
+    (`derived.questions_asked`) for accuracy. Today's per-result grid assumes letters or words.
 - [ ] **EGRA open decisions (Jim):**
   - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
   - **Comprehension skip.** Should comprehension auto-skip when the child read no passage words?
