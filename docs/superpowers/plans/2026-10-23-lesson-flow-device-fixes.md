@@ -35,7 +35,7 @@ better-sqlite3 in tests, Jest + React Native Testing Library.
 
 ## Review Focus
 
-1. **Adding a child for today mid-lesson** while the new child's facts load: no blank, and no tick may freeze a plan that leaves out the added child.
+1. **Adding a child for today mid-lesson** while the new child's facts load, or when that load fails: no tick may freeze a plan that leaves out the added child, and a failed load can be retried from the screen.
 2. **Leaving with the warning from each exit** (header Back, Android back, iOS swipe) on a lesson started from the picker lands on the screen the EA came from before the picker, never on the picker and never back in the lesson. Before the first change, Back still returns to the picker.
 3. **A resumed draft whose stored plan predates J24** (engine_version 1) keeps its stored review letters; only new plans use the new rule.
 4. **The supplied pack index belongs to a different pack** (pack id or object mismatch): the engine must ignore it and index the pack itself, never mix content.
@@ -75,7 +75,7 @@ Each line has its test in the owning task below.
 - Create: `src/lessonPlan/engine/packIndex.js` (pure)
 - Modify: `src/lessonPlan/engine/lessonPlan.js` (`evaluateLesson` uses an index), `blends.js` (`blendChoices` takes the index instead of `pack` + `soundsFor`), `books.js` (`bookChoices` takes the index's reader sounds), `index.js` (export `indexPack`; typedef `LessonInput.packIndex`)
 - Create: `src/lessonPlan/inputs/packIndexCache.js` (module-level `WeakMap` keyed by the frozen pack object; allowed: outside the engine and outside the `moduleStateAllowlist` directories)
-- Modify: `src/lessonPlan/inputs/lessonInputs.js` (`loadLessonInput` sets `packIndex`)
+- Modify: `src/lessonPlan/inputs/lessonInputs.js` (the lesson input carries `packIndex`)
 - Test: `__tests__/lessonPlanPackIndex.test.js`, `__tests__/lessonPlanEngine.vectors.test.js`, `__tests__/lessonPlanEngine.realPacks.test.js`
 
 **Interfaces:**
@@ -90,33 +90,40 @@ Each line has its test in the owning task below.
 - [ ] **Step 2:** Make `lessonPlanEngine.vectors.test.js` and `realPacks.test.js` run every case twice, with and without `packIndex: indexPack(pack)`, and assert equal output.
 - [ ] **Step 3:** Run them; expect failures (no `indexPack`, no `packIndexFor`).
 - [ ] **Step 4:** Implement. `blendItems` moves into `indexPack`. `blendChoices` filters `index.blendTiers` by `item.sounds` against `unlocked`, and buckets by `item.sounds` and `item.normalized`; the frozen-plan catalogue reads `index.blendByNormalized`. `bookChoices` reads `index.readers[id]`. No call to `soundsOf`, `normalizeToken` or `tokenizeText` remains on the per-evaluation path for pack content.
-- [ ] **Step 5:** Add one assertion to `lessonInputs.test.js`: `loadLessonInput(...)` returns `packIndex === packIndexFor(pack)`.
+- [ ] **Step 5:** Add one assertion to `lessonInputs.test.js`: the loaded lesson input has `packIndex === packIndexFor(pack)`.
 - [ ] **Step 6:** Measure in Node and record in the commit body: median of 20 runs of `computeLessonPlan` + `computeLessonChoices` on the preview pack with 3 present children, before (≈ 37 ms on Jim's Mac) and after. Expect at least a 10× drop. Do not commit a timing assertion.
 - [ ] **Step 7:** Run the engine, purity and inputs suites. Commit `perf(lesson): index each content pack once`.
 
 ### Task 3: Attendance changes never blank the lesson (D2, D4)
 
 **Files:**
-- Modify: `src/lessonPlan/inputs/lessonInputs.js` (`loadLessonInput` takes `participantChildIds`; returns `participants: ChildInput[]` instead of `presentChildren`)
-- Create: `presentLessonInput(input, presentIds) → LessonInput` in `lessonInputs.js` (pure: `{ ...input, presentChildren: presentIds.map(id => byId.get(id)).filter(Boolean) }`, screen order)
+- Modify: `src/lessonPlan/inputs/lessonInputs.js`: replace `loadLessonInput` with two functions (below)
 - Modify: `src/hooks/useLessonDraft.js`
 - Modify: `src/utils/lessonDates.js` (new `lessonHeaderSeenLabel`)
-- Modify: `src/screens/lessons/LessonScreen.js` (header text; loading indicator; Wrap up disabled while pending)
+- Modify: `src/screens/lessons/LessonScreen.js` (header text; loading indicator; retry)
 - Test: `__tests__/useLessonDraft.test.js`, `__tests__/LessonScreen.test.js`, `__tests__/lessonDates.test.js`, `__tests__/lessonInputs.test.js`
 
+**Interfaces:**
+- `loadLessonParticipants({ handle, repositories, services, programmeId, languageCode, packId, participantChildIds }) → Promise<{ participants: ChildInput[], pack, packIndex, alphabet }>`: the per-child facts (child row, known letters in the lesson language, history and mastery completeness) for **every participant**, present or absent, plus the resolved pack, its index (Task 2) and the language's alphabet.
+- `presentLessonInput({ base, lesson, loaded, presentChildIds }) → LessonInput` (pure): `{ ...base, groupId, upNextGroupId, languageCode, isEcd, pack, packIndex, alphabet, presentChildren }`, where `presentChildren` is `presentChildIds` mapped through `loaded.participants` in screen order, skipping none (a present id with no loaded facts is a bug: throw).
+- Every caller that computes a plan builds its input with `presentLessonInput`. That includes `chooseClass`/`chooseLanguage` in `useLessonDraft.apply` (today `:130–143`), which load participants for the chosen class's language and pack and then project the **present** children before `computeLessonPlan`.
+
 **Behaviour:**
-- The hook's load key uses **all participants** (`draft.attendance.childIds`: members plus added, present or absent), not the present children. Marking a child absent or present changes no key and reads nothing: `lessonInput` is derived in a `useMemo` from the loaded input and the present ids, in the same render as the chip.
-- Adding a child changes the participant set, so the hook reloads. While that load is in flight the hook reports `inputPending: true` and returns the **last settled** `lessonInput`, `plan` and `choices` (no blank); it must not recompute or persist a plan from the stale input; `assertPlan` throws "Lesson suggestions are still loading."; the screen disables ticks' writes by that throw and disables **Wrap up →**. When the load lands the plan recomputes with the added child (if the plan is not frozen).
-- First open (no settled input yet): the plan area shows one centred `ActivityIndicator` where the sections will appear, and the header shows grade and language without the last-seen part.
-- Header copy, from `lessonHeaderSeenLabel(lastSeenOn, today)`: `null` → "not seen yet"; today → "seen today"; within 6 days → "last seen Mon"; older → "last seen Mon 12 Oct" (the picker's short date). The header is `Gr 2 · isiXhosa · last seen Mon`, joined with the non-breaking separator from Task 6.
+- The hook holds two loads. **Base** (`loadLessonBase` and classes) is keyed on `[programme_id, today]`. **Participants** is keyed on `[group_id, class_id, language_code, pack_id, participantKey, retryCount]`, where `participantKey` is `draft.attendance.childIds` (members plus added, present or absent). `lessonInput` is a `useMemo` over both loads and the present ids, so marking a child absent or present changes no key, reads nothing, and redraws the plan in the same render as the chip.
+- Adding a child changes the participant set, so participants reload. While they load, `lessonInput`, `plan` and `choices` are `null` and the plan area shows the loading indicator (below); the header keeps its last seen (it comes from the base, which did not reload). With no plan, ticks are refused by `assertPlan` and **Wrap up →** is disabled, so no plan can be frozen without the added child. After the load the plan recomputes with the added child (if it is not frozen).
+- If a participants load fails, the plan area shows an `InlineNote` with "Couldn't load this lesson's suggestions." and a **Try again** `BrandButton` (tertiary). Try again increments `retryCount`, which reruns the load for the current participants. A base load failure shows the same note and button and retries the base.
+- First open: the plan area shows one centred `ActivityIndicator` where the sections will appear, and the header shows grade and language without the last-seen part until the base lands.
+- Header copy, from `lessonHeaderSeenLabel(lastSeenOn, today)`: `null` → "not seen yet"; today → "seen today"; within 6 days → "last seen Mon"; older → "last seen Mon 12 Oct" (the picker's short date). The header is `Gr 2 · isiXhosa · last seen Mon`, joined with the non-breaking separator from Task 6. Last seen is computed from the group's original members (as now), never from who is present.
 
 - [ ] **Step 1: Failing tests:**
-  - `useLessonDraft`: toggling a child absent and present keeps `lessonInput`, `plan` and `choices` non-null in every render (assert across a render log) and calls `loadLessonInput` exactly once.
-  - `useLessonDraft` (Review Focus 1): add a child with `loadLessonInput` held on a deferred promise; during the hold `inputPending === true`, `plan`/`choices` equal the previous ones, `apply(toggleTick, …)` rejects with "Lesson suggestions are still loading." and writes nothing; after resolve the plan's `present_child_ids` includes the added child.
-  - `LessonScreen`: while the first load is pending, an `ActivityIndicator` is shown and no text containing "seen" renders; after load the header reads `Gr 1 · isiXhosa · not seen yet` for a never-taught group and `… · seen today` for one taught today.
+  - `useLessonDraft`: toggling a child absent and present keeps `lessonInput`, `plan` and `choices` non-null in every render (assert across a render log) and calls `loadLessonParticipants` exactly once and `loadLessonBase` exactly once.
+  - `useLessonDraft` (Review Focus 1, pending): add a child with `loadLessonParticipants` held on a deferred promise; during the hold `plan` is `null`, `apply(toggleTick, …)` rejects with "Lesson suggestions are still loading." and writes nothing; after resolve the plan's `present_child_ids` includes the added child.
+  - `useLessonDraft` (Review Focus 1, failure): the same add with the load rejecting once; ticks are still refused, the hook exposes the error and a `retry()`; calling `retry()` with the load now succeeding restores the plan with the added child.
+  - `useLessonDraft` (choice paths): with one participant absent, `chooseClass` and `chooseLanguage` each persist a plan whose `present_child_ids` are exactly the present children and whose `reason` is not `no_children`; repeat on a resumed draft dated yesterday and assert the plan persisted by the choice itself.
+  - `LessonScreen`: while the first load is pending, one `ActivityIndicator` shows and no text containing "seen" renders; after load the header reads `Gr 1 · isiXhosa · not seen yet` for a never-taught group and `… · seen today` for one taught today; a failed load shows "Couldn't load this lesson's suggestions." and **Try again**.
   - `lessonDates`: the four `lessonHeaderSeenLabel` forms above.
 - [ ] **Step 2:** Run; expect failures.
-- [ ] **Step 3:** Implement. Keep the plan memo's existing rules (recompute only before the first tick, on the lesson's own day). Keep `chooseClass`/`chooseLanguage` loading with the new `participantChildIds` argument.
+- [ ] **Step 3:** Implement. Keep the plan memo's existing rules (recompute only before the first tick, on the lesson's own day). Update every `loadLessonInput` caller and test.
 - [ ] **Step 4:** Run `useLessonDraft`, `LessonScreen`, `lessonDates`, `lessonInputs`, `LessonWrapUp*` suites (unit and integration). Commit `fix(lesson): attendance changes redraw at once; header last seen`.
 
 ### Task 4: Leaving a kept lesson goes back to where the EA started (D1)
