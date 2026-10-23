@@ -8,13 +8,14 @@ import { getDefaultTestHandle } from '../test-support/defaultTestHandle';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
-import { draftStart, holdDraftWrite, observe } from '../test-support/lessonDraftTestUtils';
+import { draftStart, holdDraftWrite, observe, deferred } from '../test-support/lessonDraftTestUtils';
 import { getPack } from '../src/lessonPlan/packs';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { saveLesson } from '../src/services/lessonSave';
 import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
 import BrandButton from '../src/components/common/BrandButton';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
+import * as inputs from '../src/lessonPlan/inputs/lessonInputs';
 import { useLessonDraft } from '../src/hooks/useLessonDraft';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -518,4 +519,80 @@ testLesson('Wrap up creates the draft if needed and opens Wrap up', async () => 
   fireEvent.press(view.getByRole('button', { name: 'Wrap up →' }));
   await waitFor(() => expect(view.routeNames()).toEqual(['MainTabs', 'Lesson', 'LessonWrapUp']));
   expect(view.navigationRef.getCurrentRoute().params).toEqual({ draftId: (await handle.repositories.lessonDrafts.getActive()).id });
+});
+
+
+testLesson('first base load shows one spinner and no seen label, then the never-seen header', async () => {
+  await handle.withTransaction(async db => {
+    await db.runAsync('delete from session_attendees');
+    await db.runAsync('delete from sessions');
+    await db.runAsync("update classes set home_language = 'isiXhosa' where id = 'class-1'");
+  });
+  const realLoad = inputs.loadLessonBase;
+  const held = deferred();
+  jest.spyOn(inputs, 'loadLessonBase').mockImplementationOnce(async options => {
+    await held.promise; return realLoad(options);
+  });
+  const view = mount();
+  expect(view.UNSAFE_getAllByType(ReactNative.ActivityIndicator)).toHaveLength(1);
+  expect(view.queryByText(/seen/)).toBeNull();
+  await act(async () => { held.resolve(); });
+  expect(await view.findByText('Gr 1 · isiXhosa · not seen yet')).toBeTruthy();
+  await waitFor(() => expect(view.UNSAFE_queryAllByType(ReactNative.ActivityIndicator)).toHaveLength(0));
+});
+
+
+testLesson('participant loading keeps the base header and disables Wrap up, then shows seen today', async () => {
+  await handle.repositories.sessions.saveSession({ id: 'today', user_id: handle.userId, programme_id: 'programme-a',
+    session_date: '2026-10-22', children_ids: ['c1'], activities: { lesson: { version: 1 } } });
+  await handle.withTransaction(db => db.runAsync("update classes set home_language = 'isiXhosa' where id = 'class-1'"));
+  const realLoad = inputs.loadLessonParticipants;
+  const held = deferred();
+  jest.spyOn(inputs, 'loadLessonParticipants').mockImplementationOnce(async options => {
+    await held.promise; return realLoad(options);
+  });
+  const view = mount();
+  expect(await view.findByText('Gr 1 · isiXhosa · seen today')).toBeTruthy();
+  expect(view.UNSAFE_getAllByType(ReactNative.ActivityIndicator)).toHaveLength(1);
+  expect(view.getByRole('button', { name: 'Wrap up →' })).toBeDisabled();
+  await act(async () => { held.resolve(); });
+  await waitFor(() => expect(view.getByRole('button', { name: 'Wrap up →' })).toBeEnabled());
+  expect(view.UNSAFE_queryAllByType(ReactNative.ActivityIndicator)).toHaveLength(0);
+});
+
+testLesson('a failed base load shows the suggestions note and retries from the screen', async () => {
+  const load = jest.spyOn(inputs, 'loadLessonBase').mockRejectedValueOnce(new Error('Read failed'));
+  const view = mount();
+  expect(await view.findByText("Couldn't load this lesson's suggestions.")).toBeTruthy();
+  expect(view.queryByText('Read failed')).toBeNull();
+  expect(view.getByRole('button', { name: 'Wrap up →' })).toBeDisabled();
+  fireEvent.press(view.getByRole('button', { name: 'Try again' }));
+  await ready(view);
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(view.queryByText("Couldn't load this lesson's suggestions.")).toBeNull();
+});
+
+testLesson('added-child read failure keeps last seen and retries without freezing an incomplete plan', async () => {
+  await handle.repositories.sessions.saveSession({ id: 'added-child-today', user_id: handle.userId, programme_id: 'programme-a',
+    session_date: '2026-10-22', children_ids: ['c3'], activities: { lesson: { version: 1 } } });
+  const realLoad = inputs.loadLessonParticipants;
+  const load = jest.spyOn(inputs, 'loadLessonParticipants');
+  const held = deferred();
+  const view = mount();
+  await ready(view);
+  load.mockRejectedValueOnce(new Error('Read failed'));
+  fireEvent.press(view.getByRole('button', { name: '+ Add a child' }));
+  fireEvent.press(await view.findByRole('radio', { name: 'Buhle' }));
+  expect(await view.findByText("Couldn't load this lesson's suggestions.")).toBeTruthy();
+  expect(view.getByText('Gr 1 · English · last seen Mon')).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Wrap up →' })).toBeDisabled();
+  expect(view.queryByRole('button', { name: 'A, not selected' })).toBeNull();
+  load.mockImplementationOnce(async options => { await held.promise; return realLoad(options); });
+  fireEvent.press(view.getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(view.UNSAFE_getAllByType(ReactNative.ActivityIndicator)).toHaveLength(1));
+  expect(view.getByText('Gr 1 · English · last seen Mon')).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Wrap up →' })).toBeDisabled();
+  await act(async () => { held.resolve(); });
+  await waitFor(() => expect(view.getByRole('button', { name: 'Wrap up →' })).toBeEnabled());
+  expect((await handle.repositories.lessonDrafts.getActive()).plan.present_child_ids).toEqual(['c1', 'c2', 'c3']);
 });

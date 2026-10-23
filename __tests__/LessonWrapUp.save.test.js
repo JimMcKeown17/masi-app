@@ -11,7 +11,7 @@ import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { deferred, draftStart, holdDraftWrite } from '../test-support/lessonDraftTestUtils';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
-import { loadLessonBase, loadLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
 import BrandButton from '../src/components/common/BrandButton';
 import * as transitions from '../src/lessonPlan/lessonDraftState';
 import { formatSessionDate } from '../src/utils/sessionDateFormat';
@@ -150,8 +150,10 @@ testSave('after an offline save, the next lesson sees the new reading level', as
   await view.findByText('Session complete route');
   expect(cache.children.find(child => child.id === 'c1').reading_level).toBe('3 Letter Blends');
   const base = await loadLessonBase({ handle, repositories: handle.repositories, today: '2026-10-22' });
-  const next = await loadLessonInput({ handle, repositories: handle.repositories, services: handle.services, base,
-    lesson: { groupId: 'group-1', languageCode: 'en', presentChildIds: ['c1', 'c2'] } });
+  const loaded = await loadLessonParticipants({ handle, repositories: handle.repositories, services: handle.services,
+    programmeId: base.programmeId, languageCode: 'en', participantChildIds: ['c1', 'c2'] });
+  const next = presentLessonInput({ base, loaded, presentChildIds: ['c1', 'c2'],
+    lesson: { groupId: 'group-1', languageCode: 'en' } });
   expect(next.presentChildren.find(child => child.id === 'c1').readingLevel).toBe('3 Letter Blends');
 });
 

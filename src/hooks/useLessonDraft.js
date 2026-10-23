@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useSignedInEA } from '../context/SignedInEAContext';
 import { useProgrammeTodayKey } from './useProgrammeTodayKey';
-import { loadLessonBase, loadLessonInput } from '../lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadLessonParticipants, presentLessonInput } from '../lessonPlan/inputs/lessonInputs';
 import { computeLessonPlan, computeLessonChoices, isPlanRecomputable, resolveLessonClass } from '../lessonPlan/engine';
 import { getPack } from '../lessonPlan/packs';
 import { isPreviewContentEnabled } from '../lessonPlan/packs/previewContent';
@@ -21,23 +21,55 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const today = useProgrammeTodayKey();
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const { draft } = snapshot;
-  const [loaded, setLoaded] = useState(null);
-  const [loadError, setLoadError] = useState(null);
+  const [baseLoaded, setBaseLoaded] = useState(null);
+  const [participantsLoaded, setParticipantsLoaded] = useState(null);
+  const [baseError, setBaseError] = useState(null);
+  const [participantError, setParticipantError] = useState(null);
+  const [openError, setOpenError] = useState(null);
+  const [baseRetryCount, setBaseRetryCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
+  const programmeId = draft?.programme_id ?? start?.group?.programme_id;
+  const baseKey = JSON.stringify([programmeId, today, baseRetryCount]);
+  const baseReady = baseLoaded?.base.today === today && baseLoaded.retryCount === baseRetryCount
+    && (programmeId === undefined || baseLoaded.base.programmeId === programmeId);
+  const base = baseReady ? baseLoaded.base : null;
+  useEffect(() => {
+    let active = true;
+    if ((!draft && !start) || baseReady) return undefined;
+    setBaseError(null);
+    const load = async () => {
+      const [nextBase, classes] = await Promise.all([
+        loadLessonBase({ handle, repositories, today, programmeId }),
+        repositories.classes.getClasses(),
+      ]);
+      if (nextBase.missing) throw new Error(`Lesson inputs missing: ${nextBase.missing}`);
+      if (active) setBaseLoaded({ base: nextBase, classes, retryCount: baseRetryCount });
+    };
+    void load().catch(error => { if (active) setBaseError(error); });
+    return () => { active = false; };
+    // The resolved programme reuses the base that opened this lesson.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle, repositories, baseKey]);
+
+  const opened = useRef(null);
   const openingKey = JSON.stringify({ draftId, start });
+  const openingBase = draftId ? null : base;
   useEffect(() => {
     let active = true;
     const open = async () => {
-      if (draftId) return controller.open({ draftId });
-      if (!start) return null;
-      const base = await loadLessonBase({ handle, repositories, today });
-      if (base.missing) throw new Error(`Lesson inputs missing: ${base.missing}`);
+      if (opened.current === openingKey) return null;
+      if (draftId) {
+        await controller.open({ draftId });
+        if (active) opened.current = openingKey;
+        return null;
+      }
+      if (!start || !openingBase) return null;
       let group = start.group;
       let members = start.members;
       if (!group) group = (await repositories.groups.getGroups({ userId: handle.userId }))
         .find(row => row.id === start.groupId);
       if (!group) throw new Error('This group is no longer on this phone.');
       if (!members) {
-        // The picker's rule (ChildrenContext.getChildrenInGroup): group members on the visible roster.
         const [memberships, roster] = await Promise.all([
           repositories.groups.getVisibleChildrenGroups({ userId: handle.userId }),
           repositories.children.getMyChildren(handle.userId),
@@ -45,62 +77,62 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
         const ids = new Set(memberships.filter(row => row.group_id === group.id && !row.removed_at).map(row => row.child_id));
         members = visibleRosterChildren(roster).filter(child => ids.has(child.id));
       }
-      const classes = await repositories.classes.getClasses();
       const { classId } = resolveLessonClass({
         groupClassId: group.class_id, memberClassIds: members.map(child => child.class_id),
       });
-      const languageCode = languageCodeForHomeLanguage(classes.find(row => row.id === classId)?.home_language);
+      const languageCode = languageCodeForHomeLanguage(baseLoaded.classes.find(row => row.id === classId)?.home_language);
       const pack = getPack(languageCode, { allowPreview: isPreviewContentEnabled() });
       if (!active) return null;
-      return controller.open({ start: transitions.newLessonDraftInput({
-        group, members, programmeId: base.programmeId, classId, languageCode,
+      await controller.open({ start: transitions.newLessonDraftInput({
+        group, members, programmeId: openingBase.programmeId, classId, languageCode,
         packId: pack?.id ?? null, lessonDate: today,
       }) });
+      if (active) opened.current = openingKey;
     };
-    void open().catch(error => { if (active) setLoadError(error); });
+    void open().catch(error => { if (active) setOpenError(error); });
     return () => { active = false; };
     // The start is a value, so rerenders with a new options object only attach once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controller, handle, repositories, openingKey]);
+  }, [controller, handle, repositories, openingKey, openingBase]);
 
+  const participantKey = JSON.stringify(draft?.attendance.childIds ?? []);
   const presentKey = JSON.stringify(draft ? presentChildIds(draft.attendance) : []);
   const inputKey = draft ? JSON.stringify([
-    draft.programme_id, draft.group_id, draft.class_id, draft.language_code, draft.pack_id, presentKey, today,
+    draft.group_id, draft.class_id, draft.language_code, draft.pack_id, participantKey, retryCount,
   ]) : null;
   useEffect(() => {
     let active = true;
     if (!draft || !inputKey || ['empty', 'closed', 'missing', 'corrupt', 'exists'].includes(snapshot.status)) return undefined;
+    setParticipantError(null);
     const load = async () => {
-      const [base, classes] = await Promise.all([
-        loadLessonBase({ handle, repositories, today, programmeId: draft.programme_id }),
-        repositories.classes.getClasses(),
-      ]);
-      if (base.missing) throw new Error(`Lesson inputs missing: ${base.missing}`);
-      // A resumed draft keeps its class even after the class is archived.
-      const lessonClass = classes.find(row => row.id === draft.class_id)
-        ?? await repositories.classes.getClassById(draft.class_id);
-      const input = await loadLessonInput({ handle, repositories, services, base, lesson: {
-        groupId: draft.group_id, upNextGroupId: draft.plan?.up_next_group_id ?? start?.upNextGroupId ?? null,
-        languageCode: draft.language_code, packId: draft.pack_id,
-        isEcd: lessonClass?.grade === 'ECD',
-        presentChildIds: JSON.parse(presentKey),
-      } });
-      if (active) { setLoaded({ key: inputKey, input, classes }); setLoadError(null); }
+      const loaded = await loadLessonParticipants({ handle, repositories, services,
+        programmeId: draft.programme_id, languageCode: draft.language_code, packId: draft.pack_id,
+        participantChildIds: JSON.parse(participantKey),
+      });
+      const lessonClass = await repositories.classes.getClassById(draft.class_id);
+      if (active) setParticipantsLoaded({ key: inputKey, loaded, lessonClass });
     };
-    void load().catch(error => { if (active) setLoadError(error); });
+    void load().catch(error => { if (active) setParticipantError(error); });
     return () => { active = false; };
-    // Only pedagogical inputs reload; ticks, notes and confirmation of an identical plan do not.
+    // Attendance projects the same facts; only participant or lesson identity reloads them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle, repositories, services, inputKey]);
 
-  const lessonInput = loaded?.key === inputKey ? loaded.input : null;
+  const lessonInput = useMemo(() => base && participantsLoaded?.key === inputKey
+    ? presentLessonInput({ base, loaded: participantsLoaded.loaded, presentChildIds: JSON.parse(presentKey), lesson: {
+      groupId: draft.group_id, upNextGroupId: draft.plan?.up_next_group_id ?? start?.upNextGroupId ?? null,
+      languageCode: draft.language_code, isEcd: participantsLoaded.lessonClass?.grade === 'ECD',
+    } }) : null,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [base, participantsLoaded, inputKey, presentKey]);
   const needs = draft ? !draft.class_id ? 'class' : !draft.language_code ? 'language' : null : null;
   const storedPlanKey = JSON.stringify(draft?.plan ?? null);
   const recomputable = draft && isPlanRecomputable({
     lessonDate: draft.lesson_date, today, frozen: !!draft.plan_fixed_at,
   });
   const plan = useMemo(() => {
-    if (!lessonInput || needs) return draft?.plan ?? null;
+    if (!lessonInput) return null;
+    if (needs) return draft?.plan ?? null;
     if (!draft.plan || recomputable && JSON.stringify(draft.plan.present_child_ids) !== presentKey) {
       return computeLessonPlan(lessonInput);
     }
@@ -129,15 +161,19 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const apply = useCallback(async (transition, ...args) => {
     if (transition === transitions.chooseClass || transition === transitions.chooseLanguage) {
       const option = args[0];
-      const classes = loaded?.classes ?? await repositories.classes.getClasses();
+      const classes = baseLoaded?.classes ?? await repositories.classes.getClasses();
       const classId = option.classId ?? draft.class_id;
-      const lessonClass = classes.find(row => row.id === classId);
+      const lessonClass = classes.find(row => row.id === classId)
+        ?? await repositories.classes.getClassById(classId);
       const languageCode = option.languageCode ?? languageCodeForHomeLanguage(lessonClass?.home_language);
       const packId = option.packId ?? getPack(languageCode, { allowPreview: isPreviewContentEnabled() })?.id ?? null;
-      const base = await loadLessonBase({ handle, repositories, today, programmeId: draft.programme_id });
-      const input = await loadLessonInput({ handle, repositories, services, base, lesson: {
+      const choiceBase = base ?? await loadLessonBase({ handle, repositories, today, programmeId: draft.programme_id });
+      const loaded = await loadLessonParticipants({ handle, repositories, services,
+        programmeId: draft.programme_id, languageCode, packId, participantChildIds: JSON.parse(participantKey),
+      });
+      const input = presentLessonInput({ base: choiceBase, loaded, presentChildIds: JSON.parse(presentKey), lesson: {
         groupId: draft.group_id, upNextGroupId: start?.upNextGroupId ?? null,
-        languageCode, packId, isEcd: lessonClass?.grade === 'ECD', presentChildIds: JSON.parse(presentKey),
+        languageCode, isEcd: lessonClass?.grade === 'ECD',
       } });
       return controller.apply((row, choice) => ({ ...datedOnFirstChange(row, today), ...transition(row, choice) }),
         { ...option, classId, languageCode, packId, plan: languageCode ? computeLessonPlan(input) : null });
@@ -150,7 +186,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
     return controller.apply((row, ...captured) => ({
       ...datedOnFirstChange(row, today), ...(!row.plan && plan ? { plan } : {}), ...transition(row, ...captured),
     }), ...args);
-  }, [controller, draft, loaded, repositories, handle, services, today, presentKey, plan, start?.upNextGroupId, assertPlan]);
+  }, [controller, draft, baseLoaded, base, repositories, handle, services, today, participantKey, presentKey, plan, start?.upNextGroupId, assertPlan]);
   const ensureDraft = useCallback(async () => {
     assertPlan();
     if (!controller.getSnapshot().draft.plan) {
@@ -174,6 +210,11 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
     }
     return controller.beginSave();
   }, [controller, assertPlan, plan, today, choices]);
-  return { ...snapshot, plan, choices, lessonInput, needs, apply, ensureDraft, beginSave,
-    endSave: controller.endSave, discard: controller.discard, error: snapshot.error ?? loadError };
+  const retry = useCallback(() => {
+    if (baseError) setBaseRetryCount(count => count + 1);
+    else setRetryCount(count => count + 1);
+  }, [baseError]);
+  return { ...snapshot, plan, choices, lessonInput, base, needs, apply, ensureDraft, beginSave, retry,
+    inputError: baseError ?? participantError,
+    endSave: controller.endSave, discard: controller.discard, error: snapshot.error ?? openError ?? baseError ?? participantError };
 };
