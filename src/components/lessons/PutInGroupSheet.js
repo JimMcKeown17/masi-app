@@ -1,13 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import BottomSheet from '../common/BottomSheet';
 import ListRow from '../common/ListRow';
 import InlineNote from '../common/InlineNote';
 import { spacing } from '../../constants/colors';
 import { isStaleActorError } from '../../session/staleActor';
+import { compareChildNames } from '../../utils/childNames';
+import { compareGroups, getGroupDotColor } from '../../utils/groupHelpers';
+import { GroupDot } from '../children/GroupChip';
 
 const groupKey = group => group.id;
-export default function PutInGroupSheet({ visible, onDismiss, childId, groups, addChildToGroup, makeGroup, handle }) {
+export default function PutInGroupSheet({ visible, onDismiss, childId, groups, getChildrenInGroup, addChildToGroup, makeGroup, handle }) {
+  const rows = useMemo(() => [...groups].sort(compareGroups).map((group, index) => ({
+    ...group,
+    title: [...getChildrenInGroup(group.id)].sort(compareChildNames).map(child => child.first_name?.trim()).filter(Boolean).join(' & ') || group.name,
+    dotColor: getGroupDotColor(index),
+  })), [groups, getChildrenInGroup]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const writing = useRef(false);
@@ -35,8 +43,8 @@ export default function PutInGroupSheet({ visible, onDismiss, childId, groups, a
   return <BottomSheet visible={visible} onDismiss={onDismiss} title="Put in a group" dismissLabel="Close"
     scrollable={false} keyboardAvoiding={false} bodyContentStyle={styles.body}>
     {error ? <View style={styles.note}><InlineNote>{error}</InlineNote></View> : null}
-    <FlatList style={styles.list} data={groups} keyExtractor={groupKey} extraData={busyId}
-      renderItem={({ item }) => <ListRow title={item.name} onPress={() => choose(item.id)}
+    <FlatList style={styles.list} data={rows} keyExtractor={groupKey} extraData={busyId}
+      renderItem={({ item }) => <ListRow title={item.title} lead={<GroupDot color={item.dotColor} size={12} />} onPress={() => choose(item.id)}
         disabled={busyId !== null} busy={busyId === item.id} showDivider />}
       ListFooterComponent={<ListRow title="New group" onPress={() => choose(null)}
         disabled={busyId !== null} busy={busyId === 'new'} />} />

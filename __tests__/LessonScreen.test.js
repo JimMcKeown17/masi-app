@@ -105,7 +105,7 @@ afterEach(() => { Constants.expoConfig.extra.previewContent = false; jest.restor
 testLesson("header shows grade, language and last seen; the title is the children's names", async () => {
   const view = mount();
   await ready(view);
-  expect(view.getByText('Gr 1 · English · last seen Mon')).toBeTruthy();
+  expect(view.getByText('Gr 1 · English · last seen Mon').props.children).toBe('Gr\u00a01 ·\u00a0English ·\u00a0last\u00a0seen\u00a0Mon');
   expect(titles).toContainEqual(expect.objectContaining({ title: 'Amahle & Lulu' }));
   expect(view.getByRole('checkbox', { name: 'Amahle, here' })).toBeChecked();
   expect(view.getByRole('checkbox', { name: 'Lulu, here' })).toBeChecked();
@@ -143,9 +143,9 @@ testLesson('+ Add a child adds a roster child for today only', async () => {
   const view = mount();
   await ready(view);
   fireEvent.press(view.getByRole('button', { name: '+ Add a child' }));
-  expect(await view.findByRole('radio', { name: 'Buhle' })).toBeTruthy();
+  expect(await view.findByRole('radio', { name: 'Buhle Child, Grade 2A' })).toBeTruthy();
   expect(view.queryByRole('radio', { name: 'Lulu' })).toBeNull();
-  fireEvent.press(view.getByRole('radio', { name: 'Buhle' }));
+  fireEvent.press(view.getByRole('radio', { name: 'Buhle Child, Grade 2A' }));
   await waitFor(() => expect(view.getByRole('checkbox', { name: 'Buhle, here' })).toBeTruthy());
   expect((await handle.repositories.lessonDrafts.getActive()).attendance.addedChildIds).toEqual(['c3']);
   expect(await memberships()).toEqual(before);
@@ -323,7 +323,7 @@ testLesson('a held child addition cannot dismiss a newly opened Add a child shee
   await ready(view);
   const held = await holdDraftWrite();
   fireEvent.press(view.getByRole('button', { name: '+ Add a child' }));
-  fireEvent.press(await view.findByRole('radio', { name: 'Buhle' }));
+  fireEvent.press(await view.findByRole('radio', { name: 'Buhle Child, Grade 2A' }));
   await held.entered;
   fireEvent.press(view.getByRole('button', { name: 'Close' }));
   fireEvent.press(await view.findByRole('button', { name: '+ Add a child' }));
@@ -582,7 +582,7 @@ testLesson('added-child read failure keeps last seen and retries without freezin
   await ready(view);
   load.mockRejectedValueOnce(new Error('Read failed'));
   fireEvent.press(view.getByRole('button', { name: '+ Add a child' }));
-  fireEvent.press(await view.findByRole('radio', { name: 'Buhle' }));
+  fireEvent.press(await view.findByRole('radio', { name: 'Buhle Child, Grade 2A' }));
   expect(await view.findByText("Couldn't load this lesson's suggestions.")).toBeTruthy();
   expect(view.getByText('Gr 1 · English · last seen Mon')).toBeTruthy();
   expect(view.getByRole('button', { name: 'Wrap up →' })).toBeDisabled();

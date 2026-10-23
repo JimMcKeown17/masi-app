@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
+import { joinDetail } from '../../utils/lessonDates';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
 import SelectableRow from '../forms/SelectableRow';
 
@@ -10,7 +11,7 @@ export default React.memo(function LessonBookSection({ draft, choices, isEcd, on
   if (isEcd) return null;
   const book = choices.books.find(item => item.suggested);
   return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.heading}>3 · Pair reading · 5 min</Text>
+    <Text accessibilityRole="header" style={styles.heading}>{joinDetail(['3', 'Pair reading', '5 min'])}</Text>
     {!choices.contentAvailable.books ? <Text style={styles.body}>{`No books for ${LANGUAGE_LABELS[draft.language_code]} yet.`}</Text>
       : book ? <>
         <View style={styles.book}>

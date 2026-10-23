@@ -1,11 +1,13 @@
-import React, { useEffect, useRef } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { FlatList, StyleSheet } from 'react-native';
 import BottomSheet from '../common/BottomSheet';
 import InlineNote from '../common/InlineNote';
 import SelectableRow from '../forms/SelectableRow';
+import { compareChildNames, formatChildName } from '../../utils/childNames';
 
 const keyFor = child => child.id;
-export default function AddChildSheet({ visible, onDismiss, children, onAdd, error }) {
+export default function AddChildSheet({ visible, onDismiss, children, classes = [], onAdd, error }) {
+  const sorted = useMemo(() => [...children].sort(compareChildNames), [children]);
   const writing = useRef(false);
   const generation = useRef(0);
   useEffect(() => {
@@ -22,8 +24,8 @@ export default function AddChildSheet({ visible, onDismiss, children, onAdd, err
   return <BottomSheet visible={visible} title="+ Add a child" dismissLabel="Close" onDismiss={onDismiss}
     keyboardAvoiding={false} scrollable={false} bodyContentStyle={styles.body}>
     {error ? <InlineNote>{error}</InlineNote> : null}
-    <FlatList style={styles.list} data={children} keyExtractor={keyFor} renderItem={({ item, index }) => (
-      <SelectableRow variant="radio" title={item.first_name} accessibilityLabel={item.first_name}
+    <FlatList style={styles.list} data={sorted} keyExtractor={keyFor} renderItem={({ item, index }) => (
+      <SelectableRow variant="radio" title={formatChildName(item)} subtitle={classes.find(row => row.id === item.class_id)?.name}
         selected={false} onPress={() => { void choose(item.id); }}
         position={children.length === 1 ? 'only' : index === 0 ? 'first' : index === children.length - 1 ? 'last' : undefined} />
     )} />

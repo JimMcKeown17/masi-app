@@ -190,7 +190,9 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}
       keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
       {letters.length ? <View style={styles.heading}>
-        <Text accessibilityRole="header" style={styles.title}>{`Who knows ${letters.join(' ')} without help?`}</Text>
+        <Text accessibilityRole="header" accessibilityLabel={`Who knows ${letters.join(' ')} without help?`} style={styles.title}>
+          Who knows <Text style={styles.headingLetters}>{letters.join(' ')}</Text> without help?
+        </Text>
         <Text style={styles.note}>Teaching it today doesn't count.</Text>
       </View> : null}
       {draft && metadata ? ids.map(id => metadata.children[id] ? <WrapUpChildRow key={id}
@@ -235,5 +237,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background }, scroll: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg }, heading: { gap: spacing.sm },
   title: { ...typeRoles.displayHeading, color: colors.text }, note: { ...typeRoles.textBody, color: colors.textSecondary },
+  headingLetters: { color: colors.primary },
   footer: { gap: spacing.ms },
 });

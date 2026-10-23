@@ -18,6 +18,9 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: tru
 let handle;
 let mockRoster;
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockRoster }));
+jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => ({ classes: [
+  { id: 'class-1', name: 'Grade 1A' }, { id: 'xh-class', name: 'Xhosa' },
+] }) }));
 const testPicker = (name, run) => test(name, async () => {
   try { await run(); } finally { await cleanupAsync(); }
 });
@@ -52,7 +55,7 @@ beforeEach(async () => {
     { id: 'c3', first_name: 'Thando', class_id: 'xh-class' },
     { id: 'c4', first_name: 'Unathi', class_id: 'class-1' },
     { id: 'c5', first_name: 'Buhle', class_id: 'class-1' },
-  ];
+  ].map(child => ({ ...child, last_name: 'Child' }));
   const groups = [1, 2, 3].map(n => ({ id: `g${n}`, name: `Group ${n}`,
     programme_id: 'programme-a', class_id: n === 3 ? 'xh-class' : 'class-1' }));
   const childrenGroups = [1, 2, 3].map(n => ({ id: `m${n}`, group_id: `g${n}`, child_id: `c${n}`, removed_at: null }));
@@ -89,7 +92,7 @@ testPicker('Up next shows the top-ranked group with its letters and Start lesson
   const view = mount();
   await ready(view);
   expect(view.getByText('Up next')).toBeTruthy();
-  await waitFor(() => expect(view.getByText('Not seen yet · letters a m s t')).toBeTruthy());
+  await waitFor(() => expect(view.getByText('Not seen yet · letters a m s t').props.children).toBe('Not\u00a0seen\u00a0yet ·\u00a0letters\u00a0a\u00a0m\u00a0s\u00a0t'));
   fireEvent.press(view.getByRole('button', { name: 'Start lesson' }));
   await waitFor(() => expect(view.routeNames()).toEqual(['Home', 'SessionForm', 'Lesson']));
   expect(view.navigationRef.getCurrentRoute().params).toEqual({ groupId: 'g2', upNextGroupId: 'g2' });
@@ -122,9 +125,9 @@ testPicker('Make a group lists only ungrouped children and creates the group', a
   fireEvent.press(view.getByRole('button', { name: '+ Make a group' }));
   await waitFor(() => expect(view.getAllByRole('checkbox')).toHaveLength(2));
   expect(view.getByRole('button', { name: 'Done' })).toBeDisabled();
-  expect(view.queryByRole('checkbox', { name: 'Amahle' })).toBeNull();
-  fireEvent.press(view.getByRole('checkbox', { name: 'Unathi' }));
-  fireEvent.press(view.getByRole('checkbox', { name: 'Buhle' }));
+  expect(view.queryByRole('checkbox', { name: 'Amahle Child, Grade 1A' })).toBeNull();
+  fireEvent.press(view.getByRole('checkbox', { name: 'Unathi Child, Grade 1A' }));
+  fireEvent.press(view.getByRole('checkbox', { name: 'Buhle Child, Grade 1A' }));
   fireEvent.press(view.getByRole('button', { name: 'Done' }));
   await waitFor(() => expect(mockRoster.makeGroup).toHaveBeenCalledWith(['c4', 'c5']));
   await waitFor(() => expect(view.queryByRole('checkbox')).toBeNull());
@@ -133,9 +136,9 @@ testPicker('Put in a group adds the child to the chosen group', async () => {
   const view = mount();
   await ready(view);
   fireEvent.press(view.getAllByRole('button', { name: 'Put in a group' })[0]);
-  await waitFor(() => expect(view.getByRole('button', { name: 'Group 2' })).toBeTruthy());
-  fireEvent.press(view.getByRole('button', { name: 'Group 2' }));
-  await waitFor(() => expect(mockRoster.addChildToGroup).toHaveBeenCalledWith('c4', 'g2'));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Lulu' })).toBeTruthy());
+  fireEvent.press(view.getByRole('button', { name: 'Lulu' }));
+  await waitFor(() => expect(mockRoster.addChildToGroup).toHaveBeenCalledWith('c5', 'g2'));
 });
 testPicker('incomplete history shows the downloading note', async () => {
   await handle.withTransaction(db => db.runAsync('delete from sync_state'));
@@ -160,7 +163,7 @@ testPicker('the picker computes the ranking once per load', async () => {
     ['g1', 'g2', 'g3'], ['g1', 'g2'], ['g3'],
   ]);
   fireEvent.press(view.getByRole('button', { name: '+ Make a group' }));
-  fireEvent.press(await view.findByRole('checkbox', { name: 'Unathi' }));
+  fireEvent.press(await view.findByRole('checkbox', { name: 'Unathi Child, Grade 1A' }));
   expect(ranking).toHaveBeenCalledTimes(3);
 });
 testPicker('no groups: only Make a group and the ungrouped list', async () => {
@@ -184,26 +187,26 @@ testPicker('New group makes a group for the child', async () => {
   await ready(view);
   fireEvent.press(view.getAllByRole('button', { name: 'Put in a group' })[0]);
   fireEvent.press(await view.findByRole('button', { name: 'New group' }));
-  await waitFor(() => expect(mockRoster.makeGroup).toHaveBeenCalledWith(['c4']));
+  await waitFor(() => expect(mockRoster.makeGroup).toHaveBeenCalledWith(['c5']));
 });
 testPicker('group failures stay in the sheet as an InlineNote', async () => {
   mockRoster.makeGroup.mockResolvedValue({ success: false, error: new Error('Group could not be saved') });
   const view = mount();
   await ready(view);
   fireEvent.press(view.getByRole('button', { name: '+ Make a group' }));
-  fireEvent.press(await view.findByRole('checkbox', { name: 'Unathi' }));
+  fireEvent.press(await view.findByRole('checkbox', { name: 'Unathi Child, Grade 1A' }));
   fireEvent.press(view.getByRole('button', { name: 'Done' }));
   await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Group could not be saved'));
-  expect(view.getByRole('checkbox', { name: 'Unathi' })).toBeChecked();
+  expect(view.getByRole('checkbox', { name: 'Unathi Child, Grade 1A' })).toBeChecked();
 });
 testPicker('a Put in a group failure stays in the sheet', async () => {
   mockRoster.addChildToGroup.mockResolvedValue({ success: false, error: 'Child already in group' });
   const view = mount();
   await ready(view);
   fireEvent.press(view.getAllByRole('button', { name: 'Put in a group' })[0]);
-  fireEvent.press(await view.findByRole('button', { name: 'Group 2' }));
+  fireEvent.press(await view.findByRole('button', { name: 'Lulu' }));
   await waitFor(() => expect(view.getByRole('alert')).toHaveTextContent('Child already in group'));
-  expect(view.getByRole('button', { name: 'Group 2' })).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Lulu' })).toBeTruthy();
 });
 testPicker('session history page and run versions each reload the picker', async () => {
   const picker = jest.spyOn(inputs, 'loadPickerRanking');
@@ -226,24 +229,24 @@ for (const kind of ['Make a group', 'Put in a group']) {
     if (kind === 'Make a group') {
       mockRoster.makeGroup.mockReturnValue(gate.promise);
       fireEvent.press(view.getByRole('button', { name: '+ Make a group' }));
-      fireEvent.press(await view.findByRole('checkbox', { name: 'Unathi' }));
+      fireEvent.press(await view.findByRole('checkbox', { name: 'Unathi Child, Grade 1A' }));
       fireEvent.press(view.getByRole('button', { name: 'Done' }));
       await waitFor(() => expect(mockRoster.makeGroup).toHaveBeenCalledTimes(1));
       fireEvent.press(view.getByRole('button', { name: 'Close' }));
       fireEvent.press(await view.findByRole('button', { name: '+ Make a group' }));
-      await view.findByRole('checkbox', { name: 'Unathi' });
+      await view.findByRole('checkbox', { name: 'Unathi Child, Grade 1A' });
       await act(async () => { gate.resolve({ success: true }); });
-      expect(view.getByRole('checkbox', { name: 'Unathi' })).toBeTruthy();
+      expect(view.getByRole('checkbox', { name: 'Unathi Child, Grade 1A' })).toBeTruthy();
     } else {
       mockRoster.addChildToGroup.mockReturnValue(gate.promise);
       fireEvent.press(view.getAllByRole('button', { name: 'Put in a group' })[0]);
-      fireEvent.press(await view.findByRole('button', { name: 'Group 2' }));
+      fireEvent.press(await view.findByRole('button', { name: 'Lulu' }));
       await waitFor(() => expect(mockRoster.addChildToGroup).toHaveBeenCalledTimes(1));
       fireEvent.press(view.getByRole('button', { name: 'Close' }));
       fireEvent.press((await view.findAllByRole('button', { name: 'Put in a group' }))[1]);
-      await view.findByRole('button', { name: 'Group 2' });
+      await view.findByRole('button', { name: 'Lulu' });
       await act(async () => { gate.resolve({ success: true }); });
-      expect(view.getByRole('button', { name: 'Group 2' })).toBeTruthy();
+      expect(view.getByRole('button', { name: 'Lulu' })).toBeTruthy();
     }
   });
 }
@@ -316,4 +319,23 @@ testPicker('a row starts while letters are pending and a late result is dropped 
     expect(view.queryByText(/letters/, { includeHiddenElements: true })).toBeNull();
     expect(view.queryByText('Still downloading past lessons. Suggestions may repeat.', { includeHiddenElements: true })).toBeNull();
   } finally { gate.resolve(delayedLetters()); }
+});
+
+testPicker('Not in a group yet shows full names and known classes in locale order', async () => {
+  mockRoster.children = [
+    ...mockRoster.children.slice(0, 3),
+    { id: 'c4', first_name: 'Xola', last_name: 'Child' },
+    { id: 'c5', first_name: 'Ênê', last_name: 'Child', class_id: 'class-1' },
+    { id: 'c6', first_name: 'Aviwe', last_name: 'Zulu', class_id: 'xh-class' },
+    { id: 'c7', first_name: ' Aviwe ', last_name: ' McKeown ', class_id: 'class-1' },
+  ];
+  const view = mount();
+  await ready(view);
+  const names = view.getAllByText(/^(Aviwe McKeown|Aviwe Zulu|Ênê Child|Xola Child)$/);
+  expect(names.map(name => name.props.children)).toEqual(['Aviwe McKeown', 'Aviwe Zulu', 'Ênê Child', 'Xola Child']);
+  expect(view.getAllByText('Grade 1A')).toHaveLength(2);
+  expect(view.getByText('Xhosa')).toBeTruthy();
+  fireEvent.press(view.getAllByRole('button', { name: 'Put in a group' })[0]);
+  fireEvent.press(await view.findByRole('button', { name: 'New group' }));
+  await waitFor(() => expect(mockRoster.makeGroup).toHaveBeenCalledWith(['c7']));
 });

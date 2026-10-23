@@ -1,4 +1,4 @@
-import { lastSeenLabel, startedLabel, lessonHeaderSeenLabel } from '../src/utils/lessonDates';
+import { lastSeenLabel, startedLabel, lessonHeaderSeenLabel, joinDetail } from '../src/utils/lessonDates';
 
 const today = '2026-10-22';
 test('today reads Today ✓', () => expect(lastSeenLabel(today, today)).toBe('Today ✓'));
@@ -13,8 +13,8 @@ test('lastSeenLabel handles a year boundary without a timezone shift', () => {
 });
 test('lessonRowDetail leaves out letters when there are none', () => {
   const { lessonRowDetail } = require('../src/utils/lessonDates');
-  expect(lessonRowDetail('Mon', ['a', 'm'])).toBe('Mon · letters a m');
-  expect(lessonRowDetail('Not seen yet', [])).toBe('Not seen yet');
+  expect(lessonRowDetail('Mon', ['a', 'm'])).toBe('Mon ·\u00a0letters\u00a0a\u00a0m');
+  expect(lessonRowDetail('Not seen yet', [])).toBe('Not\u00a0seen\u00a0yet');
 });
 
 
@@ -27,4 +27,13 @@ test.each([
   ['2026-10-12', 'last seen Mon 12 Oct'],
 ])('lesson header labels %s as %s', (seen, expected) => {
   expect(lessonHeaderSeenLabel(seen, today)).toBe(expected);
+});
+
+test('joinDetail binds each dot to the next detail, keeps details whole and skips missing parts', () => {
+  const detail = joinDetail(['Gr 2', null, 'isiXhosa', undefined, '', 'last seen Mon']);
+  expect(detail).toBe('Gr\u00a02 ·\u00a0isiXhosa ·\u00a0last\u00a0seen\u00a0Mon');
+  // The only break opportunities are before a dot, so no line can end on one.
+  expect(detail).not.toMatch(/· /);
+  expect(detail.split(' ')).toEqual(['Gr\u00a02', '·\u00a0isiXhosa', '·\u00a0last\u00a0seen\u00a0Mon']);
+  expect(joinDetail([])).toBe('');
 });

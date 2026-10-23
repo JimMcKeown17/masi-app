@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
+import { joinDetail } from '../../utils/lessonDates';
 import BrandButton from '../common/BrandButton';
 import LetterToggleTile from '../sessions/LetterToggleTile';
 import LetterToggleGrid from '../sessions/LetterToggleGrid';
@@ -16,7 +17,7 @@ export default React.memo(function LessonLettersSection({ draft, plan, choices, 
   const letters = [...new Set([...plan.suggested_letters, ...selected])];
   const noPack = plan.reason === 'no_pack';
   return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.heading}>1 · Letters · 15 min</Text>
+    <Text accessibilityRole="header" style={styles.heading}>{joinDetail(['1', 'Letters', '15 min'])}</Text>
     {draft.language_code === 'zu' ? <Text style={styles.body}>No isiZulu letters yet.</Text> : <>
       {plan.reason === 'first_session' ? <Text style={styles.body}>First lesson: start with these letters.</Text> : null}
       {plan.reason === 'all_letters_known' ? <Text style={styles.body}>All letters known</Text> : null}

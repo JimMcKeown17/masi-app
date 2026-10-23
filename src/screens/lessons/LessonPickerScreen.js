@@ -3,6 +3,8 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-nativ
 import { useFocusEffect } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useChildren } from '../../context/ChildrenContext';
+import { useClasses } from '../../context/ClassesContext';
+import { compareChildNames, formatChildName } from '../../utils/childNames';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { useProgrammeTodayKey } from '../../hooks/useProgrammeTodayKey';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
@@ -24,10 +26,13 @@ import MakeGroupSheet from '../../components/lessons/MakeGroupSheet';
 import PutInGroupSheet from '../../components/lessons/PutInGroupSheet';
 
 const itemKey = item => item.key;
-const UngroupedChildRow = React.memo(function UngroupedChildRow({ child, onPut }) {
+const UngroupedChildRow = React.memo(function UngroupedChildRow({ child, className, onPut }) {
   const put = useCallback(() => onPut(child.id), [onPut, child.id]);
   return <View style={styles.childRow}>
-    <Text style={styles.childName}>{child.first_name}</Text>
+    <View style={styles.childDetails}>
+      <Text style={styles.childName}>{formatChildName(child)}</Text>
+      {className ? <Text style={styles.childClass}>{className}</Text> : null}
+    </View>
     <BrandButton label="Put in a group" variant="tertiary" size="sm" onPress={put} />
   </View>;
 });
@@ -35,6 +40,8 @@ export default function LessonPickerScreen({ navigation }) {
   const { handle } = useSignedInEA();
   const { repositories, services } = handle;
   const { children, groups, childrenGroups, getChildrenInGroup, makeGroup, addChildToGroup } = useChildren();
+  const { classes = [] } = useClasses();
+  const sortedMembers = useCallback(id => [...getChildrenInGroup(id)].sort(compareChildNames), [getChildrenInGroup]);
   const { pageVersion, runVersion } = useSessionHistoryStatus();
   const today = useProgrammeTodayKey();
   const bottomPadding = useScrollBottomPadding();
@@ -50,7 +57,7 @@ export default function LessonPickerScreen({ navigation }) {
     const load = async () => {
       try {
         const picker = await loadPickerRanking({ handle, repositories, today, groups,
-          getChildrenInGroup, children, childrenGroups });
+          getChildrenInGroup: sortedMembers, children, childrenGroups });
         if (!active || !handle.isCurrent()) return;
         if (picker.draftId) { navigation.replace('Lesson', { draftId: picker.draftId }); return; }
         if (picker.missing) { setMissing(picker.missing); setModel(null); setError(null); return; }
@@ -67,7 +74,7 @@ export default function LessonPickerScreen({ navigation }) {
     };
     void load();
     return () => { active = false; };
-  }, [handle, repositories, services, navigation, today, groups, getChildrenInGroup,
+  }, [handle, repositories, services, navigation, today, groups, sortedMembers,
     children, childrenGroups, pageVersion, runVersion]));
 
   const start = useCallback(groupId => navigation.navigate('Lesson', {
@@ -85,7 +92,7 @@ export default function LessonPickerScreen({ navigation }) {
         ...other.map((row, index) => ({ key: row.groupId, kind: 'group', row, index, count: other.length, showDivider: index < other.length - 1 }))] : []),
       { key: 'make', kind: 'make' },
       ...(model.ungrouped.length ? [{ key: 'ungrouped', kind: 'heading', title: 'Not in a group yet' },
-        ...model.ungrouped.map(child => ({ key: `child-${child.id}`, kind: 'child', child }))] : []),
+        ...[...model.ungrouped].sort(compareChildNames).map(child => ({ key: `child-${child.id}`, kind: 'child', child }))] : []),
     ];
   }, [model, children.length]);
   const renderItem = useCallback(({ item }) => {
@@ -95,8 +102,8 @@ export default function LessonPickerScreen({ navigation }) {
     if (item.kind === 'make') return <ListGroup style={styles.makeGroup}>
       <ListRow title="+ Make a group" onPress={openMakeGroup} />
     </ListGroup>;
-    return <UngroupedChildRow child={item.child} onPut={setPutChildId} />;
-  }, [today, start, openMakeGroup]);
+    return <UngroupedChildRow child={item.child} className={classes.find(row => row.id === item.child.class_id)?.name} onPut={setPutChildId} />;
+  }, [today, start, openMakeGroup, classes]);
 
   if (missing === 'programme') return <View style={styles.screen}>
     <NoActiveProgrammeNotice action="start lessons" />
@@ -114,9 +121,9 @@ export default function LessonPickerScreen({ navigation }) {
       ListEmptyComponent={model && children.length === 0 ? <EmptyState title="No children yet"
         body="Add children to a class to start lessons." /> : null} />
     <MakeGroupSheet visible={makingGroup} onDismiss={closeMakeGroup} ungrouped={model?.ungrouped ?? []}
-      makeGroup={makeGroup} handle={handle} />
+      classes={classes} makeGroup={makeGroup} handle={handle} />
     <PutInGroupSheet visible={putChildId !== null} onDismiss={closePutGroup} childId={putChildId}
-      groups={groups} addChildToGroup={addChildToGroup} makeGroup={makeGroup} handle={handle} />
+      groups={groups} getChildrenInGroup={sortedMembers} addChildToGroup={addChildToGroup} makeGroup={makeGroup} handle={handle} />
   </View>;
 }
 const styles = StyleSheet.create({
@@ -127,5 +134,7 @@ const styles = StyleSheet.create({
   makeGroup: { marginTop: spacing.md },
   childRow: { minHeight: 64, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center',
     gap: spacing.ms, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  childName: { ...typeRoles.textRowTitle, color: colors.text, flexGrow: 1, flexShrink: 1 },
+  childDetails: { flexGrow: 1, flexShrink: 1 },
+  childName: { ...typeRoles.textRowTitle, color: colors.text },
+  childClass: { ...typeRoles.textCaption, color: colors.textSecondary },
 });
