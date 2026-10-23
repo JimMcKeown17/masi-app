@@ -125,3 +125,39 @@ this follow-up wins.
    Zazi work because Zazi has field users.
 3. **Submitted assessments are immutable.** See ADR-0007. This does not change who may *read*
    assessments; it removes EA update and delete rights after submission.
+
+## Implementation status — 2026-10-23
+
+Assessment scope is implemented on `feat/whole-class-assessment`, rebased through `6215c04`.
+This note updates implementation status; the Decision above is unchanged.
+
+- [The class-roster pull](../../src/services/classRosterPull.js) downloads the EA's own active
+  class assignments in the active Programme, open memberships, full children and active-year
+  move memberships. Both child-data pull paths persist the roster (`ed3acf3`). Server-provided
+  closed memberships precede open replacements; unresolved conflicts wait for replay
+  (`bb63564`). Classes persist before their assignments.
+- [The class reconcile pass](../../src/services/preloadedChildData.js) consumes optional
+  `roster_class_ids` / `roster_membership_ids` after complete roster persistence. It shares a
+  transaction and acknowledgment snapshot with the delivery pass, excludes that pass's
+  acknowledged children, and has its own mass-end breaker (`ba9b28b`).
+- [`useAssessableChildren`](../../src/hooks/useAssessableChildren.js) exposes delivery and
+  class-only children from SQLite (`5e3a861`). Assessment selection, coverage, unassessed counts,
+  assessment ranking and history names use it (`a333a62`). My Children, ClassDetail, sessions,
+  groups, daily targets and delivery rankings retain delivery scope. Class-only access grants
+  no mastery confirmation or child-edit authority (`3b9720f`). The replacement/group editor
+  and its removal-reason fields remain separate work.
+- [Late-upload grace](../../supabase/migrations/20261023120000_whole_class_assessment_access.sql)
+  adds grant-on-capture-day authority for new assessment families and Battery Runs, preserving
+  current-authority acceptance, committed-family retries and existing-run lifecycle paths
+  (`122f038`). The existing classifier already handles membership-mediated pending class grants;
+  control-child upload tests prove retry, recovery and authenticated terminal denial (`6215c04`).
+  This supersedes the Consequences bullet's old single-hop `GRANT_SUBJECTS` limitation.
+- Assignment publications are compared with the last complete persisted roster's covered class
+  IDs, including both provider completion orders, so a newly granted class is pulled without
+  duplicating the initial children pull (`a333a62`).
+
+The controller reports disposable PostgreSQL 17 GREEN at 113/113 assessment-results cases and
+RED without the migration. These are local proofs. Staging migration application needs Jim's
+go; staging read/write verification and A03/iPhone device gates remain open. Task-by-task
+commits, review fixes and verification are in the
+[build log](../../documentation/build-log.md#2026-10-23--whole-class-assessment-access).

@@ -2,7 +2,7 @@
 
 **Document role:** current product, domain, and architecture requirements.
 
-**Updated:** 2026-07-23
+**Updated:** 2026-10-23
 
 This file is not a progress ledger. Use:
 
@@ -67,7 +67,12 @@ children, groups, sessions, assessments, and reporting.
 
 ### 3.3 Class, group, and session
 
-- A class is the broader school roster and assessment scope.
+- A class assignment defines assessment scope: the whole class, including delivery and control
+  children. An EA may assess a control child without creating a delivery assignment.
+- Delivery scope remains the EA's delivery subset. My Children, ClassDetail, session/attendee
+  pickers, groups, onboarding, daily targets and delivery rankings use that subset.
+- Class scope does not authorize delivery edits, mastery confirmations or changes to another
+  EA's group composition. See [ADR-0005](docs/adr/0005-assessment-delivery-scope-two-tier-access.md).
 - A group is the delivery unit within a class.
 - One completed session represents one group block of work.
 - The current app still has a transitional child-oriented capture contract. The required
@@ -82,8 +87,8 @@ children, groups, sessions, assessments, and reporting.
 - In-app assessment is an instrument delivered through the app.
 - Assessment results keep the raw item evidence needed to explain and recompute summaries.
 - Assessment Windows are first-class in the data model, but the current UI does not yet implement
-  formal Window selection. Until it does, Home and Assess use complete locally available
-  active-roster lifetime coverage.
+  formal Window selection. Home and Assess coverage uses non-skipped Letter results in the active
+  academic year, from any recorder, over the assessable roster (delivery plus control children).
 
 ## 4. Technology and current architecture
 
@@ -231,9 +236,11 @@ render-time dependency.
 
 ### 6.4 Classes, children, and onboarding
 
-- Show active-Programme classes and children authorized for the EA.
+- Show active-Programme classes. My Children and ClassDetail show the EA's delivery children;
+  the assessment roster also includes control children in the EA's assigned classes.
 - Search and filter the roster.
-- Create and edit local classes and children offline.
+- Create and edit local classes and children offline. Child edits, deletes and archives require
+  an active delivery assignment or the child's creator; class-only assessment access is insufficient.
 - A confirmed zero-class EA enters guided class then child onboarding.
 - Offline creation after an unconfirmed zero requires explicit duplicate-risk acknowledgement.
 - Class creation starts a durable incomplete child-onboarding step.
@@ -279,14 +286,21 @@ is correct.
 
 ### 6.7 Assessments
 
-- Select an authorized child. Language comes from the class's `home_language`: English (`en`),
+- Select from the class assessment roster: **"Your children"** then **"Rest of the class"**,
+  with search across both sections and empty sections omitted. A control child needs an open
+  membership in an active-Programme assigned class, not a delivery assignment or child Programme
+  enrollment. Assessing never adds a child to delivery lists or counts.
+- Language comes from the chosen membership's class `home_language`: English (`en`),
   isiXhosa (`xh`) or Afrikaans (`af`). When missing or unsupported, the EA picks from the languages
   that have an item set, with nothing preselected and never English by default.
 - Step-by-step capture only; the stop rule comes from the item set.
 - Preserve wall-clock-accurate timing, background pause/resume, hard stop, and last-attempted
   confirmation.
 - Store parent assessment and item evidence atomically before navigation.
-- Show complete locally available Assessment History for the signed-in EA and Programme.
+- Hydrate authorized current-academic-year class results, including co-EA results, for child
+  results and assessment coverage. Assessment History's list retains its signed-in-EA recorder
+  filter and active Programme; names use the assessable roster with a SQLite fallback for
+  children outside that roster.
 - Show raw correct count as the hero result and configured score-band meaning where available.
 - Keep unknown or unconfigured score bands neutral rather than inventing thresholds.
 - Retain direct paths to assessment, result detail, and letter mastery.
@@ -299,7 +313,9 @@ surface.
 - Use the curriculum letter order in `src/constants/literacyConstants.js`.
 - Distinguish assessment-derived evidence from EA-taught/mastered state.
 - Preserve deterministic logical identity and soft-delete/reactivation behavior.
-- Keep the child screen and session tracker on one shared mastery-state contract.
+- Keep the child screen and session tracker on one shared mastery-state contract. EA mastery
+  confirmations require an active delivery assignment; control-child assessment results and
+  trackers expose no confirmation controls.
 
 ### 6.9 Insights
 

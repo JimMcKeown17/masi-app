@@ -1,5 +1,12 @@
 # Whole-class assessment access — Design
 
+> **Implementation status — 2026-10-23:** Tasks 1–8 are implemented on
+> `feat/whole-class-assessment` (rebased through `6215c04`). Staging application of
+> `20261023120000_whole_class_assessment_access.sql` needs Jim's go; staging verification and
+> the A03/iPhone device gates remain open. The design and original recon below describe the
+> starting point; current implementation and verification are recorded in
+> [the build log](../../../documentation/build-log.md#2026-10-23--whole-class-assessment-access).
+
 **Date:** 2026-10-23
 **Status:** Decisions by Jim, 2026-10-23 (in conversation). Revision 4 after Codex design review rounds 1–3.
 **Implements:** ADR-0005's two-tier access model. Assessment scope is the class; delivery scope

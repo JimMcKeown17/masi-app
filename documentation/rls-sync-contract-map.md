@@ -336,6 +336,14 @@ errors in the **same SQLite transaction**. The item update runs before the versi
 return. A failure after deletion rolls back the outbox delete and both sync-state changes; a stale
 response cannot acknowledge a replacement payload. A replay can then succeed as `already_present`.
 
+**Control-child upload classification.** `controlChildSync.test.js` exercises the real outbox,
+classifier and postgrest-js with an in-process fake transport. With no delivery row, enrollment,
+group grant or pending child parent, an active membership joined to a pending class assignment
+keeps an assessment/run `42501` retriable. Recovery acknowledges the class assignment before
+the run/family; a linked Question waits for its run. With no pending evidence, an authenticated
+server refusal is terminal with `42501-authenticated:` and is not auto-healed. A synced class
+grant uploads without any local delivery row. No classifier change was required (`6215c04`).
+
 **Error classes.** `MA001`, `MA002`, `22023` and `UNEXPECTED_RPC_RESULT` are terminal. An RPC response
 outside its explicit success set is a failure, not a silent acknowledgement. `23505` remains
 terminal and never marks assessments or runs synced. `28000` is retriable. Existing `42501`/`23503`
@@ -343,14 +351,16 @@ local-evidence rules remain in force: pending/failed access evidence can make au
 retriable. The thirty-family regression retries with `syncAll({ force: true })`, exactly like the
 manual Sync action, after the assignment succeeds.
 
-**SELECT and pull.** The migration preserves assessment/item SELECT policies (owner or child-read
-authority, with items visible through their parent). Run SELECT is owner or
-`private.current_user_can_read_child(child_id)`. Authenticated direct INSERT/UPDATE/DELETE is revoked
-for all three tables; only authenticated callers receive EXECUTE on the two RPCs. Privileged
-service-role table access remains outside the EA write contract. **No pull yet — Plan 3** owns
-assessment/run history authorization and hydration; current local readers do not establish that
-future server history scope. A zero-Question run already blocks no-history child deletion, with
-restricting server child/user/run foreign keys protecting retained history.
+**SELECT and pull.** Assessment Results Plan 3's
+`20261022120000_assessment_history_pull.sql` supplies the current owner/current-year-class
+SELECT policies for assessments, items and runs, superseding the original write migration's
+broader child-read policies. The handle-owned assessment/run history walkers and atomic page
+savers are implemented; see the history-pull section below. Authenticated direct
+INSERT/UPDATE/DELETE remains revoked for all three tables; only authenticated callers receive
+EXECUTE on the write RPCs. Privileged service-role table access remains outside the EA write
+contract. A zero-Question run blocks no-history child deletion, with restricting server
+child/user/run foreign keys protecting retained history. Local implementation does not establish
+hosted migration state or native verification.
 
 **Server-owned change timestamps.** Migration `20261021120000_assessment_results_contract.sql`
 stamps `updated_at` on INSERT and UPDATE for `assessments`, `assessment_items`, `battery_runs` and
@@ -844,7 +854,13 @@ and strips the version from operations that must remain unstamped.
 rows reject pulled replacements. A synced versioned row also rejects a numeric server version
 lower than its own, so a pull that read before an upload cannot roll back a just-acknowledged
 write. Equal or higher versions still apply, including Studio edits that leave the version
-unchanged. A terminal row always remains eligible to converge to the server copy, even at a lower
+unchanged. There is no timestamp tie-breaker: `server_updated_at` is metadata, not an ordering
+guard. An older same-ID row at an equal version can reopen a closed synced membership; a
+missing incoming version also bypasses the numeric comparison. This existing limit is accepted
+for whole-class convergence (`bb63564`): the next complete delivery/class reconcile can close
+the absent reopened row and a subsequent replay can land its replacement. This is eventual
+convergence, not a guarantee that an equal-version stale response cannot win temporarily.
+A terminal row always remains eligible to converge to the server copy, even at a lower
 version. Skipping a pull neither changes the queued payload nor enqueues work.
 
 `MV001` is terminal with reason `Server has a newer version of this record (stale_version)`, never
@@ -1106,21 +1122,23 @@ The scope carries `{ ok, rows: { classEaAssignments, classes, children, membersh
 For the returned class IDs it downloads every open membership, in any academic year, with
 `classes(*)`, then full child rows. It also downloads those children's active-year memberships,
 open and closed, with `classes(*)`; an `academic_years!inner(is_active)` join resolves the active
-year on the server without a cached-year dependency. Every `.in()` list is chunked at 200. Each
+year on the server without a cached-year dependency. Full child rows already downloaded by the
+delivery scope in this same pass are reused; only missing roster child IDs are fetched. This
+reuses neither cached identities nor history references. Every `.in()` list is chunked at 200. Each
 query is a separate `enqueueRequest` admission through the existing `queuedQueryScope` wrapper;
 any failed or limit-reaching query makes the aggregate incomplete, even if deduplication leaves
 fewer than `PULL_SCOPE_COMPLETENESS_LIMIT` rows. Successful chunks remain available to persist.
 
 | Row kind | Class-roster server scope | Local persistence |
 | --- | --- | --- |
+| `classes` | Parent rows from the assignment and membership joins | Existing `saveClass`, server-synced; persisted before assignments. |
 | `class_ea_assignments` | Caller, active Programme, `unassigned_at IS NULL` | Existing class-assignment `save` path, including per-ID and active-pair guards; idempotent with ClassesContext. |
-| `classes` | Parent rows from the assignment and membership joins | Existing `saveClass`, server-synced. |
 | `children` | Full records for the open roster memberships; no delivery assignment or enrollment required | Existing `saveServerChildRow`, promoting history references to full records. Owner-scoped pending hard deletes remain excluded. |
 | `child_class_memberships` | Open held-class memberships in any year, plus all active-year move memberships for those children | Task 2's `persistRosterMemberships`: server-closed rows first, then open rows; no inferred exits or outbox work. |
 
-All four row kinds persist in one caller-bound writer transaction in that order. Assignments
-precede their parent classes, so `PRAGMA defer_foreign_keys = ON` defers FK validation until the
-transaction commits; a missing/invalid parent still fails the transaction. Missing joined parents
+All four row kinds persist in one caller-bound writer transaction: classes, assignments,
+children, then memberships. Parents precede their dependents; no deferred-FK PRAGMA is needed
+for this path. A missing/invalid required parent still prevents an invalid write. Missing joined parents
 are checked against local `classes` inside that transaction. A closed historical membership whose
 parent is neither returned nor local is dropped from `rows` without making the scope incomplete;
 an open membership without a parent makes it incomplete and is not written. A missing child is
@@ -1129,12 +1147,56 @@ completeness, Task 4 runs the paired membership reconciles below. Incomplete ros
 
 ChildrenContext increments `rosterVersion` after the roster transaction commits. ClassesContext
 publishes `assignmentsVersion` when its persisted own active-programme assignment set changes.
-Because ClassesProvider is below ChildrenProvider, it notifies the children provider through the
-latter's stable `notifyClassAssignmentsChanged` callback. That signal participates in the existing
-child-pull single-flight inputs: an in-flight pass owes a follow-up when the assignment set changes.
-An identical assignment replay publishes no new version, preventing a pull feedback loop.
-`useAssessableChildren` depends on both explicit versions as well as its existing list identities
-and screen focus. Its return shape remains unchanged.
+Because ClassesProvider is below ChildrenProvider, it calls
+`notifyClassAssignmentsChanged(assignmentClassIds)` with sorted, unique active class IDs.
+ChildrenContext records the classes covered by its last successfully persisted complete
+`classRoster` scope, using that scope's `rows.classEaAssignments`, per handle/user. An idle
+notification increments the child-pull `classAssignmentsVersion` only when it differs from that
+coverage. During an active flight, the latest notification waits until the flight settles, then
+compares with its final persisted coverage. Equal sets, including a first class publication
+already covered by the concurrent roster pull, cause no second children GET. A newly granted
+class not covered by that pull triggers one follow-up through the existing effect/single-flight
+path. An identical assignment replay publishes no new version. This is the Task 3 regression
+fixed in Task 7 (`a333a62`), covered in `classRosterPull.test.js` and `task5AuthRaces.test.js`.
+`useAssessableChildren` depends on both explicit versions, context list identities and screen
+focus. Its return shape remains `{ yourChildren, restOfClass, all, loading }`.
+
+### Assessment roster and delivery surfaces
+
+`childrenRepository.getAssessableChildren(userId)` reuses `getMyChildren(userId)` for its exact
+delivery population and adds full, non-archived, non-history-reference children with an open
+membership in a non-archived class assigned to that EA in the active Programme. The class arm
+requires no child Programme enrollment or delivery assignment. It returns one row per child,
+with `is_delivery`, `class_id`, `grade`, `home_language` and `membership_id`. For multiple open
+assigned memberships it prefers the active academic year, then latest `enrolled_at`, then
+lowest membership ID. The selected membership supplies class/language/grade, with the existing
+child-class fallback for delivery rows without a selected membership.
+
+`useAssessableChildren` supplies assessment selection, Assess-tab statistics, Home assessment
+coverage/due cards, Children-tab unassessed counts, assessment ranking and Assessment History
+names. The picker shows "Your children" then "Rest of the class", searches both, omits empty
+sections and derives language from the row's `home_language`. History keeps its existing
+signed-in-EA recorder filter and SQLite `getChildNamesByIds` fallback for children outside
+the current roster. My Children, ClassDetail,
+session/attendee pickers, `ChildSelector`, `GroupPickerBottomSheet`, onboarding, daily targets,
+session-count ranking and letter-mastery ranking keep delivery scope. `getChildrenTabStats`
+takes delivery and assessable populations separately: delivery determines child count,
+assessable determines coverage. These boundaries are pinned by `assessmentScope.test.js`.
+
+Class scope is assessment authority, not delivery-write authority. `updateChild`, `archiveChild`
+and `deleteIfNoHistory` require an active local delivery assignment for the signed-in connection
+actor or the child's existing `created_by`. `archiveClass` limits both child `class_id` nulling
+and membership/outbox cascades to that same population. Other control-child rows and outbox
+records remain unchanged. `setLetterMastery` requires an active delivery assignment only,
+matching its server RPC; the creator fallback does not apply. Refusal is `NOT_DELIVERY_CHILD`
+before any guarded mutation. ChildResults and LetterTracker pass delivery-context membership
+as `LetterMasteryPanel.isDelivery`; class-only children get no confirmation controls.
+
+In `literacySessionPersistence`, a per-attendee reading-level or mastery write refused with
+`NOT_DELIVERY_CHILD` is skipped with one warning per child. The session, attendee rows and
+all authorized child writes still commit in the same transaction. Other errors are rethrown
+and roll the transaction back. Tests: `nonDeliveryGuards.test.js`,
+`literacySessionPersistence.test.js`, and the named screen/panel suites.
 
 ### Stale active-pair supersede (2026-07-22)
 
@@ -1416,9 +1478,11 @@ Saver validation errors retain `kind = 'query'` in the returned status and failu
 returns sorted distinct `classIds` for this EA's active, synced `class_ea_assignments` in
 **any** Programme, and sorted distinct `childIds` from synced memberships in those classes
 in that year, exited or not. Neither pending assignments nor pending memberships count. The
-phone ordinarily pulls active memberships only for its delivery children, so these child ids
-are a conservative subset of the server's class grant. Class ids detect a newly held class
-even when its members are not on the phone. `readMasteryScope(db, { userId })` returns sorted
+class-roster pull now hydrates open memberships for every held active-Programme class, including
+control children, and active-year move memberships for those children. Coverage can still be a
+conservative subset of server authority, especially for exited-only children never downloaded
+or grants in another Programme. Class IDs detect a newly held class even before its members
+are on the phone. `readMasteryScope(db, { userId })` returns sorted
 distinct children with an active synced direct delivery assignment; it needs no Programme.
 
 **Coverage tracks authorization separately from timestamp progress.** A gained class, a child

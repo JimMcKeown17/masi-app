@@ -693,7 +693,8 @@ acknowledgment RPC.
 The active specification is
 [`group-session-workflow.md`](./group-session-workflow.md). Implement it in this order:
 
-1. access grants and whole-class visibility;
+1. **Whole-class visibility/access implementation is closed** (2026-10-23); complete its
+   staging and device gates below before treating it as deployed;
 2. identity and lifecycle contracts;
 3. local schema, Supabase schema, RLS, payloads, ordering, and reconcile;
 4. group cards and Group Detail;
@@ -704,6 +705,21 @@ Status (2026-10-21): item 3's session-group contract is built on `feat/lesson-pl
 (lesson-plan B2: held-group authorization, local history reference, upload and ordering, the
 lost-reply fix). Its hosted migration was applied on 2026-10-22, and its A03s device gates G1 and G2 passed the same
 day; the iPhone rows remain.
+
+Whole-class assessment access:
+
+- [x] **Build whole-class visibility/access** — Tasks 1–8 implemented on
+  `feat/whole-class-assessment`, rebased through `6215c04`. Assessment scope includes delivery
+  and control children; delivery surfaces remain unchanged. See the
+  [2026-10-23 build entry](./build-log.md#2026-10-23--whole-class-assessment-access).
+- [ ] **Staging apply and verification, only after Jim's go.** Apply
+  `20261023120000_whole_class_assessment_access.sql`, check both new acknowledgment keys, and
+  verify a class-only EA can submit a control-child result. Disposable PostgreSQL proof is not
+  evidence that staging has the migration.
+- [ ] **Device gate — A03 and iPhone.** Sign in as a class-assigned EA; see "Rest of the class";
+  assess and sync a control child with the letter test and WelaPLUS after its host flow is
+  available; verify the server rows; end the child's membership, pull, and confirm the child
+  leaves the assessment picker. Keep the child out of delivery lists and counts throughout.
 
 Additional Head Office behavior retained from the Sprint 4 follow-up:
 
