@@ -74,7 +74,8 @@ test('English FAL 2 resumes four decided Questions, finalizes offline and suppli
     await assessments.saveQuestionResult({ assessmentId: uuid(), userId, childId, batteryRunId: runId, result: results[0] });
     throw new Error('duplicate should have been rejected');
   } catch (error) { expect(error.code).toBe('QUESTION_ALREADY_DECIDED'); }
-  await runs.finalizeRun(runId);
+  // Plan 3: finalize requires every battery Question decided.
+  await runs.finalizeRun(runId, { questionCodes: results.map(result => result.question_code) });
   expect((await runs.getRunWithResults(runId)).status).toBe('completed');
   const outbox = await db.getAllAsync('select * from sync_outbox');
   expect(outbox).toHaveLength(5);
