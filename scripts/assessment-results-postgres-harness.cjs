@@ -33,6 +33,7 @@ const PROGRAMME = "(SELECT id FROM public.programmes WHERE code = 'literacy')";
 const ACTIVE_YEAR = '(SELECT id FROM public.academic_years WHERE is_active)';
 const STARTED_AT = '2026-10-01T09:00:00.000Z';
 const COMPLETED_AT = '2026-10-01T09:10:00.000Z';
+const WHOLE_CLASS_MIGRATION = '20261023120000_whole_class_assessment_access.sql';
 const OLD_UPDATED_AT = '2001-01-01T00:00:00.000Z';
 const quoteIdentifier = (value) => `"${value.replaceAll('"', '""')}"`;
 const quote = (value) => `'${value.replaceAll("'", "''")}'`;
@@ -449,6 +450,197 @@ const runCases = (databaseUrl, programmeId) => {
   return summary;
 };
 
+// Whole-class Task 1: public RPC behavior, with no delivery grant or enrollment
+// unless explicitly requested. Cases roll back except the committed-retry fixture.
+const runWholeClassCases = (databaseUrl, programmeId) => {
+  const summary = {};
+  const check = (label, sql, sqlState) => {
+    if (sqlState) expectSqlState({ databaseUrl, label, sql, sqlState });
+    else runPsql({ databaseUrl, label, sql });
+    summary[label] = 'passed';
+  };
+  // Relative days keep the grace cases valid as the wall clock advances. The active
+  // year's bounds are controlled in each transaction, never on a hosted project.
+  const today = runPsql({ databaseUrl, label: 'whole-class-local-day', sql:
+    "SELECT (now() AT TIME ZONE 'Africa/Johannesburg')::date;" });
+  const day = (offset) => new Date(Date.parse(`${today}T12:00:00Z`) + offset * 86400000)
+    .toISOString().slice(0, 10);
+  const d = day(-10);
+  const at = (date, time = '12:00:00') => `${date}T${time}+02:00`;
+  const yearSetup = `UPDATE public.academic_years
+    SET starts_on = '${day(-365)}', ends_on = '${day(365)}' WHERE is_active;`;
+
+  const seedGrant = ({ arm = 'class', actor = EA_A, start = at(day(-11)),
+    end = at(day(-9)), memberStart = at(day(-12)), memberEnd = null } = {}) => {
+    const childId = randomUUID();
+    const scopeId = randomUUID();
+    const grantId = randomUUID();
+    const membershipId = randomUUID();
+    const endSql = end === null ? 'NULL' : quote(end);
+    const memberEndSql = memberEnd === null ? 'NULL' : quote(memberEnd);
+    let setup = `${yearSetup}
+      INSERT INTO public.children (id, first_name, last_name, created_by)
+      VALUES ('${childId}', 'Control', 'Whole class', '${HEAD_OFFICE}');`;
+    if (arm === 'delivery') {
+      setup += `INSERT INTO public.child_ea_assignments
+        (id, user_id, child_id, assigned_at, unassigned_at, created_by)
+        VALUES ('${grantId}', '${actor}', '${childId}', '${start}', ${endSql}, '${HEAD_OFFICE}');`;
+    } else if (arm === 'class') {
+      setup += `INSERT INTO public.classes (id, school_id, name, grade, academic_year_id, created_by)
+        VALUES ('${scopeId}', '${SCHOOL}', 'Whole class', '1', ${ACTIVE_YEAR}, '${HEAD_OFFICE}');
+        INSERT INTO public.class_ea_assignments
+          (id, class_id, ea_user_id, programme_id, assigned_at, unassigned_at, created_by)
+        VALUES ('${grantId}', '${scopeId}', '${actor}', '${programmeId}', '${start}', ${endSql}, '${HEAD_OFFICE}');
+        INSERT INTO public.child_class_memberships
+          (id, child_id, class_id, academic_year_id, enrolled_at, exited_at, created_by)
+        VALUES ('${membershipId}', '${childId}', '${scopeId}', ${ACTIVE_YEAR}, '${memberStart}', ${memberEndSql}, '${HEAD_OFFICE}');`;
+    } else {
+      setup += `INSERT INTO public.groups (id, name, programme_id, created_by)
+        VALUES ('${scopeId}', 'Whole class group', '${programmeId}', '${HEAD_OFFICE}');
+        INSERT INTO public.group_ea_assignments
+          (id, group_id, ea_user_id, programme_id, assigned_at, unassigned_at, created_by)
+        VALUES ('${grantId}', '${scopeId}', '${actor}', '${programmeId}', '${start}', ${endSql}, '${HEAD_OFFICE}');
+        INSERT INTO public.child_group_memberships
+          (id, child_id, group_id, joined_at, removed_at, created_by)
+        VALUES ('${membershipId}', '${childId}', '${scopeId}', '${memberStart}', ${memberEndSql}, '${HEAD_OFFICE}');`;
+    }
+    return { setup, childId, scopeId, grantId, membershipId };
+  };
+
+  // First new assertion fails behaviorally on the old schema: an ended class
+  // assignment must still authorize a new family captured inside its old window.
+  for (const scenario of [
+    { label: 'class-ended-inside-window' },
+    { label: 'class-only-current-control', end: null },
+    { label: 'class-another-eas-ended-grant', actor: EA_B, caller: EA_A, denied: true },
+    { label: 'class-ended-day-after', end: at(d, '23:59:59'), date: day(-9), denied: true },
+    { label: 'class-membership-ended-same-day', memberEnd: at(d, '09:00:00') },
+    { label: 'class-never-overlapped', end: at(d, '10:00:00'), memberStart: at(d, '11:00:00'), denied: true },
+    { label: 'class-touching-intervals', end: at(d, '10:00:00'), memberStart: at(d, '10:00:00'), denied: true },
+    { label: 'class-same-day-0800-sast', start: at(d, '08:00:00'), end: at(d, '09:00:00') },
+    { label: 'class-utc-end-next-sast-day', end: `${d}T23:30:00Z`, date: day(-9), time: '00:30:00' },
+    { label: 'class-end-exact-local-midnight', end: at(d, '00:00:00'), denied: true },
+    { label: 'class-start-next-local-midnight', start: at(day(-9), '00:00:00'), denied: true },
+    { label: 'class-zero-duration-grant', start: at(d), end: at(d), denied: true },
+    { label: 'class-future-date', start: at(day(-1)), end: at(day(2)), date: day(1), denied: true },
+    { label: 'class-outside-active-year', date: day(-366), memberStart: at(day(-367)), start: at(day(-367)), end: at(day(-365)), denied: true },
+    { label: 'class-no-active-year', noActiveYear: true, denied: true },
+    { label: 'class-no-open-programme', actor: NO_PROGRAMME_EA, denied: true },
+    { label: 'class-current-before-grant', start: at(day(-1)), end: null },
+    { label: 'class-current-future-preserved', end: null, date: day(1) },
+    { label: 'class-current-outside-year-preserved', end: null, date: day(-366) },
+    { label: 'delivery-ended-inside-window', arm: 'delivery' },
+    { label: 'delivery-ended-day-after', arm: 'delivery', end: at(d, '23:59:59'), date: day(-9), denied: true },
+    { label: 'group-ended-intersection', arm: 'group', memberStart: at(d, '08:00:00'), memberEnd: at(d, '09:00:00') },
+    { label: 'group-never-overlapped', arm: 'group', end: at(d, '08:00:00'), memberStart: at(d, '09:00:00'), denied: true },
+    { label: 'group-member-removed-before-day', arm: 'group', start: at(day(-13)), memberEnd: at(day(-11)), denied: true },
+    { label: 'group-member-joins-after-day', arm: 'group', end: at(day(-8)), memberStart: at(day(-9)), denied: true },
+  ]) {
+    const seed = seedGrant(scenario);
+    const date = scenario.date || d;
+    const actor = scenario.caller || scenario.actor || EA_A;
+    const overrides = { child_id: seed.childId, user_id: actor };
+    const family = makeFamily(programmeId, { ...overrides, assessment_date: date });
+    const run = makeRun(programmeId, { ...overrides, started_at: at(date, scenario.time || '12:00:00') });
+    const setup = seed.setup + (scenario.noActiveYear
+      ? 'UPDATE public.academic_years SET is_active = false WHERE is_active;' : '');
+    for (const [kind, call] of [['submit', submit(family)], ['run', saveRun(run)]]) {
+      check(`whole-class-${kind}-${scenario.label}`, asActor(actor,
+        scenario.denied ? `SELECT ${call};` : expectResult(call, 'inserted'), { setup }),
+      scenario.denied ? '42501' : undefined);
+    }
+  }
+
+  const retry = seedGrant({ end: null });
+  const retryFamily = makeFamily(programmeId, { child_id: retry.childId, assessment_date: d });
+  const retryRun = makeRun(programmeId, { child_id: retry.childId, started_at: at(d) });
+  runPsql({ databaseUrl, label: 'whole-class-committed-retry-seed', sql: asActor(EA_A, `
+    ${expectResult(submit(retryFamily), 'inserted')}
+    ${expectResult(saveRun(retryRun), 'inserted')}
+  `, { setup: retry.setup, commit: true }) });
+  runPsql({ databaseUrl, label: 'whole-class-end-committed-class-grant', sql: `
+    UPDATE public.class_ea_assignments SET unassigned_at = '${at(day(-9))}' WHERE id = '${retry.grantId}';
+  ` });
+  check('whole-class-committed-family-and-run-after-class-ended', asActor(EA_A, `
+    ${sqlAssert(`NOT private.current_user_can_write_for_child('${retry.childId}')`, 'Class grant really ended')}
+    ${expectResult(submit(retryFamily), 'already_present')}
+    ${expectResult(saveRun({ ...retryRun, status: 'abandoned' }), 'updated')}
+    RESET ROLE;
+    ${familyCounts(retryFamily)}
+  `, { setup: `UPDATE public.staff_programme_assignments SET ended_at = now()
+    WHERE user_id = '${EA_A}' AND ended_at IS NULL;` }));
+
+  // Grace cannot bypass the exact-instant class-at-started_at check.
+  const instant = seedGrant({ memberStart: at(d, '13:00:00') });
+  check('whole-class-run-still-checks-class-at-started-at', asActor(EA_A, `SELECT ${saveRun(
+    makeRun(programmeId, { child_id: instant.childId, class_id: instant.scopeId, started_at: at(d) }))};`,
+  { setup: instant.setup }), '42501');
+  check('whole-class-run-valid-class-at-started-at', asActor(EA_A, expectResult(saveRun(
+    makeRun(programmeId, { child_id: instant.childId, class_id: instant.scopeId, started_at: at(d, '14:00:00') })), 'inserted'),
+  { setup: instant.setup }));
+
+  const own = seedGrant({ end: null });
+  const ended = seedGrant();
+  const otherEA = seedGrant({ actor: EA_B, end: null });
+  const otherProgramme = randomUUID();
+  const otherProgrammeClass = seedGrant({ end: null });
+  const sharedChild = randomUUID();
+  const sharedMembership = randomUUID();
+  const closedMembership = randomUUID();
+  const priorYear = randomUUID();
+  const priorMembership = randomUUID();
+  const ackSetup = `${own.setup}${ended.setup}${otherEA.setup}${otherProgrammeClass.setup}
+    INSERT INTO public.academic_years (id, label, starts_on, ends_on, is_active)
+    VALUES ('${priorYear}', 'Whole class prior year', '${day(-730)}', '${day(-366)}', false);
+    INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by)
+    VALUES ('${priorMembership}', '${own.childId}', '${own.scopeId}', '${priorYear}', '${at(day(-400))}', '${HEAD_OFFICE}');
+    INSERT INTO public.programmes (id, code, name) VALUES ('${otherProgramme}', 'whole_class_other', 'Other programme');
+    INSERT INTO public.class_ea_assignments (class_id, ea_user_id, programme_id, assigned_at, created_by)
+    VALUES ('${otherProgrammeClass.scopeId}', '${EA_A}', '${otherProgramme}', '${at(day(-11))}', '${HEAD_OFFICE}');
+    UPDATE public.class_ea_assignments SET unassigned_at = '${at(day(-9))}' WHERE id = '${otherProgrammeClass.grantId}';
+    INSERT INTO public.children (id, first_name, last_name, created_by)
+    VALUES ('${sharedChild}', 'Other EA delivery', 'Shared class', '${HEAD_OFFICE}');
+    INSERT INTO public.child_ea_assignments (user_id, child_id, created_by)
+    VALUES ('${EA_B}', '${sharedChild}', '${HEAD_OFFICE}');
+    INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by)
+    VALUES ('${sharedMembership}', '${sharedChild}', '${own.scopeId}', ${ACTIVE_YEAR}, '${at(day(-11))}', '${HEAD_OFFICE}');
+    INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, exited_at, created_by)
+    VALUES ('${closedMembership}', '${ended.childId}', '${own.scopeId}', ${ACTIVE_YEAR}, '${at(day(-20))}', '${at(day(-15))}', '${HEAD_OFFICE}');`;
+  check('whole-class-roster-ack-exact-active-programme-and-shared-class', asActor(EA_A, `
+    ${sqlAssert(`(public.get_reconcile_acknowledgments()->>'schema_version')::int = 1`, 'Schema stays 1')}
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'roster_class_ids' = ${json([own.scopeId])}`, 'Only own active-programme classes')}
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'roster_membership_ids' = ${json([own.membershipId, sharedMembership, priorMembership].sort())}`,
+      'Every open membership includes controls and another EA delivery child')}
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'child_class_membership_ids' = '[]'::jsonb`, 'Delivery acknowledgment unchanged')}
+  `, { setup: ackSetup }));
+  check('whole-class-roster-ack-authoritative-empty', asActor(UNRELATED_EA, `
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'roster_class_ids' = '[]'::jsonb`, 'Empty class set is an array')}
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'roster_membership_ids' = '[]'::jsonb`, 'Empty membership set is an array')}
+  `));
+  const noProgramme = seedGrant({ actor: NO_PROGRAMME_EA, end: null });
+  check('whole-class-roster-ack-no-programme-empty', asActor(NO_PROGRAMME_EA, `
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'roster_class_ids' = '[]'::jsonb`, 'No programme means empty classes')}
+    ${sqlAssert(`public.get_reconcile_acknowledgments()->'roster_membership_ids' = '[]'::jsonb`, 'No programme means empty memberships')}
+  `, { setup: noProgramme.setup }));
+
+  for (const signature of ['public.submit_assessment(jsonb,jsonb)', 'public.save_battery_run(jsonb)']) {
+    check(`whole-class-${signature}-definer-and-api-grants`, `
+      ${sqlAssert(`(SELECT prosecdef AND proconfig @> ARRAY['search_path=""'] FROM pg_proc
+        WHERE oid = '${signature}'::regprocedure)`, 'RPC retains definer and empty search_path')}
+      ${sqlAssert(`NOT has_function_privilege('service_role', '${signature}', 'EXECUTE')`, 'No service-role execute')}
+      ${sqlAssert(`NOT has_function_privilege('authenticator', '${signature}', 'EXECUTE')`, 'No authenticator execute')}
+    `);
+  }
+  check('whole-class-helper-security-and-grants', `
+    ${sqlAssert(`(SELECT prosecdef AND proconfig @> ARRAY['search_path=""'] FROM pg_proc
+      WHERE oid = 'private.user_held_grant_on(uuid,date)'::regprocedure)`, 'Helper is definer with empty search_path')}
+    ${sqlAssert(`NOT has_function_privilege('public', 'private.user_held_grant_on(uuid,date)', 'EXECUTE')`, 'No PUBLIC helper execution')}
+    ${sqlAssert(`NOT has_function_privilege('anon', 'private.user_held_grant_on(uuid,date)', 'EXECUTE')`, 'No anon helper execution')}
+    ${sqlAssert(`NOT has_function_privilege('authenticated', 'private.user_held_grant_on(uuid,date)', 'EXECUTE')`, 'Helper only called inside definer RPCs')}
+  `);
+  return summary;
+};
+
 // runPsql is spawnSync. These connections must remain alive simultaneously.
 const spawnPsql = ({ databaseUrl, sql, label, onStderr = () => {} }) => {
   const child = spawn('psql', [
@@ -556,10 +748,21 @@ const main = async () => {
     for (const filename of fs.readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort()) {
       runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, filename), label: `migration-${filename}` });
     }
+    // Apply the new migration twice in total before exercising its behavior.
+    // CREATE OR REPLACE must preserve signatures, grants and repeated application.
+    const wholeClassMigration = path.join(MIGRATIONS_DIR, WHOLE_CLASS_MIGRATION);
+    if (fs.existsSync(wholeClassMigration)) {
+      runPsql({ databaseUrl, file: wholeClassMigration, label: 'whole-class-migration-second-application' });
+    }
     runPsql({ databaseUrl, sql: fixtureSql, label: 'assessment-results-fixture' });
     const programmeId = runPsql({ databaseUrl, label: 'literacy-programme', sql: `SELECT ${PROGRAMME};` });
     assert.match(programmeId, /^[0-9a-f-]{36}$/, 'Exactly one literacy programme is required');
-    const cases = { ...runCases(databaseUrl, programmeId), ...await runOverlappingCases(databaseUrl, programmeId) };
+    const cases = {
+      ...(fs.existsSync(wholeClassMigration) ? { 'whole-class-migration-applied-twice': 'passed' } : {}),
+      ...runCases(databaseUrl, programmeId),
+      ...runWholeClassCases(databaseUrl, programmeId),
+      ...await runOverlappingCases(databaseUrl, programmeId),
+    };
     process.stdout.write(`${JSON.stringify({ passed: Object.keys(cases).length, cases })}\n`);
   } finally {
     // Both asynchronous clients have been awaited before cleanup, including on failure.
@@ -574,4 +777,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fixtureSql, runCases, runOverlappingCases, overlappingCalls };
+module.exports = { fixtureSql, runCases, runWholeClassCases, runOverlappingCases, overlappingCalls };

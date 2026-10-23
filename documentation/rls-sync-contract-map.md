@@ -221,8 +221,8 @@ Before a mobile session-history pull can ship:
 
 | Operation shape | Tables | Server call | RLS implication |
 | --- | --- | --- | --- |
-| Complete assessment family (`insert`) | `assessments` plus all `assessment_items` | `rpc('submit_assessment', { p_assessment, p_items })`; only `inserted` or `already_present` acknowledges the family | Exclusive authenticated write boundary; new ids require child/programme write authority, committed ids require matching identity and item-id set. No per-item DML or generic fallback. |
-| Battery header (`insert` or `update`) | `battery_runs` | `rpc('save_battery_run', { p_run })` with the full header; only `inserted`, `updated` or `unchanged` acknowledges it | New ids require child/programme authority and, when supplied, class membership at `started_at`. Existing owned runs use immutable identity and forward-only status checks, without renewed assignment checks. |
+| Complete assessment family (`insert`) | `assessments` plus all `assessment_items` | `rpc('submit_assessment', { p_assessment, p_items })`; only `inserted` or `already_present` acknowledges the family | Exclusive authenticated write boundary; new ids require current child write authority OR a grant on `assessment_date`, plus an open programme assignment; committed ids require matching identity and item-id set. No per-item DML or generic fallback. |
+| Battery header (`insert` or `update`) | `battery_runs` | `rpc('save_battery_run', { p_run })` with the full header; only `inserted`, `updated` or `unchanged` acknowledges it | New ids require current child write authority OR a grant on the Johannesburg date of `started_at`, plus an open programme assignment and, when supplied, class membership at the exact `started_at`. Existing owned runs use immutable identity and forward-only status checks, without renewed assignment checks. |
 | Default outbox push | Other synced domain tables without a special operation below | `upsert(payload, { onConflict: 'id' })` | Needs both write permission and SELECT visibility for upsert. |
 | Acknowledged edit | `time_entries` and every table in `ARCHIVE_SERVER_COLUMNS` when `operation === 'update'` | `update(editPatch).eq('id', serverId).select('id')`, where `serverId` is the payload id after `buildSyncPayload`, falling back to `record_id`. `editPatch` excludes `id`, `created_by`, `created_at`, `user_id`, and `archived_by_user_id`, plus the table's archive/restore columns. Success requires exactly the requested id; zero or ambiguous acknowledgments fail as `UPDATE_NOT_APPLIED`. An edit is deferred, not failed, while its own `insert` is still owed (pending, failed, or in flight). | Exercises UPDATE policy without asking for INSERT permission: PostgreSQL applies INSERT `WITH CHECK` to every upsert row, even a conflicting one, so these edits never go as upserts. S1 (`npm run verify:upload-contract:postgres`) proved the original five-table permission contract; the additional lifecycle-table routing has real-SQLite/synthetic-server regression coverage, not new PostgreSQL or hosted evidence. `class_grouping_state` is the exception and stays an upsert, because its `update` means create-or-update and its INSERT policy is authorization-based. A zero-row result stays retriable only while the row's own insert or a direct/membership-mediated authorization grant is still owed locally; otherwise it is terminal. |
 | Lifecycle archive | `classes`, `children`, assignment/enrollment/membership tables, `grouping_versions`, `groups` | `update(lifecyclePatch).eq('id', recordId).select('id')`. `ARCHIVE_SERVER_COLUMNS` narrows even a legacy full-snapshot outbox row to its table's lifecycle fields plus the claimed `row_version` on versioned tables. Success requires exactly the requested id in the returned rows; zero or ambiguous acknowledgments fail terminal as `ARCHIVE_NOT_APPLIED`. | Exercises UPDATE policy only. It must never create a missing row, run INSERT `WITH CHECK` on a partial payload, rewrite identity columns, or claim success without an exact server acknowledgment. |
@@ -271,13 +271,42 @@ limits cannot split their items.
 language, stopped reason and object `derived` on every family, including skipped results. It
 validates UUID/date/timestamp types, unique item ids and non-negative positions (gaps allowed),
 boolean correctness, object metadata, and `total_items === p_items.length`. New ids require current
-child write authority and an active programme assignment. An optional run must belong to the caller
+child write authority OR `private.user_held_grant_on(child_id, assessment_date)`, together with an
+open programme assignment in either case (Whole-Class Access Task 1). An optional run must belong to the caller
 and the same child/programme; a completed or abandoned run can still receive a late Question.
 An existing assessment id is checked before current assignment authority: owner, child, programme,
 run, Question code, item-set id and the exact item-id set must match. It returns `already_present`
 without editing saved marks, or raises `MA001`. New families return `inserted`. This is an identity
 and membership check, not a comparison of every captured field. A second id for the same
 `(battery_run_id, question_code)` raises `23505`; the phone never interprets that as success.
+
+**Date-aware late-upload grace (Whole-Class Access Task 1).** Migration
+`20261023120000_whole_class_assessment_access.sql` adds
+`private.user_held_grant_on(p_child uuid, p_day date) returns boolean`, a stable
+`SECURITY DEFINER` helper with `set search_path = ''`, revoked from PUBLIC and the API roles.
+Only the definer RPCs call it. For new families `d` is `assessment_date`; for new runs it is
+`(started_at at time zone 'Africa/Johannesburg')::date`. Both RPCs authorize
+`current_user_can_write_for_child(child) OR user_held_grant_on(child, d)` and still require
+an open `staff_programme_assignments` row for the payload's programme. The current-authority
+arm is unchanged: it can still accept dates before the grant, future dates or dates outside
+the active academic year. The helper's bounds apply only to historical grace.
+
+The helper requires `d` on or before today's Johannesburg date and within an active
+`academic_years` row, inclusive of its start and end dates. It builds the half-open local-day
+window `ds = (d::timestamp at time zone 'Africa/Johannesburg')` and
+`de = ((d + 1)::timestamp at time zone 'Africa/Johannesburg')`. A delivery grant overlaps when
+`assigned_at < de` and `coalesce(unassigned_at, 'infinity') > ds`. Class and group grants
+require a non-empty intersection between the caller's assignment and the child's membership,
+and that intersection must overlap `[ds, de)`. Class membership uses `enrolled_at`/`exited_at`;
+group membership uses `joined_at`/`removed_at`. No programme enrollment is required for a
+control child. The run's exact-instant class membership check remains in force. Committed
+family confirmation and existing-run lifecycle paths still precede these authority checks.
+
+Accepted limitation: restoring a group assignment clears `unassigned_at` on the same row while
+retaining `assigned_at`. The resulting interval hides an intervening gap, so grace can accept a
+date in that gap; grant-period history is not recorded. No new history table is introduced.
+Disposable-Postgres cases cover the grace and acknowledgment contracts and apply the migration
+twice; execution evidence and any open controller gates belong in the Task 1 report.
 
 **Battery headers and order.** `batteryRunsRepository` starts runs locally with `started_here = 1`,
 `in_progress`, `progress_check` and a null window. It stores `started_at` once as an ISO string and
@@ -1103,6 +1132,18 @@ inactive-incoming, and local-create cases).
 
 Ordinary authenticated SELECTs hydrate row content, but they do not authorize absence. PostgreSQL RLS can suppress a row while returning `{ data: [], error: null }`, so treating an ordinary empty result as proof of removal is unsafe. Migration `20260714220000_server_authoritative_reconcile_acknowledgments.sql` adds `public.get_reconcile_acknowledgments()`, backed by a fixed-search-path `SECURITY DEFINER` function in `private`. It accepts no caller-supplied identity, derives the EA from `auth.uid()`, and returns schema version 1, `complete: true`, the active Programme id, and every relationship-specific id set from one PostgreSQL statement snapshot.
 
+Whole-Class Access Task 1 adds `roster_class_ids` and `roster_membership_ids` under the
+same `schema_version: 1`. The former contains only the caller's active class assignments in
+the active programme; the latter contains every open membership in those classes, in any
+academic year, including control children and another EA's delivery children. Both keys are
+`[]` when empty; an absent key on an older server means "not provided". Existing delivery
+acknowledgment keys and the public wrapper are unchanged. These server keys are the input
+contract for the later class-roster reconcile task; Task 1 does not add that phone pass.
+Its required safety rules are: end only synced rows, only from a complete snapshot with both
+keys present, only inside `roster_class_ids`, excluding children owned by the delivery pass's
+`visible_child_ids`; apply the mass-end breaker to this separate population. Losing a class
+assignment must never invent membership exits.
+
 The client validates the schema version, completeness flag, authenticated user id, active Programme id, and every required array. Ordinary scopes still decide which returned rows can be persisted. Only the validated RPC snapshot supplies the acknowledged sets used to end local relationships:
 
 | Reconciled table and server scope | Acknowledged set | Local rows ended | End column |
@@ -1110,6 +1151,7 @@ The client validates the schema version, completeness flag, authenticated user i
 | `child_ea_assignments`, direct active assignments for the EA with children embedded | RPC `child_ea_assignment_ids` | The EA's active synced assignments absent from the set; the same transaction calls `deleteUndeliveredLetterMastery` to delete the ended children's synced mastery with nothing owed and drop their mastery coverage | `unassigned_at` |
 | `child_programme_enrollments`, active rows for the active Programme within acknowledged assigned child ids | RPC `child_programme_enrollment_ids` within `assigned_child_ids` | Active synced enrollments in that exact Programme and child scope whose ids are absent | `ended_at` |
 | `child_class_memberships`, active rows for child ids returned by the children query | RPC `child_class_membership_ids` within `visible_child_ids` | Active synced memberships for acknowledged child ids whose ids are absent | `exited_at` |
+| `child_class_memberships`, every open row in the caller's active-programme assigned classes (server keys available; phone pass is a later task) | RPC `roster_membership_ids` within `roster_class_ids` | Later class pass: active synced memberships absent from the set, excluding delivery-acknowledged children; complete snapshot and mass-end breaker required | `exited_at` |
 | `group_ea_assignments`, full embedded rows from the active, EA-scoped, Programme-scoped groups query | RPC `group_ids` | The EA's active synced group assignments for the active Programme whose group ids are absent | `unassigned_at`, never `groups.archived_at` |
 | `child_group_memberships`, active rows for returned group ids | RPC `child_group_membership_ids` within `group_ids` | Active synced memberships for acknowledged group ids whose ids are absent | `removed_at` |
 | `class_ea_assignments`, active rows for the EA and Programme from the two-stage Classes pull | RPC `class_ids` | The EA's active synced class assignments for the active Programme whose class ids are absent | `unassigned_at`, never `classes.archived_at` |
