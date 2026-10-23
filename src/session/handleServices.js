@@ -26,7 +26,7 @@ import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
 import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
 import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
 import {
-  isMasteryInputsComplete, sessionHistoryCompletenessByChild, masteryCompletenessByChild,
+  isMasteryInputsComplete, sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
 } from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
 import { createLessonDraftController } from '../services/lessonDraftController';
@@ -130,6 +130,9 @@ export const createHandleServices = (handle) => {
     sessionHistory: {
       start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }),
       store,
+      coveredChildIds: ({ programmeId, academicYearStart } = {}) => sessionHistoryCoveredChildIds({
+        database: handle, userId: handle.userId, programmeId, academicYearStart,
+      }),
       completenessByChild: ({ childIds, programmeId, academicYearStart } = {}) => sessionHistoryCompletenessByChild({
         database: handle, userId: handle.userId, childIds, programmeId, academicYearStart,
       }),

@@ -16,10 +16,15 @@ export const loadLessonBase = async ({ handle, repositories, today, programmeId 
   if (!programme) return { missing: 'programme' };
   const year = await getActiveAcademicYear(db);
   if (!year?.starts_on) return { missing: 'academic_year' };
+  // Pull pages and cursors commit together: coverage before evidence keeps sessions at least as new as the claim.
+  const sessionHistoryCoveredChildIds = await handle.services.sessionHistory.coveredChildIds({
+    programmeId: programme, academicYearStart: year.starts_on,
+  });
   const sessions = await repositories.sessions.getSessions({
     userId: handle.userId, programmeId: programme, sinceDate: year.starts_on,
   });
-  return { today, academicYear: year, academicYearStart: year.starts_on, programmeId: programme, sessions };
+  return { today, academicYear: year, academicYearStart: year.starts_on, programmeId: programme,
+    sessions, sessionHistoryCoveredChildIds };
 };
 
 const describeGroups = ({ groups, membersByGroup, classes }) => {
@@ -117,13 +122,12 @@ export const loadPickerRanking = async ({ handle, repositories, base, today, gro
 export const loadPickerLetters = async ({ handle, repositories, services, base, ranking }) => {
   const memberIdsByGroup = Object.fromEntries(ranking.rows.map(row => [row.groupId, row.members.map(child => child.id)]));
   const childIds = [...new Set(Object.values(memberIdsByGroup).flat())];
-  const [childrenById, classes, historyByChild, masteryByChild] = await Promise.all([
+  const [childrenById, classes, masteryByChild] = await Promise.all([
     repositories.children.getChildrenByIds(childIds), repositories.classes.getClasses(),
-    services.sessionHistory.completenessByChild({ childIds, programmeId: base.programmeId,
-      academicYearStart: base.academicYearStart }),
     services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId: base.programmeId,
       academicYear: base.academicYear }),
   ]);
+  const historyByChild = Object.fromEntries(childIds.map(id => [id, base.sessionHistoryCoveredChildIds?.has(id) === true]));
   const membersByGroup = Object.fromEntries(ranking.groups.map(group => [group.id,
     memberIdsByGroup[group.id].map(id => childrenById[id] ?? { id }),
   ]));
@@ -152,15 +156,19 @@ export const loadPickerLetters = async ({ handle, repositories, services, base, 
 export const loadLessonParticipants = async ({ handle, repositories, services, programmeId,
   languageCode, packId, participantChildIds }) => {
   const childIds = [...new Set(participantChildIds)];
-  const [childrenById, knownLetters, historyByChild, masteryByChild] = await Promise.all([
+  const [childrenById, masteryByChild] = await Promise.all([
     repositories.children.getChildrenByIds(childIds),
-    loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode }),
-    services.sessionHistory.completenessByChild({ childIds, programmeId }),
     services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId }),
   ]);
+  // Read coverage before evidence, which may be newer but must never be older than its completeness claim.
+  const knownLetters = await loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode });
   const pack = packFor(languageCode, packId, isPreviewContentEnabled());
   return {
-    participants: childIds.map(id => childInput(childrenById[id] ?? { id }, knownLetters[id], historyByChild, masteryByChild)),
+    participants: childIds.map(id => {
+      const child = childrenById[id] ?? { id };
+      return { id, readingLevel: child.reading_level ?? null, knownLetters: knownLetters[id] ?? [],
+        masteryComplete: masteryByChild[id] === true };
+    }),
     pack, packIndex: packIndexFor(pack), alphabet: PEDAGOGICAL_ORDERS[languageCode] ?? null,
   };
 };
@@ -173,7 +181,7 @@ export const presentLessonInput = ({ base, lesson, loaded, presentChildIds }) =>
     pack: loaded.pack, packIndex: loaded.packIndex, alphabet: loaded.alphabet,
     presentChildren: presentChildIds.map(id => {
       if (!byId.has(id)) throw new Error(`Lesson participant facts missing: ${id}`);
-      return byId.get(id);
+      return { ...byId.get(id), historyComplete: base.sessionHistoryCoveredChildIds?.has(id) === true };
     }),
   };
 };

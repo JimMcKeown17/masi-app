@@ -10,6 +10,7 @@ import { presentChildIds } from '../db/repositories/lessonDraftsRepository';
 import * as transitions from '../lessonPlan/lessonDraftState';
 import { visibleRosterChildren } from '../utils/childVisibility';
 import { compareChildNames } from '../utils/childNames';
+import { useSessionHistoryStatus } from '../services/sessionHistoryStatus';
 
 // A lesson with no change yet is dated by its first change, so a lesson opened before
 // midnight and first touched after it keeps a plan made for its own date (C14).
@@ -20,6 +21,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const { repositories, services } = handle;
   const controller = services.lessonDraft;
   const today = useProgrammeTodayKey();
+  const { pageVersion, runVersion } = useSessionHistoryStatus();
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const { draft } = snapshot;
   const [baseLoaded, setBaseLoaded] = useState(null);
@@ -30,13 +32,16 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const [baseRetryCount, setBaseRetryCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const programmeId = draft?.programme_id ?? start?.group?.programme_id;
-  const baseKey = JSON.stringify([programmeId, today, baseRetryCount]);
-  const baseReady = baseLoaded?.base.today === today && baseLoaded.retryCount === baseRetryCount
+  const baseKey = JSON.stringify([programmeId, today, baseRetryCount, pageVersion, runVersion]);
+  const baseInScope = baseLoaded?.base.today === today
     && (programmeId === undefined || baseLoaded.base.programmeId === programmeId);
+  const baseReady = baseInScope && baseLoaded.retryCount === baseRetryCount;
   const base = baseReady ? baseLoaded.base : null;
+  // History refreshes keep the last base visible; first load, date/programme changes and retry do not.
+  const baseCurrent = baseReady && baseLoaded.pageVersion === pageVersion && baseLoaded.runVersion === runVersion;
   useEffect(() => {
     let active = true;
-    if ((!draft && !start) || baseReady) return undefined;
+    if ((!draft && !start) || baseCurrent) return undefined;
     setBaseError(null);
     const load = async () => {
       const [nextBase, classes] = await Promise.all([
@@ -44,9 +49,15 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
         repositories.classes.getClasses(),
       ]);
       if (nextBase.missing) throw new Error(`Lesson inputs missing: ${nextBase.missing}`);
-      if (active) setBaseLoaded({ base: nextBase, classes, retryCount: baseRetryCount });
+      if (active) setBaseLoaded({ base: nextBase, classes, retryCount: baseRetryCount,
+        pageVersion, runVersion, refreshed: baseInScope });
     };
-    void load().catch(error => { if (active) setBaseError(error); });
+    void load().catch(error => {
+      if (!active) return;
+      // A failed history refresh keeps the coherent base on screen; the next history version tries again.
+      if (baseReady) console.warn('[lesson] history refresh failed:', error?.message);
+      else setBaseError(error);
+    });
     return () => { active = false; };
     // The resolved programme reuses the base that opened this lesson.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,16 +143,18 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const recomputable = draft && isPlanRecomputable({
     lessonDate: draft.lesson_date, today, frozen: !!draft.plan_fixed_at,
   });
+  // Keep a resumed plan on initial load; attendance changes and a replacement base refresh it before freezing.
+  const needsCurrentPlan = !draft?.plan || recomputable
+    && (JSON.stringify(draft.plan.present_child_ids) !== presentKey || baseLoaded?.refreshed === true);
+  const currentPlan = useMemo(() => lessonInput && !needs && needsCurrentPlan ? computeLessonPlan(lessonInput) : null,
+  [lessonInput, needs, needsCurrentPlan]);
   const plan = useMemo(() => {
     if (!lessonInput) return null;
     if (needs) return draft?.plan ?? null;
-    if (!draft.plan || recomputable && JSON.stringify(draft.plan.present_child_ids) !== presentKey) {
-      return computeLessonPlan(lessonInput);
-    }
-    return draft.plan;
+    return currentPlan ?? draft.plan ?? computeLessonPlan(lessonInput);
     // JSON keys preserve memoisation when SQLite decodes an unchanged plan into a new object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lessonInput, needs, storedPlanKey, presentKey, recomputable]);
+  }, [lessonInput, needs, storedPlanKey, currentPlan]);
   const planKey = JSON.stringify(plan);
   const choices = useMemo(() => lessonInput && plan && !needs
     ? computeLessonChoices(lessonInput, { plan }) : null,
@@ -149,7 +162,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   [lessonInput, planKey, needs]);
   useEffect(() => {
     // Opening alone never creates a draft. Fold the initial plan into the first user change.
-    // A persisted plan is refreshed only for a changed attendance on the lesson's own day.
+    // A persisted, unfrozen plan follows refreshed inputs only on the lesson's own day.
     if (!draft?.plan || !plan || !recomputable || storedPlanKey === planKey) return;
     const current = controller.getSnapshot();
     if (current.status === 'saving' || current.draft !== draft) return;

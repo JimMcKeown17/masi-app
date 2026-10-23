@@ -266,7 +266,7 @@ test('a mixed-class group has classId null and no letters until the class is cho
 test('lesson base reports missing dependencies and honours an explicit programme', async () => {
   expect(await loadLessonBase({ handle, repositories, today, programmeId: 'programme-b' }))
     .toEqual({ today, academicYear: expect.objectContaining({ id: 'year-2026', starts_on: '2026-01-15' }),
-      academicYearStart: '2026-01-15', programmeId: 'programme-b', sessions: [] });
+      academicYearStart: '2026-01-15', programmeId: 'programme-b', sessions: [], sessionHistoryCoveredChildIds: null });
   await write(db => db.runAsync('update staff_programme_assignments set ended_at = assigned_at'));
   expect(await base()).toEqual({ missing: 'programme' });
   await write(db => db.runAsync('update academic_years set is_active = 0'));
@@ -299,10 +299,11 @@ test('participant facts include absentees and project present children in screen
   expect(loaded.participants[1].knownLetters).toEqual(['m']);
   statements.length = 0;
   const projected = presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['c2', 'c1'] });
-  expect(projected.presentChildren).toEqual([loaded.participants[1], loaded.participants[0]]);
+  expect(projected.presentChildren).toEqual([loaded.participants[1], loaded.participants[0]]
+    .map(child => ({ ...child, historyComplete: true })));
   expect(projected.packIndex).toBe(loaded.packIndex);
   expect(presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['c1'] }).presentChildren)
-    .toEqual([loaded.participants[0]]);
+    .toEqual([{ ...loaded.participants[0], historyComplete: true }]);
   expect(() => presentLessonInput({ base: loadedBase, lesson: lesson(), loaded, presentChildIds: ['missing'] }))
     .toThrow('Lesson participant facts missing: missing');
   expect(statements).toEqual([]);
@@ -355,11 +356,18 @@ test('picker ranking stays within six statements and shares programme and year w
   expect(ranked.statements).toBeLessThanOrEqual(6);
   expect(ranked.value.rows).toHaveLength(8);
   expect(ranked.value.rows.every(row => row.nextLetters === null)).toBe(true);
-  expect(ranked.calls.some(call => /from (children|classes|assessments|assessment_items|letter_mastery|sync_state)\b/i.test(call.sql))).toBe(false);
+  expect(ranked.calls.some(call => /from (children|classes|assessments|assessment_items|letter_mastery)\b/i.test(call.sql))).toBe(false);
+  const coverageIndex = ranked.calls.findIndex(call => /from sync_state\b/i.test(call.sql));
+  const sessionsIndex = ranked.calls.findIndex(call => /from sessions\b/i.test(call.sql));
+  expect(coverageIndex).toBeGreaterThanOrEqual(0);
+  expect(coverageIndex).toBeLessThan(sessionsIndex);
+  expect(ranked.value.base.sessionHistoryCoveredChildIds).toEqual(new Set(data.children.map(child => child.id)));
+  const sessionCompleteness = jest.spyOn(services.sessionHistory, 'completenessByChild');
   const letters = await countPickerReads(() => pickerInputs.loadPickerLetters({ handle, repositories, services,
     base: ranked.value.base, ranking: ranked.value }));
   expect(Object.keys(letters.value.lettersByGroup)).toHaveLength(8);
   expect(letters.value.historyComplete).toBe(true);
+  expect(sessionCompleteness).not.toHaveBeenCalled();
   expect(programme).toHaveBeenCalledTimes(1);
   expect(year).toHaveBeenCalledTimes(1);
   console.log('D5 split picker', { ranking: { statements: ranked.statements, rows: ranked.rows },

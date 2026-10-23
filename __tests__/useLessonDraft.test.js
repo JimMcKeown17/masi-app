@@ -55,6 +55,128 @@ beforeEach(async () => {
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 
+// Control notifications independently of the transactional page/cursor write.
+const historyVersions = () => {
+  const store = handle.services.sessionHistory.store;
+  let snapshot = store.getSnapshot();
+  const listeners = new Set();
+  jest.spyOn(store, 'getSnapshot').mockImplementation(() => snapshot);
+  jest.spyOn(store, 'subscribe').mockImplementation(listener => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  });
+  return (version = 'pageVersion') => {
+    snapshot = { ...snapshot, [version]: snapshot[version] + 1 };
+    listeners.forEach(listener => listener());
+  };
+};
+const finishLessonHistory = () => handle.withTransaction(async transaction => {
+  await handle.repositories.sessions.saveSession({ id: 'previous-lesson', user_id: handle.userId,
+    programme_id: 'programme-a', session_date: '2026-10-16', children_ids: ['c1'],
+    activities: { lesson: { version: 1 } }, synced: true,
+  }, { transaction });
+  await handle.repositories.syncState.setPullState(`session_history_pull:${handle.userId}:programme-a`, {
+    cursor: JSON.stringify({ windowStart: '2026-01-15', complete: true, lastFailureAt: null,
+      rescanChildIds: ['c1', 'c2', 'c3'] }),
+  }, { transaction });
+});
+
+for (const notify of [true, false]) {
+  testHook(`history completed after opening ${notify ? 'refreshes before the first tick' : 'cannot lend new coverage to stale sessions without notification'}`, async () => {
+    const bump = historyVersions();
+    const { result } = mount();
+    await ready(result);
+    expect(result.current.lessonInput.sessions).toEqual([]);
+    expect(result.current.base.sessionHistoryCoveredChildIds).toBeNull();
+    expect(result.current.plan.history_complete).toBe(false);
+    await finishLessonHistory();
+    if (notify) await act(async () => { bump(); });
+    await change(result, transitions.addChildForToday, 'c3');
+    await ready(result);
+    expect(result.current.lessonInput.presentChildren.map(child => child.id)).toEqual(['c1', 'c2', 'c3']);
+    await change(result, transitions.toggleTick, 'letters', 'a');
+    const persisted = await handle.repositories.lessonDrafts.getActive();
+    expect(persisted.plan.reason).toBe('ok');
+    expect(persisted.plan.history_complete).toBe(notify);
+    expect(result.current.lessonInput.presentChildren.map(child => child.historyComplete)).toEqual([notify, notify, notify]);
+    expect(result.current.lessonInput.sessions.map(session => session.id)).toEqual(notify ? ['previous-lesson'] : []);
+  });
+}
+
+for (const version of ['pageVersion', 'runVersion']) {
+  testHook(`${version} refresh keeps the old plan and choices in every render until the new base lands`, async () => {
+    const bump = historyVersions();
+    const renders = [];
+    const realLoad = inputs.loadLessonBase;
+    const load = jest.spyOn(inputs, 'loadLessonBase');
+    const { result } = renderHook(() => {
+      const lesson = useLessonDraft({ start });
+      renders.push(lesson);
+      return lesson;
+    }, { wrapper });
+    await ready(result);
+    await change(result, transitions.setNotes, 'Unfrozen persisted lesson');
+    const previous = result.current;
+    expect(previous.draft.plan_fixed_at).toBeNull();
+    await finishLessonHistory();
+    const held = deferred();
+    load.mockImplementationOnce(async options => { await held.promise; return realLoad(options); });
+    renders.length = 0;
+    await act(async () => { bump(version); });
+    try {
+      await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+      expect(result.current.base).toBe(previous.base);
+      expect(result.current.plan).toBe(previous.plan);
+      expect(result.current.choices).toBe(previous.choices);
+    } finally {
+      await act(async () => { held.resolve(); });
+    }
+    await waitFor(() => expect(result.current.plan.history_complete).toBe(true));
+    expect(result.current.lessonInput.sessions.map(session => session.id)).toEqual(['previous-lesson']);
+    expect(result.current.plan).not.toBe(previous.plan);
+    expect(result.current.choices).not.toBe(previous.choices);
+    for (const lesson of renders) {
+      expect(lesson.plan).not.toBeNull();
+      expect(lesson.choices).not.toBeNull();
+      expect(lesson.lessonInput).not.toBeNull();
+    }
+    await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).plan.history_complete).toBe(true));
+  });
+}
+
+testHook('a failed history refresh keeps the shown plan and no error', async () => {
+  const bump = historyVersions();
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  const load = jest.spyOn(inputs, 'loadLessonBase');
+  const { result } = mount();
+  await ready(result);
+  const previous = result.current;
+  load.mockRejectedValueOnce(new Error('disk busy'));
+  await act(async () => { bump(); });
+  await waitFor(() => expect(warn).toHaveBeenCalledWith('[lesson] history refresh failed:', 'disk busy'));
+  expect(result.current.inputError).toBeNull();
+  expect(result.current.base).toBe(previous.base);
+  expect(result.current.plan).toBe(previous.plan);
+  expect(result.current.choices).toBe(previous.choices);
+});
+
+testHook('resuming a same-day unfrozen plan keeps it until a new history base arrives', async () => {
+  const bump = historyVersions();
+  const row = await handle.repositories.lessonDrafts.create(draftStart());
+  const compute = jest.spyOn(engine, 'computeLessonPlan');
+  const { result } = mount({ draftId: row.id });
+  await ready(result);
+  expect(result.current.plan).toEqual(row.plan);
+  expect((await handle.repositories.lessonDrafts.getActive()).plan).toEqual(row.plan);
+  expect(compute).not.toHaveBeenCalled();
+  await finishLessonHistory();
+  await act(async () => { bump(); });
+  await waitFor(() => expect(result.current.plan.engine_version).toBe(2));
+  expect(result.current.plan.history_complete).toBe(true);
+  expect(result.current.lessonInput.sessions.map(session => session.id)).toEqual(['previous-lesson']);
+  expect(result.current.draft.plan_fixed_at).toBeNull();
+});
+
 testHook('attendance projects loaded participants without blanking or reading again', async () => {
   const baseLoad = jest.spyOn(inputs, 'loadLessonBase');
   jest.spyOn(inputs, 'loadLessonParticipants');
