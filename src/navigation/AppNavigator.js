@@ -48,6 +48,7 @@ import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScr
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
 import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
 import ChildResultsScreen from '../screens/assessments/ChildResultsScreen';
+import BatteryOverviewScreen from '../screens/assessments/battery/BatteryOverviewScreen';
 
 // Insight screens
 import LetterMasteryRankingScreen from '../screens/insights/LetterMasteryRankingScreen';
@@ -283,6 +284,7 @@ export function MainNavigator() {
         component={AssessmentResultsScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="BatteryOverview" component={BatteryOverviewScreen} options={{ title: '' }} />
       <Stack.Screen
         name="AssessmentHistory"
         component={AssessmentHistoryScreen}
