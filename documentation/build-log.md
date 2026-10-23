@@ -3837,6 +3837,62 @@ present, record with the group; absence derived; last seen follows the children)
 through with Jim on 2026-10-23. Draft PR #97 is open; device section V remains, on builds from
 `94748df`: `preview` Android 33 / iOS 17, `preview-content` Android 34 / iOS 18.
 
+### 2026-10-23 — Lesson flow device run, Galaxy A03s (builds 33 and 34)
+
+**Setup.** Galaxy A03s (R9WWA0G3H8R, Android 13), test@masinyusane.org on `segygjzpujphwvrubusm`.
+Build 33 (`preview`, `previewContent: false` in the embedded app config) installed over 31, then
+build 34 (`preview-content`, `previewContent: true`, no update channel) over 33; data kept. 360 dp
+(`wm density 320`) at 1.0× and 1.3× text, cold relaunch after each change. Offline = airplane mode
+plus a Wi-Fi watchdog (this phone re-enables Wi-Fi in airplane mode); ping to 8.8.8.8 unreachable
+throughout. Timing from `screenrecord` frames at 60 fps. Server checks read-only through the IPv4
+pooler. Afterwards: density reset, font 1.0, auto time on, airplane off, Wi-Fi on, stay-awake off;
+the phone keeps build 34. Results per gate: device-gates §V.
+
+**Bugs (block merge).**
+
+| # | Finding | Root cause | Evidence |
+|---|---|---|---|
+| D1 | The first **Leave lesson** on a lesson started from the picker returns to the same lesson; the second leave works. Every field lesson starts this way. | The picker opens the lesson with `navigate` (`LessonPickerScreen.js:73`), so it stays underneath. On refocus its focus effect sees the draft and replaces itself with the lesson (`:54`, the "+ Record opens the lesson in progress" rule). Resumed lessons have no picker underneath, which is why replays from Home passed. | 3 of 3 picker starts; video `v3-leave-fresh-lesson.mp4`: lesson pops 2.30 s, picker 2.43 s, lesson again 2.80 s. |
+| D2 | Every attendance change blanks the plan sections and disables Wrap up, and the header reads "last seen Not seen yet", until inputs reload: **330 ms on 33, 3.2 s on 34**. The same blank shows on first open. | `useLessonDraft` keys its input load on the present children (`inputKey` includes `presentKey`), so a toggle discards the loaded input and `lessonInput` is null until a full reload; `choices` and `seen` derive from it. | Videos `v3-plan-absent.mp4` (33), `v3-b34-samia-back.mp4` (34: chip 1.30 s, plan back 4.52 s). |
+| D3 | With a content pack the lesson engine is slow: on the A03 each attendance change runs ~3 s of JavaScript, during which the app ignores taps. | `blendChoices` rebuilds `blendItems(pack)` from all 3,328 word-bank entries and calls `soundsFor` twice per word on every call; `computeLessonPlan` and `computeLessonChoices` both do it. Node 20 on the Mac: 18.0 ms + 18.6 ms per change with the preview pack vs 0.1 ms with the letters-only pack (scratch timing test, not committed). | D2's 34 video; Node timings above. |
+| D4 | The header reads "last seen Not seen yet" for a never-taught group (and "last seen Today ✓" for one taught today). | `LessonScreen.js:142` prefixes the picker's label with "last seen ". | Nola's English lesson, `v-47-english-lesson.png`. |
+| D5 | Picker rows take 470–530 ms after the screen appears on 33 and 550–620 ms on 34 (budget 500 ms); a spinner shows each time. | Not yet profiled. The picker reloads everything on each focus (drafts, base, sessions since the year start, children, classes, two completeness reads, known letters per language) in several sequential rounds. | `v1_trials.py` runs, 4 on 33 and 3 on 34. |
+
+**Polish (fix with the bugs).** "No one new yet" toggles between two button styles and exposes no
+selected state (`WrapUpChildRow.js`); use a selectable chip. Add a child, Make a group and the
+ungrouped list show first names only, so the test account's two Amanda Manqinas and two Aviwe
+McKeowns are indistinguishable; Put in a group lists "Group 1, Group 1, Group 2…" where the picker
+names groups by their children. The Wrap up heading does not set the letters apart ("Who knows o
+without help?"). "2 · Blending · 15 min ·" leaves a dangling dot when it wraps at 1.3×. "Ênê" sorts
+after "Xola" (code-point order). Row dividers in the Make a group and Add a child sheets start at
+x = 184 px with nothing to their left. Adjacent groups can share a dot colour (Nola, Plan).
+
+**Passed as specified.** Last seen follows the children (all 7 groups matched server attendance;
+"Aviwe & Sinoxolo" stays Mon because Aviwe's last lesson was in July). "letters o" on every row was
+correct: every child's latest letter result was l a m and none had a lesson-plan session, so the
+first-lesson rule taught the unknown step-1 letter. Plan recompute before the first tick and freeze
+after it; Add a child; class and language questions; leave warning on Back and Android back (which
+also closes it); Wrap up chips, locked letters, ladder, date, notes and empty-lesson confirmation;
+offline save then sync with matching server rows; force-quit offline resume with the TalkBack label;
+a lesson started yesterday saving with its own date; + Record opening the lesson in progress;
+Discard lesson; blends, tiers, syllable hyphens, "ahead" link and book on 34; 1.3× layouts.
+
+**Questions for Jim, not bugs.** Review lists step letters nobody knows yet ("Review: m l a u" when
+k is suggested), as spec §4.4 and C3 define. The tracker sheet still uses the old order until
+Letter order lands. At 1.3× the lesson card sits under the + button until Home is scrolled (pre-existing
+Home layout, as is "Not clocked in" wrapping to three lines).
+
+**Dead ends.** Group 5 was first logged as missing from the picker after Make a group; the text filter
+matched only rows containing "· letters", and Group 5 (no class, so no letters) was there all along
+(`v-34-picker-new-group.png`). A text-matched tap hit the sheet row under a background row and made
+a group of Ênê instead of Nola; kept as test data (it showed never-seen groups ranking first).
+
+**Staging data created.** Sessions `4ba29800` (Amanda, Kunaal; o m), `e3cd3c71` (Nwabisa, Xola;
+dated 2026-10-23, created with the clock +1 day), `6b06cb1c` (Amanda, Aviwe, Plan; olu, book);
+Group 5 (Nwabisa, Xola, Alunamida), groups for Ênê and Nola; Amanda's o mark; Kunaal's level
+2 Letter Blends. Three test lessons were discarded on the phone. Screenshots and videos:
+session scratchpad `device/v-*.png`, `device/*.mp4`.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
