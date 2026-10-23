@@ -68,6 +68,7 @@ const TITLES = {
   SessionForm: 'New session', SessionHistory: 'Session history',
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
+  BatteryOverview: '',
   SessionCountRanking: 'Session count', SyncStatus: 'Sync status',
   QuestionGallery: 'Question gallery',
   ChildrenList: 'Children', ClassDetail: '', ChildResults: 'Child results',
