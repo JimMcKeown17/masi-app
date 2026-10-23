@@ -118,7 +118,7 @@ test('the title table covers every visible stack header', () => {
   const visible = mockScreens.filter(({ kind, name }) => kind === 'stack' && optionsFor(name).headerShown !== false).map(({ name }) => name);
   expect(visible.sort()).toEqual(Object.keys(TITLES).sort());
   expect(mockScreens.filter(({ name }) => optionsFor(name).headerShown === false).map(({ name }) => name).sort()).toEqual([
-    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'StandaloneTest', 'AssessmentResults', 'QuestionGalleryRun',
+    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'StandaloneTest', 'AssessmentResults', 'QuestionGalleryRun', 'BatteryQuestion',
   ].sort());
 });
 
