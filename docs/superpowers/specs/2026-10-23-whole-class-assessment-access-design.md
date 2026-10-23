@@ -1,7 +1,7 @@
 # Whole-class assessment access — Design
 
 **Date:** 2026-10-23
-**Status:** Decisions by Jim, 2026-10-23 (in conversation). Revision 2 after Codex design review round 1.
+**Status:** Decisions by Jim, 2026-10-23 (in conversation). Revision 3 after Codex design review rounds 1–2.
 **Implements:** ADR-0005's two-tier access model. Assessment scope is the class; delivery scope
 is a subset. Today the phone only implements delivery scope.
 **Consumed by:** WelaPLUS Plan 3 (`docs/superpowers/plans/2026-10-23-welaplus-plan-3-host-run-flow.md`).
@@ -103,6 +103,19 @@ class foreign key holds.
   (`:674-683`) is harmless.
 - Roster rows are written as `synced`, with no outbox rows.
 
+**A superseded membership is closed before its replacement is saved** (rev 3, Codex round 2).
+- The server allows one open membership per child per academic year, and so does the phone
+  (`src/db/migrations.js:389-391`).
+- So when a pulled open membership `mB` arrives for `(child, year)` while the phone holds a
+  different open `mA`, `mA` has ended on the server.
+- In the same transaction as the upsert of `mB`, `saveChildClassMembership` sets
+  `mA.exited_at = mB.enrolled_at`, only if `mA` is `synced`. If `mA` is pending, failed or
+  terminal, it keeps `mA`, skips `mB` and logs, so a local edit is never overwritten.
+- This applies to every pull path, delivery included. It is the server's uniqueness rule, not
+  an inference from assignment loss.
+- Test: an EA and a control child both move from class A to class B in one year. After A leaves
+  `roster_class_ids`, B's membership lands and the child stays assessable.
+
 **Publishing.** `ChildrenContext` bumps a `rosterVersion` after the scope persists.
 `useAssessableChildren` (5.3) reloads on that version and on `ClassesContext`'s assignment
 version, so either pull finishing first is safe. Cold start offline reads the last persisted
@@ -120,7 +133,9 @@ class, not about an EA.
   - `roster_membership_ids`: every open membership in those classes.
   An authoritative empty roster is `[]`. An absent key, from an older server, means "not
   provided".
-- **Candidates.** Local rows with `class_id in roster_class_ids`, `exited_at is null`,
+- **Candidates.** Local rows for children **not** in the delivery pass's `acknowledgedChildIds`
+  (the two populations are disjoint, see below), with `class_id in roster_class_ids`,
+  `exited_at is null`,
   `sync_status = 'synced'` and `id not in roster_membership_ids`. Those are ended with
   `exited_at = pulledAt`.
   - This covers the last control child leaving a still-assigned class.
@@ -132,10 +147,15 @@ class, not about an EA.
     class-based access through the read model's join (5.3), not by inventing exits;
   - rows that are pending, failed or terminal;
   - anything at all when either key is absent or the snapshot is incomplete.
-- **The existing delivery pass is unchanged** (it is by child, over `visible_children`).
+- **The existing delivery pass is unchanged** (it is by child, over `visible_children`). It
+  alone owns every membership of a delivery-acknowledged child. The class pass never touches
+  those children (rev 3, Codex round 2), so each breaker sees the whole of its own population
+  and neither pass can apply a removal the other withheld.
   - The two passes cannot conflict: a membership the delivery acknowledgment keeps is open on
     the server, so if its class is in `roster_class_ids` it is also in `roster_membership_ids`.
   - They run in one transaction from one snapshot.
+  - Test: 12 delivery memberships end inside a 40-child class. The delivery breaker trips, and
+    the class pass ends none of those 12. Check both execution orders.
 - **Breaker:** the existing per-scope mass-end breaker applies to the class pass as its own
   scope, `classRosterMemberships`. There is **no handover exemption**: a handover ends no
   memberships under this rule. A real mass exit, such as a whole class moving at year end, still
