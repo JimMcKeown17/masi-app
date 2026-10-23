@@ -71,7 +71,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
         item_set_id: 'wela_plus_read_words@2024.1.en',
       }),
     });
-    await f.runs.finalizeRun(runB.id);
+    await f.runs.finalizeRun(runB.id, { questionCodes: ['letter_sounds', 'wela_plus_read_words'] });
     const runC = await f.start({ childId: children[2].id });
     await f.save(0, {
       childId: children[2].id, batteryRunId: runC.id,
