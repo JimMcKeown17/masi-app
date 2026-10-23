@@ -1124,9 +1124,8 @@ transaction commits; a missing/invalid parent still fails the transaction. Missi
 are checked against local `classes` inside that transaction. A closed historical membership whose
 parent is neither returned nor local is dropped from `rows` without making the scope incomplete;
 an open membership without a parent makes it incomplete and is not written. A missing child is
-also withheld rather than causing a partial-parent FK failure. This scope performs no absence
-reconcile yet; Task 4 owns that pass. Incomplete roster data cannot stamp `child_data_pull` as
-complete.
+also withheld rather than causing a partial-parent FK failure. After persistence finalizes scope
+completeness, Task 4 runs the paired membership reconciles below. Incomplete roster data cannot authorize the class pass or stamp `child_data_pull` complete.
 
 ChildrenContext increments `rosterVersion` after the roster transaction commits. ClassesContext
 publishes `assignmentsVersion` when its persisted own active-programme assignment set changes.
@@ -1181,9 +1180,10 @@ same `schema_version: 1`. The former contains only the caller's active class ass
 the active programme; the latter contains every open membership in those classes, in any
 academic year, including control children and another EA's delivery children. Both keys are
 `[]` when empty; an absent key on an older server means "not provided". Existing delivery
-acknowledgment keys and the public wrapper are unchanged. These server keys are the input
-contract for the later class-roster reconcile task; Task 1 does not add that phone pass.
-Its required safety rules are: end only synced rows, only from a complete snapshot with both
+acknowledgment keys and the public wrapper are unchanged. Task 4 consumes these keys after roster
+persistence, in the same transaction as the delivery membership reconcile and from the same
+decoded acknowledgment snapshot. Its safety rules are: end only synced rows, only from a complete
+snapshot with both
 keys present, only inside `roster_class_ids`, excluding children owned by the delivery pass's
 `visible_child_ids`; apply the mass-end breaker to this separate population. Losing a class
 assignment must never invent membership exits.
@@ -1195,12 +1195,50 @@ The client validates the schema version, completeness flag, authenticated user i
 | `child_ea_assignments`, direct active assignments for the EA with children embedded | RPC `child_ea_assignment_ids` | The EA's active synced assignments absent from the set; the same transaction calls `deleteUndeliveredLetterMastery` to delete the ended children's synced mastery with nothing owed and drop their mastery coverage | `unassigned_at` |
 | `child_programme_enrollments`, active rows for the active Programme within acknowledged assigned child ids | RPC `child_programme_enrollment_ids` within `assigned_child_ids` | Active synced enrollments in that exact Programme and child scope whose ids are absent | `ended_at` |
 | `child_class_memberships`, active rows for child ids returned by the children query | RPC `child_class_membership_ids` within `visible_child_ids` | Active synced memberships for acknowledged child ids whose ids are absent | `exited_at` |
-| `child_class_memberships`, every open row in the caller's active-programme assigned classes (server keys available; phone pass is a later task) | RPC `roster_membership_ids` within `roster_class_ids` | Later class pass: active synced memberships absent from the set, excluding delivery-acknowledged children; complete snapshot and mass-end breaker required | `exited_at` |
+| `child_class_memberships`, every open row in the caller's active-programme assigned classes | RPC `roster_membership_ids` within `roster_class_ids` | Active synced memberships absent from the set, excluding `visibleChildIds` owned by the delivery pass; final complete roster scope, both optional keys and mass-end breaker required | `exited_at` |
 | `group_ea_assignments`, full embedded rows from the active, EA-scoped, Programme-scoped groups query | RPC `group_ids` | The EA's active synced group assignments for the active Programme whose group ids are absent | `unassigned_at`, never `groups.archived_at` |
 | `child_group_memberships`, active rows for returned group ids | RPC `child_group_membership_ids` within `group_ids` | Active synced memberships for acknowledged group ids whose ids are absent | `removed_at` |
 | `class_ea_assignments`, active rows for the EA and Programme from the two-stage Classes pull | RPC `class_ids` | The EA's active synced class assignments for the active Programme whose class ids are absent | `unassigned_at`, never `classes.archived_at` |
 
 `children`, `classes`, and `groups` entities are never archived because they are absent. Their server tombstones arrive on the rows themselves because the pull queries do not filter `archived_at`. `getGroups({ userId, programmeId })` joins an active `group_ea_assignments` row, so group state matches the assignment-scoped server read model. Memberships for an absent or unassigned group remain intact but `getVisibleChildrenGroups` excludes them from published state until the group becomes visible again.
+
+### Class-scoped membership reconcile (Whole-Class Access Task 4)
+
+The acknowledgment decoder accepts optional `roster_class_ids` and `roster_membership_ids` as
+`rosterClassIds` and `rosterMembershipIds`. Missing/non-array keys decode to `undefined`; empty
+arrays stay empty arrays. They are not mandatory schema-version-1 keys, so an old server still
+supports the existing delivery reconcile while the class pass is skipped.
+
+`childrenRepository.buildClassRosterMembershipReconcile` uses breaker scope
+`classRosterMemberships`. Its candidate population is open, synced memberships in
+`rosterClassIds` whose child is **not** in the acknowledgment's `visibleChildIds`. From that
+population it ends IDs absent from `rosterMembershipIds`, with `exited_at` and `updated_at` set
+to `pulledAt`; it writes no outbox work. Pending, failed, terminal, already-closed and unheld-class
+rows are never candidates. Losing a class assignment invents no membership exits.
+
+Both live paths persist membership rows as before and finish `persistClassRoster` first, because
+that operation can still mark `scope.complete = false` during parent validation. When optional
+roster keys are available, the delivery membership reconcile is deferred: the shared
+`reconcilePulledClassMemberships` runs the unchanged delivery builder and the new class builder
+in **one writer transaction**, from one decoded acknowledgment and one `pulledAt`. The delivery
+builder's `acknowledgedChildIds` and the class builder's `deliveryChildIds` are exactly the same
+`visibleChildIds`. If roster persistence leaves the scope incomplete, only the delivery pass may
+run. An unavailable/inconsistent acknowledgment authorizes neither pass. With an old server, the
+original delivery-only repository path, including its fallback behavior, is retained.
+
+The two breaker populations are disjoint. Twelve removals among twelve delivery children in a
+40-child class trip the delivery breaker; the class pass counts only the other 28 and cannot apply
+any of those twelve withheld removals, in either execution order. A large control exit trips its
+own `classRosterMemberships` note, with no handover exemption. Only an explicit authorization for
+that exact scope bypasses it; it never authorizes the delivery breaker. ChildrenContext registers
+this scope in its consume/follow-up list and refreshes attention state after an authorized apply.
+The runtime breaker, OfflineContext authorization store, sync-state note reader and needs-attention
+presenter are scope-generic and need no new enumeration or copy.
+
+`classRosterReconcile.test.js` covers raw JSON decoding through both paths, missing versus empty
+keys (including retaining versus clearing an old class-scope note), final post-persist completeness,
+real SQLite safety rails, shared-class children, both 12-of-40 pass orders, independent
+scope authorization and rollback of both passes on a real SQL failure.
 
 ### Assessment, run and mastery history pull (AR Plan 3)
 

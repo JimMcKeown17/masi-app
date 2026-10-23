@@ -2,7 +2,7 @@ import { persistClassRoster } from '../services/classRosterPull';
 import { isStaleActorError } from '../session/staleActor';
 import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
-import { pullPreloadedChildData } from '../services/preloadedChildData';
+import { pullPreloadedChildData, shouldDeferMembershipReconcile, reconcilePulledClassMemberships } from '../services/preloadedChildData';
 
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -15,6 +15,7 @@ const CHILD_RECONCILE_BREAKER_SCOPES = [
   'childEaAssignments',
   'childProgrammeEnrollments',
   'childClassMemberships',
+  'classRosterMemberships',
   'groupEaAssignments',
   'childrenGroups',
 ];
@@ -264,7 +265,7 @@ export const ChildrenProvider = ({ children }) => {
           'childClassMemberships',
           childrenRepository.saveServerChildClassMembershipRows,
           pulledChildClassMemberships,
-          reconcileAuthorityComplete && programmeScopeOk
+          reconcileAuthorityComplete && programmeScopeOk && !shouldDeferMembershipReconcile(pulled)
             ? {
               acknowledgedIds: acknowledgmentData.childClassMembershipIds,
               acknowledgedChildIds: acknowledgmentData.visibleChildIds,
@@ -309,6 +310,13 @@ export const ChildrenProvider = ({ children }) => {
       const rosterPersisted = await persistClassRoster({
         scope: scopes.classRoster, repositories, deletedChildIds: pendingChildDeleteIds,
       });
+      const membershipResults = await reconcilePulledClassMemberships({
+        pulled, repositories, pulledAt, authorizedBreakerScopes,
+      });
+      reconcileResults.push(...membershipResults);
+      if (membershipResults.some(result => authorizedBreakerScopes.has(result.scope) && result.reconcileCompleted)) {
+        bypassedReconcileCompleted = true;
+      }
       if (activeUserIdRef.current !== activeUserId) return;
       if (rosterPersisted) setRosterVersion(version => version + 1);
       const transportFailed = Object.values(scopes)

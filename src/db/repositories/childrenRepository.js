@@ -289,6 +289,49 @@ export const createChildrenRepository = ({ database } = {}) => {
     });
   };
 
+  const buildClassRosterMembershipReconcile = ({
+    rosterClassIds, rosterMembershipIds, deliveryChildIds, pulledAt, bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(rosterClassIds) || !Array.isArray(rosterMembershipIds)
+      || !Array.isArray(deliveryChildIds) || !pulledAt) {
+      return async () => ({ ended: 0, reconcileCompleted: false });
+    }
+    const classIdsJson = JSON.stringify(rosterClassIds);
+    const deliveryIdsJson = JSON.stringify(deliveryChildIds);
+    const membershipIdsJson = JSON.stringify(rosterMembershipIds);
+    const activeScopeSql = `
+      from child_class_memberships
+      where class_id in (select value from json_each(?))
+        and child_id not in (select value from json_each(?))
+        and exited_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'classRosterMemberships',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (await txn.getFirstAsync(
+        `select count(*) as count ${activeScopeSql}`, classIdsJson, deliveryIdsJson
+      ))?.count,
+      countWouldEnd: async (txn) => (await txn.getFirstAsync(
+        `select count(*) as count ${absentSql}`, classIdsJson, deliveryIdsJson, membershipIdsJson
+      ))?.count,
+      apply: async (txn) => (await txn.runAsync(`
+        update child_class_memberships
+        set exited_at = ?, updated_at = ?
+        where class_id in (select value from json_each(?))
+          and child_id not in (select value from json_each(?))
+          and exited_at is null
+          and sync_status = 'synced'
+          and id not in (select value from json_each(?))
+      `, pulledAt, pulledAt, classIdsJson, deliveryIdsJson, membershipIdsJson)).changes,
+    });
+  };
+
   const getChildNamesByIds = async (ids = []) => {
     if (!ids.length) return {};
     const db = await resolveDatabase(database);
@@ -934,6 +977,8 @@ export const createChildrenRepository = ({ database } = {}) => {
     getChildren,
     getChildNamesByIds,
     getMyChildren,
+    buildClassMembershipReconcile,
+    buildClassRosterMembershipReconcile,
     getAssessableChildren,
     save,
     saveChild: save,
