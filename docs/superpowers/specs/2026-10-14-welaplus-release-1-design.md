@@ -1,5 +1,19 @@
 # WelaPLUS Release 1 — Design
 
+> **Status note — 2026-10-23 (Plan 3 built; print production brief):** The host Run flow is
+> built on `feat/welaplus-plan-3`, stacked on `feat/whole-class-assessment` (PR #100). Physical
+> A03 and iPhone checks and the Plan 3 PR remain open; verification is recorded in
+> [`documentation/build-log.md`](../../../documentation/build-log.md).
+> The [WelaPLUS 2024.1 printout pack brief](../../../documentation/welaplus-printout-pack.md)
+> is the designer's current production contract. **§9.1's Side A row is superseded by Grid A,
+> 6 × 10**, shared by the EN/XH/AF letter sets; full WelaPLUS remains EN/XH only. The brief
+> carries Andika Regular content typography, whole-card-row/paragraph boundaries with phone
+> reflow, the boxed Run code field and the exact `materialsLine` footers (Reading Card sides
+> end in `side A`, `side B` or `side C`, without an extra item name). Finalize requires only
+> the run-code/name tick, with no filing tick. This amends §9's generic footer and §9.6's
+> production-brief pointer as well as the Side A and row-mirroring claims; the historical
+> body below is preserved. Printing, Q5 artwork approval and isiXhosa proofing remain open.
+
 > **Status note — 2026-10-20:** The [Assessment Results and Letter Test design](./2026-10-19-assessment-results-and-letter-test-design.md)
 > supersedes this document's §7 storage/upload design, D4's Q1 stop-rule decision and D10's
 > ADR-0007 enforcement/transport design. Q1 is now `letter_sounds`, sharing the standalone Letter Sounds item sets

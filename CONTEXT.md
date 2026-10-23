@@ -209,6 +209,15 @@ _Avoid_: “EGRA” alone for a form (say which form), merging English HL and FA
 One EA administering one Battery to one child on one date. Materialised as N `assessment` rows — one per Question in the Battery — all sharing a `battery_run_id`. Partial completion is per-Question: an EA can finish Letter Sounds and pause before Story Writing, and the Run remains open until all Questions are marked complete or explicitly abandoned. Multiple Runs of the same Battery on the same child are allowed; the most-recent Run is canonical for reporting, all prior Runs are retained for audit.
 _Avoid_: "assessment session" — sessions are programme delivery work, not assessment work.
 
+**Run code**:
+The six-character paper label for a Battery Run, displayed as `XXX-XXX` and copied with the
+child's name onto the Writing Sheet. It is derived from the first 30 bits of the Run's UUID
+using Crockford base 32 (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`). Head Office uses it with the
+child's name to match the paper to the exact Run, including when a child has multiple Runs
+on the same day. The full UUID remains the stored Run identifier; the short code is not a
+separate identifier or a guarantee of global uniqueness.
+_Avoid_: "assessment number", treating a Run code as a child identifier, or using it as a database key.
+
 **Assessment Window**:
 A calendar period during which a wave of formal assessment is collected — typically `baseline`, `midline`, `endline` per programme per academic year. A Window exists so that "the 2026 Midline average for Grade 1 Core Literacy" is a comparable number: every Run inside that Window was captured during the same defined period. Windows are configured by Masi admin (not by EAs).
 _Avoid_: "assessment period" — too vague; "term" — overlaps with the school calendar.
