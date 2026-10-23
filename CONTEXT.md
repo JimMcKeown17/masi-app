@@ -104,7 +104,8 @@ A single block of work an EA does with one group of children under one programme
 **Lesson**:
 One group's teaching block, from choosing the group through teaching to saving one session.
 Advice comes from the children present; the saved record belongs to the group. Attendance changes
-for today do not change group membership.
+for today do not change group membership. Only the children present are saved; who was absent is
+worked out from the group's membership on that date, never stored (ADR-0010).
 
 **Lesson screen**:
 The screen kept open while teaching: Who's here, letters, blending and (outside ECD) pair reading.
@@ -157,6 +158,12 @@ _Avoid_: calling the session record itself a "lesson plan".
 The group suggested first when the EA starts a session. It is the group whose current members
 were seen least recently (never-seen groups first), skipping groups seen today; ties go to the
 fewest sessions this week, then the lower group number. The EA may choose any group.
+
+**Last seen**:
+The most recent day this school year, in this programme, that any of a group's current children
+had a lesson, with any group and any EA. A child added to another group's lesson for the day
+counts toward their own group's last seen.
+_Avoid_: last taught (a group can be "seen" through one child's lesson elsewhere)
 
 **Blend tier**:
 The length of blending items a child practises, from their reading level. Cannot blend and
