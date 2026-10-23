@@ -3722,6 +3722,87 @@ Oct 22, 1:14 PM"; the label carries U+00A0 before PM, and it renders without a b
 360 dp / 1.3x. The fallback commit `df72cf5` came after this build and is covered by renderer tests
 only.
 
+### 2026-10-23 — EGRA content pack integration (A–E)
+
+Implemented `docs/superpowers/plans/2026-10-23-egra-content-pack-integration.md` on
+`feat/egra-content-pack`. The adapter loads the immutable catalog through `content/egra/index.js`
+and builds 13 batteries and 52 item sets, preserving all 920 letter positions, 990 word positions,
+65 comprehension prompts, original case/repeats, practice separation and source discrepancies.
+The passage adapter preserves paragraph boundaries, joins the punctuation-only token in `Lebo .`
+and keeps `uNomehlo- mancinane.` as two marking tokens. No printed source count drives scoring.
+
+The shared reducer and validator now support `first_row_all_wrong`; consecutive-wrong behavior
+and its existing tests are unchanged. Comprehension uses explicit assessor choices (Correct,
+Wrong, Not asked), a visible answer guide, story sheet, unmarked confirmation and empty-item
+skips. A new package UI choice-card primitive keeps styling and accessibility within `ui/`.
+Oral reading is registered with `tap_wrong`; marked passage tiles now display and announce
+incorrect under that polarity. Default WelaPLUS passage marking remains unchanged.
+
+The dev gallery has all 52 EGRA entries grouped under expandable form rows, with fixed form
+languages and exact item sets taking precedence over global gallery preferences. An initial
+always-expanded list was cumbersome and slowed renderer navigation; disclosure groups keep the
+list usable. The gallery retains its result-only, non-persisting behavior.
+
+Behavior evidence includes first-row widths 5/6/8/10, undo/Back, timer-before-row precedence,
+timed/untimed real letter/word components, comprehension states and selection changes, no text
+grading, missing item sets, and a real rendered-output comparison for every synthetic section
+builder. Real SQLite saves all 52 form/section families, and an English FAL 2 run covers four
+decisions, fresh-repository resume, ordered items, duplicate rejection by error code, finalize,
+five pending offline outbox rows, `assertSubmitShape`/`toSubmitArgs`, latest letter evidence and
+all-reached-occurrences mastery. The mastery test additionally saves a later standalone EGRA
+letter attempt with one wrong repeated letter to prove the positive and negative mastery cases.
+
+RED evidence: first-row reducer/validator tracer had 5 failing tests; passage polarity tracer had
+1 failed / 6 passed; gallery registry tracer had 1 failed / 19 passed. Adapter and comprehension
+tracers initially failed on the absent modules. Test development also corrected the expected
+source punctuation (`mancinane.`), existing skip-button copy and synthetic passage metadata
+(reached passage items omit metadata; unreached ones explicitly carry `reached: false`). No
+frozen product decision changed.
+
+All JavaScript verification commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command after the Node 20 PATH prefix | Result |
+| --- | --- |
+| `npx jest src/assessment-questions` (final exact invocation) | PASS, exit 0: 66 suites, 813 tests, 0 failures, 0 snapshots. Includes boundary/style/hex guards and unchanged consecutive-wrong, standalone and WelaPLUS tests. |
+| `npx jest --maxWorkers=2 --testTimeout=30000 --silent` (final full gate) | PASS, exit 0: 405 suites, 5,674 tests, 0 failures, 0 snapshots (895.442 s). |
+| `npm run test:types` (final) | PASS, exit 0: no diagnostics; no test count. |
+| `git diff --check` (final) | PASS, exit 0: no whitespace errors. |
+| `npm run test:content` (final) | PASS, exit 0: 5 tests passed, 0 failed, 0 skipped; pinned content SHA-256 unchanged. |
+| `npx jest __tests__/egraRun.integration.test.js --runInBand` | PASS: 1 suite, 2 tests. All 52 families plus the four-Question run/resume/finalize/mastery integration use real SQLite. |
+| `npx jest src/assessment-questions/__tests__/boundary.test.ts --runInBand` | PASS: 1 suite, 19 tests, including the live import scan. |
+| `npx jest __tests__/AppNavigator.headers.test.js __tests__/HomeScreen.test.js __tests__/LiteracySessionForm.submit.test.js --runInBand --testTimeout=30000 --silent` | PASS, exit 0: 3 suites, 76 tests. |
+| `node_modules/react-native/sdks/hermesc/osx-bin/hermes /tmp/egra-unicode-engine-check.js` | PASS, exit 0: four Unicode letter/digit assertions, using the bundled Hermes executable. This is an expression sanity check, not native UI/device acceptance. |
+
+**Verification problems and corrections.** The initial exact package invocation completed with
+65 suites passed / 1 failed and 812 tests passed / 1 failed (813 total): the existing boundary
+scanner exceeded its five-second deadline during severe host contention. The isolated boundary
+check and final exact package command pass. Host load averages reached 260 on 12 available CPUs.
+An initial default full run and an overlapping serial repeat were interrupted (exit 130), so they
+have no final Jest test totals. Verification then used two workers, a 30-second per-test runner
+limit and suppressed console output; repository runner settings and assertions were not changed.
+
+The first completed bounded full run used the parent checkout's incomplete dependency directory:
+402 suites passed / 3 failed (405 total), 5,627 tests passed / 7 failed (5,634 total). Every failure
+was the declared-but-uninstalled Andika font in app-root imports. Verification now reuses the
+existing assessment-style dependency tree; its `package-lock.json` is byte-identical to this
+worktree's. No package was installed and no manifest/lockfile was edited.
+
+The next exact `npx jest` completed with 402 suites passed / 3 failed (405 total), 5,637 tests
+passed / 3 failed (5,640 total). LiteracySessionForm submit and HomeScreen hit five-second test
+timeouts. AppNavigator headers failed to load because its narrow gallery mock exported only
+`isQuestionGalleryEnabled`, while the new form grouping reads the gallery entries at module load.
+The supporting regression fixture now spreads the real exports and preserves its flag override;
+no header assertions were weakened. The targeted 76-test regression gate above passes. The
+AppNavigator mock update is an additional supporting regression change beyond the two gallery
+test files named in E; it preserves the frozen product decisions.
+The final full gate above runs every suite after that correction with the matching dependencies.
+
+Scope audit: no content-pack, standalone test/item-set, WelaPLUS definition, migration, Supabase,
+repository, sync, outbox or dependency-manifest changes. Concurrent edits to CONTEXT, the
+roadmap and the design-spec status note were preserved; they were not authored by this build.
+Changes remain uncommitted. Host battery-registry wiring/form selection and native device,
+force-quit, hosted-sync and results-screen gates remain the explicit Plan 3 follow-up.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

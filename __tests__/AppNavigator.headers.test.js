@@ -5,6 +5,7 @@ let mockGalleryEnabled = true;
 let mockUpdatesChannel = null;
 let mockEmbeddedLaunch = true;
 jest.mock('../src/utils/questionGallery', () => ({
+  ...jest.requireActual('../src/utils/questionGallery'),
   isQuestionGalleryEnabled: () => mockGalleryEnabled ?? jest.requireActual('../src/utils/questionGallery').isQuestionGalleryEnabled(),
 }));
 jest.mock('expo-updates', () => ({

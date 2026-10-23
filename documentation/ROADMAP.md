@@ -800,6 +800,24 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 - [ ] Replace placeholder EGRA word lists with authoritative English, isiXhosa and Afrikaans content
   (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
   becomes a new version).
+- [ ] **EGRA forms (13, from `content/egra/`): host wiring and device gate.** The package and data side is
+  on `feat/egra-content-pack` (plan: `docs/superpowers/plans/2026-10-23-egra-content-pack-integration.md`).
+  It is runnable today only through the dev Question gallery. After WelaPLUS Plan 3 merges:
+  - register `EGRA_BATTERIES` and `egraItemSetFor` in its battery registry;
+  - add a form picker that keeps English HL and FAL distinct, with `fixedLanguage` per form;
+  - run the device gate: selection, capture, save, force-quit resume, finalize, offline then sync,
+    and results.
+- [ ] **EGRA open decisions (Jim):**
+  - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
+  - **Comprehension skip.** Should comprehension auto-skip when the child read no passage words?
+    Today the EA marks the questions Not asked.
+  - **Passage line rule.** Should the passage have a first-line stop rule? It needs printed line
+    data, which the pack does not have.
+  - **Score bands.** Should `oral_reading` and `reading_comprehension` get score bands?
+  - **isiZulu mastery.** isiZulu letter mastery needs an isiZulu 26-letter order.
+  - **Rankings.** Letter rankings mix 40–110-letter EGRA cards with the 60-letter Grid A card on
+    raw score. Raw score is comparable within a 60-second timer, but a fast reader is capped by a
+    short card.
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
   tested synced-table configuration path exists.

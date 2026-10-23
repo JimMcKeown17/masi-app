@@ -7,20 +7,22 @@ import SelectSheet from '../../components/common/SelectSheet';
 import { colors, spacing } from '../../constants/colors';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
-import { STANDALONE_GALLERY_ENTRIES, BATTERY_GALLERY_ENTRIES } from '../../utils/questionGallery';
+import { STANDALONE_GALLERY_ENTRIES, BATTERY_GALLERY_ENTRIES, EGRA_GALLERY_ENTRIES } from '../../utils/questionGallery';
 
 const LANGUAGES = [{ key: 'en', label: 'English' }, { key: 'xh', label: 'isiXhosa' }];
+const EGRA_GROUPS = [...new Map(EGRA_GALLERY_ENTRIES.map(entry => [entry.formId, entry.formTitle]))];
 const CONTENT = [{ key: 'bundled', label: 'Bundled card' }, { key: 'fixture', label: 'Test fixture' }];
 
 export default function QuestionGalleryScreen({ navigation }) {
   const [languageCode, setLanguageCode] = useState('en');
   const [contentMode, setContentMode] = useState('bundled');
   const [sheet, setSheet] = useState(null);
+  const [expandedForm, setExpandedForm] = useState(null);
   const paddingBottom = useScrollBottomPadding(spacing.lg);
   const contentSubtitle = contentMode === 'bundled' ? 'Bundled card'
     : languageCode === 'xh' ? 'Test fixture · English fixture' : 'Test fixture';
   const entryRow = entry => <ListRow key={entry.entryKey} title={entry.title} trailing="chevron"
-    onPress={() => navigation.navigate('QuestionGalleryRun', { entryKey: entry.entryKey, languageCode, contentMode })} />;
+    onPress={() => navigation.navigate('QuestionGalleryRun', { entryKey: entry.entryKey, languageCode: entry.fixedLanguage ?? languageCode, contentMode: entry.itemSet ? 'bundled' : contentMode })} />;
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom }]}>
@@ -35,6 +37,14 @@ export default function QuestionGalleryScreen({ navigation }) {
         <View>
           <SectionHeader title="WelaPLUS battery" />
           <ListGroup>{BATTERY_GALLERY_ENTRIES.map(entryRow)}</ListGroup>
+        </View>
+        <View>
+          <SectionHeader title="EGRA forms" />
+          {EGRA_GROUPS.map(([id, title]) => <ListGroup key={id}>
+            <ListRow title={title} trailing="disclosure" expanded={expandedForm === id}
+              onPress={() => setExpandedForm(current => current === id ? null : id)} />
+            {expandedForm === id ? EGRA_GALLERY_ENTRIES.filter(entry => entry.formId === id).map(entryRow) : null}
+          </ListGroup>)}
         </View>
       </ScrollView>
       <SelectSheet visible={sheet === 'language'} title="Language" dismissLabel="Close language selection"

@@ -10,15 +10,16 @@ import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
 import { questionGalleryEntry, questionGalleryFixture } from '../../utils/questionGallery';
 
 export default function QuestionGalleryRunScreen({ navigation, route }) {
-  const { entryKey, languageCode, contentMode } = route.params;
+  const { entryKey, languageCode: selectedLanguage, contentMode } = route.params;
   const entry = questionGalleryEntry(entryKey);
+  const languageCode = entry?.fixedLanguage ?? selectedLanguage;
   const question = entry && questionComponentFor(entry.questionCode);
   const [run, setRun] = useState(0);
   const [result, setResult] = useState(null);
   const onComplete = useCallback(nextResult => setResult(nextResult), []);
   const close = () => navigation.goBack();
-  const itemSet = contentMode === 'fixture' ? questionGalleryFixture(entry?.questionCode)
-    : entry?.standalone ? CURRENT_ITEM_SETS[entry.questionCode]?.[languageCode] : undefined;
+  const itemSet = entry?.itemSet ?? (contentMode === 'fixture' ? questionGalleryFixture(entry?.questionCode)
+    : entry?.standalone ? CURRENT_ITEM_SETS[entry.questionCode]?.[languageCode] : undefined);
   const instructions = typeof entry?.instructions === 'string' ? entry.instructions : entry?.instructions?.[languageCode];
   const Question = question?.Component;
   return (

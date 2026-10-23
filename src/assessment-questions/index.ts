@@ -27,3 +27,6 @@ export { questionComponentFor } from './battery/questionComponents';
 export type { QuestionEntry } from './battery/questionComponents';
 export { NullQuestion } from './questions/NullQuestion';
 export * as testFixtures from './testFixtures';
+export * from './egra';
+export { ReadingComprehensionQuestion } from './questions/ReadingComprehensionQuestion';
+export type { ReadingComprehensionItemSet } from './questions/ReadingComprehensionQuestion/types';
