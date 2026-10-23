@@ -1,0 +1,9003 @@
+{
+  "formatVersion": 1,
+  "contentVersion": "2026-10-23.1",
+  "title": "South African EGRA assessment content",
+  "description": "Portable source transcription for Masi and Zazi iZandi. Content only; not an activation configuration or a validated scoring protocol.",
+  "conventions": {
+    "itemOrder": "Row-major: left to right, top to bottom. Preserve duplicates and case.",
+    "itemIdentity": "IDs are one-based positions within each section. Persist assessment id, section name and item id together. Never identify a response by prompt text.",
+    "answerText": "Source answer key or rubric for a human assessor; not an exact-match automatic scoring rule.",
+    "missingSourceCount": "null means no count printed on the selected chart, not zero items.",
+    "textNormalization": "PDF layout line wraps are joined, repeated layout whitespace is collapsed and extraction-only word splits repaired. Spelling, case and punctuation are retained. Paragraph breaks are represented as two newlines.",
+    "versioning": "Do not change ordered content under an assessment id once responses refer to it; publish a new id/version.",
+    "administration": "Time limits included for convenience. Full instructions, stop rules, benchmarks and scoring algorithms are not encoded; consult the linked source.",
+    "review": "Source inconsistencies are recorded in sourceNotes. The catalog is importable content, not approval to replace existing field instruments."
+  },
+  "sources": [
+    {
+      "id": "xh_charts",
+      "title": "DBE isiXhosa Learner Charts",
+      "url": "https://sasoldbeedustream.co.za/mod/resource/view.php?id=41049",
+      "fileName": "ISIXHOSA LEARNER CHARTS.pdf",
+      "sha256": "e5176e3f3695781226b0cc96faf3d5a5ff802f554d252bf6e049b123e9019c20",
+      "pageNumbering": "1-based PDF page, not printed page number"
+    },
+    {
+      "id": "xh_guide",
+      "title": "DBE isiXhosa Teachers Guide",
+      "url": "https://sasoldbeedustream.co.za/mod/resource/view.php?id=41051",
+      "fileName": "ISIXHOSA TEACHERS GUIDE.pdf",
+      "sha256": "df103e6c7cf1f18d9cdb6401ddf063bdf6b9d4c0015f798c8de6e678b1facfe0",
+      "pageNumbering": "1-based PDF page, not printed page number"
+    },
+    {
+      "id": "english",
+      "title": "DBE English Home Language Teacher Guide",
+      "url": "https://sasoldbeedustream.co.za/mod/resource/view.php?id=41042",
+      "fileName": "egra-english-guide.pdf",
+      "sha256": "b6eb2afd42893dec2ba3f2cf14d1983b7c9882b3b594e9ef147fa50323f30e1e",
+      "pageNumbering": "1-based PDF page, not printed page number"
+    },
+    {
+      "id": "efal",
+      "title": "DBE English First Additional Language Teacher Guide",
+      "url": "https://sasoldbeedustream.co.za/mod/resource/view.php?id=41040",
+      "fileName": "egra-efal-guide.pdf",
+      "sha256": "a448fced97784abea563e0dd0144d0949b2e832e40386c26c9b04f757d73ac54",
+      "pageNumbering": "1-based PDF page, not printed page number"
+    },
+    {
+      "id": "afrikaans",
+      "title": "DBE Afrikaans Teacher Guide",
+      "url": "https://sasoldbeedustream.co.za/mod/resource/view.php?id=41039",
+      "fileName": "egra-afrikaans-guide.pdf",
+      "sha256": "ec29558cc7596d64973108d8c1908525b263fca4aa5ad830c1260f941af490ff",
+      "pageNumbering": "1-based PDF page, not printed page number"
+    },
+    {
+      "id": "zu",
+      "title": "SMRS-EGRA isiZulu original supplied by Jim",
+      "url": null,
+      "fileName": "EGRA isiZulu original (1).pdf",
+      "sha256": "67d81155e60b667e133b0e3146a29a192c457364e8b4837132cf8ca265329189",
+      "pageNumbering": "1-based PDF page, not printed page number"
+    }
+  ],
+  "assessments": [
+    {
+      "id": "dbe-egra-xh-hl-1-v1",
+      "title": "isiXhosa EGRA 1",
+      "languageCode": "xh",
+      "languageName": "isiXhosa",
+      "variant": "hl",
+      "assessmentNumber": 1,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "V"
+          },
+          {
+            "id": "2",
+            "text": "l"
+          },
+          {
+            "id": "3",
+            "text": "h"
+          },
+          {
+            "id": "4",
+            "text": "g"
+          },
+          {
+            "id": "5",
+            "text": "S"
+          },
+          {
+            "id": "6",
+            "text": "y"
+          },
+          {
+            "id": "7",
+            "text": "z"
+          },
+          {
+            "id": "8",
+            "text": "W"
+          },
+          {
+            "id": "9",
+            "text": "e"
+          },
+          {
+            "id": "10",
+            "text": "n"
+          },
+          {
+            "id": "11",
+            "text": "l"
+          },
+          {
+            "id": "12",
+            "text": "k"
+          },
+          {
+            "id": "13",
+            "text": "T"
+          },
+          {
+            "id": "14",
+            "text": "d"
+          },
+          {
+            "id": "15",
+            "text": "K"
+          },
+          {
+            "id": "16",
+            "text": "t"
+          },
+          {
+            "id": "17",
+            "text": "q"
+          },
+          {
+            "id": "18",
+            "text": "d"
+          },
+          {
+            "id": "19",
+            "text": "z"
+          },
+          {
+            "id": "20",
+            "text": "A"
+          },
+          {
+            "id": "21",
+            "text": "h"
+          },
+          {
+            "id": "22",
+            "text": "w"
+          },
+          {
+            "id": "23",
+            "text": "z"
+          },
+          {
+            "id": "24",
+            "text": "m"
+          },
+          {
+            "id": "25",
+            "text": "U"
+          },
+          {
+            "id": "26",
+            "text": "r"
+          },
+          {
+            "id": "27",
+            "text": "j"
+          },
+          {
+            "id": "28",
+            "text": "A"
+          },
+          {
+            "id": "29",
+            "text": "x"
+          },
+          {
+            "id": "30",
+            "text": "U"
+          },
+          {
+            "id": "31",
+            "text": "g"
+          },
+          {
+            "id": "32",
+            "text": "r"
+          },
+          {
+            "id": "33",
+            "text": "b"
+          },
+          {
+            "id": "34",
+            "text": "Q"
+          },
+          {
+            "id": "35",
+            "text": "L"
+          },
+          {
+            "id": "36",
+            "text": "f"
+          },
+          {
+            "id": "37",
+            "text": "l"
+          },
+          {
+            "id": "38",
+            "text": "Z"
+          },
+          {
+            "id": "39",
+            "text": "s"
+          },
+          {
+            "id": "40",
+            "text": "r"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "b",
+          "s"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": null,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            1
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "umama"
+          },
+          {
+            "id": "2",
+            "text": "utata"
+          },
+          {
+            "id": "3",
+            "text": "usisi"
+          },
+          {
+            "id": "4",
+            "text": "usana"
+          },
+          {
+            "id": "5",
+            "text": "kuba"
+          },
+          {
+            "id": "6",
+            "text": "isikolo"
+          },
+          {
+            "id": "7",
+            "text": "wafika"
+          },
+          {
+            "id": "8",
+            "text": "kudala"
+          },
+          {
+            "id": "9",
+            "text": "ikati"
+          },
+          {
+            "id": "10",
+            "text": "vuka"
+          },
+          {
+            "id": "11",
+            "text": "wabona"
+          },
+          {
+            "id": "12",
+            "text": "funa"
+          },
+          {
+            "id": "13",
+            "text": "lala"
+          },
+          {
+            "id": "14",
+            "text": "suka"
+          },
+          {
+            "id": "15",
+            "text": "wema"
+          },
+          {
+            "id": "16",
+            "text": "mna"
+          },
+          {
+            "id": "17",
+            "text": "bona"
+          },
+          {
+            "id": "18",
+            "text": "cula"
+          },
+          {
+            "id": "19",
+            "text": "iti"
+          },
+          {
+            "id": "20",
+            "text": "Imali"
+          },
+          {
+            "id": "21",
+            "text": "luma"
+          },
+          {
+            "id": "22",
+            "text": "Emva"
+          },
+          {
+            "id": "23",
+            "text": "cela"
+          },
+          {
+            "id": "24",
+            "text": "udade"
+          },
+          {
+            "id": "25",
+            "text": "imoto"
+          },
+          {
+            "id": "26",
+            "text": "sela"
+          },
+          {
+            "id": "27",
+            "text": "ubisi"
+          },
+          {
+            "id": "28",
+            "text": "yena"
+          },
+          {
+            "id": "29",
+            "text": "usuku"
+          },
+          {
+            "id": "30",
+            "text": "waya"
+          },
+          {
+            "id": "31",
+            "text": "Ihagu"
+          },
+          {
+            "id": "32",
+            "text": "intombi"
+          },
+          {
+            "id": "33",
+            "text": "wona"
+          },
+          {
+            "id": "34",
+            "text": "ifama"
+          },
+          {
+            "id": "35",
+            "text": "icawa"
+          },
+          {
+            "id": "36",
+            "text": "Ewe"
+          },
+          {
+            "id": "37",
+            "text": "jika"
+          },
+          {
+            "id": "38",
+            "text": "vasa"
+          },
+          {
+            "id": "39",
+            "text": "umfo"
+          },
+          {
+            "id": "40",
+            "text": "zathi"
+          },
+          {
+            "id": "41",
+            "text": "hayi"
+          },
+          {
+            "id": "42",
+            "text": "zisa"
+          },
+          {
+            "id": "43",
+            "text": "nomama"
+          },
+          {
+            "id": "44",
+            "text": "lilela"
+          },
+          {
+            "id": "45",
+            "text": "ibali"
+          },
+          {
+            "id": "46",
+            "text": "ukuba"
+          },
+          {
+            "id": "47",
+            "text": "njani"
+          },
+          {
+            "id": "48",
+            "text": "phambili"
+          },
+          {
+            "id": "49",
+            "text": "wabona"
+          },
+          {
+            "id": "50",
+            "text": "ubisi"
+          },
+          {
+            "id": "51",
+            "text": "Imini"
+          },
+          {
+            "id": "52",
+            "text": "isele"
+          },
+          {
+            "id": "53",
+            "text": "wafika"
+          },
+          {
+            "id": "54",
+            "text": "lila"
+          },
+          {
+            "id": "55",
+            "text": "phambi"
+          },
+          {
+            "id": "56",
+            "text": "imini"
+          },
+          {
+            "id": "57",
+            "text": "ubisi"
+          },
+          {
+            "id": "58",
+            "text": "imali"
+          },
+          {
+            "id": "59",
+            "text": "kuqala"
+          },
+          {
+            "id": "60",
+            "text": "ihagu"
+          },
+          {
+            "id": "61",
+            "text": "isofa"
+          },
+          {
+            "id": "62",
+            "text": "ibali"
+          },
+          {
+            "id": "63",
+            "text": "umhlobo"
+          },
+          {
+            "id": "64",
+            "text": "wabo"
+          },
+          {
+            "id": "65",
+            "text": "umalume"
+          },
+          {
+            "id": "66",
+            "text": "ikofu"
+          },
+          {
+            "id": "67",
+            "text": "wabeleka"
+          },
+          {
+            "id": "68",
+            "text": "qoqa"
+          },
+          {
+            "id": "69",
+            "text": "vela"
+          },
+          {
+            "id": "70",
+            "text": "vota"
+          },
+          {
+            "id": "71",
+            "text": "kusasa"
+          },
+          {
+            "id": "72",
+            "text": "umsebenzi"
+          },
+          {
+            "id": "73",
+            "text": "buza"
+          },
+          {
+            "id": "74",
+            "text": "xoxa"
+          },
+          {
+            "id": "75",
+            "text": "zola"
+          },
+          {
+            "id": "76",
+            "text": "bona"
+          },
+          {
+            "id": "77",
+            "text": "funda"
+          },
+          {
+            "id": "78",
+            "text": "esikhulu"
+          },
+          {
+            "id": "79",
+            "text": "amehlo"
+          },
+          {
+            "id": "80",
+            "text": "maziye"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "utata",
+          "icici"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": null,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            2
+          ]
+        }
+      },
+      "passage": {
+        "text": "ULolo wayeza kuqala ukuya kwisikolo esikhulu. Lwalungathi alufiki olu suku yimivuyo.\n\nNgomhla wokuvulwa kwezikolo wavuka ekuseni. Wahlamba waza watya isidlo sakusasa. Emva koko uLolo wabeleka ubhaka wakhe waya esikolweni nomama wakhe.\n\nEsikolweni waboniswa utitshalakazi wakhe. Utitshalakazi wabalisa ibali likaSidumo. USidumo libali elidlala kumabonakude. ULolo wahleka izinto ezenziwa nguSidumo Wabona ukuba kumnandi esikolweni esikhulu.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 53,
+        "whitespaceTokenCount": 53,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            3
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Ngubani owayeza kuya esikolweni?",
+            "answerText": "nguLolo",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Wavuka nini ngosuku lokuvulwa kwezikolo?",
+            "answerText": "ekuseni",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Waya nabani esikolweni?",
+            "answerText": "nomama wakhe",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Wenza ntoni utitshalakazi wabo?",
+            "answerText": "wababalisela ibali okanye wabalisa ibali likaSidumo”",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Ingaba wabona ngathi kumnandi na esikolweni uLolo?",
+            "answerText": "ewe",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "xh_guide",
+          "pdfPages": [
+            10
+          ],
+          "role": "answer key"
+        },
+        "questionSource": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            4
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Questions follow the learner chart; answers follow the corresponding teacher-guide key. Minor wording differences between the two sources are preserved.",
+        "Teacher-guide introductory counts disagree with the actual charts. Item arrays preserve every chart entry; passage totals use the passage page.",
+        "The source omits punctuation between nguSidumo and Wabona; it is preserved. The answer to question 4 ends with an unmatched closing quote in the guide; it is preserved."
+      ]
+    },
+    {
+      "id": "dbe-egra-xh-hl-2-v1",
+      "title": "isiXhosa EGRA 2",
+      "languageCode": "xh",
+      "languageName": "isiXhosa",
+      "variant": "hl",
+      "assessmentNumber": 2,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "s"
+          },
+          {
+            "id": "2",
+            "text": "n"
+          },
+          {
+            "id": "3",
+            "text": "c"
+          },
+          {
+            "id": "4",
+            "text": "b"
+          },
+          {
+            "id": "5",
+            "text": "p"
+          },
+          {
+            "id": "6",
+            "text": "y"
+          },
+          {
+            "id": "7",
+            "text": "F"
+          },
+          {
+            "id": "8",
+            "text": "c"
+          },
+          {
+            "id": "9",
+            "text": "a"
+          },
+          {
+            "id": "10",
+            "text": "e"
+          },
+          {
+            "id": "11",
+            "text": "y"
+          },
+          {
+            "id": "12",
+            "text": "S"
+          },
+          {
+            "id": "13",
+            "text": "q"
+          },
+          {
+            "id": "14",
+            "text": "p"
+          },
+          {
+            "id": "15",
+            "text": "M"
+          },
+          {
+            "id": "16",
+            "text": "v"
+          },
+          {
+            "id": "17",
+            "text": "O"
+          },
+          {
+            "id": "18",
+            "text": "t"
+          },
+          {
+            "id": "19",
+            "text": "n"
+          },
+          {
+            "id": "20",
+            "text": "P"
+          },
+          {
+            "id": "21",
+            "text": "z"
+          },
+          {
+            "id": "22",
+            "text": "A"
+          },
+          {
+            "id": "23",
+            "text": "E"
+          },
+          {
+            "id": "24",
+            "text": "x"
+          },
+          {
+            "id": "25",
+            "text": "F"
+          },
+          {
+            "id": "26",
+            "text": "f"
+          },
+          {
+            "id": "27",
+            "text": "h"
+          },
+          {
+            "id": "28",
+            "text": "u"
+          },
+          {
+            "id": "29",
+            "text": "a"
+          },
+          {
+            "id": "30",
+            "text": "t"
+          },
+          {
+            "id": "31",
+            "text": "w"
+          },
+          {
+            "id": "32",
+            "text": "S"
+          },
+          {
+            "id": "33",
+            "text": "H"
+          },
+          {
+            "id": "34",
+            "text": "B"
+          },
+          {
+            "id": "35",
+            "text": "S"
+          },
+          {
+            "id": "36",
+            "text": "l"
+          },
+          {
+            "id": "37",
+            "text": "g"
+          },
+          {
+            "id": "38",
+            "text": "m"
+          },
+          {
+            "id": "39",
+            "text": "i"
+          },
+          {
+            "id": "40",
+            "text": "l"
+          },
+          {
+            "id": "41",
+            "text": "c"
+          },
+          {
+            "id": "42",
+            "text": "n"
+          },
+          {
+            "id": "43",
+            "text": "g"
+          },
+          {
+            "id": "44",
+            "text": "D"
+          },
+          {
+            "id": "45",
+            "text": "o"
+          },
+          {
+            "id": "46",
+            "text": "K"
+          },
+          {
+            "id": "47",
+            "text": "M"
+          },
+          {
+            "id": "48",
+            "text": "w"
+          },
+          {
+            "id": "49",
+            "text": "p"
+          },
+          {
+            "id": "50",
+            "text": "r"
+          },
+          {
+            "id": "51",
+            "text": "f"
+          },
+          {
+            "id": "52",
+            "text": "t"
+          },
+          {
+            "id": "53",
+            "text": "v"
+          },
+          {
+            "id": "54",
+            "text": "a"
+          },
+          {
+            "id": "55",
+            "text": "U"
+          },
+          {
+            "id": "56",
+            "text": "T"
+          },
+          {
+            "id": "57",
+            "text": "y"
+          },
+          {
+            "id": "58",
+            "text": "B"
+          },
+          {
+            "id": "59",
+            "text": "Q"
+          },
+          {
+            "id": "60",
+            "text": "i"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": null,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            5
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "lala"
+          },
+          {
+            "id": "2",
+            "text": "lila"
+          },
+          {
+            "id": "3",
+            "text": "vuka"
+          },
+          {
+            "id": "4",
+            "text": "umama"
+          },
+          {
+            "id": "5",
+            "text": "usana"
+          },
+          {
+            "id": "6",
+            "text": "Wabona"
+          },
+          {
+            "id": "7",
+            "text": "kuqala"
+          },
+          {
+            "id": "8",
+            "text": "kudala"
+          },
+          {
+            "id": "9",
+            "text": "jika"
+          },
+          {
+            "id": "10",
+            "text": "ukuba"
+          },
+          {
+            "id": "11",
+            "text": "wavuka"
+          },
+          {
+            "id": "12",
+            "text": "wabo"
+          },
+          {
+            "id": "13",
+            "text": "nomama"
+          },
+          {
+            "id": "14",
+            "text": "wema"
+          },
+          {
+            "id": "15",
+            "text": "wabeleka"
+          },
+          {
+            "id": "16",
+            "text": "bona"
+          },
+          {
+            "id": "17",
+            "text": "umhlobo"
+          },
+          {
+            "id": "18",
+            "text": "kusasa"
+          },
+          {
+            "id": "19",
+            "text": "wona"
+          },
+          {
+            "id": "20",
+            "text": "utata"
+          },
+          {
+            "id": "21",
+            "text": "luma"
+          },
+          {
+            "id": "22",
+            "text": "emva"
+          },
+          {
+            "id": "23",
+            "text": "qoqa"
+          },
+          {
+            "id": "24",
+            "text": "Udade"
+          },
+          {
+            "id": "25",
+            "text": "imoto"
+          },
+          {
+            "id": "26",
+            "text": "phambi"
+          },
+          {
+            "id": "27",
+            "text": "ifama"
+          },
+          {
+            "id": "28",
+            "text": "usuku"
+          },
+          {
+            "id": "29",
+            "text": "xoxa"
+          },
+          {
+            "id": "30",
+            "text": "waya"
+          },
+          {
+            "id": "31",
+            "text": "ihagu"
+          },
+          {
+            "id": "32",
+            "text": "intombi"
+          },
+          {
+            "id": "33",
+            "text": "iti"
+          },
+          {
+            "id": "34",
+            "text": "amehlo"
+          },
+          {
+            "id": "35",
+            "text": "icawa"
+          },
+          {
+            "id": "36",
+            "text": "ewe"
+          },
+          {
+            "id": "37",
+            "text": "ikofu"
+          },
+          {
+            "id": "38",
+            "text": "hayi"
+          },
+          {
+            "id": "39",
+            "text": "cela"
+          },
+          {
+            "id": "40",
+            "text": "Suka"
+          },
+          {
+            "id": "41",
+            "text": "waza"
+          },
+          {
+            "id": "42",
+            "text": "zisa"
+          },
+          {
+            "id": "43",
+            "text": "funda"
+          },
+          {
+            "id": "44",
+            "text": "phambili"
+          },
+          {
+            "id": "45",
+            "text": "ibali"
+          },
+          {
+            "id": "46",
+            "text": "maziye"
+          },
+          {
+            "id": "47",
+            "text": "imali"
+          },
+          {
+            "id": "48",
+            "text": "lilela"
+          },
+          {
+            "id": "49",
+            "text": "ihagu"
+          },
+          {
+            "id": "50",
+            "text": "sela"
+          },
+          {
+            "id": "51",
+            "text": "kakhulu"
+          },
+          {
+            "id": "52",
+            "text": "isityebi"
+          },
+          {
+            "id": "53",
+            "text": "ukuba"
+          },
+          {
+            "id": "54",
+            "text": "funa"
+          },
+          {
+            "id": "55",
+            "text": "usisi"
+          },
+          {
+            "id": "56",
+            "text": "Phila"
+          },
+          {
+            "id": "57",
+            "text": "ubisi"
+          },
+          {
+            "id": "58",
+            "text": "ibhokhwe"
+          },
+          {
+            "id": "59",
+            "text": "ukuya"
+          },
+          {
+            "id": "60",
+            "text": "isikolo"
+          },
+          {
+            "id": "61",
+            "text": "isofa"
+          },
+          {
+            "id": "62",
+            "text": "buza"
+          },
+          {
+            "id": "63",
+            "text": "imali"
+          },
+          {
+            "id": "64",
+            "text": "Kuba"
+          },
+          {
+            "id": "65",
+            "text": "ikati"
+          },
+          {
+            "id": "66",
+            "text": "imini"
+          },
+          {
+            "id": "67",
+            "text": "umfo"
+          },
+          {
+            "id": "68",
+            "text": "vela"
+          },
+          {
+            "id": "69",
+            "text": "vota"
+          },
+          {
+            "id": "70",
+            "text": "cula"
+          },
+          {
+            "id": "71",
+            "text": "umsebenzi"
+          },
+          {
+            "id": "72",
+            "text": "zola"
+          },
+          {
+            "id": "73",
+            "text": "ibali"
+          },
+          {
+            "id": "74",
+            "text": "yena"
+          },
+          {
+            "id": "75",
+            "text": "njani"
+          },
+          {
+            "id": "76",
+            "text": "imini"
+          },
+          {
+            "id": "77",
+            "text": "zathi"
+          },
+          {
+            "id": "78",
+            "text": "esikhulu"
+          },
+          {
+            "id": "79",
+            "text": "bona"
+          },
+          {
+            "id": "80",
+            "text": "ubisi"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "utata",
+          "icici"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": null,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            6
+          ]
+        }
+      },
+      "passage": {
+        "text": "Kwakukho utata owayefuna umsebenzi. Wavuka ekuseni wayakufuna umsebenzi emzini wesityebi. Wahamba, wahamba wada wafika emzini wesityebi.\n\nEsi sityebi sasinomzi omkhulu. Wafika lo tata wema phambi kwendlu waza wathi ucela umsebenzi.\n\nIsityebi sambuza utata ukuba ingaba ufuna msebenzi mni na. Wathi ke yena ufuna nokuba ngonjani na, angazityisa neehagu.\n\nIsityebi ke samxelela ukuba umsebenzi esinawo ngowokwalusa iibhokhwe ezininzi kakhulu. Kufuneka azijonge zingayi endleleni. Wavuma ngovuyo olukhulu lo mfo.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 68,
+        "whitespaceTokenCount": 67,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            7
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Lingantoni eli bali?",
+            "answerText": "Lingotata owaya kufuna umsebenzi",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Ngoobani ekuthethwa ngabo kweli bali?",
+            "answerText": "Ngulo tata kunye nesityebi",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Wathini utata akufika emzini wesityebi?",
+            "answerText": "Wathi ucela umsebenzi",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Yaba ngumsebenzi wantoni?",
+            "answerText": "Yayingowokwalusa iibhokhwe",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Kwenzeka ntoni akuba efumene umsebenzi utata?",
+            "answerText": "Wavuya kakhulu",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "xh_guide",
+          "pdfPages": [
+            14
+          ],
+          "role": "answer key"
+        },
+        "questionSource": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            8
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Questions follow the learner chart; answers follow the corresponding teacher-guide key. Minor wording differences between the two sources are preserved.",
+        "Teacher-guide introductory counts disagree with the actual charts. Item arrays preserve every chart entry; passage totals use the passage page.",
+        "Passage printed total is 68; whitespace token count is 67. Neither is silently substituted for the other; verify the scoring denominator before use."
+      ]
+    },
+    {
+      "id": "dbe-egra-xh-hl-3-v1",
+      "title": "isiXhosa EGRA 3",
+      "languageCode": "xh",
+      "languageName": "isiXhosa",
+      "variant": "hl",
+      "assessmentNumber": 3,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "d"
+          },
+          {
+            "id": "2",
+            "text": "l"
+          },
+          {
+            "id": "3",
+            "text": "o"
+          },
+          {
+            "id": "4",
+            "text": "m"
+          },
+          {
+            "id": "5",
+            "text": "X"
+          },
+          {
+            "id": "6",
+            "text": "n"
+          },
+          {
+            "id": "7",
+            "text": "e"
+          },
+          {
+            "id": "8",
+            "text": "a"
+          },
+          {
+            "id": "9",
+            "text": "p"
+          },
+          {
+            "id": "10",
+            "text": "x"
+          },
+          {
+            "id": "11",
+            "text": "N"
+          },
+          {
+            "id": "12",
+            "text": "K"
+          },
+          {
+            "id": "13",
+            "text": "c"
+          },
+          {
+            "id": "14",
+            "text": "i"
+          },
+          {
+            "id": "15",
+            "text": "D"
+          },
+          {
+            "id": "16",
+            "text": "y"
+          },
+          {
+            "id": "17",
+            "text": "b"
+          },
+          {
+            "id": "18",
+            "text": "J"
+          },
+          {
+            "id": "19",
+            "text": "r"
+          },
+          {
+            "id": "20",
+            "text": "v"
+          },
+          {
+            "id": "21",
+            "text": "v"
+          },
+          {
+            "id": "22",
+            "text": "o"
+          },
+          {
+            "id": "23",
+            "text": "w"
+          },
+          {
+            "id": "24",
+            "text": "u"
+          },
+          {
+            "id": "25",
+            "text": "V"
+          },
+          {
+            "id": "26",
+            "text": "l"
+          },
+          {
+            "id": "27",
+            "text": "h"
+          },
+          {
+            "id": "28",
+            "text": "G"
+          },
+          {
+            "id": "29",
+            "text": "s"
+          },
+          {
+            "id": "30",
+            "text": "y"
+          },
+          {
+            "id": "31",
+            "text": "g"
+          },
+          {
+            "id": "32",
+            "text": "R"
+          },
+          {
+            "id": "33",
+            "text": "B"
+          },
+          {
+            "id": "34",
+            "text": "q"
+          },
+          {
+            "id": "35",
+            "text": "l"
+          },
+          {
+            "id": "36",
+            "text": "f"
+          },
+          {
+            "id": "37",
+            "text": "L"
+          },
+          {
+            "id": "38",
+            "text": "z"
+          },
+          {
+            "id": "39",
+            "text": "q"
+          },
+          {
+            "id": "40",
+            "text": "R"
+          },
+          {
+            "id": "41",
+            "text": "x"
+          },
+          {
+            "id": "42",
+            "text": "g"
+          },
+          {
+            "id": "43",
+            "text": "u"
+          },
+          {
+            "id": "44",
+            "text": "e"
+          },
+          {
+            "id": "45",
+            "text": "p"
+          },
+          {
+            "id": "46",
+            "text": "n"
+          },
+          {
+            "id": "47",
+            "text": "x"
+          },
+          {
+            "id": "48",
+            "text": "v"
+          },
+          {
+            "id": "49",
+            "text": "i"
+          },
+          {
+            "id": "50",
+            "text": "a"
+          },
+          {
+            "id": "51",
+            "text": "K"
+          },
+          {
+            "id": "52",
+            "text": "f"
+          },
+          {
+            "id": "53",
+            "text": "h"
+          },
+          {
+            "id": "54",
+            "text": "o"
+          },
+          {
+            "id": "55",
+            "text": "X"
+          },
+          {
+            "id": "56",
+            "text": "z"
+          },
+          {
+            "id": "57",
+            "text": "t"
+          },
+          {
+            "id": "58",
+            "text": "E"
+          },
+          {
+            "id": "59",
+            "text": "g"
+          },
+          {
+            "id": "60",
+            "text": "c"
+          },
+          {
+            "id": "61",
+            "text": "t"
+          },
+          {
+            "id": "62",
+            "text": "G"
+          },
+          {
+            "id": "63",
+            "text": "w"
+          },
+          {
+            "id": "64",
+            "text": "B"
+          },
+          {
+            "id": "65",
+            "text": "i"
+          },
+          {
+            "id": "66",
+            "text": "a"
+          },
+          {
+            "id": "67",
+            "text": "z"
+          },
+          {
+            "id": "68",
+            "text": "b"
+          },
+          {
+            "id": "69",
+            "text": "d"
+          },
+          {
+            "id": "70",
+            "text": "j"
+          },
+          {
+            "id": "71",
+            "text": "w"
+          },
+          {
+            "id": "72",
+            "text": "c"
+          },
+          {
+            "id": "73",
+            "text": "b"
+          },
+          {
+            "id": "74",
+            "text": "a"
+          },
+          {
+            "id": "75",
+            "text": "H"
+          },
+          {
+            "id": "76",
+            "text": "k"
+          },
+          {
+            "id": "77",
+            "text": "b"
+          },
+          {
+            "id": "78",
+            "text": "e"
+          },
+          {
+            "id": "79",
+            "text": "y"
+          },
+          {
+            "id": "80",
+            "text": "u"
+          },
+          {
+            "id": "81",
+            "text": "Z"
+          },
+          {
+            "id": "82",
+            "text": "X"
+          },
+          {
+            "id": "83",
+            "text": "h"
+          },
+          {
+            "id": "84",
+            "text": "u"
+          },
+          {
+            "id": "85",
+            "text": "e"
+          },
+          {
+            "id": "86",
+            "text": "v"
+          },
+          {
+            "id": "87",
+            "text": "N"
+          },
+          {
+            "id": "88",
+            "text": "e"
+          },
+          {
+            "id": "89",
+            "text": "a"
+          },
+          {
+            "id": "90",
+            "text": "u"
+          },
+          {
+            "id": "91",
+            "text": "b"
+          },
+          {
+            "id": "92",
+            "text": "z"
+          },
+          {
+            "id": "93",
+            "text": "n"
+          },
+          {
+            "id": "94",
+            "text": "C"
+          },
+          {
+            "id": "95",
+            "text": "o"
+          },
+          {
+            "id": "96",
+            "text": "k"
+          },
+          {
+            "id": "97",
+            "text": "l"
+          },
+          {
+            "id": "98",
+            "text": "H"
+          },
+          {
+            "id": "99",
+            "text": "y"
+          },
+          {
+            "id": "100",
+            "text": "o"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": null,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            9
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "amehlo"
+          },
+          {
+            "id": "2",
+            "text": "vuka"
+          },
+          {
+            "id": "3",
+            "text": "zola"
+          },
+          {
+            "id": "4",
+            "text": "phila"
+          },
+          {
+            "id": "5",
+            "text": "esikhulu"
+          },
+          {
+            "id": "6",
+            "text": "xoxa"
+          },
+          {
+            "id": "7",
+            "text": "buza"
+          },
+          {
+            "id": "8",
+            "text": "Ikofu"
+          },
+          {
+            "id": "9",
+            "text": "maziye"
+          },
+          {
+            "id": "10",
+            "text": "lila"
+          },
+          {
+            "id": "11",
+            "text": "lala"
+          },
+          {
+            "id": "12",
+            "text": "kuba"
+          },
+          {
+            "id": "13",
+            "text": "ubisi"
+          },
+          {
+            "id": "14",
+            "text": "suka"
+          },
+          {
+            "id": "15",
+            "text": "wena"
+          },
+          {
+            "id": "16",
+            "text": "Kakhulu"
+          },
+          {
+            "id": "17",
+            "text": "isityebi"
+          },
+          {
+            "id": "18",
+            "text": "ukutya"
+          },
+          {
+            "id": "19",
+            "text": "isitya"
+          },
+          {
+            "id": "20",
+            "text": "cula"
+          },
+          {
+            "id": "21",
+            "text": "iti"
+          },
+          {
+            "id": "22",
+            "text": "imali"
+          },
+          {
+            "id": "23",
+            "text": "luma"
+          },
+          {
+            "id": "24",
+            "text": "emva"
+          },
+          {
+            "id": "25",
+            "text": "Hayi"
+          },
+          {
+            "id": "26",
+            "text": "udade"
+          },
+          {
+            "id": "27",
+            "text": "umfo"
+          },
+          {
+            "id": "28",
+            "text": "ubisi"
+          },
+          {
+            "id": "29",
+            "text": "Yena"
+          },
+          {
+            "id": "30",
+            "text": "usuku"
+          },
+          {
+            "id": "31",
+            "text": "sela"
+          },
+          {
+            "id": "32",
+            "text": "ihagu"
+          },
+          {
+            "id": "33",
+            "text": "umhlobo"
+          },
+          {
+            "id": "34",
+            "text": "ifama"
+          },
+          {
+            "id": "35",
+            "text": "icawa"
+          },
+          {
+            "id": "36",
+            "text": "wabona"
+          },
+          {
+            "id": "37",
+            "text": "imoto"
+          },
+          {
+            "id": "38",
+            "text": "uloliwe"
+          },
+          {
+            "id": "39",
+            "text": "bona"
+          },
+          {
+            "id": "40",
+            "text": "Cela"
+          },
+          {
+            "id": "41",
+            "text": "isicelo"
+          },
+          {
+            "id": "42",
+            "text": "nomama"
+          },
+          {
+            "id": "43",
+            "text": "umakazi"
+          },
+          {
+            "id": "44",
+            "text": "lilela"
+          },
+          {
+            "id": "45",
+            "text": "inkwenkwe"
+          },
+          {
+            "id": "46",
+            "text": "ibali"
+          },
+          {
+            "id": "47",
+            "text": "ukuba"
+          },
+          {
+            "id": "48",
+            "text": "phambili"
+          },
+          {
+            "id": "49",
+            "text": "jika"
+          },
+          {
+            "id": "50",
+            "text": "wavuka"
+          },
+          {
+            "id": "51",
+            "text": "imini"
+          },
+          {
+            "id": "52",
+            "text": "intombi"
+          },
+          {
+            "id": "53",
+            "text": "yimivuyo"
+          },
+          {
+            "id": "54",
+            "text": "wabona"
+          },
+          {
+            "id": "55",
+            "text": "phambi"
+          },
+          {
+            "id": "56",
+            "text": "Indlu"
+          },
+          {
+            "id": "57",
+            "text": "kuqala"
+          },
+          {
+            "id": "58",
+            "text": "ihagu"
+          },
+          {
+            "id": "59",
+            "text": "isofa"
+          },
+          {
+            "id": "60",
+            "text": "Ibali"
+          },
+          {
+            "id": "61",
+            "text": "ibhokhwe"
+          },
+          {
+            "id": "62",
+            "text": "Wabo"
+          },
+          {
+            "id": "63",
+            "text": "kudala"
+          },
+          {
+            "id": "64",
+            "text": "Wabeleka"
+          },
+          {
+            "id": "65",
+            "text": "qoqa"
+          },
+          {
+            "id": "66",
+            "text": "vela"
+          },
+          {
+            "id": "67",
+            "text": "vota"
+          },
+          {
+            "id": "68",
+            "text": "izolo"
+          },
+          {
+            "id": "69",
+            "text": "kusasa"
+          },
+          {
+            "id": "70",
+            "text": "ebusuku"
+          },
+          {
+            "id": "71",
+            "text": "umsebenzi"
+          },
+          {
+            "id": "72",
+            "text": "Ikati"
+          },
+          {
+            "id": "73",
+            "text": "ukuba"
+          },
+          {
+            "id": "74",
+            "text": "isikolo"
+          },
+          {
+            "id": "75",
+            "text": "usisi"
+          },
+          {
+            "id": "76",
+            "text": "usana"
+          },
+          {
+            "id": "77",
+            "text": "isele"
+          },
+          {
+            "id": "78",
+            "text": "isonka"
+          },
+          {
+            "id": "79",
+            "text": "funda"
+          },
+          {
+            "id": "80",
+            "text": "incwadi"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "utata",
+          "icici"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": null,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            10
+          ]
+        }
+      },
+      "passage": {
+        "text": "Kudala dala kwakukho ixhegokazi elalikhohlakele kakhulu. Igama lalo yayinguNomehlo-mancinane. Yayilizim elalizenza umntu onobubele. Izim ngumntu otya abantu.\n\nUNomehlo-mancinane wayenentombi ewayeyithanda kakhulu. Wayenodadewabo owayehlala kwenye ilali. UNomehlo-mancinane wayengamthandi kakhulu udadewabo. Udade lo wayeneentombi ezintathu. Ngenye imini ezi ntombi zandwendwela uNomehlo- mancinane.\n\nZazingamazi ukuba ulizim. Zathi xa zisendleleni zadibana nomnye umama owazixelela ukuba umakazi wabo lizim. Zagqiba kwelokuba maziye phambili zingoyiki, ziyombona umakazi.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 61,
+        "whitespaceTokenCount": 61,
+        "source": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            11
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Ngubani igama lexhegokazi obufunda ngalo?",
+            "answerText": "NguNomehlomancinane",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Yintoni izim?",
+            "answerText": "Ngumntu otya abantu",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Ucinga ukuba kulungile ukuba lizim?",
+            "answerText": "Hayi",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Utsho ngoba?",
+            "answerText": "Akulunganga ukutya abantu",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Zazingaphi iintombi zakadade boNomehlomancinane?",
+            "answerText": "Zazintathu",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "xh_guide",
+          "pdfPages": [
+            17
+          ],
+          "role": "answer key"
+        },
+        "questionSource": {
+          "sourceId": "xh_charts",
+          "pdfPages": [
+            12
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Questions follow the learner chart; answers follow the corresponding teacher-guide key. Minor wording differences between the two sources are preserved.",
+        "Teacher-guide introductory counts disagree with the actual charts. Item arrays preserve every chart entry; passage totals use the passage page.",
+        "The source prints uNomehlo- mancinane with a space; it is preserved. Whitespace token count is descriptive, not a validated oral-reading scoring denominator."
+      ]
+    },
+    {
+      "id": "dbe-egra-en-hl-1-v1",
+      "title": "English HL EGRA 1",
+      "languageCode": "en",
+      "languageName": "English",
+      "variant": "hl",
+      "assessmentNumber": 1,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "l"
+          },
+          {
+            "id": "2",
+            "text": "z"
+          },
+          {
+            "id": "3",
+            "text": "s"
+          },
+          {
+            "id": "4",
+            "text": "w"
+          },
+          {
+            "id": "5",
+            "text": "M"
+          },
+          {
+            "id": "6",
+            "text": "j"
+          },
+          {
+            "id": "7",
+            "text": "i"
+          },
+          {
+            "id": "8",
+            "text": "y"
+          },
+          {
+            "id": "9",
+            "text": "a"
+          },
+          {
+            "id": "10",
+            "text": "H"
+          },
+          {
+            "id": "11",
+            "text": "h"
+          },
+          {
+            "id": "12",
+            "text": "e"
+          },
+          {
+            "id": "13",
+            "text": "r"
+          },
+          {
+            "id": "14",
+            "text": "o"
+          },
+          {
+            "id": "15",
+            "text": "T"
+          },
+          {
+            "id": "16",
+            "text": "c"
+          },
+          {
+            "id": "17",
+            "text": "i"
+          },
+          {
+            "id": "18",
+            "text": "e"
+          },
+          {
+            "id": "19",
+            "text": "t"
+          },
+          {
+            "id": "20",
+            "text": "O"
+          },
+          {
+            "id": "21",
+            "text": "e"
+          },
+          {
+            "id": "22",
+            "text": "n"
+          },
+          {
+            "id": "23",
+            "text": "f"
+          },
+          {
+            "id": "24",
+            "text": "v"
+          },
+          {
+            "id": "25",
+            "text": "B"
+          },
+          {
+            "id": "26",
+            "text": "k"
+          },
+          {
+            "id": "27",
+            "text": "o"
+          },
+          {
+            "id": "28",
+            "text": "d"
+          },
+          {
+            "id": "29",
+            "text": "a"
+          },
+          {
+            "id": "30",
+            "text": "T"
+          },
+          {
+            "id": "31",
+            "text": "g"
+          },
+          {
+            "id": "32",
+            "text": "s"
+          },
+          {
+            "id": "33",
+            "text": "u"
+          },
+          {
+            "id": "34",
+            "text": "x"
+          },
+          {
+            "id": "35",
+            "text": "A"
+          },
+          {
+            "id": "36",
+            "text": "i"
+          },
+          {
+            "id": "37",
+            "text": "r"
+          },
+          {
+            "id": "38",
+            "text": "n"
+          },
+          {
+            "id": "39",
+            "text": "d"
+          },
+          {
+            "id": "40",
+            "text": "P"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "b",
+          "s"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 40,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            14
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "back"
+          },
+          {
+            "id": "2",
+            "text": "came"
+          },
+          {
+            "id": "3",
+            "text": "but"
+          },
+          {
+            "id": "4",
+            "text": "look"
+          },
+          {
+            "id": "5",
+            "text": "went"
+          },
+          {
+            "id": "6",
+            "text": "what"
+          },
+          {
+            "id": "7",
+            "text": "did"
+          },
+          {
+            "id": "8",
+            "text": "be"
+          },
+          {
+            "id": "9",
+            "text": "got"
+          },
+          {
+            "id": "10",
+            "text": "me"
+          },
+          {
+            "id": "11",
+            "text": "eat"
+          },
+          {
+            "id": "12",
+            "text": "do"
+          },
+          {
+            "id": "13",
+            "text": "like"
+          },
+          {
+            "id": "14",
+            "text": "there"
+          },
+          {
+            "id": "15",
+            "text": "little"
+          },
+          {
+            "id": "16",
+            "text": "with"
+          },
+          {
+            "id": "17",
+            "text": "had"
+          },
+          {
+            "id": "18",
+            "text": "are"
+          },
+          {
+            "id": "19",
+            "text": "your"
+          },
+          {
+            "id": "20",
+            "text": "make"
+          },
+          {
+            "id": "21",
+            "text": "put"
+          },
+          {
+            "id": "22",
+            "text": "He"
+          },
+          {
+            "id": "23",
+            "text": "see"
+          },
+          {
+            "id": "24",
+            "text": "it"
+          },
+          {
+            "id": "25",
+            "text": "the"
+          },
+          {
+            "id": "26",
+            "text": "all"
+          },
+          {
+            "id": "27",
+            "text": "here"
+          },
+          {
+            "id": "28",
+            "text": "no"
+          },
+          {
+            "id": "29",
+            "text": "from"
+          },
+          {
+            "id": "30",
+            "text": "tree"
+          },
+          {
+            "id": "31",
+            "text": "out"
+          },
+          {
+            "id": "32",
+            "text": "an"
+          },
+          {
+            "id": "33",
+            "text": "come"
+          },
+          {
+            "id": "34",
+            "text": "will"
+          },
+          {
+            "id": "35",
+            "text": "time"
+          },
+          {
+            "id": "36",
+            "text": "my"
+          },
+          {
+            "id": "37",
+            "text": "you"
+          },
+          {
+            "id": "38",
+            "text": "Too"
+          },
+          {
+            "id": "39",
+            "text": "cat"
+          },
+          {
+            "id": "40",
+            "text": "she"
+          },
+          {
+            "id": "41",
+            "text": "have"
+          },
+          {
+            "id": "42",
+            "text": "some"
+          },
+          {
+            "id": "43",
+            "text": "away"
+          },
+          {
+            "id": "44",
+            "text": "down"
+          },
+          {
+            "id": "45",
+            "text": "a"
+          },
+          {
+            "id": "46",
+            "text": "them"
+          },
+          {
+            "id": "47",
+            "text": "we"
+          },
+          {
+            "id": "48",
+            "text": "in"
+          },
+          {
+            "id": "49",
+            "text": "that"
+          },
+          {
+            "id": "50",
+            "text": "they"
+          },
+          {
+            "id": "51",
+            "text": "can"
+          },
+          {
+            "id": "52",
+            "text": "one"
+          },
+          {
+            "id": "53",
+            "text": "not"
+          },
+          {
+            "id": "54",
+            "text": "Of"
+          },
+          {
+            "id": "55",
+            "text": "this"
+          },
+          {
+            "id": "56",
+            "text": "his"
+          },
+          {
+            "id": "57",
+            "text": "was"
+          },
+          {
+            "id": "58",
+            "text": "is"
+          },
+          {
+            "id": "59",
+            "text": "when"
+          },
+          {
+            "id": "60",
+            "text": "so"
+          },
+          {
+            "id": "61",
+            "text": "go"
+          },
+          {
+            "id": "62",
+            "text": "dog"
+          },
+          {
+            "id": "63",
+            "text": "at"
+          },
+          {
+            "id": "64",
+            "text": "day"
+          },
+          {
+            "id": "65",
+            "text": "big"
+          },
+          {
+            "id": "66",
+            "text": "just"
+          },
+          {
+            "id": "67",
+            "text": "said"
+          },
+          {
+            "id": "68",
+            "text": "her"
+          },
+          {
+            "id": "69",
+            "text": "into"
+          },
+          {
+            "id": "70",
+            "text": "To"
+          },
+          {
+            "id": "71",
+            "text": "up"
+          },
+          {
+            "id": "72",
+            "text": "very"
+          },
+          {
+            "id": "73",
+            "text": "for"
+          },
+          {
+            "id": "74",
+            "text": "mother"
+          },
+          {
+            "id": "75",
+            "text": "and"
+          },
+          {
+            "id": "76",
+            "text": "now"
+          },
+          {
+            "id": "77",
+            "text": "on"
+          },
+          {
+            "id": "78",
+            "text": "where"
+          },
+          {
+            "id": "79",
+            "text": "get"
+          },
+          {
+            "id": "80",
+            "text": "then"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "pot",
+          "bell"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            16
+          ]
+        }
+      },
+      "passage": {
+        "text": "Jabu had a little dog. The little dog was fat and happy. One day Jabu and the dog went out to play in the fields behind his house.\n\nThe little dog liked to play tricks and he ran away. The little dog got lost. Jabu was sad. But after a while the dog came back. He had been gone for only a little while.\n\nJabu took the dog home. When they got home Jabu gave the dog a bone. The dog ate it.\n\nThe little dog was happy, so he slept. Jabu also went to sleep. They both slept for a very long time and played again when they woke up.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 111,
+        "whitespaceTokenCount": 111,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            19
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Who had a dog?",
+            "answerText": "Jabu",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Was the dog big or little?",
+            "answerText": "Little",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "What did the dog like to do?",
+            "answerText": "play tricks",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Where did Jabu take the dog?",
+            "answerText": "home",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "What did the dog do after he got the bone?",
+            "answerText": "The dog ate the bone.",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            19
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Question 5 uses the assessment-page answer key; the earlier worked example also accepts He slept."
+      ]
+    },
+    {
+      "id": "dbe-egra-en-hl-2-v1",
+      "title": "English HL EGRA 2",
+      "languageCode": "en",
+      "languageName": "English",
+      "variant": "hl",
+      "assessmentNumber": 2,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "M"
+          },
+          {
+            "id": "2",
+            "text": "L"
+          },
+          {
+            "id": "3",
+            "text": "h"
+          },
+          {
+            "id": "4",
+            "text": "g"
+          },
+          {
+            "id": "5",
+            "text": "S"
+          },
+          {
+            "id": "6",
+            "text": "y"
+          },
+          {
+            "id": "7",
+            "text": "R"
+          },
+          {
+            "id": "8",
+            "text": "W"
+          },
+          {
+            "id": "9",
+            "text": "L"
+          },
+          {
+            "id": "10",
+            "text": "N"
+          },
+          {
+            "id": "11",
+            "text": "l"
+          },
+          {
+            "id": "12",
+            "text": "K"
+          },
+          {
+            "id": "13",
+            "text": "T"
+          },
+          {
+            "id": "14",
+            "text": "D"
+          },
+          {
+            "id": "15",
+            "text": "K"
+          },
+          {
+            "id": "16",
+            "text": "T"
+          },
+          {
+            "id": "17",
+            "text": "s"
+          },
+          {
+            "id": "18",
+            "text": "d"
+          },
+          {
+            "id": "19",
+            "text": "n"
+          },
+          {
+            "id": "20",
+            "text": "w"
+          },
+          {
+            "id": "21",
+            "text": "h"
+          },
+          {
+            "id": "22",
+            "text": "w"
+          },
+          {
+            "id": "23",
+            "text": "r"
+          },
+          {
+            "id": "24",
+            "text": "a"
+          },
+          {
+            "id": "25",
+            "text": "F"
+          },
+          {
+            "id": "26",
+            "text": "r"
+          },
+          {
+            "id": "27",
+            "text": "R"
+          },
+          {
+            "id": "28",
+            "text": "C"
+          },
+          {
+            "id": "29",
+            "text": "S"
+          },
+          {
+            "id": "30",
+            "text": "f"
+          },
+          {
+            "id": "31",
+            "text": "A"
+          },
+          {
+            "id": "32",
+            "text": "p"
+          },
+          {
+            "id": "33",
+            "text": "R"
+          },
+          {
+            "id": "34",
+            "text": "u"
+          },
+          {
+            "id": "35",
+            "text": "s"
+          },
+          {
+            "id": "36",
+            "text": "c"
+          },
+          {
+            "id": "37",
+            "text": "Y"
+          },
+          {
+            "id": "38",
+            "text": "j"
+          },
+          {
+            "id": "39",
+            "text": "E"
+          },
+          {
+            "id": "40",
+            "text": "n"
+          },
+          {
+            "id": "41",
+            "text": "U"
+          },
+          {
+            "id": "42",
+            "text": "I"
+          },
+          {
+            "id": "43",
+            "text": "F"
+          },
+          {
+            "id": "44",
+            "text": "t"
+          },
+          {
+            "id": "45",
+            "text": "u"
+          },
+          {
+            "id": "46",
+            "text": "G"
+          },
+          {
+            "id": "47",
+            "text": "M"
+          },
+          {
+            "id": "48",
+            "text": "e"
+          },
+          {
+            "id": "49",
+            "text": "r"
+          },
+          {
+            "id": "50",
+            "text": "B"
+          },
+          {
+            "id": "51",
+            "text": "h"
+          },
+          {
+            "id": "52",
+            "text": "p"
+          },
+          {
+            "id": "53",
+            "text": "m"
+          },
+          {
+            "id": "54",
+            "text": "l"
+          },
+          {
+            "id": "55",
+            "text": "B"
+          },
+          {
+            "id": "56",
+            "text": "F"
+          },
+          {
+            "id": "57",
+            "text": "A"
+          },
+          {
+            "id": "58",
+            "text": "g"
+          },
+          {
+            "id": "59",
+            "text": "f"
+          },
+          {
+            "id": "60",
+            "text": "E"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "r",
+          "s"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 60,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            14
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "here"
+          },
+          {
+            "id": "2",
+            "text": "some"
+          },
+          {
+            "id": "3",
+            "text": "he"
+          },
+          {
+            "id": "4",
+            "text": "will"
+          },
+          {
+            "id": "5",
+            "text": "had"
+          },
+          {
+            "id": "6",
+            "text": "For"
+          },
+          {
+            "id": "7",
+            "text": "so"
+          },
+          {
+            "id": "8",
+            "text": "now"
+          },
+          {
+            "id": "9",
+            "text": "do"
+          },
+          {
+            "id": "10",
+            "text": "my"
+          },
+          {
+            "id": "11",
+            "text": "at"
+          },
+          {
+            "id": "12",
+            "text": "came"
+          },
+          {
+            "id": "13",
+            "text": "time"
+          },
+          {
+            "id": "14",
+            "text": "Day"
+          },
+          {
+            "id": "15",
+            "text": "too"
+          },
+          {
+            "id": "16",
+            "text": "big"
+          },
+          {
+            "id": "17",
+            "text": "was"
+          },
+          {
+            "id": "18",
+            "text": "out"
+          },
+          {
+            "id": "19",
+            "text": "they"
+          },
+          {
+            "id": "20",
+            "text": "when"
+          },
+          {
+            "id": "21",
+            "text": "and"
+          },
+          {
+            "id": "22",
+            "text": "A"
+          },
+          {
+            "id": "23",
+            "text": "them"
+          },
+          {
+            "id": "24",
+            "text": "is"
+          },
+          {
+            "id": "25",
+            "text": "it"
+          },
+          {
+            "id": "26",
+            "text": "look"
+          },
+          {
+            "id": "27",
+            "text": "she"
+          },
+          {
+            "id": "28",
+            "text": "went"
+          },
+          {
+            "id": "29",
+            "text": "just"
+          },
+          {
+            "id": "30",
+            "text": "See"
+          },
+          {
+            "id": "31",
+            "text": "up"
+          },
+          {
+            "id": "32",
+            "text": "tree"
+          },
+          {
+            "id": "33",
+            "text": "what"
+          },
+          {
+            "id": "34",
+            "text": "eat"
+          },
+          {
+            "id": "35",
+            "text": "back"
+          },
+          {
+            "id": "36",
+            "text": "with"
+          },
+          {
+            "id": "37",
+            "text": "from"
+          },
+          {
+            "id": "38",
+            "text": "You"
+          },
+          {
+            "id": "39",
+            "text": "one"
+          },
+          {
+            "id": "40",
+            "text": "this"
+          },
+          {
+            "id": "41",
+            "text": "but"
+          },
+          {
+            "id": "42",
+            "text": "be"
+          },
+          {
+            "id": "43",
+            "text": "an"
+          },
+          {
+            "id": "44",
+            "text": "of"
+          },
+          {
+            "id": "45",
+            "text": "get"
+          },
+          {
+            "id": "46",
+            "text": "Are"
+          },
+          {
+            "id": "47",
+            "text": "the"
+          },
+          {
+            "id": "48",
+            "text": "her"
+          },
+          {
+            "id": "49",
+            "text": "me"
+          },
+          {
+            "id": "50",
+            "text": "not"
+          },
+          {
+            "id": "51",
+            "text": "mother"
+          },
+          {
+            "id": "52",
+            "text": "said"
+          },
+          {
+            "id": "53",
+            "text": "that"
+          },
+          {
+            "id": "54",
+            "text": "Did"
+          },
+          {
+            "id": "55",
+            "text": "there"
+          },
+          {
+            "id": "56",
+            "text": "dog"
+          },
+          {
+            "id": "57",
+            "text": "to"
+          },
+          {
+            "id": "58",
+            "text": "got"
+          },
+          {
+            "id": "59",
+            "text": "we"
+          },
+          {
+            "id": "60",
+            "text": "make"
+          },
+          {
+            "id": "61",
+            "text": "his"
+          },
+          {
+            "id": "62",
+            "text": "Into"
+          },
+          {
+            "id": "63",
+            "text": "cat"
+          },
+          {
+            "id": "64",
+            "text": "very"
+          },
+          {
+            "id": "65",
+            "text": "no"
+          },
+          {
+            "id": "66",
+            "text": "put"
+          },
+          {
+            "id": "67",
+            "text": "then"
+          },
+          {
+            "id": "68",
+            "text": "on"
+          },
+          {
+            "id": "69",
+            "text": "like"
+          },
+          {
+            "id": "70",
+            "text": "come"
+          },
+          {
+            "id": "71",
+            "text": "your"
+          },
+          {
+            "id": "72",
+            "text": "go"
+          },
+          {
+            "id": "73",
+            "text": "in"
+          },
+          {
+            "id": "74",
+            "text": "where"
+          },
+          {
+            "id": "75",
+            "text": "away"
+          },
+          {
+            "id": "76",
+            "text": "can"
+          },
+          {
+            "id": "77",
+            "text": "little"
+          },
+          {
+            "id": "78",
+            "text": "All"
+          },
+          {
+            "id": "79",
+            "text": "have"
+          },
+          {
+            "id": "80",
+            "text": "down"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "pot",
+          "bell"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            17
+          ]
+        }
+      },
+      "passage": {
+        "text": "Everyone was in the playground at the school. It was after the holidays. The children were playing with their toys. Nomsa had brought a plastic snake along. She had bought it while on holiday with her parents.\n\nMrs May, their teacher, called everyone inside. Anne liked to play tricks. Anne had an idea. She wanted to play a trick on Mrs May.\n\nAnne cried out that she could see a snake in the playground. Sipho said he could see it too. Ben asked what kind of snake it was. Mrs May told them it was a black adder. Anne smiled. She said it was only a plastic snake.\n\nAfter Anne had played her trick, all the children started reading their interesting story books.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 122,
+        "whitespaceTokenCount": 123,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            20
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Who had bought the snake?",
+            "answerText": "Nomsa",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "What was the snake made of?",
+            "answerText": "Plastic",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Who had an idea?",
+            "answerText": "Anne",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "What kind of snake was it?",
+            "answerText": "A black adder",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Why did Anne want to trick the teacher?",
+            "answerText": "(Any acceptable answer.)",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            20
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Passage printed total is 122; whitespace token count is 123. Neither is silently substituted for the other; verify the scoring denominator before use."
+      ]
+    },
+    {
+      "id": "dbe-egra-en-hl-3-v1",
+      "title": "English HL EGRA 3",
+      "languageCode": "en",
+      "languageName": "English",
+      "variant": "hl",
+      "assessmentNumber": 3,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "K"
+          },
+          {
+            "id": "2",
+            "text": "y"
+          },
+          {
+            "id": "3",
+            "text": "r"
+          },
+          {
+            "id": "4",
+            "text": "m"
+          },
+          {
+            "id": "5",
+            "text": "S"
+          },
+          {
+            "id": "6",
+            "text": "I"
+          },
+          {
+            "id": "7",
+            "text": "w"
+          },
+          {
+            "id": "8",
+            "text": "W"
+          },
+          {
+            "id": "9",
+            "text": "U"
+          },
+          {
+            "id": "10",
+            "text": "h"
+          },
+          {
+            "id": "11",
+            "text": "l"
+          },
+          {
+            "id": "12",
+            "text": "n"
+          },
+          {
+            "id": "13",
+            "text": "f"
+          },
+          {
+            "id": "14",
+            "text": "b"
+          },
+          {
+            "id": "15",
+            "text": "O"
+          },
+          {
+            "id": "16",
+            "text": "d"
+          },
+          {
+            "id": "17",
+            "text": "R"
+          },
+          {
+            "id": "18",
+            "text": "f"
+          },
+          {
+            "id": "19",
+            "text": "w"
+          },
+          {
+            "id": "20",
+            "text": "B"
+          },
+          {
+            "id": "21",
+            "text": "s"
+          },
+          {
+            "id": "22",
+            "text": "F"
+          },
+          {
+            "id": "23",
+            "text": "j"
+          },
+          {
+            "id": "24",
+            "text": "T"
+          },
+          {
+            "id": "25",
+            "text": "P"
+          },
+          {
+            "id": "26",
+            "text": "D"
+          },
+          {
+            "id": "27",
+            "text": "G"
+          },
+          {
+            "id": "28",
+            "text": "I"
+          },
+          {
+            "id": "29",
+            "text": "K"
+          },
+          {
+            "id": "30",
+            "text": "E"
+          },
+          {
+            "id": "31",
+            "text": "E"
+          },
+          {
+            "id": "32",
+            "text": "n"
+          },
+          {
+            "id": "33",
+            "text": "C"
+          },
+          {
+            "id": "34",
+            "text": "r"
+          },
+          {
+            "id": "35",
+            "text": "p"
+          },
+          {
+            "id": "36",
+            "text": "a"
+          },
+          {
+            "id": "37",
+            "text": "K"
+          },
+          {
+            "id": "38",
+            "text": "u"
+          },
+          {
+            "id": "39",
+            "text": "t"
+          },
+          {
+            "id": "40",
+            "text": "g"
+          },
+          {
+            "id": "41",
+            "text": "G"
+          },
+          {
+            "id": "42",
+            "text": "c"
+          },
+          {
+            "id": "43",
+            "text": "m"
+          },
+          {
+            "id": "44",
+            "text": "P"
+          },
+          {
+            "id": "45",
+            "text": "B"
+          },
+          {
+            "id": "46",
+            "text": "e"
+          },
+          {
+            "id": "47",
+            "text": "h"
+          },
+          {
+            "id": "48",
+            "text": "B"
+          },
+          {
+            "id": "49",
+            "text": "H"
+          },
+          {
+            "id": "50",
+            "text": "A"
+          },
+          {
+            "id": "51",
+            "text": "t"
+          },
+          {
+            "id": "52",
+            "text": "Y"
+          },
+          {
+            "id": "53",
+            "text": "P"
+          },
+          {
+            "id": "54",
+            "text": "N"
+          },
+          {
+            "id": "55",
+            "text": "M"
+          },
+          {
+            "id": "56",
+            "text": "u"
+          },
+          {
+            "id": "57",
+            "text": "r"
+          },
+          {
+            "id": "58",
+            "text": "M"
+          },
+          {
+            "id": "59",
+            "text": "j"
+          },
+          {
+            "id": "60",
+            "text": "p"
+          },
+          {
+            "id": "61",
+            "text": "i"
+          },
+          {
+            "id": "62",
+            "text": "l"
+          },
+          {
+            "id": "63",
+            "text": "S"
+          },
+          {
+            "id": "64",
+            "text": "o"
+          },
+          {
+            "id": "65",
+            "text": "m"
+          },
+          {
+            "id": "66",
+            "text": "o"
+          },
+          {
+            "id": "67",
+            "text": "F"
+          },
+          {
+            "id": "68",
+            "text": "s"
+          },
+          {
+            "id": "69",
+            "text": "M"
+          },
+          {
+            "id": "70",
+            "text": "F"
+          },
+          {
+            "id": "71",
+            "text": "t"
+          },
+          {
+            "id": "72",
+            "text": "N"
+          },
+          {
+            "id": "73",
+            "text": "p"
+          },
+          {
+            "id": "74",
+            "text": "A"
+          },
+          {
+            "id": "75",
+            "text": "s"
+          },
+          {
+            "id": "76",
+            "text": "L"
+          },
+          {
+            "id": "77",
+            "text": "g"
+          },
+          {
+            "id": "78",
+            "text": "L"
+          },
+          {
+            "id": "79",
+            "text": "Y"
+          },
+          {
+            "id": "80",
+            "text": "R"
+          },
+          {
+            "id": "81",
+            "text": "s"
+          },
+          {
+            "id": "82",
+            "text": "R"
+          },
+          {
+            "id": "83",
+            "text": "E"
+          },
+          {
+            "id": "84",
+            "text": "j"
+          },
+          {
+            "id": "85",
+            "text": "b"
+          },
+          {
+            "id": "86",
+            "text": "k"
+          },
+          {
+            "id": "87",
+            "text": "c"
+          },
+          {
+            "id": "88",
+            "text": "D"
+          },
+          {
+            "id": "89",
+            "text": "d"
+          },
+          {
+            "id": "90",
+            "text": "T"
+          },
+          {
+            "id": "91",
+            "text": "a"
+          },
+          {
+            "id": "92",
+            "text": "g"
+          },
+          {
+            "id": "93",
+            "text": "W"
+          },
+          {
+            "id": "94",
+            "text": "h"
+          },
+          {
+            "id": "95",
+            "text": "l"
+          },
+          {
+            "id": "96",
+            "text": "D"
+          },
+          {
+            "id": "97",
+            "text": "S"
+          },
+          {
+            "id": "98",
+            "text": "y"
+          },
+          {
+            "id": "99",
+            "text": "n"
+          },
+          {
+            "id": "100",
+            "text": "y"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "m",
+          "y"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 100,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            15
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "her"
+          },
+          {
+            "id": "2",
+            "text": "can"
+          },
+          {
+            "id": "3",
+            "text": "in"
+          },
+          {
+            "id": "4",
+            "text": "there"
+          },
+          {
+            "id": "5",
+            "text": "go"
+          },
+          {
+            "id": "6",
+            "text": "back"
+          },
+          {
+            "id": "7",
+            "text": "that"
+          },
+          {
+            "id": "8",
+            "text": "for"
+          },
+          {
+            "id": "9",
+            "text": "one"
+          },
+          {
+            "id": "10",
+            "text": "away"
+          },
+          {
+            "id": "11",
+            "text": "it"
+          },
+          {
+            "id": "12",
+            "text": "had"
+          },
+          {
+            "id": "13",
+            "text": "so"
+          },
+          {
+            "id": "14",
+            "text": "All"
+          },
+          {
+            "id": "15",
+            "text": "came"
+          },
+          {
+            "id": "16",
+            "text": "put"
+          },
+          {
+            "id": "17",
+            "text": "from"
+          },
+          {
+            "id": "18",
+            "text": "do"
+          },
+          {
+            "id": "19",
+            "text": "be"
+          },
+          {
+            "id": "20",
+            "text": "make"
+          },
+          {
+            "id": "21",
+            "text": "a"
+          },
+          {
+            "id": "22",
+            "text": "out"
+          },
+          {
+            "id": "23",
+            "text": "was"
+          },
+          {
+            "id": "24",
+            "text": "dog"
+          },
+          {
+            "id": "25",
+            "text": "and"
+          },
+          {
+            "id": "26",
+            "text": "he"
+          },
+          {
+            "id": "27",
+            "text": "your"
+          },
+          {
+            "id": "28",
+            "text": "down"
+          },
+          {
+            "id": "29",
+            "text": "tree"
+          },
+          {
+            "id": "30",
+            "text": "eat"
+          },
+          {
+            "id": "31",
+            "text": "too"
+          },
+          {
+            "id": "32",
+            "text": "she"
+          },
+          {
+            "id": "33",
+            "text": "now"
+          },
+          {
+            "id": "34",
+            "text": "you"
+          },
+          {
+            "id": "35",
+            "text": "to"
+          },
+          {
+            "id": "36",
+            "text": "then"
+          },
+          {
+            "id": "37",
+            "text": "got"
+          },
+          {
+            "id": "38",
+            "text": "what"
+          },
+          {
+            "id": "39",
+            "text": "me"
+          },
+          {
+            "id": "40",
+            "text": "some"
+          },
+          {
+            "id": "41",
+            "text": "said"
+          },
+          {
+            "id": "42",
+            "text": "day"
+          },
+          {
+            "id": "43",
+            "text": "when"
+          },
+          {
+            "id": "44",
+            "text": "have"
+          },
+          {
+            "id": "45",
+            "text": "look"
+          },
+          {
+            "id": "46",
+            "text": "see"
+          },
+          {
+            "id": "47",
+            "text": "get"
+          },
+          {
+            "id": "48",
+            "text": "went"
+          },
+          {
+            "id": "49",
+            "text": "into"
+          },
+          {
+            "id": "50",
+            "text": "but"
+          },
+          {
+            "id": "51",
+            "text": "on"
+          },
+          {
+            "id": "52",
+            "text": "an"
+          },
+          {
+            "id": "53",
+            "text": "his"
+          },
+          {
+            "id": "54",
+            "text": "very"
+          },
+          {
+            "id": "55",
+            "text": "not"
+          },
+          {
+            "id": "56",
+            "text": "this"
+          },
+          {
+            "id": "57",
+            "text": "is"
+          },
+          {
+            "id": "58",
+            "text": "cat"
+          },
+          {
+            "id": "59",
+            "text": "at"
+          },
+          {
+            "id": "60",
+            "text": "big"
+          },
+          {
+            "id": "61",
+            "text": "of"
+          },
+          {
+            "id": "62",
+            "text": "with"
+          },
+          {
+            "id": "63",
+            "text": "up"
+          },
+          {
+            "id": "64",
+            "text": "here"
+          },
+          {
+            "id": "65",
+            "text": "did"
+          },
+          {
+            "id": "66",
+            "text": "the"
+          },
+          {
+            "id": "67",
+            "text": "like"
+          },
+          {
+            "id": "68",
+            "text": "they"
+          },
+          {
+            "id": "69",
+            "text": "just"
+          },
+          {
+            "id": "70",
+            "text": "come"
+          },
+          {
+            "id": "71",
+            "text": "are"
+          },
+          {
+            "id": "72",
+            "text": "no"
+          },
+          {
+            "id": "73",
+            "text": "mother"
+          },
+          {
+            "id": "74",
+            "text": "we"
+          },
+          {
+            "id": "75",
+            "text": "them"
+          },
+          {
+            "id": "76",
+            "text": "where"
+          },
+          {
+            "id": "77",
+            "text": "my"
+          },
+          {
+            "id": "78",
+            "text": "little"
+          },
+          {
+            "id": "79",
+            "text": "time"
+          },
+          {
+            "id": "80",
+            "text": "will"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "pot",
+          "bell"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            18
+          ]
+        }
+      },
+      "passage": {
+        "text": "Once there was a giant called Nunu. He was big and ugly. He also liked to eat people. One day he saw a clever and brave girl called Lulu. He caught her. Lulu was very scared. He wanted to eat her, but Lulu was too clever for the giant.\n\nLulu told the giant that she would taste better with salt. The giant put Lulu in his bag. He left the bag on the field. Then he went to get the salt from his house.\n\nLulu got out of the bag and ran home to her family.\n\nWhen the giant came back he found that the bag was empty. He was angry and went to bed hungry that night.\n\nLulu was happy, but the giant was disappointed.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 126,
+        "whitespaceTokenCount": 126,
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            21
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "What was the giant’s name?",
+            "answerText": "Nunu",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "What did he like to do?",
+            "answerText": "To eat people",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Where did the giant put the girl?",
+            "answerText": "In his bag",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "What did the girl do after the giant had gone to his house?",
+            "answerText": "Accept any one of these answers: got out of the bag, ran home",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Why do you think the giant was disappointed?",
+            "answerText": "(Any acceptable answer.)",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "english",
+          "pdfPages": [
+            21
+          ]
+        }
+      },
+      "sourceNotes": []
+    },
+    {
+      "id": "dbe-egra-en-fal-1-v1",
+      "title": "English FAL EGRA 1",
+      "languageCode": "en",
+      "languageName": "English",
+      "variant": "fal",
+      "assessmentNumber": 1,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "s"
+          },
+          {
+            "id": "2",
+            "text": "a"
+          },
+          {
+            "id": "3",
+            "text": "t"
+          },
+          {
+            "id": "4",
+            "text": "i"
+          },
+          {
+            "id": "5",
+            "text": "p"
+          },
+          {
+            "id": "6",
+            "text": "n"
+          },
+          {
+            "id": "7",
+            "text": "c"
+          },
+          {
+            "id": "8",
+            "text": "k"
+          },
+          {
+            "id": "9",
+            "text": "e"
+          },
+          {
+            "id": "10",
+            "text": "h"
+          },
+          {
+            "id": "11",
+            "text": "r"
+          },
+          {
+            "id": "12",
+            "text": "m"
+          },
+          {
+            "id": "13",
+            "text": "d"
+          },
+          {
+            "id": "14",
+            "text": "g"
+          },
+          {
+            "id": "15",
+            "text": "o"
+          },
+          {
+            "id": "16",
+            "text": "u"
+          },
+          {
+            "id": "17",
+            "text": "l"
+          },
+          {
+            "id": "18",
+            "text": "f"
+          },
+          {
+            "id": "19",
+            "text": "b"
+          },
+          {
+            "id": "20",
+            "text": "j"
+          },
+          {
+            "id": "21",
+            "text": "n"
+          },
+          {
+            "id": "22",
+            "text": "z"
+          },
+          {
+            "id": "23",
+            "text": "w"
+          },
+          {
+            "id": "24",
+            "text": "v"
+          },
+          {
+            "id": "25",
+            "text": "y"
+          },
+          {
+            "id": "26",
+            "text": "t"
+          },
+          {
+            "id": "27",
+            "text": "a"
+          },
+          {
+            "id": "28",
+            "text": "c"
+          },
+          {
+            "id": "29",
+            "text": "m"
+          },
+          {
+            "id": "30",
+            "text": "o"
+          },
+          {
+            "id": "31",
+            "text": "e"
+          },
+          {
+            "id": "32",
+            "text": "g"
+          },
+          {
+            "id": "33",
+            "text": "b"
+          },
+          {
+            "id": "34",
+            "text": "d"
+          },
+          {
+            "id": "35",
+            "text": "k"
+          },
+          {
+            "id": "36",
+            "text": "l"
+          },
+          {
+            "id": "37",
+            "text": "f"
+          },
+          {
+            "id": "38",
+            "text": "h"
+          },
+          {
+            "id": "39",
+            "text": "u"
+          },
+          {
+            "id": "40",
+            "text": "s"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "a",
+          "c",
+          "t"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 40,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            14
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "I"
+          },
+          {
+            "id": "2",
+            "text": "me"
+          },
+          {
+            "id": "3",
+            "text": "a"
+          },
+          {
+            "id": "4",
+            "text": "my"
+          },
+          {
+            "id": "5",
+            "text": "to"
+          },
+          {
+            "id": "6",
+            "text": "in"
+          },
+          {
+            "id": "7",
+            "text": "he"
+          },
+          {
+            "id": "8",
+            "text": "it"
+          },
+          {
+            "id": "9",
+            "text": "of"
+          },
+          {
+            "id": "10",
+            "text": "and"
+          },
+          {
+            "id": "11",
+            "text": "was"
+          },
+          {
+            "id": "12",
+            "text": "you"
+          },
+          {
+            "id": "13",
+            "text": "we"
+          },
+          {
+            "id": "14",
+            "text": "on"
+          },
+          {
+            "id": "15",
+            "text": "she"
+          },
+          {
+            "id": "16",
+            "text": "is"
+          },
+          {
+            "id": "17",
+            "text": "for"
+          },
+          {
+            "id": "18",
+            "text": "at"
+          },
+          {
+            "id": "19",
+            "text": "his"
+          },
+          {
+            "id": "20",
+            "text": "but"
+          },
+          {
+            "id": "21",
+            "text": "do"
+          },
+          {
+            "id": "22",
+            "text": "am"
+          },
+          {
+            "id": "23",
+            "text": "all"
+          },
+          {
+            "id": "24",
+            "text": "got"
+          },
+          {
+            "id": "25",
+            "text": "can"
+          },
+          {
+            "id": "26",
+            "text": "are"
+          },
+          {
+            "id": "27",
+            "text": "up"
+          },
+          {
+            "id": "28",
+            "text": "or"
+          },
+          {
+            "id": "29",
+            "text": "no"
+          },
+          {
+            "id": "30",
+            "text": "her"
+          },
+          {
+            "id": "31",
+            "text": "us"
+          },
+          {
+            "id": "32",
+            "text": "if"
+          },
+          {
+            "id": "33",
+            "text": "out"
+          },
+          {
+            "id": "34",
+            "text": "this"
+          },
+          {
+            "id": "35",
+            "text": "that"
+          },
+          {
+            "id": "36",
+            "text": "our"
+          },
+          {
+            "id": "37",
+            "text": "be"
+          },
+          {
+            "id": "38",
+            "text": "like"
+          },
+          {
+            "id": "39",
+            "text": "get"
+          },
+          {
+            "id": "40",
+            "text": "so"
+          },
+          {
+            "id": "41",
+            "text": "the"
+          },
+          {
+            "id": "42",
+            "text": "by"
+          },
+          {
+            "id": "43",
+            "text": "mum"
+          },
+          {
+            "id": "44",
+            "text": "now"
+          },
+          {
+            "id": "45",
+            "text": "walk"
+          },
+          {
+            "id": "46",
+            "text": "see"
+          },
+          {
+            "id": "47",
+            "text": "as"
+          },
+          {
+            "id": "48",
+            "text": "dog"
+          },
+          {
+            "id": "49",
+            "text": "saw"
+          },
+          {
+            "id": "50",
+            "text": "big"
+          },
+          {
+            "id": "51",
+            "text": "run"
+          },
+          {
+            "id": "52",
+            "text": "play"
+          },
+          {
+            "id": "53",
+            "text": "love"
+          },
+          {
+            "id": "54",
+            "text": "like"
+          },
+          {
+            "id": "55",
+            "text": "did"
+          },
+          {
+            "id": "56",
+            "text": "may"
+          },
+          {
+            "id": "57",
+            "text": "ran"
+          },
+          {
+            "id": "58",
+            "text": "run"
+          },
+          {
+            "id": "59",
+            "text": "fly"
+          },
+          {
+            "id": "60",
+            "text": "jump"
+          },
+          {
+            "id": "61",
+            "text": "car"
+          },
+          {
+            "id": "62",
+            "text": "cry"
+          },
+          {
+            "id": "63",
+            "text": "look"
+          },
+          {
+            "id": "64",
+            "text": "dad"
+          },
+          {
+            "id": "65",
+            "text": "house"
+          },
+          {
+            "id": "66",
+            "text": "baby"
+          },
+          {
+            "id": "67",
+            "text": "girl"
+          },
+          {
+            "id": "68",
+            "text": "boy"
+          },
+          {
+            "id": "69",
+            "text": "book"
+          },
+          {
+            "id": "70",
+            "text": "stop"
+          },
+          {
+            "id": "71",
+            "text": "will"
+          },
+          {
+            "id": "72",
+            "text": "home"
+          },
+          {
+            "id": "73",
+            "text": "go"
+          },
+          {
+            "id": "74",
+            "text": "sit"
+          },
+          {
+            "id": "75",
+            "text": "some"
+          },
+          {
+            "id": "76",
+            "text": "leg"
+          },
+          {
+            "id": "77",
+            "text": "come"
+          },
+          {
+            "id": "78",
+            "text": "cat"
+          },
+          {
+            "id": "79",
+            "text": "sat"
+          },
+          {
+            "id": "80",
+            "text": "bed"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "me",
+          "my"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            16
+          ]
+        }
+      },
+      "passage": {
+        "text": "Sam and Jill go to school by bus. The bus is red. They take their bags on the bus. The bus stops. What now? Sam looks at Jill. The bus stops for the old man and his dog. The man and his dog get on the bus. They also want to go to school.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 54,
+        "whitespaceTokenCount": 54,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            19
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Who goes to school?",
+            "answerText": "Sam and Jill",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "What colour is the bus?",
+            "answerText": "red",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "What do they take with them?",
+            "answerText": "bags",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Who got on the bus?",
+            "answerText": "A man and his dog",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Where do they want to go?",
+            "answerText": "school",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            19
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Question 1 uses the assessment-page answer Sam and Jill; the earlier worked example prints Sam/Jill."
+      ]
+    },
+    {
+      "id": "dbe-egra-en-fal-2-v1",
+      "title": "English FAL EGRA 2",
+      "languageCode": "en",
+      "languageName": "English",
+      "variant": "fal",
+      "assessmentNumber": 2,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "e"
+          },
+          {
+            "id": "2",
+            "text": "n"
+          },
+          {
+            "id": "3",
+            "text": "r"
+          },
+          {
+            "id": "4",
+            "text": "s"
+          },
+          {
+            "id": "5",
+            "text": "a"
+          },
+          {
+            "id": "6",
+            "text": "m"
+          },
+          {
+            "id": "7",
+            "text": "z"
+          },
+          {
+            "id": "8",
+            "text": "g"
+          },
+          {
+            "id": "9",
+            "text": "t"
+          },
+          {
+            "id": "10",
+            "text": "n"
+          },
+          {
+            "id": "11",
+            "text": "t"
+          },
+          {
+            "id": "12",
+            "text": "d"
+          },
+          {
+            "id": "13",
+            "text": "w"
+          },
+          {
+            "id": "14",
+            "text": "b"
+          },
+          {
+            "id": "15",
+            "text": "i"
+          },
+          {
+            "id": "16",
+            "text": "g"
+          },
+          {
+            "id": "17",
+            "text": "v"
+          },
+          {
+            "id": "18",
+            "text": "d"
+          },
+          {
+            "id": "19",
+            "text": "f"
+          },
+          {
+            "id": "20",
+            "text": "y"
+          },
+          {
+            "id": "21",
+            "text": "k"
+          },
+          {
+            "id": "22",
+            "text": "y"
+          },
+          {
+            "id": "23",
+            "text": "o"
+          },
+          {
+            "id": "24",
+            "text": "p"
+          },
+          {
+            "id": "25",
+            "text": "n"
+          },
+          {
+            "id": "26",
+            "text": "u"
+          },
+          {
+            "id": "27",
+            "text": "t"
+          },
+          {
+            "id": "28",
+            "text": "l"
+          },
+          {
+            "id": "29",
+            "text": "k"
+          },
+          {
+            "id": "30",
+            "text": "g"
+          },
+          {
+            "id": "31",
+            "text": "c"
+          },
+          {
+            "id": "32",
+            "text": "a"
+          },
+          {
+            "id": "33",
+            "text": "f"
+          },
+          {
+            "id": "34",
+            "text": "h"
+          },
+          {
+            "id": "35",
+            "text": "j"
+          },
+          {
+            "id": "36",
+            "text": "q"
+          },
+          {
+            "id": "37",
+            "text": "u"
+          },
+          {
+            "id": "38",
+            "text": "v"
+          },
+          {
+            "id": "39",
+            "text": "c"
+          },
+          {
+            "id": "40",
+            "text": "r"
+          },
+          {
+            "id": "41",
+            "text": "d"
+          },
+          {
+            "id": "42",
+            "text": "t"
+          },
+          {
+            "id": "43",
+            "text": "y"
+          },
+          {
+            "id": "44",
+            "text": "a"
+          },
+          {
+            "id": "45",
+            "text": "m"
+          },
+          {
+            "id": "46",
+            "text": "s"
+          },
+          {
+            "id": "47",
+            "text": "x"
+          },
+          {
+            "id": "48",
+            "text": "w"
+          },
+          {
+            "id": "49",
+            "text": "z"
+          },
+          {
+            "id": "50",
+            "text": "u"
+          },
+          {
+            "id": "51",
+            "text": "b"
+          },
+          {
+            "id": "52",
+            "text": "n"
+          },
+          {
+            "id": "53",
+            "text": "l"
+          },
+          {
+            "id": "54",
+            "text": "j"
+          },
+          {
+            "id": "55",
+            "text": "v"
+          },
+          {
+            "id": "56",
+            "text": "o"
+          },
+          {
+            "id": "57",
+            "text": "s"
+          },
+          {
+            "id": "58",
+            "text": "h"
+          },
+          {
+            "id": "59",
+            "text": "i"
+          },
+          {
+            "id": "60",
+            "text": "p"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "r",
+          "m",
+          "q"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 60,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            14
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "not"
+          },
+          {
+            "id": "2",
+            "text": "let"
+          },
+          {
+            "id": "3",
+            "text": "fun"
+          },
+          {
+            "id": "4",
+            "text": "all"
+          },
+          {
+            "id": "5",
+            "text": "with"
+          },
+          {
+            "id": "6",
+            "text": "good"
+          },
+          {
+            "id": "7",
+            "text": "bad"
+          },
+          {
+            "id": "8",
+            "text": "when"
+          },
+          {
+            "id": "9",
+            "text": "top"
+          },
+          {
+            "id": "10",
+            "text": "down"
+          },
+          {
+            "id": "11",
+            "text": "live"
+          },
+          {
+            "id": "12",
+            "text": "has"
+          },
+          {
+            "id": "13",
+            "text": "him"
+          },
+          {
+            "id": "14",
+            "text": "hug"
+          },
+          {
+            "id": "15",
+            "text": "what"
+          },
+          {
+            "id": "16",
+            "text": "time"
+          },
+          {
+            "id": "17",
+            "text": "there"
+          },
+          {
+            "id": "18",
+            "text": "were"
+          },
+          {
+            "id": "19",
+            "text": "man"
+          },
+          {
+            "id": "20",
+            "text": "have"
+          },
+          {
+            "id": "21",
+            "text": "call"
+          },
+          {
+            "id": "22",
+            "text": "make"
+          },
+          {
+            "id": "23",
+            "text": "here"
+          },
+          {
+            "id": "24",
+            "text": "how"
+          },
+          {
+            "id": "25",
+            "text": "they"
+          },
+          {
+            "id": "26",
+            "text": "took"
+          },
+          {
+            "id": "27",
+            "text": "well"
+          },
+          {
+            "id": "28",
+            "text": "work"
+          },
+          {
+            "id": "29",
+            "text": "door"
+          },
+          {
+            "id": "30",
+            "text": "made"
+          },
+          {
+            "id": "31",
+            "text": "friend"
+          },
+          {
+            "id": "32",
+            "text": "had"
+          },
+          {
+            "id": "33",
+            "text": "back"
+          },
+          {
+            "id": "34",
+            "text": "your"
+          },
+          {
+            "id": "35",
+            "text": "put"
+          },
+          {
+            "id": "36",
+            "text": "night"
+          },
+          {
+            "id": "37",
+            "text": "mother"
+          },
+          {
+            "id": "38",
+            "text": "then"
+          },
+          {
+            "id": "39",
+            "text": "met"
+          },
+          {
+            "id": "40",
+            "text": "into"
+          },
+          {
+            "id": "41",
+            "text": "from"
+          },
+          {
+            "id": "42",
+            "text": "over"
+          },
+          {
+            "id": "43",
+            "text": "them"
+          },
+          {
+            "id": "44",
+            "text": "who"
+          },
+          {
+            "id": "45",
+            "text": "hen"
+          },
+          {
+            "id": "46",
+            "text": "day"
+          },
+          {
+            "id": "47",
+            "text": "give"
+          },
+          {
+            "id": "48",
+            "text": "far"
+          },
+          {
+            "id": "49",
+            "text": "going"
+          },
+          {
+            "id": "50",
+            "text": "said"
+          },
+          {
+            "id": "51",
+            "text": "tell"
+          },
+          {
+            "id": "52",
+            "text": "take"
+          },
+          {
+            "id": "53",
+            "text": "best"
+          },
+          {
+            "id": "54",
+            "text": "school"
+          },
+          {
+            "id": "55",
+            "text": "teacher"
+          },
+          {
+            "id": "56",
+            "text": "went"
+          },
+          {
+            "id": "57",
+            "text": "old"
+          },
+          {
+            "id": "58",
+            "text": "after"
+          },
+          {
+            "id": "59",
+            "text": "new"
+          },
+          {
+            "id": "60",
+            "text": "ask"
+          }
+        ],
+        "columns": 6,
+        "practiceItems": [
+          "no",
+          "go"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            17
+          ]
+        }
+      },
+      "passage": {
+        "text": "Mpho goes to the farm to visit his friend, Buhle. The boys like to help to feed the animals. They give the hens food and water. They run to the dam to see the ducks. Then Buhle falls into the dam with a big splash. Help me! Help me! He screams. Mpho jumps in and pulls Buhle from the water. They are both very wet. The boys sit in the sun until they are dry.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 75,
+        "whitespaceTokenCount": 75,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            20
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Who is Mpho’s friend?",
+            "answerText": "Buhle",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Where does his friend live?",
+            "answerText": "On the farm",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Why do the boys go to the dam?",
+            "answerText": "To see the ducks",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "What happened to Buhle?",
+            "answerText": "He fell in the dam/water",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Why do the boys sit in the sun?",
+            "answerText": "To dry themselves",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            20
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Word chart is labelled 80 words but visibly contains 10 rows of 6 (60). All 60 entries are retained."
+      ]
+    },
+    {
+      "id": "dbe-egra-en-fal-3-v1",
+      "title": "English FAL EGRA 3",
+      "languageCode": "en",
+      "languageName": "English",
+      "variant": "fal",
+      "assessmentNumber": 3,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "B"
+          },
+          {
+            "id": "2",
+            "text": "n"
+          },
+          {
+            "id": "3",
+            "text": "l"
+          },
+          {
+            "id": "4",
+            "text": "j"
+          },
+          {
+            "id": "5",
+            "text": "v"
+          },
+          {
+            "id": "6",
+            "text": "o"
+          },
+          {
+            "id": "7",
+            "text": "S"
+          },
+          {
+            "id": "8",
+            "text": "h"
+          },
+          {
+            "id": "9",
+            "text": "g"
+          },
+          {
+            "id": "10",
+            "text": "d"
+          },
+          {
+            "id": "11",
+            "text": "e"
+          },
+          {
+            "id": "12",
+            "text": "T"
+          },
+          {
+            "id": "13",
+            "text": "k"
+          },
+          {
+            "id": "14",
+            "text": "y"
+          },
+          {
+            "id": "15",
+            "text": "I"
+          },
+          {
+            "id": "16",
+            "text": "c"
+          },
+          {
+            "id": "17",
+            "text": "r"
+          },
+          {
+            "id": "18",
+            "text": "w"
+          },
+          {
+            "id": "19",
+            "text": "o"
+          },
+          {
+            "id": "20",
+            "text": "F"
+          },
+          {
+            "id": "21",
+            "text": "v"
+          },
+          {
+            "id": "22",
+            "text": "q"
+          },
+          {
+            "id": "23",
+            "text": "U"
+          },
+          {
+            "id": "24",
+            "text": "p"
+          },
+          {
+            "id": "25",
+            "text": "a"
+          },
+          {
+            "id": "26",
+            "text": "m"
+          },
+          {
+            "id": "27",
+            "text": "z"
+          },
+          {
+            "id": "28",
+            "text": "G"
+          },
+          {
+            "id": "29",
+            "text": "y"
+          },
+          {
+            "id": "30",
+            "text": "a"
+          },
+          {
+            "id": "31",
+            "text": "x"
+          },
+          {
+            "id": "32",
+            "text": "r"
+          },
+          {
+            "id": "33",
+            "text": "t"
+          },
+          {
+            "id": "34",
+            "text": "f"
+          },
+          {
+            "id": "35",
+            "text": "W"
+          },
+          {
+            "id": "36",
+            "text": "n"
+          },
+          {
+            "id": "37",
+            "text": "d"
+          },
+          {
+            "id": "38",
+            "text": "v"
+          },
+          {
+            "id": "39",
+            "text": "m"
+          },
+          {
+            "id": "40",
+            "text": "z"
+          },
+          {
+            "id": "41",
+            "text": "A"
+          },
+          {
+            "id": "42",
+            "text": "p"
+          },
+          {
+            "id": "43",
+            "text": "g"
+          },
+          {
+            "id": "44",
+            "text": "E"
+          },
+          {
+            "id": "45",
+            "text": "h"
+          },
+          {
+            "id": "46",
+            "text": "j"
+          },
+          {
+            "id": "47",
+            "text": "b"
+          },
+          {
+            "id": "48",
+            "text": "e"
+          },
+          {
+            "id": "49",
+            "text": "J"
+          },
+          {
+            "id": "50",
+            "text": "r"
+          },
+          {
+            "id": "51",
+            "text": "f"
+          },
+          {
+            "id": "52",
+            "text": "o"
+          },
+          {
+            "id": "53",
+            "text": "w"
+          },
+          {
+            "id": "54",
+            "text": "r"
+          },
+          {
+            "id": "55",
+            "text": "C"
+          },
+          {
+            "id": "56",
+            "text": "i"
+          },
+          {
+            "id": "57",
+            "text": "y"
+          },
+          {
+            "id": "58",
+            "text": "u"
+          },
+          {
+            "id": "59",
+            "text": "t"
+          },
+          {
+            "id": "60",
+            "text": "e"
+          },
+          {
+            "id": "61",
+            "text": "h"
+          },
+          {
+            "id": "62",
+            "text": "K"
+          },
+          {
+            "id": "63",
+            "text": "t"
+          },
+          {
+            "id": "64",
+            "text": "i"
+          },
+          {
+            "id": "65",
+            "text": "p"
+          },
+          {
+            "id": "66",
+            "text": "n"
+          },
+          {
+            "id": "67",
+            "text": "c"
+          },
+          {
+            "id": "68",
+            "text": "l"
+          },
+          {
+            "id": "69",
+            "text": "A"
+          },
+          {
+            "id": "70",
+            "text": "s"
+          },
+          {
+            "id": "71",
+            "text": "d"
+          },
+          {
+            "id": "72",
+            "text": "f"
+          },
+          {
+            "id": "73",
+            "text": "M"
+          },
+          {
+            "id": "74",
+            "text": "k"
+          },
+          {
+            "id": "75",
+            "text": "o"
+          },
+          {
+            "id": "76",
+            "text": "v"
+          },
+          {
+            "id": "77",
+            "text": "D"
+          },
+          {
+            "id": "78",
+            "text": "t"
+          },
+          {
+            "id": "79",
+            "text": "u"
+          },
+          {
+            "id": "80",
+            "text": "c"
+          },
+          {
+            "id": "81",
+            "text": "g"
+          },
+          {
+            "id": "82",
+            "text": "k"
+          },
+          {
+            "id": "83",
+            "text": "b"
+          },
+          {
+            "id": "84",
+            "text": "s"
+          },
+          {
+            "id": "85",
+            "text": "a"
+          },
+          {
+            "id": "86",
+            "text": "L"
+          },
+          {
+            "id": "87",
+            "text": "e"
+          },
+          {
+            "id": "88",
+            "text": "n"
+          },
+          {
+            "id": "89",
+            "text": "H"
+          },
+          {
+            "id": "90",
+            "text": "p"
+          },
+          {
+            "id": "91",
+            "text": "j"
+          },
+          {
+            "id": "92",
+            "text": "t"
+          },
+          {
+            "id": "93",
+            "text": "u"
+          },
+          {
+            "id": "94",
+            "text": "v"
+          },
+          {
+            "id": "95",
+            "text": "x"
+          },
+          {
+            "id": "96",
+            "text": "Y"
+          },
+          {
+            "id": "97",
+            "text": "i"
+          },
+          {
+            "id": "98",
+            "text": "q"
+          },
+          {
+            "id": "99",
+            "text": "m"
+          },
+          {
+            "id": "100",
+            "text": "l"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "d",
+          "h",
+          "v"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 100,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            15
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "yes"
+          },
+          {
+            "id": "2",
+            "text": "just"
+          },
+          {
+            "id": "3",
+            "text": "wish"
+          },
+          {
+            "id": "4",
+            "text": "draw"
+          },
+          {
+            "id": "5",
+            "text": "came"
+          },
+          {
+            "id": "6",
+            "text": "little"
+          },
+          {
+            "id": "7",
+            "text": "with"
+          },
+          {
+            "id": "8",
+            "text": "catch"
+          },
+          {
+            "id": "9",
+            "text": "try"
+          },
+          {
+            "id": "10",
+            "text": "top"
+          },
+          {
+            "id": "11",
+            "text": "meet"
+          },
+          {
+            "id": "12",
+            "text": "must"
+          },
+          {
+            "id": "13",
+            "text": "fell"
+          },
+          {
+            "id": "14",
+            "text": "told"
+          },
+          {
+            "id": "15",
+            "text": "gone"
+          },
+          {
+            "id": "16",
+            "text": "fire"
+          },
+          {
+            "id": "17",
+            "text": "table"
+          },
+          {
+            "id": "18",
+            "text": "fall"
+          },
+          {
+            "id": "19",
+            "text": "last"
+          },
+          {
+            "id": "20",
+            "text": "things"
+          },
+          {
+            "id": "21",
+            "text": "small"
+          },
+          {
+            "id": "22",
+            "text": "very"
+          },
+          {
+            "id": "23",
+            "text": "fast"
+          },
+          {
+            "id": "24",
+            "text": "sister"
+          },
+          {
+            "id": "25",
+            "text": "pull"
+          },
+          {
+            "id": "26",
+            "text": "gave"
+          },
+          {
+            "id": "27",
+            "text": "sky"
+          },
+          {
+            "id": "28",
+            "text": "take"
+          },
+          {
+            "id": "29",
+            "text": "took"
+          },
+          {
+            "id": "30",
+            "text": "goes"
+          },
+          {
+            "id": "31",
+            "text": "why"
+          },
+          {
+            "id": "32",
+            "text": "most"
+          },
+          {
+            "id": "33",
+            "text": "small"
+          },
+          {
+            "id": "34",
+            "text": "been"
+          },
+          {
+            "id": "35",
+            "text": "write"
+          },
+          {
+            "id": "36",
+            "text": "where"
+          },
+          {
+            "id": "37",
+            "text": "end"
+          },
+          {
+            "id": "38",
+            "text": "every"
+          },
+          {
+            "id": "39",
+            "text": "happy"
+          },
+          {
+            "id": "40",
+            "text": "took"
+          },
+          {
+            "id": "41",
+            "text": "thing"
+          },
+          {
+            "id": "42",
+            "text": "each"
+          },
+          {
+            "id": "43",
+            "text": "better"
+          },
+          {
+            "id": "44",
+            "text": "over"
+          },
+          {
+            "id": "45",
+            "text": "help"
+          },
+          {
+            "id": "46",
+            "text": "sleep"
+          },
+          {
+            "id": "47",
+            "text": "children"
+          },
+          {
+            "id": "48",
+            "text": "please"
+          },
+          {
+            "id": "49",
+            "text": "away"
+          },
+          {
+            "id": "50",
+            "text": "tree"
+          },
+          {
+            "id": "51",
+            "text": "many"
+          },
+          {
+            "id": "52",
+            "text": "find"
+          },
+          {
+            "id": "53",
+            "text": "know"
+          },
+          {
+            "id": "54",
+            "text": "cold"
+          },
+          {
+            "id": "55",
+            "text": "today"
+          },
+          {
+            "id": "56",
+            "text": "think"
+          },
+          {
+            "id": "57",
+            "text": "again"
+          },
+          {
+            "id": "58",
+            "text": "own"
+          },
+          {
+            "id": "59",
+            "text": "open"
+          },
+          {
+            "id": "60",
+            "text": "read"
+          },
+          {
+            "id": "61",
+            "text": "began"
+          },
+          {
+            "id": "62",
+            "text": "eight"
+          },
+          {
+            "id": "63",
+            "text": "along"
+          },
+          {
+            "id": "64",
+            "text": "early"
+          },
+          {
+            "id": "65",
+            "text": "inside"
+          },
+          {
+            "id": "66",
+            "text": "late"
+          },
+          {
+            "id": "67",
+            "text": "about"
+          },
+          {
+            "id": "68",
+            "text": "before"
+          },
+          {
+            "id": "69",
+            "text": "long"
+          },
+          {
+            "id": "70",
+            "text": "where"
+          },
+          {
+            "id": "71",
+            "text": "cried"
+          },
+          {
+            "id": "72",
+            "text": "much"
+          },
+          {
+            "id": "73",
+            "text": "party"
+          },
+          {
+            "id": "74",
+            "text": "brother"
+          },
+          {
+            "id": "75",
+            "text": "never"
+          },
+          {
+            "id": "76",
+            "text": "across"
+          },
+          {
+            "id": "77",
+            "text": "soon"
+          },
+          {
+            "id": "78",
+            "text": "three"
+          },
+          {
+            "id": "79",
+            "text": "could"
+          },
+          {
+            "id": "80",
+            "text": "always"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "me",
+          "be"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            18
+          ]
+        }
+      },
+      "passage": {
+        "text": "Lebo is very excited. It is her birthday. She is eight years old. She wants a bike. Dad gives her a surprise on her birthday. He hides her gift in the garden. She hears Dad singing in the garden. Happy birthday! my dear Lebo . She looks behind the big tree and sees Dad with the bike. He gives her a big smile. Lebo is so happy and she shouts with joy. “Is this bike for me! Dad?” Yes! It is your gift Lebo. Thank you very much, Dad. Now I will ride my new bike to school.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 95,
+        "whitespaceTokenCount": 98,
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            21
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "What does Lebo want for her birthday?",
+            "answerText": "A bike",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "How old is Lebo?",
+            "answerText": "8",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Where did she find her gift?",
+            "answerText": "In the garden",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Why did her dad hide the bike?",
+            "answerText": "He wanted to surprise her",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Why do you think Lebo wanted a bike?",
+            "answerText": "To ride to school",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "efal",
+          "pdfPages": [
+            22
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Source spacing before the full stop in Lebo . is preserved. Do not treat whitespaceTokenCount as a validated oral-reading scoring denominator.",
+        "Passage printed total is 95; whitespace token count is 98. Neither is silently substituted for the other; verify the scoring denominator before use."
+      ]
+    },
+    {
+      "id": "dbe-egra-af-hl-1-v1",
+      "title": "Afrikaans EGRA 1",
+      "languageCode": "af",
+      "languageName": "Afrikaans",
+      "variant": "hl",
+      "assessmentNumber": 1,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "s"
+          },
+          {
+            "id": "2",
+            "text": "n"
+          },
+          {
+            "id": "3",
+            "text": "i"
+          },
+          {
+            "id": "4",
+            "text": "w"
+          },
+          {
+            "id": "5",
+            "text": "M"
+          },
+          {
+            "id": "6",
+            "text": "j"
+          },
+          {
+            "id": "7",
+            "text": "t"
+          },
+          {
+            "id": "8",
+            "text": "y"
+          },
+          {
+            "id": "9",
+            "text": "a"
+          },
+          {
+            "id": "10",
+            "text": "h"
+          },
+          {
+            "id": "11",
+            "text": "r"
+          },
+          {
+            "id": "12",
+            "text": "e"
+          },
+          {
+            "id": "13",
+            "text": "H"
+          },
+          {
+            "id": "14",
+            "text": "o"
+          },
+          {
+            "id": "15",
+            "text": "T"
+          },
+          {
+            "id": "16",
+            "text": "k"
+          },
+          {
+            "id": "17",
+            "text": "i"
+          },
+          {
+            "id": "18",
+            "text": "e"
+          },
+          {
+            "id": "19",
+            "text": "l"
+          },
+          {
+            "id": "20",
+            "text": "o"
+          },
+          {
+            "id": "21",
+            "text": "e"
+          },
+          {
+            "id": "22",
+            "text": "n"
+          },
+          {
+            "id": "23",
+            "text": "f"
+          },
+          {
+            "id": "24",
+            "text": "v"
+          },
+          {
+            "id": "25",
+            "text": "B"
+          },
+          {
+            "id": "26",
+            "text": "k"
+          },
+          {
+            "id": "27",
+            "text": "O"
+          },
+          {
+            "id": "28",
+            "text": "d"
+          },
+          {
+            "id": "29",
+            "text": "a"
+          },
+          {
+            "id": "30",
+            "text": "T"
+          },
+          {
+            "id": "31",
+            "text": "g"
+          },
+          {
+            "id": "32",
+            "text": "s"
+          },
+          {
+            "id": "33",
+            "text": "u"
+          },
+          {
+            "id": "34",
+            "text": "A"
+          },
+          {
+            "id": "35",
+            "text": "i"
+          },
+          {
+            "id": "36",
+            "text": "r"
+          },
+          {
+            "id": "37",
+            "text": "x"
+          },
+          {
+            "id": "38",
+            "text": "P"
+          },
+          {
+            "id": "39",
+            "text": "d"
+          },
+          {
+            "id": "40",
+            "text": "z"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "b",
+          "s"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 40,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            14
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "as"
+          },
+          {
+            "id": "2",
+            "text": "die"
+          },
+          {
+            "id": "3",
+            "text": "in"
+          },
+          {
+            "id": "4",
+            "text": "kyk"
+          },
+          {
+            "id": "5",
+            "text": "min"
+          },
+          {
+            "id": "6",
+            "text": "oog"
+          },
+          {
+            "id": "7",
+            "text": "ry"
+          },
+          {
+            "id": "8",
+            "text": "son"
+          },
+          {
+            "id": "9",
+            "text": "baie"
+          },
+          {
+            "id": "10",
+            "text": "een"
+          },
+          {
+            "id": "11",
+            "text": "is"
+          },
+          {
+            "id": "12",
+            "text": "lag"
+          },
+          {
+            "id": "13",
+            "text": "mooi"
+          },
+          {
+            "id": "14",
+            "text": "op"
+          },
+          {
+            "id": "15",
+            "text": "saam"
+          },
+          {
+            "id": "16",
+            "text": "val"
+          },
+          {
+            "id": "17",
+            "text": "sit"
+          },
+          {
+            "id": "18",
+            "text": "bal"
+          },
+          {
+            "id": "19",
+            "text": "ek"
+          },
+          {
+            "id": "20",
+            "text": "jas"
+          },
+          {
+            "id": "21",
+            "text": "lig"
+          },
+          {
+            "id": "22",
+            "text": "kan"
+          },
+          {
+            "id": "23",
+            "text": "ou"
+          },
+          {
+            "id": "24",
+            "text": "sal"
+          },
+          {
+            "id": "25",
+            "text": "vir"
+          },
+          {
+            "id": "26",
+            "text": "so"
+          },
+          {
+            "id": "27",
+            "text": "vis"
+          },
+          {
+            "id": "28",
+            "text": "en"
+          },
+          {
+            "id": "29",
+            "text": "jou"
+          },
+          {
+            "id": "30",
+            "text": "ons"
+          },
+          {
+            "id": "31",
+            "text": "my"
+          },
+          {
+            "id": "32",
+            "text": "pa"
+          },
+          {
+            "id": "33",
+            "text": "skool"
+          },
+          {
+            "id": "34",
+            "text": "vuur"
+          },
+          {
+            "id": "35",
+            "text": "om"
+          },
+          {
+            "id": "36",
+            "text": "gaan"
+          },
+          {
+            "id": "37",
+            "text": "jy"
+          },
+          {
+            "id": "38",
+            "text": "maak"
+          },
+          {
+            "id": "39",
+            "text": "na"
+          },
+          {
+            "id": "40",
+            "text": "paar"
+          },
+          {
+            "id": "41",
+            "text": "pas"
+          },
+          {
+            "id": "42",
+            "text": "been"
+          },
+          {
+            "id": "43",
+            "text": "wag"
+          },
+          {
+            "id": "44",
+            "text": "boek"
+          },
+          {
+            "id": "45",
+            "text": "goed"
+          },
+          {
+            "id": "46",
+            "text": "Met"
+          },
+          {
+            "id": "47",
+            "text": "mal"
+          },
+          {
+            "id": "48",
+            "text": "nes"
+          },
+          {
+            "id": "49",
+            "text": "boom"
+          },
+          {
+            "id": "50",
+            "text": "het"
+          },
+          {
+            "id": "51",
+            "text": "kas"
+          },
+          {
+            "id": "52",
+            "text": "man"
+          },
+          {
+            "id": "53",
+            "text": "nie"
+          },
+          {
+            "id": "54",
+            "text": "pos"
+          },
+          {
+            "id": "55",
+            "text": "som"
+          },
+          {
+            "id": "56",
+            "text": "wal"
+          },
+          {
+            "id": "57",
+            "text": "tee"
+          },
+          {
+            "id": "58",
+            "text": "wen"
+          },
+          {
+            "id": "59",
+            "text": "bus"
+          },
+          {
+            "id": "60",
+            "text": "loop"
+          },
+          {
+            "id": "61",
+            "text": "kat"
+          },
+          {
+            "id": "62",
+            "text": "mat"
+          },
+          {
+            "id": "63",
+            "text": "nou"
+          },
+          {
+            "id": "64",
+            "text": "pot"
+          },
+          {
+            "id": "65",
+            "text": "Wil"
+          },
+          {
+            "id": "66",
+            "text": "daar"
+          },
+          {
+            "id": "67",
+            "text": "hou"
+          },
+          {
+            "id": "68",
+            "text": "koek"
+          },
+          {
+            "id": "69",
+            "text": "meer"
+          },
+          {
+            "id": "70",
+            "text": "bo"
+          },
+          {
+            "id": "71",
+            "text": "reg"
+          },
+          {
+            "id": "72",
+            "text": "sy"
+          },
+          {
+            "id": "73",
+            "text": "dak"
+          },
+          {
+            "id": "74",
+            "text": "huis"
+          },
+          {
+            "id": "75",
+            "text": "kom"
+          },
+          {
+            "id": "76",
+            "text": "muis"
+          },
+          {
+            "id": "77",
+            "text": "haan"
+          },
+          {
+            "id": "78",
+            "text": "rus"
+          },
+          {
+            "id": "79",
+            "text": "tak"
+          },
+          {
+            "id": "80",
+            "text": "wit"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "pot",
+          "jas"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            16
+          ]
+        }
+      },
+      "passage": {
+        "text": "Jan het ’n hond. Die hond is klein en vet. Eendag gaan Jan en die hond buite speel.\n\nDie hond raak weg, maar na ’n rukkie kom hy weer terug.\n\nJan neem die hond huis toe. By die huis gee Jan die hond ’n groot been. Die hond is baie gelukkig en raak gou aan die slaap. Jan gaan ook slaap. Hulle slaap lekker.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 64,
+        "whitespaceTokenCount": 64,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            19
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Wie het ’n hond?",
+            "answerText": "Jan",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Was die hond groot of klein?",
+            "answerText": "Klein",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Was die hond vet of maer?",
+            "answerText": "Vet",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Waarheen het Jan die hond geneem?",
+            "answerText": "Aanvaar ‘om buite te speel’ of ‘huis toe geneem’",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Wat het die hond gedoen nadat hy die been gekry het?",
+            "answerText": "Hy het gaan slaap.",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            19
+          ]
+        }
+      },
+      "sourceNotes": []
+    },
+    {
+      "id": "dbe-egra-af-hl-2-v1",
+      "title": "Afrikaans EGRA 2",
+      "languageCode": "af",
+      "languageName": "Afrikaans",
+      "variant": "hl",
+      "assessmentNumber": 2,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "v"
+          },
+          {
+            "id": "2",
+            "text": "n"
+          },
+          {
+            "id": "3",
+            "text": "b"
+          },
+          {
+            "id": "4",
+            "text": "y"
+          },
+          {
+            "id": "5",
+            "text": "x"
+          },
+          {
+            "id": "6",
+            "text": "o"
+          },
+          {
+            "id": "7",
+            "text": "z"
+          },
+          {
+            "id": "8",
+            "text": "e"
+          },
+          {
+            "id": "9",
+            "text": "g"
+          },
+          {
+            "id": "10",
+            "text": "j"
+          },
+          {
+            "id": "11",
+            "text": "g"
+          },
+          {
+            "id": "12",
+            "text": "t"
+          },
+          {
+            "id": "13",
+            "text": "w"
+          },
+          {
+            "id": "14",
+            "text": "d"
+          },
+          {
+            "id": "15",
+            "text": "t"
+          },
+          {
+            "id": "16",
+            "text": "b"
+          },
+          {
+            "id": "17",
+            "text": "k"
+          },
+          {
+            "id": "18",
+            "text": "V"
+          },
+          {
+            "id": "19",
+            "text": "e"
+          },
+          {
+            "id": "20",
+            "text": "i"
+          },
+          {
+            "id": "21",
+            "text": "j"
+          },
+          {
+            "id": "22",
+            "text": "e"
+          },
+          {
+            "id": "23",
+            "text": "h"
+          },
+          {
+            "id": "24",
+            "text": "r"
+          },
+          {
+            "id": "25",
+            "text": "l"
+          },
+          {
+            "id": "26",
+            "text": "k"
+          },
+          {
+            "id": "27",
+            "text": "R"
+          },
+          {
+            "id": "28",
+            "text": "t"
+          },
+          {
+            "id": "29",
+            "text": "s"
+          },
+          {
+            "id": "30",
+            "text": "r"
+          },
+          {
+            "id": "31",
+            "text": "y"
+          },
+          {
+            "id": "32",
+            "text": "a"
+          },
+          {
+            "id": "33",
+            "text": "u"
+          },
+          {
+            "id": "34",
+            "text": "o"
+          },
+          {
+            "id": "35",
+            "text": "E"
+          },
+          {
+            "id": "36",
+            "text": "f"
+          },
+          {
+            "id": "37",
+            "text": "n"
+          },
+          {
+            "id": "38",
+            "text": "M"
+          },
+          {
+            "id": "39",
+            "text": "x"
+          },
+          {
+            "id": "40",
+            "text": "s"
+          },
+          {
+            "id": "41",
+            "text": "o"
+          },
+          {
+            "id": "42",
+            "text": "n"
+          },
+          {
+            "id": "43",
+            "text": "H"
+          },
+          {
+            "id": "44",
+            "text": "p"
+          },
+          {
+            "id": "45",
+            "text": "D"
+          },
+          {
+            "id": "46",
+            "text": "i"
+          },
+          {
+            "id": "47",
+            "text": "o"
+          },
+          {
+            "id": "48",
+            "text": "A"
+          },
+          {
+            "id": "49",
+            "text": "z"
+          },
+          {
+            "id": "50",
+            "text": "a"
+          },
+          {
+            "id": "51",
+            "text": "U"
+          },
+          {
+            "id": "52",
+            "text": "I"
+          },
+          {
+            "id": "53",
+            "text": "F"
+          },
+          {
+            "id": "54",
+            "text": "t"
+          },
+          {
+            "id": "55",
+            "text": "u"
+          },
+          {
+            "id": "56",
+            "text": "G"
+          },
+          {
+            "id": "57",
+            "text": "M"
+          },
+          {
+            "id": "58",
+            "text": "e"
+          },
+          {
+            "id": "59",
+            "text": "r"
+          },
+          {
+            "id": "60",
+            "text": "B"
+          },
+          {
+            "id": "61",
+            "text": "h"
+          },
+          {
+            "id": "62",
+            "text": "p"
+          },
+          {
+            "id": "63",
+            "text": "m"
+          },
+          {
+            "id": "64",
+            "text": "l"
+          },
+          {
+            "id": "65",
+            "text": "B"
+          },
+          {
+            "id": "66",
+            "text": "F"
+          },
+          {
+            "id": "67",
+            "text": "A"
+          },
+          {
+            "id": "68",
+            "text": "g"
+          },
+          {
+            "id": "69",
+            "text": "f"
+          },
+          {
+            "id": "70",
+            "text": "E"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "b",
+          "s"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 60,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            14
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "die"
+          },
+          {
+            "id": "2",
+            "text": "een"
+          },
+          {
+            "id": "3",
+            "text": "bal"
+          },
+          {
+            "id": "4",
+            "text": "been"
+          },
+          {
+            "id": "5",
+            "text": "vuur"
+          },
+          {
+            "id": "6",
+            "text": "so"
+          },
+          {
+            "id": "7",
+            "text": "ons"
+          },
+          {
+            "id": "8",
+            "text": "wen"
+          },
+          {
+            "id": "9",
+            "text": "as"
+          },
+          {
+            "id": "10",
+            "text": "daar"
+          },
+          {
+            "id": "11",
+            "text": "in"
+          },
+          {
+            "id": "12",
+            "text": "kyk"
+          },
+          {
+            "id": "13",
+            "text": "min"
+          },
+          {
+            "id": "14",
+            "text": "oog"
+          },
+          {
+            "id": "15",
+            "text": "ry"
+          },
+          {
+            "id": "16",
+            "text": "om"
+          },
+          {
+            "id": "17",
+            "text": "Pa"
+          },
+          {
+            "id": "18",
+            "text": "my"
+          },
+          {
+            "id": "19",
+            "text": "loop"
+          },
+          {
+            "id": "20",
+            "text": "Jou"
+          },
+          {
+            "id": "21",
+            "text": "En"
+          },
+          {
+            "id": "22",
+            "text": "vis"
+          },
+          {
+            "id": "23",
+            "text": "lag"
+          },
+          {
+            "id": "24",
+            "text": "vir"
+          },
+          {
+            "id": "25",
+            "text": "sit"
+          },
+          {
+            "id": "26",
+            "text": "baie"
+          },
+          {
+            "id": "27",
+            "text": "ek"
+          },
+          {
+            "id": "28",
+            "text": "jas"
+          },
+          {
+            "id": "29",
+            "text": "Lig"
+          },
+          {
+            "id": "30",
+            "text": "muis"
+          },
+          {
+            "id": "31",
+            "text": "ou"
+          },
+          {
+            "id": "32",
+            "text": "Sal"
+          },
+          {
+            "id": "33",
+            "text": "op"
+          },
+          {
+            "id": "34",
+            "text": "boek"
+          },
+          {
+            "id": "35",
+            "text": "kan"
+          },
+          {
+            "id": "36",
+            "text": "nes"
+          },
+          {
+            "id": "37",
+            "text": "Mal"
+          },
+          {
+            "id": "38",
+            "text": "goed"
+          },
+          {
+            "id": "39",
+            "text": "wag"
+          },
+          {
+            "id": "40",
+            "text": "pas"
+          },
+          {
+            "id": "41",
+            "text": "skool"
+          },
+          {
+            "id": "42",
+            "text": "mooi"
+          },
+          {
+            "id": "43",
+            "text": "bo"
+          },
+          {
+            "id": "44",
+            "text": "gaan"
+          },
+          {
+            "id": "45",
+            "text": "Jy"
+          },
+          {
+            "id": "46",
+            "text": "maak"
+          },
+          {
+            "id": "47",
+            "text": "na"
+          },
+          {
+            "id": "48",
+            "text": "paar"
+          },
+          {
+            "id": "49",
+            "text": "saam"
+          },
+          {
+            "id": "50",
+            "text": "wal"
+          },
+          {
+            "id": "51",
+            "text": "man"
+          },
+          {
+            "id": "52",
+            "text": "nie"
+          },
+          {
+            "id": "53",
+            "text": "Pos"
+          },
+          {
+            "id": "54",
+            "text": "som"
+          },
+          {
+            "id": "55",
+            "text": "kas"
+          },
+          {
+            "id": "56",
+            "text": "boom"
+          },
+          {
+            "id": "57",
+            "text": "pot"
+          },
+          {
+            "id": "58",
+            "text": "bus"
+          },
+          {
+            "id": "59",
+            "text": "Kat"
+          },
+          {
+            "id": "60",
+            "text": "nou"
+          },
+          {
+            "id": "61",
+            "text": "mat"
+          },
+          {
+            "id": "62",
+            "text": "het"
+          },
+          {
+            "id": "63",
+            "text": "val"
+          },
+          {
+            "id": "64",
+            "text": "son"
+          },
+          {
+            "id": "65",
+            "text": "sy"
+          },
+          {
+            "id": "66",
+            "text": "reg"
+          },
+          {
+            "id": "67",
+            "text": "koek"
+          },
+          {
+            "id": "68",
+            "text": "meer"
+          },
+          {
+            "id": "69",
+            "text": "Tee"
+          },
+          {
+            "id": "70",
+            "text": "hou"
+          },
+          {
+            "id": "71",
+            "text": "Is"
+          },
+          {
+            "id": "72",
+            "text": "wil"
+          },
+          {
+            "id": "73",
+            "text": "wit"
+          },
+          {
+            "id": "74",
+            "text": "tak"
+          },
+          {
+            "id": "75",
+            "text": "rus"
+          },
+          {
+            "id": "76",
+            "text": "haan"
+          },
+          {
+            "id": "77",
+            "text": "met"
+          },
+          {
+            "id": "78",
+            "text": "kom"
+          },
+          {
+            "id": "79",
+            "text": "huis"
+          },
+          {
+            "id": "80",
+            "text": "dak"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "pot",
+          "jas"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            17
+          ]
+        }
+      },
+      "passage": {
+        "text": "Thandi woon op ’n plaas. Daar is nie water in die huise op die plaas nie.\n\nSy weet die huise in die dorp het elkeen ’n kraan. Een kraan se water is warm en een kraan se water is koud. Jy maak net die kraan oop, dan spoeg dit die water uit. Jy kan ’n bad vol water tap. Mens hoef glad nie die water aan te dra nie.\n\nDaar is nie ’n bad op die plaas nie. Almal bad sommer in die dam.\n\nThandi sit die emmer water voor die deur neer. Mamma gaan ’n lepel Jik in die water gooi. Sy gaan die water kook om pap te maak. Sy gaan ook daarmee vir hulle tee maak.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 119,
+        "whitespaceTokenCount": 119,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            20
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Waar woon Thandi?",
+            "answerText": "Op ’n plaas",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Is daar ’n kraan in Thandi se huis?",
+            "answerText": "Nee",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Waar bad almal op die plaas?",
+            "answerText": "In die dam",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Wat gooi Mamma in die water?",
+            "answerText": "Jik",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Wat gaan Mamma met die water maak?",
+            "answerText": "Sy kook die water om pap en tee te maak.",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            20
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Letter chart is labelled 60 letterklanke but visibly contains 7 rows of 10 (70). All 70 entries are retained."
+      ]
+    },
+    {
+      "id": "dbe-egra-af-hl-3-v1",
+      "title": "Afrikaans EGRA 3",
+      "languageCode": "af",
+      "languageName": "Afrikaans",
+      "variant": "hl",
+      "assessmentNumber": 3,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "a"
+          },
+          {
+            "id": "2",
+            "text": "v"
+          },
+          {
+            "id": "3",
+            "text": "m"
+          },
+          {
+            "id": "4",
+            "text": "n"
+          },
+          {
+            "id": "5",
+            "text": "L"
+          },
+          {
+            "id": "6",
+            "text": "w"
+          },
+          {
+            "id": "7",
+            "text": "f"
+          },
+          {
+            "id": "8",
+            "text": "h"
+          },
+          {
+            "id": "9",
+            "text": "r"
+          },
+          {
+            "id": "10",
+            "text": "o"
+          },
+          {
+            "id": "11",
+            "text": "i"
+          },
+          {
+            "id": "12",
+            "text": "Y"
+          },
+          {
+            "id": "13",
+            "text": "e"
+          },
+          {
+            "id": "14",
+            "text": "u"
+          },
+          {
+            "id": "15",
+            "text": "d"
+          },
+          {
+            "id": "16",
+            "text": "I"
+          },
+          {
+            "id": "17",
+            "text": "s"
+          },
+          {
+            "id": "18",
+            "text": "g"
+          },
+          {
+            "id": "19",
+            "text": "t"
+          },
+          {
+            "id": "20",
+            "text": "o"
+          },
+          {
+            "id": "21",
+            "text": "v"
+          },
+          {
+            "id": "22",
+            "text": "s"
+          },
+          {
+            "id": "23",
+            "text": "t"
+          },
+          {
+            "id": "24",
+            "text": "d"
+          },
+          {
+            "id": "25",
+            "text": "A"
+          },
+          {
+            "id": "26",
+            "text": "o"
+          },
+          {
+            "id": "27",
+            "text": "r"
+          },
+          {
+            "id": "28",
+            "text": "t"
+          },
+          {
+            "id": "29",
+            "text": "j"
+          },
+          {
+            "id": "30",
+            "text": "i"
+          },
+          {
+            "id": "31",
+            "text": "k"
+          },
+          {
+            "id": "32",
+            "text": "b"
+          },
+          {
+            "id": "33",
+            "text": "N"
+          },
+          {
+            "id": "34",
+            "text": "p"
+          },
+          {
+            "id": "35",
+            "text": "h"
+          },
+          {
+            "id": "36",
+            "text": "e"
+          },
+          {
+            "id": "37",
+            "text": "a"
+          },
+          {
+            "id": "38",
+            "text": "X"
+          },
+          {
+            "id": "39",
+            "text": "e"
+          },
+          {
+            "id": "40",
+            "text": "z"
+          },
+          {
+            "id": "41",
+            "text": "w"
+          },
+          {
+            "id": "42",
+            "text": "s"
+          },
+          {
+            "id": "43",
+            "text": "t"
+          },
+          {
+            "id": "44",
+            "text": "u"
+          },
+          {
+            "id": "45",
+            "text": "b"
+          },
+          {
+            "id": "46",
+            "text": "o"
+          },
+          {
+            "id": "47",
+            "text": "p"
+          },
+          {
+            "id": "48",
+            "text": "r"
+          },
+          {
+            "id": "49",
+            "text": "a"
+          },
+          {
+            "id": "50",
+            "text": "x"
+          },
+          {
+            "id": "51",
+            "text": "a"
+          },
+          {
+            "id": "52",
+            "text": "d"
+          },
+          {
+            "id": "53",
+            "text": "f"
+          },
+          {
+            "id": "54",
+            "text": "g"
+          },
+          {
+            "id": "55",
+            "text": "h"
+          },
+          {
+            "id": "56",
+            "text": "l"
+          },
+          {
+            "id": "57",
+            "text": "j"
+          },
+          {
+            "id": "58",
+            "text": "k"
+          },
+          {
+            "id": "59",
+            "text": "l"
+          },
+          {
+            "id": "60",
+            "text": "q"
+          },
+          {
+            "id": "61",
+            "text": "H"
+          },
+          {
+            "id": "62",
+            "text": "j"
+          },
+          {
+            "id": "63",
+            "text": "i"
+          },
+          {
+            "id": "64",
+            "text": "v"
+          },
+          {
+            "id": "65",
+            "text": "g"
+          },
+          {
+            "id": "66",
+            "text": "c"
+          },
+          {
+            "id": "67",
+            "text": "q"
+          },
+          {
+            "id": "68",
+            "text": "m"
+          },
+          {
+            "id": "69",
+            "text": "l"
+          },
+          {
+            "id": "70",
+            "text": "v"
+          },
+          {
+            "id": "71",
+            "text": "g"
+          },
+          {
+            "id": "72",
+            "text": "t"
+          },
+          {
+            "id": "73",
+            "text": "w"
+          },
+          {
+            "id": "74",
+            "text": "d"
+          },
+          {
+            "id": "75",
+            "text": "t"
+          },
+          {
+            "id": "76",
+            "text": "b"
+          },
+          {
+            "id": "77",
+            "text": "k"
+          },
+          {
+            "id": "78",
+            "text": "V"
+          },
+          {
+            "id": "79",
+            "text": "e"
+          },
+          {
+            "id": "80",
+            "text": "l"
+          },
+          {
+            "id": "81",
+            "text": "j"
+          },
+          {
+            "id": "82",
+            "text": "e"
+          },
+          {
+            "id": "83",
+            "text": "h"
+          },
+          {
+            "id": "84",
+            "text": "r"
+          },
+          {
+            "id": "85",
+            "text": "l"
+          },
+          {
+            "id": "86",
+            "text": "k"
+          },
+          {
+            "id": "87",
+            "text": "R"
+          },
+          {
+            "id": "88",
+            "text": "T"
+          },
+          {
+            "id": "89",
+            "text": "s"
+          },
+          {
+            "id": "90",
+            "text": "i"
+          },
+          {
+            "id": "91",
+            "text": "y"
+          },
+          {
+            "id": "92",
+            "text": "a"
+          },
+          {
+            "id": "93",
+            "text": "u"
+          },
+          {
+            "id": "94",
+            "text": "o"
+          },
+          {
+            "id": "95",
+            "text": "E"
+          },
+          {
+            "id": "96",
+            "text": "f"
+          },
+          {
+            "id": "97",
+            "text": "n"
+          },
+          {
+            "id": "98",
+            "text": "M"
+          },
+          {
+            "id": "99",
+            "text": "x"
+          },
+          {
+            "id": "100",
+            "text": "s"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "b",
+          "s"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 100,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            15
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "dak"
+          },
+          {
+            "id": "2",
+            "text": "rus"
+          },
+          {
+            "id": "3",
+            "text": "wit"
+          },
+          {
+            "id": "4",
+            "text": "een"
+          },
+          {
+            "id": "5",
+            "text": "so"
+          },
+          {
+            "id": "6",
+            "text": "been"
+          },
+          {
+            "id": "7",
+            "text": "vuur"
+          },
+          {
+            "id": "8",
+            "text": "huis"
+          },
+          {
+            "id": "9",
+            "text": "wil"
+          },
+          {
+            "id": "10",
+            "text": "koek"
+          },
+          {
+            "id": "11",
+            "text": "pot"
+          },
+          {
+            "id": "12",
+            "text": "daar"
+          },
+          {
+            "id": "13",
+            "text": "oog"
+          },
+          {
+            "id": "14",
+            "text": "kyk"
+          },
+          {
+            "id": "15",
+            "text": "min"
+          },
+          {
+            "id": "16",
+            "text": "is"
+          },
+          {
+            "id": "17",
+            "text": "Son"
+          },
+          {
+            "id": "18",
+            "text": "kat"
+          },
+          {
+            "id": "19",
+            "text": "sy"
+          },
+          {
+            "id": "20",
+            "text": "My"
+          },
+          {
+            "id": "21",
+            "text": "Vis"
+          },
+          {
+            "id": "22",
+            "text": "jou"
+          },
+          {
+            "id": "23",
+            "text": "en"
+          },
+          {
+            "id": "24",
+            "text": "val"
+          },
+          {
+            "id": "25",
+            "text": "sal"
+          },
+          {
+            "id": "26",
+            "text": "kan"
+          },
+          {
+            "id": "27",
+            "text": "Op"
+          },
+          {
+            "id": "28",
+            "text": "baie"
+          },
+          {
+            "id": "29",
+            "text": "muis"
+          },
+          {
+            "id": "30",
+            "text": "jas"
+          },
+          {
+            "id": "31",
+            "text": "Lig"
+          },
+          {
+            "id": "32",
+            "text": "kas"
+          },
+          {
+            "id": "33",
+            "text": "paar"
+          },
+          {
+            "id": "34",
+            "text": "man"
+          },
+          {
+            "id": "35",
+            "text": "saam"
+          },
+          {
+            "id": "36",
+            "text": "boek"
+          },
+          {
+            "id": "37",
+            "text": "goed"
+          },
+          {
+            "id": "38",
+            "text": "nes"
+          },
+          {
+            "id": "39",
+            "text": "mal"
+          },
+          {
+            "id": "40",
+            "text": "wag"
+          },
+          {
+            "id": "41",
+            "text": "ons"
+          },
+          {
+            "id": "42",
+            "text": "om"
+          },
+          {
+            "id": "43",
+            "text": "skool"
+          },
+          {
+            "id": "44",
+            "text": "mooi"
+          },
+          {
+            "id": "45",
+            "text": "maak"
+          },
+          {
+            "id": "46",
+            "text": "Gaan"
+          },
+          {
+            "id": "47",
+            "text": "jy"
+          },
+          {
+            "id": "48",
+            "text": "Na"
+          },
+          {
+            "id": "49",
+            "text": "pas"
+          },
+          {
+            "id": "50",
+            "text": "ek"
+          },
+          {
+            "id": "51",
+            "text": "sit"
+          },
+          {
+            "id": "52",
+            "text": "wal"
+          },
+          {
+            "id": "53",
+            "text": "som"
+          },
+          {
+            "id": "54",
+            "text": "nie"
+          },
+          {
+            "id": "55",
+            "text": "pos"
+          },
+          {
+            "id": "56",
+            "text": "ou"
+          },
+          {
+            "id": "57",
+            "text": "vir"
+          },
+          {
+            "id": "58",
+            "text": "loop"
+          },
+          {
+            "id": "59",
+            "text": "As"
+          },
+          {
+            "id": "60",
+            "text": "bus"
+          },
+          {
+            "id": "61",
+            "text": "het"
+          },
+          {
+            "id": "62",
+            "text": "nou"
+          },
+          {
+            "id": "63",
+            "text": "mat"
+          },
+          {
+            "id": "64",
+            "text": "lag"
+          },
+          {
+            "id": "65",
+            "text": "tee"
+          },
+          {
+            "id": "66",
+            "text": "In"
+          },
+          {
+            "id": "67",
+            "text": "pa"
+          },
+          {
+            "id": "68",
+            "text": "reg"
+          },
+          {
+            "id": "69",
+            "text": "hou"
+          },
+          {
+            "id": "70",
+            "text": "meer"
+          },
+          {
+            "id": "71",
+            "text": "tee"
+          },
+          {
+            "id": "72",
+            "text": "ry"
+          },
+          {
+            "id": "73",
+            "text": "Wen"
+          },
+          {
+            "id": "74",
+            "text": "bal"
+          },
+          {
+            "id": "75",
+            "text": "die"
+          },
+          {
+            "id": "76",
+            "text": "Tak"
+          },
+          {
+            "id": "77",
+            "text": "kom"
+          },
+          {
+            "id": "78",
+            "text": "haan"
+          },
+          {
+            "id": "79",
+            "text": "met"
+          },
+          {
+            "id": "80",
+            "text": "Boom"
+          }
+        ],
+        "columns": 8,
+        "practiceItems": [
+          "pot",
+          "jas"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 80,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            18
+          ]
+        }
+      },
+      "passage": {
+        "text": "Vusi gooi ’n plat klip op die water en kyk hoe dit een, twee, drie, vier keer spring. Hy voel alleen, want sy vriend Thami, is in die skool. Vusi voel hartseer, want hy wil ook graag skool toe gaan.\n\nSy ouma leer hom elke dag om te lees en skryf, maar dit is nie genoeg nie. Hy wil nog meer leer.\n\nSy oupa wil nie he Vusi moet skool toe gaan nie. Hy moet by die huis bly om hom te help met al die werkies. Vusi is baie fluks.\n\nDie aand huil Vusi hom aan die slaap. Hy wil so graag skool toe gaan. Al sy maats is in die skool. Hoekom moet hy dan by die huis bly?\n\nDie volgende oggend maak sy ouma hom wakker met goeie nuus. Hy mag skool toe gaan!",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 137,
+        "whitespaceTokenCount": 137,
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            21
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Hoeveel keer spring die plat klip op die water?",
+            "answerText": "Vier keer",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Hoekom voel Vusi hartseer?",
+            "answerText": "Hy wil ook graag skool toe gaan.",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Wat leer sy ouma elke dag vir hom?",
+            "answerText": "Sy leer hom om te lees en te skryf.",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Hoekom wil oupa nie he Vusi moet skool toe gaan nie?",
+            "answerText": "Vusi moet help met al die werkies by die huis.",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Watter goeie nuus het ouma vir Vusi gehad?",
+            "answerText": "Hy mag skool toe gaan!",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "afrikaans",
+          "pdfPages": [
+            21
+          ]
+        }
+      },
+      "sourceNotes": [
+        "Source spells he without a circumflex in the passage and question 4; preserved as printed."
+      ]
+    },
+    {
+      "id": "smrs-egra-zu-1-v1",
+      "title": "isiZulu SMRS EGRA 1",
+      "languageCode": "zu",
+      "languageName": "isiZulu",
+      "variant": "smrs",
+      "assessmentNumber": 1,
+      "letters": {
+        "items": [
+          {
+            "id": "1",
+            "text": "W"
+          },
+          {
+            "id": "2",
+            "text": "G"
+          },
+          {
+            "id": "3",
+            "text": "H"
+          },
+          {
+            "id": "4",
+            "text": "b"
+          },
+          {
+            "id": "5",
+            "text": "S"
+          },
+          {
+            "id": "6",
+            "text": "l"
+          },
+          {
+            "id": "7",
+            "text": "g"
+          },
+          {
+            "id": "8",
+            "text": "m"
+          },
+          {
+            "id": "9",
+            "text": "i"
+          },
+          {
+            "id": "10",
+            "text": "L"
+          },
+          {
+            "id": "11",
+            "text": "g"
+          },
+          {
+            "id": "12",
+            "text": "V"
+          },
+          {
+            "id": "13",
+            "text": "B"
+          },
+          {
+            "id": "14",
+            "text": "Q"
+          },
+          {
+            "id": "15",
+            "text": "l"
+          },
+          {
+            "id": "16",
+            "text": "f"
+          },
+          {
+            "id": "17",
+            "text": "l"
+          },
+          {
+            "id": "18",
+            "text": "Z"
+          },
+          {
+            "id": "19",
+            "text": "s"
+          },
+          {
+            "id": "20",
+            "text": "w"
+          },
+          {
+            "id": "21",
+            "text": "y"
+          },
+          {
+            "id": "22",
+            "text": "s"
+          },
+          {
+            "id": "23",
+            "text": "Q"
+          },
+          {
+            "id": "24",
+            "text": "P"
+          },
+          {
+            "id": "25",
+            "text": "M"
+          },
+          {
+            "id": "26",
+            "text": "v"
+          },
+          {
+            "id": "27",
+            "text": "O"
+          },
+          {
+            "id": "28",
+            "text": "t"
+          },
+          {
+            "id": "29",
+            "text": "n"
+          },
+          {
+            "id": "30",
+            "text": "P"
+          },
+          {
+            "id": "31",
+            "text": "l"
+          },
+          {
+            "id": "32",
+            "text": "K"
+          },
+          {
+            "id": "33",
+            "text": "T"
+          },
+          {
+            "id": "34",
+            "text": "D"
+          },
+          {
+            "id": "35",
+            "text": "K"
+          },
+          {
+            "id": "36",
+            "text": "T"
+          },
+          {
+            "id": "37",
+            "text": "q"
+          },
+          {
+            "id": "38",
+            "text": "d"
+          },
+          {
+            "id": "39",
+            "text": "z"
+          },
+          {
+            "id": "40",
+            "text": "w"
+          },
+          {
+            "id": "41",
+            "text": "N"
+          },
+          {
+            "id": "42",
+            "text": "k"
+          },
+          {
+            "id": "43",
+            "text": "c"
+          },
+          {
+            "id": "44",
+            "text": "D"
+          },
+          {
+            "id": "45",
+            "text": "d"
+          },
+          {
+            "id": "46",
+            "text": "y"
+          },
+          {
+            "id": "47",
+            "text": "b"
+          },
+          {
+            "id": "48",
+            "text": "j"
+          },
+          {
+            "id": "49",
+            "text": "B"
+          },
+          {
+            "id": "50",
+            "text": "v"
+          },
+          {
+            "id": "51",
+            "text": "S"
+          },
+          {
+            "id": "52",
+            "text": "n"
+          },
+          {
+            "id": "53",
+            "text": "C"
+          },
+          {
+            "id": "54",
+            "text": "B"
+          },
+          {
+            "id": "55",
+            "text": "p"
+          },
+          {
+            "id": "56",
+            "text": "Y"
+          },
+          {
+            "id": "57",
+            "text": "F"
+          },
+          {
+            "id": "58",
+            "text": "c"
+          },
+          {
+            "id": "59",
+            "text": "a"
+          },
+          {
+            "id": "60",
+            "text": "E"
+          },
+          {
+            "id": "61",
+            "text": "L"
+          },
+          {
+            "id": "62",
+            "text": "L"
+          },
+          {
+            "id": "63",
+            "text": "o"
+          },
+          {
+            "id": "64",
+            "text": "o"
+          },
+          {
+            "id": "65",
+            "text": "X"
+          },
+          {
+            "id": "66",
+            "text": "N"
+          },
+          {
+            "id": "67",
+            "text": "E"
+          },
+          {
+            "id": "68",
+            "text": "Y"
+          },
+          {
+            "id": "69",
+            "text": "p"
+          },
+          {
+            "id": "70",
+            "text": "x"
+          },
+          {
+            "id": "71",
+            "text": "Z"
+          },
+          {
+            "id": "72",
+            "text": "A"
+          },
+          {
+            "id": "73",
+            "text": "e"
+          },
+          {
+            "id": "74",
+            "text": "x"
+          },
+          {
+            "id": "75",
+            "text": "f"
+          },
+          {
+            "id": "76",
+            "text": "F"
+          },
+          {
+            "id": "77",
+            "text": "h"
+          },
+          {
+            "id": "78",
+            "text": "u"
+          },
+          {
+            "id": "79",
+            "text": "A"
+          },
+          {
+            "id": "80",
+            "text": "t"
+          },
+          {
+            "id": "81",
+            "text": "h"
+          },
+          {
+            "id": "82",
+            "text": "w"
+          },
+          {
+            "id": "83",
+            "text": "z"
+          },
+          {
+            "id": "84",
+            "text": "m"
+          },
+          {
+            "id": "85",
+            "text": "U"
+          },
+          {
+            "id": "86",
+            "text": "H"
+          },
+          {
+            "id": "87",
+            "text": "j"
+          },
+          {
+            "id": "88",
+            "text": "G"
+          },
+          {
+            "id": "89",
+            "text": "X"
+          },
+          {
+            "id": "90",
+            "text": "u"
+          },
+          {
+            "id": "91",
+            "text": "V"
+          },
+          {
+            "id": "92",
+            "text": "l"
+          },
+          {
+            "id": "93",
+            "text": "h"
+          },
+          {
+            "id": "94",
+            "text": "g"
+          },
+          {
+            "id": "95",
+            "text": "S"
+          },
+          {
+            "id": "96",
+            "text": "y"
+          },
+          {
+            "id": "97",
+            "text": "Z"
+          },
+          {
+            "id": "98",
+            "text": "W"
+          },
+          {
+            "id": "99",
+            "text": "L"
+          },
+          {
+            "id": "100",
+            "text": "N"
+          },
+          {
+            "id": "101",
+            "text": "W"
+          },
+          {
+            "id": "102",
+            "text": "l"
+          },
+          {
+            "id": "103",
+            "text": "S"
+          },
+          {
+            "id": "104",
+            "text": "M"
+          },
+          {
+            "id": "105",
+            "text": "V"
+          },
+          {
+            "id": "106",
+            "text": "g"
+          },
+          {
+            "id": "107",
+            "text": "V"
+          },
+          {
+            "id": "108",
+            "text": "q"
+          },
+          {
+            "id": "109",
+            "text": "h"
+          },
+          {
+            "id": "110",
+            "text": "j"
+          }
+        ],
+        "columns": 10,
+        "practiceItems": [
+          "b",
+          "S"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 110,
+        "source": {
+          "sourceId": "zu",
+          "pdfPages": [
+            2
+          ]
+        }
+      },
+      "words": {
+        "items": [
+          {
+            "id": "1",
+            "text": "umama"
+          },
+          {
+            "id": "2",
+            "text": "ikati"
+          },
+          {
+            "id": "3",
+            "text": "ubaba"
+          },
+          {
+            "id": "4",
+            "text": "itiye"
+          },
+          {
+            "id": "5",
+            "text": "vela"
+          },
+          {
+            "id": "6",
+            "text": "hlela"
+          },
+          {
+            "id": "7",
+            "text": "sika"
+          },
+          {
+            "id": "8",
+            "text": "utshani"
+          },
+          {
+            "id": "9",
+            "text": "umfana"
+          },
+          {
+            "id": "10",
+            "text": "abantu"
+          },
+          {
+            "id": "11",
+            "text": "iqanda"
+          },
+          {
+            "id": "12",
+            "text": "Isigqoko"
+          },
+          {
+            "id": "13",
+            "text": "incwadi"
+          },
+          {
+            "id": "14",
+            "text": "indoda"
+          },
+          {
+            "id": "15",
+            "text": "isicabha"
+          },
+          {
+            "id": "16",
+            "text": "umshibilizo"
+          },
+          {
+            "id": "17",
+            "text": "ingxabano"
+          },
+          {
+            "id": "18",
+            "text": "izitsha"
+          },
+          {
+            "id": "19",
+            "text": "imfundo"
+          },
+          {
+            "id": "20",
+            "text": "inhlwathi"
+          },
+          {
+            "id": "21",
+            "text": "qoba"
+          },
+          {
+            "id": "22",
+            "text": "ugodo"
+          },
+          {
+            "id": "23",
+            "text": "cula"
+          },
+          {
+            "id": "24",
+            "text": "veza"
+          },
+          {
+            "id": "25",
+            "text": "khala"
+          },
+          {
+            "id": "26",
+            "text": "ihleza"
+          },
+          {
+            "id": "27",
+            "text": "umoba"
+          },
+          {
+            "id": "28",
+            "text": "ibhodi"
+          },
+          {
+            "id": "29",
+            "text": "amanzi"
+          },
+          {
+            "id": "30",
+            "text": "isitsha"
+          },
+          {
+            "id": "31",
+            "text": "inkomishi"
+          },
+          {
+            "id": "32",
+            "text": "isicabha"
+          },
+          {
+            "id": "33",
+            "text": "insipho"
+          },
+          {
+            "id": "34",
+            "text": "ukuhlanza"
+          },
+          {
+            "id": "35",
+            "text": "ibhentshi"
+          },
+          {
+            "id": "36",
+            "text": "ibhubesi"
+          },
+          {
+            "id": "37",
+            "text": "impukane"
+          },
+          {
+            "id": "38",
+            "text": "impama"
+          },
+          {
+            "id": "39",
+            "text": "igatsha"
+          },
+          {
+            "id": "40",
+            "text": "ingqathu"
+          },
+          {
+            "id": "41",
+            "text": "iphephandaba"
+          },
+          {
+            "id": "42",
+            "text": "umgqomo"
+          },
+          {
+            "id": "43",
+            "text": "umsindo"
+          },
+          {
+            "id": "44",
+            "text": "insizwa"
+          },
+          {
+            "id": "45",
+            "text": "intshonalanga"
+          },
+          {
+            "id": "46",
+            "text": "isikhwama"
+          },
+          {
+            "id": "47",
+            "text": "ummese"
+          },
+          {
+            "id": "48",
+            "text": "indlebe"
+          },
+          {
+            "id": "49",
+            "text": "inkinobho"
+          },
+          {
+            "id": "50",
+            "text": "isicabucabu"
+          }
+        ],
+        "columns": 5,
+        "practiceItems": [
+          "usisi",
+          "icici"
+        ],
+        "timeLimitSeconds": 60,
+        "sourceReportedItemCount": 50,
+        "source": {
+          "sourceId": "zu",
+          "pdfPages": [
+            3
+          ]
+        }
+      },
+      "passage": {
+        "text": "Igama lami nginguJabu. Ngineminyaka eyisithupa. Ngithanda ukusiza usisi uma egeza izitsha. Usisi engitshela ukuthi kubalulekile ukusizana, kanye nokuhlanzeka.\n\nAbanye abafana bacabanga ukuthi amantombazane kuphela okufanele ageze izitsha, kanti akunjalo. Umama wangitshela ukuthi wonke umuntu kufanele azigeze izitsha. Ngiyathanda ukulekelela usisi uma egeza izitsha.",
+        "timeLimitSeconds": 60,
+        "sourceReportedWordCount": 43,
+        "whitespaceTokenCount": 43,
+        "source": {
+          "sourceId": "zu",
+          "pdfPages": [
+            4
+          ]
+        }
+      },
+      "comprehension": {
+        "scoringMethod": "assessor",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Ngubani igama lomfana?",
+            "answerText": "uJabu",
+            "maxScore": 1
+          },
+          {
+            "id": "2",
+            "text": "Uneminyaka emingaki umfana?",
+            "answerText": "Eyisithupa",
+            "maxScore": 1
+          },
+          {
+            "id": "3",
+            "text": "Ngabe uthanda ukwenzani umfana?",
+            "answerText": "Ukusiza usisi",
+            "maxScore": 1
+          },
+          {
+            "id": "4",
+            "text": "Umama wamtshela ukuthi yini ebalulekile?",
+            "answerText": "Ukusizana kanye nokuhlanzeka",
+            "maxScore": 1
+          },
+          {
+            "id": "5",
+            "text": "Ucabanga ukuthi usisi uzizwa enjani uma uJabu emsiza?",
+            "answerText": "Ejabule/ejabulile",
+            "maxScore": 1
+          }
+        ],
+        "source": {
+          "sourceId": "zu",
+          "pdfPages": [
+            5
+          ]
+        }
+      },
+      "sourceNotes": [
+        "The source question 4 attributes a statement to Umama, whereas the corresponding passage sentence names Usisi. Both are preserved; review before operational use."
+      ]
+    }
+  ]
+}
