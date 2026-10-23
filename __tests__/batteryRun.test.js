@@ -60,7 +60,7 @@ test('fresh run: Q1 is next, nothing decided, no reminder', () => {
 test('done row shows score / max using derived.max when present', () => {
   const state = view({ results: [
     { question_code: battery.questions[0].question_code, stopped_reason: 'timer', score: 34, total_items: 60, derived: {} },
-    { question_code: battery.questions[10].question_code, stopped_reason: 'completed', score: 9, total_items: 4, derived: { max: 16 } },
+    { question_code: battery.questions[10].question_code, stopped_reason: 'completed', score: 9, total_items: 4, derived: { max: 16, questions_asked: 3 } },
   ] });
   expect(state.rows[0]).toMatchObject({ state: 'done', detail: 'Done', scoreText: '34 / 60' });
   expect(state.rows[10]).toMatchObject({ state: 'done', detail: 'Done', scoreText: '9 / 16' });
@@ -227,4 +227,12 @@ test('building a view and materials lines does not mutate inputs', () => {
   buildRunView(inputBattery, inputRun, inputAccess);
   materialsLine(inputBattery.questions[4], inputRun.language, inputBattery);
   expect(JSON.stringify([inputBattery, inputRun, inputAccess])).toBe(before);
+});
+
+test('comprehension-like done row uses derived.questions_asked for 2 / 3 rather than total_items 5', () => {
+  const state = view({ results: [{
+    question_code: battery.questions[1].question_code,
+    stopped_reason: 'completed', score: 2, total_items: 5, derived: { questions_asked: 3 },
+  }] });
+  expect(state.rows[1]).toMatchObject({ state: 'done', detail: 'Done', scoreText: '2 / 3' });
 });
