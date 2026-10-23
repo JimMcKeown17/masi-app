@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import BottomSheet from '../common/BottomSheet';
 import BrandButton from '../common/BrandButton';
@@ -6,9 +6,11 @@ import InlineNote from '../common/InlineNote';
 import SelectableRow from '../forms/SelectableRow';
 import { spacing } from '../../constants/colors';
 import { isStaleActorError } from '../../session/staleActor';
+import { compareChildNames, formatChildName } from '../../utils/childNames';
 
 const childKey = child => child.id;
-export default function MakeGroupSheet({ visible, onDismiss, ungrouped, makeGroup, handle }) {
+export default function MakeGroupSheet({ visible, onDismiss, ungrouped, classes = [], makeGroup, handle }) {
+  const sorted = useMemo(() => [...ungrouped].sort(compareChildNames), [ungrouped]);
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -38,9 +40,9 @@ export default function MakeGroupSheet({ visible, onDismiss, ungrouped, makeGrou
     scrollable={false} keyboardAvoiding={false} bodyContentStyle={styles.body}
     footer={<BrandButton label="Done" onPress={done} disabled={selected.length === 0} loading={busy} />}>
     {error ? <View style={styles.note}><InlineNote>{error}</InlineNote></View> : null}
-    <FlatList style={styles.list} data={ungrouped} keyExtractor={childKey} extraData={selected}
-      renderItem={({ item, index }) => <SelectableRow variant="checkbox" title={item.first_name}
-        selected={selected.includes(item.id)} accessibilityLabel={item.first_name}
+    <FlatList style={styles.list} data={sorted} keyExtractor={childKey} extraData={selected}
+      renderItem={({ item, index }) => <SelectableRow variant="checkbox" title={formatChildName(item)}
+        subtitle={classes.find(row => row.id === item.class_id)?.name} selected={selected.includes(item.id)}
         position={ungrouped.length === 1 ? 'only' : index === 0 ? 'first' : index === ungrouped.length - 1 ? 'last' : undefined}
         onPress={() => {
           if (!writing.current) setSelected(ids => ids.includes(item.id) ? ids.filter(id => id !== item.id) : [...ids, item.id]);

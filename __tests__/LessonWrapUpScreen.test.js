@@ -6,6 +6,7 @@ import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { draftStart, deferred } from '../test-support/lessonDraftTestUtils';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
+import { colors } from '../src/constants/colors';
 import { saveLesson, LessonSaveError } from '../src/services/lessonSave';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -64,7 +65,11 @@ afterEach(() => jest.restoreAllMocks());
 
 test('the heading names the ticked letters; no ticked letters skips the section', async () => {
   const view = mount(); await ready(view);
-  expect(view.getByText('Who knows a m without help?')).toBeTruthy();
+  const heading = view.getByRole('header', { name: 'Who knows a m without help?' });
+  expect(heading.props.accessibilityLabel).toBe('Who knows a m without help?');
+  const letters = within(heading).getByText('a m');
+  // The letters keep the heading's own type and only change colour.
+  expect(StyleSheet.flatten(letters.props.style)).toEqual({ color: colors.primary });
   expect(view.getByText("Teaching it today doesn't count.")).toBeTruthy();
   view.unmount(); mockInitial = draftStart();
   const empty = mount(); await ready(empty);
@@ -88,8 +93,11 @@ test("No one new yet clears the child's chips", async () => {
   mockInitial.tracker_changes = { c1: { a: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' },
     z: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' } } };
   const view = mount(); await ready(view);
-  fireEvent.press(row(view).getByRole('button', { name: 'No one new yet' }));
+  expect(row(view).getByRole('checkbox', { name: 'No one new yet' })).not.toBeChecked();
+  fireEvent.press(row(view).getByRole('checkbox', { name: 'No one new yet' }));
   await waitFor(() => expect(mockDraft.ticks.noOneNew).toEqual(['c1']));
+  expect(row(view).getByRole('checkbox', { name: 'No one new yet' })).toBeChecked();
+  expect(row(view).getByRole('checkbox', { name: 'No one new yet' }).findAll(node => node.props.name === 'checkmark').length).toBeGreaterThan(0);
   expect(Object.keys(mockDraft.tracker_changes.c1)).toEqual(['z']);
 });
 test("the tracker sheet opens in the lesson language with the child's marks", async () => {
@@ -161,7 +169,7 @@ test('authority hides only the controls the EA cannot write', async () => {
   });
   const view = mount(); await ready(view);
   expect(row(view).getByText("Letters can't be updated for this child")).toBeTruthy();
-  expect(row(view).queryByRole('button', { name: 'No one new yet' })).toBeNull();
+  expect(row(view).queryByRole('checkbox', { name: 'No one new yet' })).toBeNull();
   expect(row(view).queryByRole('button', { name: /letter tracker/ })).toBeNull();
   expect(row(view).getByRole('button', { name: /reading level/ })).toBeTruthy();
   expect(row(view, 'c2').queryByRole('button', { name: /reading level/ })).toBeNull();

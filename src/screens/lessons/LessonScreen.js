@@ -8,7 +8,7 @@ import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
-import { lessonHeaderSeenLabel } from '../../utils/lessonDates';
+import { joinDetail, lessonHeaderSeenLabel } from '../../utils/lessonDates';
 import { groupLastSeenOn } from '../../lessonPlan/engine';
 import { visibleRosterChildren } from '../../utils/childVisibility';
 import { isStaleActorError } from '../../session/staleActor';
@@ -157,8 +157,8 @@ export default function LessonScreen({ navigation, route }) {
       {error ? <InlineNote>{error}</InlineNote> : null}
       {draft && metadata ? <>
         {draft.class_id && draft.language_code ? <Text style={styles.detail}>
-          {[grade ? `Gr ${grade}` : null, LANGUAGE_LABELS[draft.language_code],
-            base ? lessonHeaderSeenLabel(seen, today) : null].filter(Boolean).join('\u00a0· ')}
+          {joinDetail([grade ? `Gr ${grade}` : null, LANGUAGE_LABELS[draft.language_code],
+            base ? lessonHeaderSeenLabel(seen, today) : null])}
         </Text> : null}
         <AttendanceChips children={participants} attendance={draft.attendance} authority={metadata.authority}
           onToggle={toggleAttendance} onRemove={remove} />
@@ -178,6 +178,7 @@ export default function LessonScreen({ navigation, route }) {
     <StickyActionFooter><BrandButton label="Wrap up →" onPress={wrapUp}
       disabled={!draft || !!needs || !plan || !choices || !metadata || presentCount === 0 || status === 'saving'} /></StickyActionFooter>
     <AddChildSheet visible={addVisible} onDismiss={() => setAddVisible(false)} error={error}
+      classes={metadata?.classes ?? []}
       children={metadata?.roster.filter(child => !draft?.attendance.childIds.includes(child.id)) ?? []}
       onAdd={id => apply(transitions.addChildForToday, id)} />
     <OtherLetterSheet visible={otherVisible} onDismiss={() => setOtherVisible(false)} error={error}

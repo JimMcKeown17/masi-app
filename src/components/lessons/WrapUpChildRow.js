@@ -5,6 +5,7 @@ import { typeRoles } from '../../constants/typography';
 import { countMastered } from '../../utils/masteryState';
 import LetterToggleTile from '../sessions/LetterToggleTile';
 import BrandButton from '../common/BrandButton';
+import ToggleChip from '../common/ToggleChip';
 import SelectField from '../common/SelectField';
 
 export default function WrapUpChildRow({ child, letters, languageOrder, authority, mastery, changes,
@@ -27,7 +28,7 @@ export default function WrapUpChildRow({ child, letters, languageOrder, authorit
           disabled={locked || !mastery} accessibilityLabel={`${letter}, ${description}`}
           accessibilityState={{ selected: locked || known }} onPress={() => onLetter(letter)} />;
       })}</View>
-      {letters.length > 0 ? <BrandButton variant={noOneNew ? 'secondary' : 'tertiary'} label="No one new yet" onPress={onNoOneNew} /> : null}
+      {letters.length > 0 ? <ToggleChip selected={!!noOneNew} label="No one new yet" onPress={onNoOneNew} /> : null}
       <BrandButton variant="tertiary" label={`${count}/26 ›`}
         accessibilityLabel={`${child.first_name}, letter tracker, ${count}/26`} onPress={onOpenTracker} />
     </> : null : <Text style={styles.note}>Letters can't be updated for this child</Text>}

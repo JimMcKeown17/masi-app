@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
+import { joinDetail } from '../../utils/lessonDates';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
 import BrandButton from '../common/BrandButton';
 import BlendTile from './BlendTile';
@@ -23,7 +24,7 @@ export default React.memo(function LessonBlendSection({ draft, plan, choices, pa
   const items = [...suggested, ...selected.filter(text => !suggested.some(suggestion => suggestion.text === text))
     .map(text => catalogue.get(text) ?? { text, display: text })];
   return <View testID="lesson-blends" style={styles.section}>
-    <Text accessibilityRole="header" style={styles.heading}>{`2 · Blending · 15 min · ${label}`}</Text>
+    <Text accessibilityRole="header" style={styles.heading}>{joinDetail(['2', 'Blending', '15 min', label])}</Text>
     {!choices.contentAvailable.blends ? <Text style={styles.body}>{`No blends for ${LANGUAGE_LABELS[draft.language_code]} yet.`}</Text> : <>
       <View style={styles.tiles}>
         {items.map(item => <BlendTile key={item.text} text={item.text} display={item.display}

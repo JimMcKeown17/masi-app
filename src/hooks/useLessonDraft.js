@@ -9,6 +9,7 @@ import { languageCodeForHomeLanguage } from '../utils/assessmentRegistry';
 import { presentChildIds } from '../db/repositories/lessonDraftsRepository';
 import * as transitions from '../lessonPlan/lessonDraftState';
 import { visibleRosterChildren } from '../utils/childVisibility';
+import { compareChildNames } from '../utils/childNames';
 
 // A lesson with no change yet is dated by its first change, so a lesson opened before
 // midnight and first touched after it keeps a plan made for its own date (C14).
@@ -75,7 +76,8 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
           repositories.children.getMyChildren(handle.userId),
         ]);
         const ids = new Set(memberships.filter(row => row.group_id === group.id && !row.removed_at).map(row => row.child_id));
-        members = visibleRosterChildren(roster).filter(child => ids.has(child.id));
+        // The picker's order, so the chips and title read as the row did.
+        members = visibleRosterChildren(roster).filter(child => ids.has(child.id)).sort(compareChildNames);
       }
       const { classId } = resolveLessonClass({
         groupClassId: group.class_id, memberClassIds: members.map(child => child.class_id),
