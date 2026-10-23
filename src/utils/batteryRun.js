@@ -44,7 +44,7 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
       } else {
         rowState = 'done';
         detail = 'Done';
-        const max = result.derived?.max ?? result.total_items;
+        const max = result.derived?.max ?? result.derived?.questions_asked ?? result.total_items;
         if (result.score != null && max != null) scoreText = `${result.score} / ${max}`;
       }
     } else {

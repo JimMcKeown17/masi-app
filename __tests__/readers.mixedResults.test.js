@@ -113,17 +113,18 @@ describe('readers share stored standalone and battery Question evidence', () => 
     </AuthContext.Provider>
   );
 
-  test('history renders four rows, keeps both runs read-only, and opens standalone detail by id', async () => {
+  test('history renders four rows, opens both run summaries, and opens standalone detail by id', async () => {
     const navigation = { navigate: jest.fn() };
     const screen = renderReader(<AssessmentHistoryScreen navigation={navigation} />);
-    await screen.findByText('WelaPLUS · Completed · 2 Questions');
-    expect(screen.getByText('WelaPLUS · In progress · 1 Questions')).toBeTruthy();
+    await screen.findByText('wela_plus · 20 Oct · 2');
+    expect(screen.getByText('wela_plus · 20 Oct · 1')).toBeTruthy();
     expect(screen.getAllByText(/^[ABCD] Child$/)).toHaveLength(4);
     expect(screen.getByText('Letter Sounds')).toBeTruthy();
     expect(screen.getByText('Word Reading')).toBeTruthy();
     fireEvent.press(screen.getByText('B Child'));
     fireEvent.press(screen.getByText('C Child'));
-    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(navigation.navigate).toHaveBeenNthCalledWith(1, 'BatteryRunSummary', { runId: ids.runB });
+    expect(navigation.navigate).toHaveBeenNthCalledWith(2, 'BatteryRunSummary', { runId: ids.runC });
     fireEvent.press(screen.getByText('A Child'));
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentDetail', {
       assessmentId: ids.a, childName: 'A Child',
@@ -187,7 +188,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
     const counts = await f.assessments.getAssessmentCountsSince({ userId: f.userId });
     expect(getCoverageFromCounts(children, counts).assessed).toBe(3);
     const screen = renderReader(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
-    await screen.findByText('WelaPLUS · Completed · 2 Questions');
+    await screen.findByText('wela_plus · 20 Oct · 2');
     expect(screen.getAllByText(/^[ABCD] Child$/)).toHaveLength(4);
   });
 
