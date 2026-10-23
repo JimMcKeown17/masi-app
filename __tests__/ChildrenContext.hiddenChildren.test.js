@@ -1,3 +1,4 @@
+import { getConnectionActor } from '../src/session/signedInHandle';
 import { getTestWriter } from '../test-support/testDatabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
@@ -12,6 +13,14 @@ import { resolveDatabase } from '../src/db/repositories/repositoryRuntime';
 beforeEach(async () => {
   await AsyncStorage.clear();
 });
+
+const seedDelivery = async (...childIds) => {
+  const db = await getTestWriter();
+  for (const childId of childIds) await db.runAsync(`
+    insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values (?, ?, ?, 'synced')
+  `, `delivery-${childId}`, childId, getConnectionActor(db));
+};
 
 describe('hidden children - repository soft-delete', () => {
   test('childrenRepository.updateChild persists hidden_at + synced:false on the target row', async () => {
@@ -28,6 +37,7 @@ describe('hidden children - repository soft-delete', () => {
       synced: true,
     });
 
+    await seedDelivery('child-1');
     const hiddenAt = '2026-04-30T10:15:00.000Z';
     const ok = await childrenRepository.updateChild('child-1', {
       hidden_at: hiddenAt,
@@ -60,6 +70,7 @@ describe('hidden children - repository soft-delete', () => {
 
   test('hidden child remains in local children cache so allChildren can resolve names later', async () => {
     await childrenRepository.saveChildRecord({ id: 'child-1', first_name: 'A', last_name: 'M', synced: true });
+    await seedDelivery('child-1');
     await childrenRepository.updateChild('child-1', {
       hidden_at: '2026-04-30T10:15:00.000Z',
       synced: false,
@@ -75,6 +86,7 @@ describe('hidden children - repository soft-delete', () => {
     await childrenRepository.saveChildRecord({ id: 'child-no-history', first_name: 'A', last_name: 'M', synced: true });
     await childrenRepository.saveChildRecord({ id: 'child-with-history', first_name: 'B', last_name: 'K', synced: true });
 
+    await seedDelivery('child-no-history', 'child-with-history');
     const db = await getTestWriter();
     await db.runAsync("insert into programmes (id, code, name) values ('programme-a', 'literacy', 'Literacy')");
     await db.runAsync(`

@@ -10,7 +10,7 @@ import { createMasteryRepository } from '../src/db/repositories/masteryRepositor
 describe('letter mastery RPC errors through real postgrest-js', () => {
   let f, mastery;
   beforeEach(async () => {
-    f = await createFamilySyncFixture();
+    f = await createFamilySyncFixture({ withDelivery: true });
     mastery = createMasteryRepository({ database: f.db });
   });
   afterEach(async () => { await f.db.closeAsync(); });

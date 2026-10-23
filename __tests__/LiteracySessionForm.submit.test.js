@@ -69,6 +69,8 @@ beforeEach(async () => {
     await tx.runAsync("insert into programmes (id, code, name) values (?, 'literacy', 'Literacy')", PROGRAMME);
     await tx.runAsync("insert into staff_programme_assignments (id, user_id, programme_id) values ('assignment', ?, ?)", EA, PROGRAMME);
     await tx.runAsync("insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)", mockChild.id, mockChild.first_name, mockChild.last_name, EA);
+    await tx.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values ('tracker-delivery', ?, ?, 'synced')`, mockChild.id, EA);
   });
 });
 afterEach(async () => {
@@ -337,6 +339,9 @@ test.each([
     'insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)',
     SECOND_CHILD.id, 'Ben', 'Smith', EA
   ));
+  await handle.withTransaction(tx => tx.runAsync(`
+    insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('second-tracker-delivery', ?, ?, 'synced')`, SECOND_CHILD.id, EA));
 
   const screen = renderForm();
   fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
@@ -379,6 +384,9 @@ test('a child whose class has no known language gets no tracker letters, never a
     'insert into children (id, first_name, last_name, created_by) values (?, ?, ?, ?)',
     SECOND_CHILD.id, 'Ben', 'Smith', EA
   ));
+  await handle.withTransaction(tx => tx.runAsync(`
+    insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('second-tracker-delivery', ?, ?, 'synced')`, SECOND_CHILD.id, EA));
 
   const screen = renderForm();
   fireEvent.press(screen.getByLabelText('Amahle Dlamini, Grade 1A'));
@@ -402,6 +410,9 @@ test.each([['isiXhosa', 'isiXhosa', 'xh'], ['Afrikaans', 'Afrikaans', 'af']])(
       'Smith',
       EA
     ));
+    await handle.withTransaction(tx => tx.runAsync(`
+      insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values ('second-tracker-delivery', ?, ?, 'synced')`, SECOND_CHILD.id, EA));
     await handle.repositories.mastery.setLetterMastery({
       childId: mockChild.id, letter: 'k', language: code, confirmed: true,
     });
@@ -454,6 +465,9 @@ test('undoing every pending mark in an open tracker keeps that tracker\'s langua
     'Smith',
     EA
   ));
+  await handle.withTransaction(tx => tx.runAsync(`
+    insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('second-tracker-delivery', ?, ?, 'synced')`, SECOND_CHILD.id, EA));
   await handle.repositories.mastery.setLetterMastery({
     childId: mockChild.id, letter: 'k', language: 'xh', confirmed: true,
   });

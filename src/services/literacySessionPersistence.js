@@ -43,6 +43,16 @@ export async function persistLiteracySession({
 
     await sessionsRepository.saveSession(programmeScopedSession, { transaction });
 
+    const warnedChildIds = new Set();
+    const handleChildWriteError = (childId, error) => {
+      if (error?.code !== 'NOT_DELIVERY_CHILD') throw error;
+      if (warnedChildIds.has(childId)) return;
+      warnedChildIds.add(childId);
+      console.warn('Skipped delivery-only child updates for literacy session', {
+        sessionId: programmeScopedSession.id, childId, code: error.code,
+      });
+    };
+
     for (const [childId, readingLevel] of Object.entries(childReadingLevels)) {
       if (!readingLevel) continue;
       const existingChild = await transaction.getFirstAsync(
@@ -50,27 +60,35 @@ export async function persistLiteracySession({
         childId
       );
       if (!existingChild || existingChild.reading_level === readingLevel) continue;
-      await childrenRepository.updateChild(childId, {
-        reading_level: readingLevel,
-        updated_at: nowIso,
-        synced: false,
-      }, {
-        actorUserId: programmeScopedSession.user_id,
-        transaction,
-      });
+      try {
+        await childrenRepository.updateChild(childId, {
+          reading_level: readingLevel,
+          updated_at: nowIso,
+          synced: false,
+        }, {
+          actorUserId: programmeScopedSession.user_id,
+          transaction,
+        });
+      } catch (error) {
+        handleChildWriteError(childId, error);
+      }
     }
 
     for (const [childId, changes] of Object.entries(attendeeTrackerChanges)) {
       for (const [letter, change] of Object.entries(changes)) {
-        await masteryRepository.setLetterMastery({
-          childId,
-          letter,
-          language: change.languageCode,
-          confirmed: change.mastered,
-          changedAt: change.madeAt,
-          programmeId,
-          transaction,
-        });
+        try {
+          await masteryRepository.setLetterMastery({
+            childId,
+            letter,
+            language: change.languageCode,
+            confirmed: change.mastered,
+            changedAt: change.madeAt,
+            programmeId,
+            transaction,
+          });
+        } catch (error) {
+          handleChildWriteError(childId, error);
+        }
       }
     }
   });

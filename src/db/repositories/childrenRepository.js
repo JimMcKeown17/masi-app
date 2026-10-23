@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { getConnectionActor } from '../../session/signedInHandle';
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
@@ -472,6 +473,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     await assertNotHistoryReference(txn, id);
     const existing = await txn.getFirstAsync('select * from children where id = ?', id);
     if (!existing) return false;
+    await assertDeliveryChild(txn, id);
 
     const next = normalizeSyncFields({
       ...normalizeChildRecord({
@@ -862,6 +864,23 @@ export const createChildrenRepository = ({ database } = {}) => {
     }));
   };
 
+  const assertDeliveryChild = async (txn, childId) => {
+    const actor = getConnectionActor(txn) ?? database?.userId;
+    const allowed = actor && await txn.getFirstAsync(`
+      select 1 from children c where c.id = ? and (
+        c.created_by = ? or exists (
+          select 1 from child_ea_assignments a
+          where a.child_id = c.id and a.user_id = ? and a.unassigned_at is null
+        )
+      )
+    `, childId, actor, actor);
+    if (!allowed) {
+      const error = new Error('This child is not in your delivery scope');
+      error.code = 'NOT_DELIVERY_CHILD';
+      throw error;
+    }
+  };
+
   const archiveChild = async (childId, {
     actorUserId,
     archivedAt = new Date().toISOString(),
@@ -869,6 +888,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     transaction,
   } = {}) => runWrite(transaction, async (txn) => {
     await assertNotHistoryReference(txn, childId);
+    await assertDeliveryChild(txn, childId);
     await txn.runAsync(`
       update children
       set archived_at = ?,
@@ -911,6 +931,9 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   const deleteIfNoHistory = async (childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await assertNotHistoryReference(txn, childId);
+    const child = await txn.getFirstAsync('select created_by from children where id = ?', childId);
+    if (!child) return false;
+    await assertDeliveryChild(txn, childId);
     const checks = [
       "select 1 from session_attendees where child_id = ? limit 1",
       "select 1 from assessments where child_id = ? limit 1",
@@ -927,12 +950,6 @@ export const createChildrenRepository = ({ database } = {}) => {
         return false;
       }
     }
-
-    const child = await txn.getFirstAsync(
-      'select created_by from children where id = ?',
-      childId
-    );
-    if (!child) return false;
 
     // Sync status describes the latest edit, not whether INSERT was acknowledged.
     // Any attempted INSERT may have committed remotely, including a failed request
