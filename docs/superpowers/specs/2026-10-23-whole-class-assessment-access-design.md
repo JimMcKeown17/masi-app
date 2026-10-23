@@ -1,7 +1,7 @@
 # Whole-class assessment access — Design
 
 **Date:** 2026-10-23
-**Status:** Decisions by Jim, 2026-10-23 (in conversation). Ready for plan and Codex review.
+**Status:** Decisions by Jim, 2026-10-23 (in conversation). Revision 2 after Codex design review round 1.
 **Implements:** ADR-0005's two-tier access model. Assessment scope is the class; delivery scope
 is a subset. Today the phone only implements delivery scope.
 **Consumed by:** WelaPLUS Plan 3 (`docs/superpowers/plans/2026-10-23-welaplus-plan-3-host-run-flow.md`).
@@ -71,94 +71,192 @@ The phone never downloads control children (`preloadedChildData.js:279-313`).
 
 ## 5. Design
 
+*Revision 2, after Codex design review round 1: reconcile by class, an exact grace predicate,
+and a deterministic membership choice.*
+
 ### 5.1 Pull: the class roster scope
 
-The pull adds a class-roster scope. Its roster is the children with an open
-`child_class_memberships` row in a class where the EA has an active, own, active-programme
-`class_ea_assignments` row. It pulls:
-- those children rows;
-- their open memberships;
-- the classes, which `ClassesContext` already scopes correctly (`ClassesContext.js:190-203`).
+**Inputs.** The EA's own active class assignments in the active programme are already pulled and
+persisted (`ClassesContext.js:190-224`, `preloadedChildData.js:439-444`). Never derive "my
+classes" from the `classes` table: its SELECT also admits same-school staff and ended assignees
+(`…alignment_schema.sql:338-366`).
 
-Rules for the pull:
-- Never derive "my classes" from the `classes` table. Its SELECT also admits same-school staff
-  and ended assignees (`:338-366`).
-- Implement it in **both** live pull paths (`ChildrenContext.performPullFromServer` and
-  `persistPreloadedChildData`), not in the dead `handleServices.pullRoster`.
-- Persist classes, then children, then memberships, so the membership → class foreign key holds.
-- Chunk every `.in()` list.
-- An incomplete or errored scope is never reconciled (`PULL_SCOPE_COMPLETENESS_LIMIT`,
-  `preloadedChildData.js:3`).
+**New scope, `classRoster`.** For those class ids it pulls two kinds of row:
+- every open `child_class_memberships` row (`exited_at is null`) in those classes, chunked by
+  class id;
+- the children rows for those memberships, chunked, with full columns (W2).
 
-### 5.2 Reconcile: keeping the class roster fresh
+**It is complete only when** both queries succeed and neither hits
+`PULL_SCOPE_COMPLETENESS_LIMIT`. An incomplete or errored scope persists what it fetched, but
+never feeds reconcile.
 
-Today's membership reconcile only covers the server's delivery children (`visible_children` in
-`get_reconcile_acknowledgments`, `20260714220000_…:41-84`). So a control child who leaves the
-class would stay assessable on the phone forever. The server would then refuse the upload.
+**Where it runs.** Implement it in **both** live paths (`ChildrenContext.performPullFromServer` and
+`persistPreloadedChildData`). The dead `handleServices.pullRoster` is left alone.
 
-- **Server.** `get_reconcile_acknowledgments` gains two keys, keeping `schema_version 1`; old
-  clients ignore keys they don't know:
-  - `class_roster_child_ids`;
-  - `class_roster_membership_ids`, the open memberships in the EA's active class assignments.
-- **Phone.** The membership reconcile runs a second pass over the class-roster children using
-  those keys. The usual rules hold: it ends only `synced` rows, never on an incomplete scope.
-- **Mass-end breaker.** A class handover legitimately ends a whole class's memberships at once.
-  When the EA's `class_ea_assignments` row for that class has itself been ended by the same
-  reconcile, those memberships are exempt from the breaker. Every other mass end still
-  escalates.
+**Persist order:** classes (already first), then children, then memberships, so the membership →
+class foreign key holds.
+
+**Writing a class-roster child:**
+- It goes through the same `saveServerChildRow` path, so a history-reference stub is promoted to
+  a full row (`childrenRepository.js:542-558`).
+- `children.class_id` is not trusted for assessment metadata (5.3), so its FK nulling
+  (`:674-683`) is harmless.
+- Roster rows are written as `synced`, with no outbox rows.
+
+**Publishing.** `ChildrenContext` bumps a `rosterVersion` after the scope persists.
+`useAssessableChildren` (5.3) reloads on that version and on `ClassesContext`'s assignment
+version, so either pull finishing first is safe. Cold start offline reads the last persisted
+rows.
+
+### 5.2 Reconcile: membership exits in the EA's classes
+
+**The rule: reconcile by class, not by child.** A membership is a fact about a child and a
+class, not about an EA.
+
+- **Server.** `get_reconcile_acknowledgments` adds two keys, under the same `schema_version` 1;
+  old clients ignore them:
+  - `roster_class_ids`: the class ids of the caller's active class assignments in the active
+    programme;
+  - `roster_membership_ids`: every open membership in those classes.
+  An authoritative empty roster is `[]`. An absent key, from an older server, means "not
+  provided".
+- **Candidates.** Local rows with `class_id in roster_class_ids`, `exited_at is null`,
+  `sync_status = 'synced'` and `id not in roster_membership_ids`. Those are ended with
+  `exited_at = pulledAt`.
+  - This covers the last control child leaving a still-assigned class.
+  - It covers a delivery child's membership in that class too, because the roster key lists
+    every open membership in the class, so both acknowledgments agree. Both come from one
+    server snapshot.
+- **Never a candidate:**
+  - memberships in classes **not** in `roster_class_ids`. Losing a class assignment removes
+    class-based access through the read model's join (5.3), not by inventing exits;
+  - rows that are pending, failed or terminal;
+  - anything at all when either key is absent or the snapshot is incomplete.
+- **The existing delivery pass is unchanged** (it is by child, over `visible_children`).
+  - The two passes cannot conflict: a membership the delivery acknowledgment keeps is open on
+    the server, so if its class is in `roster_class_ids` it is also in `roster_membership_ids`.
+  - They run in one transaction from one snapshot.
+- **Breaker:** the existing per-scope mass-end breaker applies to the class pass as its own
+  scope, `classRosterMemberships`. There is **no handover exemption**: a handover ends no
+  memberships under this rule. A real mass exit, such as a whole class moving at year end, still
+  escalates to needs-attention, as designed.
 
 ### 5.3 Phone read model
 
-`childrenRepository.getAssessableChildren(userId)` returns one row per child in the class
-roster, built from three tables:
-- `children`;
-- open `child_class_memberships`;
-- the EA's active `class_ea_assignments` in the active programme, on a non-archived class.
+`childrenRepository.getAssessableChildren(userId)` returns one row per child: the union of two
+arms.
 
-It excludes `history_reference = 1` and is deduplicated against delivery. Each row has the
-following fields:
-- `is_delivery`, true when the EA also holds an active `child_ea_assignments` row for the child;
-- `class_id`, `grade` and `home_language` from the **membership's** class, never from
-  `children.class_id`, which can be null before the class row lands
-  (`childrenRepository.js:416-428`).
+- **Delivery arm.** Exactly `getMyChildren(userId)`'s population, unchanged (`:739-767`), with
+  `is_delivery = true`.
+- **Class arm.** Children with an open membership in a class where the EA has an active, own,
+  active-programme `class_ea_assignments` row, on a non-archived class, with
+  `history_reference = 0`. These have `is_delivery = false` unless the delivery arm also has
+  them.
 
-A `useAssessableChildren()` hook exposes it, reloading on pull and roster changes like
-`useChildren()`.
+**Choosing the metadata membership.** Each child gets one deterministically chosen membership for
+`class_id`, `grade` and `home_language`. It is chosen from that child's open memberships in the
+EA's **assigned** classes, ordered by:
+1. a membership whose `academic_year_id` is the active year;
+2. otherwise the latest `enrolled_at`;
+3. ties broken by `id` ascending.
 
-**Who is in it.** A delivery child who has no class membership is still assessable, as today. It
-appears under "Your children" with its class from `children.class_id`. So the roster is
-`delivery ∪ class roster`.
+A delivery child with no membership in an assigned class falls back to its existing class via
+`children.class_id`, which is today's behaviour. The chosen `class_id` is also the one used as
+`battery_runs.class_id`.
+
+`useAssessableChildren()` exposes it, sorted into two sections (W3): `is_delivery` first, then
+the rest.
 
 ### 5.4 Server: late-upload grace (W4)
 
-A new `private.user_could_write_for_child_on(p_child_id uuid, p_on date)` returns true when the
-caller held any of these grants **covering local date `p_on` in Africa/Johannesburg**:
-- a `child_ea_assignments` row;
-- a `class_ea_assignments` row with a `child_class_memberships` row for that class;
-- a `group_ea_assignments` row with a `child_group_memberships` row.
+W4 **adds** acceptance; it removes none. A new family or run is authorized when **either** of
+these holds:
+1. today's rule: `current_user_can_write_for_child(child)`, plus the open programme assignment;
+2. the caller held a grant **for the child on local day `d`**, plus the open programme
+   assignment.
 
-"Covering" uses the `assigned_at`/`unassigned_at` and `enrolled_at`/`exited_at` windows.
+Rule 1 stays as it is. An EA with a current grant may submit a result dated before that grant,
+exactly as today. The date is phone-stamped at save, field staff are trusted, and narrowing
+this would turn phone clock skew into lost results. That is a deliberate call against Codex
+review round 1.
 
-`submit_assessment` (new family) and `save_battery_run` (new run) accept
-`current_user_can_write_for_child(child) OR user_could_write_for_child_on(child, d)`, where:
-- `d` is the payload's `assessment_date` for an assessment;
-- `d` is the local date of `started_at` for a run.
+**`private.user_held_grant_on(p_child uuid, p_day date) returns boolean`**
+- It is SECURITY DEFINER and `search_path`-pinned.
+- It uses `ds = (p_day::timestamp at time zone 'Africa/Johannesburg')` and
+  `de = ((p_day + 1)::timestamp at time zone 'Africa/Johannesburg')`.
+- It returns true if any arm has a single interval that overlaps `[ds, de)`, with every row in
+  that arm active at the same time:
+  - **Delivery:** a `child_ea_assignments` row for the caller and child with
+    `assigned_at < de` and `coalesce(unassigned_at, 'infinity') > ds`.
+  - **Class:** a `class_ea_assignments` row `cea` for the caller, and a membership `m` for the
+    child in `cea.class_id`, with
+    `greatest(cea.assigned_at, m.enrolled_at) < least(coalesce(cea.unassigned_at,'infinity'), coalesce(m.exited_at,'infinity'))`,
+    and that intersection overlapping `[ds, de)`.
+  - **Group:** the same intersection, using `group_ea_assignments` and `child_group_memberships`
+    (`joined_at`/`removed_at`, `…clean_base_schema.sql:164-174`).
 
-Both keep the open programme check. The date must also be in the active academic year and not
-after today, so the grace window cannot be stretched by a forged date. `save_battery_run`'s
-`class_id` membership-at-`started_at` check is unchanged.
+**Bounds:** `p_day` must be on or before the Johannesburg date of `now()` and within an
+`academic_years` row with `is_active`. Otherwise the result is false.
+
+**Which date `d` is:**
+- for `submit_assessment` (new family only), `d` is the payload's `assessment_date`;
+- for `save_battery_run` (new run only), `d` is the Johannesburg date of `started_at`.
+
+The committed-family confirmation and the existing-run lifecycle paths run first, unchanged
+(`20261021120000_…:281-299, 428-478`). `save_battery_run`'s exact-`started_at` class membership
+check is also unchanged.
+
+**Known imprecision (accepted).** Group assignments are reactivated on the same row: the restore
+clears `unassigned_at` and keeps `assigned_at` (`groupsRepository.js:113-151`). So that row's
+interval hides an intervening gap, and a result dated inside the gap is accepted. Fixing this
+needs grant-period history, which no table records. For trusted staff and a rare sequence
+(assign → end → restore → end, then an upload dated in the gap), this is accepted and
+documented. Class and delivery assignments are not restored in place today; turnover inserts a
+new row (`CONTEXT.md` Class assignment).
 
 ### 5.5 Guards
 
-These guards stop class-scope rows from being edited as if they were the EA's own:
-- `classesRepository.archiveClass` (`:239-257`) only rewrites `class_id` on children the EA
-  delivers to or created. It never rewrites class-roster rows.
-- `deleteChild`/`EditChild` are unreachable for a non-delivery child.
-- `setLetterMastery` refuses a child without an active local delivery assignment (C2).
+- **`classesRepository.archiveClass`** (`:219-257`): its children and membership cascade only
+  touches children the EA delivers to (an active local `child_ea_assignments` row) or created
+  (`children.created_by = me`). It never rewrites class-roster rows or enqueues writes for them.
+- **`deleteChild`/`EditChild`** are reachable only from delivery surfaces, which stay delivery
+  scope. Add a repository-level refusal for a non-delivery, non-creator child.
+- **`setLetterMastery`** refuses a child without an active local delivery assignment (C2). The
+  mastery panel hides its confirm taps for `is_delivery = false`.
+
+### 5.6 Surfaces that switch to `useAssessableChildren` (C1)
+
+**Switch to the assessable roster:**
+- `AssessmentChildSelectScreen.js:35`, standalone and battery, in two sections;
+- `AssessmentsScreen.js:26` stats;
+- `HomeScreen.js:46`: assessment coverage and the assessment-due card only;
+- `ChildrenListScreen.js:62-66, 115`, "Unassessed". `getChildrenTabStats` (`dashboardStats.js:325-330`)
+  takes two inputs, the delivery list for the child count and the assessable list for coverage;
+- `AssessmentRankingScreen.js:58, 87-91` "not assessed".
+
+**Stay delivery scope:**
+- `LetterMasteryRankingScreen.js:29, 42` (mastery is delivery, C2);
+- `SessionCountRankingScreen`, `ChildSelector`, `GroupPickerBottomSheet`, ClassDetail,
+  onboarding and EditChild.
+
+`AssessmentHistoryScreen.js:48` already resolves missing names through `getChildNamesByIds`. It
+switches to the assessable roster for names, with that fallback kept.
+
+`ChildResultsScreen` and `LetterTrackerScreen` receive their child and class from route params,
+and use the 5.3 metadata when entered from an assessment surface.
 
 ## 6. Testing
 
-- **PostgreSQL harness** (`scripts/assessment-results-postgres-harness.cjs`):
+- **PostgreSQL harness** (`scripts/assessment-results-postgres-harness.cjs`), including the grace
+  predicate cases:
+  - assign → end → submit, with the result dated inside and outside the window;
+  - a class assignment and a membership that never overlapped, refused;
+  - a same-day grant;
+  - SAST/UTC midnight boundaries;
+  - a future date, and a date outside the active year, refused;
+  - `rls:probe` extended for `roster_class_ids` and `roster_membership_ids`, with a class-only
+    seed.
+- **Other harness cases:**
   - a class-only EA can submit and save a run for a control child;
   - that is refused after the class assignment ends, unless the result's date falls inside the
     old window (W4);
@@ -171,7 +269,12 @@ These guards stop class-scope rows from being edited as if they were the EA's ow
   - a control child who leaves the class has their membership ended and drops out of
     `getAssessableChildren`;
   - pending and failed rows are never ended;
-  - a handover is exempt from the breaker, but any other mass end still escalates;
+  - a class the EA no longer holds ends no memberships;
+  - a child with delivery and class memberships keeps the memberships both passes acknowledge;
+  - the last control child leaving a still-assigned class has their membership ended;
+  - an absent key from an older server, or an incomplete scope, ends nothing;
+  - a year-end mass exit trips the `classRosterMemberships` breaker;
+  - a child with two open memberships in different years gets the active-year one's metadata;
   - `getAssessableChildren` takes class, grade and language from the membership.
 - **Scope assertions:** a control child appears in both assessment pickers and every C1 surface.
   It does **not** appear in My Children, the session and attendee pickers, groups or daily
