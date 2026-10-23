@@ -1,3 +1,4 @@
+import { persistClassRoster } from '../services/classRosterPull';
 import { isStaleActorError } from '../session/staleActor';
 import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
@@ -41,6 +42,9 @@ export const ChildrenProvider = ({ children }) => {
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
+  const [rosterVersion, setRosterVersion] = useState(0);
+  const [classAssignmentsVersion, setClassAssignmentsVersion] = useState(0);
+  const notifyClassAssignmentsChanged = useCallback(() => setClassAssignmentsVersion(version => version + 1), []);
   const [loading, setLoading] = useState(true);
   const activeUserIdRef = useRef(null);
   const historyActorRef = useRef(user?.id || null);
@@ -302,14 +306,19 @@ export const ChildrenProvider = ({ children }) => {
         );
       }
 
+      const rosterPersisted = await persistClassRoster({
+        scope: scopes.classRoster, repositories, deletedChildIds: pendingChildDeleteIds,
+      });
       if (activeUserIdRef.current !== activeUserId) return;
+      if (rosterPersisted) setRosterVersion(version => version + 1);
       const transportFailed = Object.values(scopes)
         .some((scope) => scope.failureKind === 'transport')
         || reconcileAcknowledgments?.failureKind === 'transport';
       const reconcilesCompleted = reconcileResults
         .every((result) => result?.reconcileCompleted === true);
       if (
-        !transportFailed
+        (!scopes.classRoster || (scopes.classRoster.ok && scopes.classRoster.complete))
+        && !transportFailed
         && incompletePullScopes.length === 0
         && reconcileAuthorityComplete
         && reconcilesCompleted
@@ -351,12 +360,13 @@ export const ChildrenProvider = ({ children }) => {
 
   const pullFromServer = useCallback(() => {
     const userId = user?.id;
-    const inputs = { isOnline, domainPullNonce, run: performPullFromServer };
+    const inputs = { isOnline, domainPullNonce, classAssignmentsVersion, run: performPullFromServer };
     const active = activePullRef.current;
     if (active && active.userId === userId) {
       // A join with newer inputs owes another pass; it cannot inherit the old
       // pass's captured offline state or consume a reconnect request silently.
-      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce) {
+      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce
+        || active.inputs.classAssignmentsVersion !== classAssignmentsVersion) {
         active.pending = inputs;
       } else {
         active.pending = null;
@@ -383,7 +393,7 @@ export const ChildrenProvider = ({ children }) => {
       }
     })();
     return flight.promise;
-  }, [user?.id, isOnline, domainPullNonce, performPullFromServer, handle]);
+  }, [user?.id, isOnline, domainPullNonce, classAssignmentsVersion, performPullFromServer, handle]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {
@@ -723,6 +733,8 @@ export const ChildrenProvider = ({ children }) => {
   // historical name resolution where dropping a name to "Unknown" would degrade UX.
   const value = useMemo(() => ({
     children: visibleChildren,
+    rosterVersion,
+    notifyClassAssignmentsChanged,
     allChildren: childrenList,
     getChildById,
     groups,
@@ -742,7 +754,7 @@ export const ChildrenProvider = ({ children }) => {
     getChildrenInGroup,
     getGroupsForChild,
   }), [
-    visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
+    rosterVersion, notifyClassAssignmentsChanged, visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
     refreshFromCache, loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup,
     updateGroup, deleteGroup, addChildToGroup, removeChildFromGroup,
     getChildrenInGroup, getGroupsForChild,

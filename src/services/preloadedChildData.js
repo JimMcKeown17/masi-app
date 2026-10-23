@@ -1,3 +1,4 @@
+import { classRosterDependencyScope, pullClassRoster, persistClassRoster } from './classRosterPull';
 import { isStaleActorError } from '../session/staleActor';
 
 export const PULL_SCOPE_COMPLETENESS_LIMIT = 1000;
@@ -254,6 +255,7 @@ export const pullPreloadedChildData = async ({
       scopes: {
         programmeAssignment,
         ...dependencyScopes(),
+        classRoster: classRosterDependencyScope(),
       },
     };
   }
@@ -361,6 +363,10 @@ export const pullPreloadedChildData = async ({
     ? successfulScope(rawChildrenGroups.rows.map(markSynced))
     : rawChildrenGroups;
 
+  const classRoster = await pullClassRoster({
+    userId, activeProgrammeId, supabaseClient, queryScope: queuedQueryScope,
+  });
+
   return {
     activeProgrammeId,
     reconcileAcknowledgments,
@@ -374,6 +380,7 @@ export const pullPreloadedChildData = async ({
       groups,
       groupEaAssignments,
       childrenGroups,
+      classRoster,
     },
   };
 };
@@ -416,6 +423,7 @@ export const persistPreloadedChildData = async ({
     canReconcile ? { acknowledgedGroupIds: ack.groupIds, userId, programmeId: activeProgrammeId } : null);
   await save('childrenGroups', repositories.groups.saveServerChildrenGroupRows, scopes.childrenGroups.rows,
     canReconcile ? { acknowledgedIds: ack.childGroupMembershipIds, acknowledgedGroupIds: ack.groupIds } : null);
+  await persistClassRoster({ scope: scopes.classRoster, repositories, deletedChildIds: deleted });
   if (pullCanBeStamped(pulled, reconciles)) {
     await repositories.syncState.setPullState('child_data_pull', { lastPulledAt: pulledAt });
   }
@@ -423,7 +431,8 @@ export const persistPreloadedChildData = async ({
 };
 
 const pullCanBeStamped = ({ activeProgrammeId, scopes, reconcileAcknowledgments: ack }, reconciles) => (
-  ack?.ok === true && ack.complete === true && ack.data.activeProgrammeId === activeProgrammeId
+  (!scopes.classRoster || (scopes.classRoster.ok && scopes.classRoster.complete))
+  && ack?.ok === true && ack.complete === true && ack.data.activeProgrammeId === activeProgrammeId
   && !Object.values(scopes).some((scope) => scope.failureKind === 'transport' || (scope.ok && !scope.complete))
   && reconciles.every((result) => result?.reconcileCompleted === true)
 );

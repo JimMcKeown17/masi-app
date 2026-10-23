@@ -106,6 +106,7 @@ jest.mock('../src/db/repositories/classesRepository', () => ({
 jest.mock('../src/db/repositories/classEaAssignmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/classEaAssignmentsRepository'),
   classEaAssignmentsRepository: {
+    getAll: jest.fn().mockResolvedValue([]),
     saveServerRows: jest.fn(),
   },
 }));

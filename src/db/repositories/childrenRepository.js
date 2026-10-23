@@ -938,6 +938,8 @@ export const createChildrenRepository = ({ database } = {}) => {
     save,
     saveChild: save,
     saveChildRecord,
+    saveServerChildRow,
+    withTransaction: (task) => runWrite(null, task),
     saveServerChildRows,
     updateChild,
     getUnsyncedChildren,

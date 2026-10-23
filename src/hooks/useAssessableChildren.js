@@ -13,8 +13,8 @@ const byFirstName = (a, b) => (a.first_name || '').localeCompare(b.first_name ||
 export function useAssessableChildren() {
   const { handle, repositories } = useSignedInEA();
   const childrenRepository = repositories.children;
-  const { children } = useChildren();
-  const { classes } = useClasses();
+  const { children, rosterVersion } = useChildren();
+  const { classes, assignmentsVersion } = useClasses();
   const [roster, setRoster] = useState({ handle: null, rows: EMPTY_ROWS, loading: true });
 
   useFocusEffect(useCallback(() => {
@@ -36,9 +36,7 @@ export function useAssessableChildren() {
       }
     })();
     return () => { active = false; };
-    // Task 3 can add rosterVersion and assignmentsVersion here. Until then,
-    // each provider's list identity signals persisted changes; focus rechecks SQLite.
-  }, [handle, childrenRepository, children, classes]));
+  }, [handle, childrenRepository, children, classes, rosterVersion, assignmentsVersion]));
 
   // An EA change must hide the previous EA's rows even before the focus effect runs.
   const rows = roster.handle === handle ? roster.rows : EMPTY_ROWS;
