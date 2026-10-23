@@ -1,6 +1,7 @@
 export type MaterialItem = 'reading_card' | 'picture_cards' | 'writing_sheet';
 export interface Materials { item: MaterialItem; side?: 'A' | 'B' | 'C' }
 export interface BatteryQuestion {
+  title: string;
   question_code: string;
   question_version: string;
   durationSec?: number;
@@ -10,6 +11,8 @@ export interface BatteryQuestion {
 }
 export interface PrerequisiteRule { depends_on: string; minScore: number; on_unmet_reason: 'skipped_prerequisite_unmet' }
 export interface BatteryConfig {
+  title: string;
+  aboutMinutes: number;
   battery_code: string;
   battery_version: string;
   languages: string[];
