@@ -2238,3 +2238,71 @@ production excluded and hides the gallery after an OTA even on preview
 (`src/utils/questionGallery.js:6`, `app.config.js:4`, `eas.json:54`, `eas.json:69`). Shared
 primitives, guard tests, behaviour tests and device inspection each cover a different failure
 mode. None substitutes for the other three.
+
+## A screen that redirects on focus must not sit under its own destination (lesson flow, 2026-10-23)
+
+The Galaxy A03s run found that the first **Leave lesson** on a lesson started from "Who are you
+teaching?" bounced straight back into the lesson. Each piece was right on its own. The picker
+opened the lesson with `navigate`, so the picker stayed in the stack underneath. The picker
+also had a rule for fresh opens: if a lesson is in progress, replace yourself with it (so
+"+ Record" resumes instead of starting a second lesson). Leaving popped the lesson, the picker
+came back into focus, saw the kept draft and replaced itself with the lesson again. Resumed
+lessons have no picker underneath, which is why every replay from Home passed and why screen
+tests that mount one screen at a time could not see it.
+
+The fix follows the lesson's own copy, "You can finish it later from Home": once the lesson
+is real (it has a draft), the Lesson screen removes the picker directly below it with one
+`CommonActions.reset` that keeps every other route and key. Before the first change nothing
+is removed, so Back still undoes a wrong group (`src/screens/lessons/LessonScreen.js:54`). The
+test that would have caught it mounts a real `NavigationContainer` and native stack with the
+real picker and Lesson screens (`__tests__/LessonFlowNavigation.test.js`). The general rule:
+a focus effect that navigates is a loop waiting for its destination to pop back to it.
+
+The same run found a second, quieter design error: **a load keyed on something the data does
+not depend on**. The lesson hook keyed its database read on the present children, so every
+absent/present tap threw away the loaded input and blanked the plan until a fresh read
+finished (330 ms, or 3.2 s with the blends pack). But attendance does not change any child's
+facts; it only selects which loaded facts count today. The hook now loads facts for everyone
+in the lesson's attendance and projects the present children in the same render as the chip
+(`src/lessonPlan/inputs/lessonInputs.js`, `presentLessonInput`). Only adding a child changes
+what must be read. Ask of every load key: if this value changes, does the stored data I read
+actually change? If not, it belongs in a projection, not in the key.
+
+The 3.2 s also had a CPU half. The pure engine re-tokenised all 3,328 pack words on every call.
+The engine may hold no state (`__tests__/lessonPlanEnginePurity.test.js`), so the cache lives
+one layer out: a pure `indexPack` in the engine, memoised per frozen pack object in the inputs
+layer (`src/lessonPlan/inputs/packIndexCache.js`). Purity and speed did not conflict; they only
+needed the cache to live where state is allowed.
+
+## Two writers of one record need a rule that runs out (lesson flow, 2026-10-23)
+
+The Lesson screen stays mounted under Wrap up, and both run `useLessonDraft`. They share one draft
+through a controller, but each loads its own facts about the children, at its own moment. So the
+two can disagree: one loaded before "what children know" finished downloading, the other after.
+
+The first version of "refresh the plan when history arrives" said: *if my base was refreshed,
+recompute the plan and save it if it differs from the stored one.* Each screen obeyed that rule
+with its own facts, so each one's write made the other's plan "differ", and they traded writes
+forever. Nothing was wrong in either screen alone; the loop lived between them.
+
+The way out is to compare against the **shared** record and only ever move it one way. The stored
+plan carries `history_complete` and `mastery_complete`. A screen may replace it only with a plan
+that is at least as complete on both and more complete on one. Every write raises the stored
+plan, and there are only two flags to raise, so after at most two writes no screen has anything
+better to offer, whatever facts each one holds. A screen whose facts are *worse* (a download
+failed since) never writes at all.
+
+Two habits to take from this:
+
+- When two components can write the same record, ask "what stops them?" A rule that only says
+  "write when we disagree" never stops if they keep disagreeing. A rule that only lets the record
+  improve in a fixed order stops by construction. (The attendance rule already worked this way:
+  the stored plan records who was present, so one write settles it for both screens.)
+- Count what you mean to count. The draft controller runs a transition to check it, again to show
+  it at once, and again to save it, so a spy on the transition saw 6 calls for 2 writes. The test
+  counts calls to `controller.apply`, which is one per write.
+- A failed write is a writer too. "Every write raises the stored plan" holds only if writes land.
+  When one fails, the controller puts the old plan back, the screen sees the same gap, and it
+  tries again, for as long as the disk stays full. An automatic write must not retry on its own
+  schedule: here it waits while the controller shows "Couldn't save your last change", which
+  only a successful write clears, so the next change the EA makes is the retry.
