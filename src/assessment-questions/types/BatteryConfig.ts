@@ -16,6 +16,7 @@ export interface BatteryConfig {
   battery_code: string;
   battery_version: string;
   languages: string[];
+  fixedLanguage?: string;
   questions: BatteryQuestion[];
   prerequisites: Record<string, PrerequisiteRule>;
 }
