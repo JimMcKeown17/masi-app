@@ -56,17 +56,17 @@ in tests via `test-support/expoSQLiteMock`), Jest + React Native Testing Library
 
 1. **Double tap on Start / Resume / Start next.** It must not create two runs or push two
    Question screens. The `launchingRef` guard and the repository's `UNFINISHED_RUN_EXISTS` are the
-   two nets. Tests: Task 3 (repository) and Task 5 (screen).
+   two nets. Tests: Task 4 (repository) and Task 6 (screen).
 2. **The EA leaves a Question mid-capture** (✕, hardware Back, swipe). This shows a discard sheet,
-   writes nothing, and the Question stays undecided on the overview. Test: Task 8.
+   writes nothing, and the Question stays undecided on the overview. Test: Task 9.
 3. **A save refused because the run is no longer writable** (abandoned meanwhile, or the
    Question already decided). This shows "This run is closed", with no retry loop and no lost
-   navigation. Tests: Task 3 (codes) and Task 8 (screen).
+   navigation. Tests: Task 4 (codes) and Task 9 (screen).
 4. **The child is no longer in the EA's list** when the run is resumed. The overview opens
    read-only with "This child is no longer assigned to you — you can abandon this run." and only
-   Abandon. Test: Task 7.
+   Abandon. Test: Task 8.
 5. **A run started on another phone** (`started_here = 0`), opened from History. It shows the
-   read-only summary, with no Finalize, no checklist and no Abandon. Test: Task 9.
+   read-only summary, with no Finalize, no checklist and no Abandon. Test: Task 10.
 
 ---
 
@@ -86,7 +86,11 @@ in tests via `test-support/expoSQLiteMock`), Jest + React Native Testing Library
   - `BatteryConfig.title: string` and `BatteryConfig.aboutMinutes: number` (30 for WelaPLUS 2024.1).
   - `BatteryQuestion.title: string`. This is required, and every battery Question has one.
   - `batteryFor(code: string | null | undefined, version: string | null | undefined): BatteryConfig | null`
-  - `bundledItemSetFor(questionCode: string, language: string): ItemSetMeta | null`
+  - `bundledItemSetFor(questionCode: string, questionVersion: string, language: string): ItemSet | null`.
+    It returns the full bundled item set, keyed by code **and** version. The host passes that
+    exact object to the component as `itemSet` (Task 9), and `skippedResult` derives its
+    identity from the same lookup. A completed result and a skipped result in one run therefore
+    always carry the same provenance.
   - `skippedResult(question: BatteryQuestion, language: string, reason: StoppedReason): Result`.
     It throws `TypeError` when the reason does not start with `skipped_`, or when no bundled
     item set exists.
@@ -114,14 +118,14 @@ test.each(WELA_PLUS_FULL_2024_1.languages.flatMap(lang =>
   WELA_PLUS_FULL_2024_1.questions.map(q => [q.question_code, lang] as const)))(
   'bundled item set for %s/%s matches the battery Question', (code, lang) => {
     const q = WELA_PLUS_FULL_2024_1.questions.find(x => x.question_code === code)!;
-    const set = bundledItemSetFor(code, lang)!;
+    const set = bundledItemSetFor(code, q.question_version, lang)!;
     expect(set).toMatchObject({ question_code: code, question_version: q.question_version, language: lang });
   });
 test('skippedResult builds a valid zero-item result', () => {
   const q = WELA_PLUS_FULL_2024_1.questions[5];
   const r = skippedResult(q, 'xh', 'skipped_tired');
   expect(r).toMatchObject({ question_code: q.question_code, question_version: q.question_version,
-    item_set_id: bundledItemSetFor(q.question_code, 'xh')!.item_set_id, language: 'xh',
+    item_set_id: bundledItemSetFor(q.question_code, q.question_version, 'xh')!.item_set_id, language: 'xh',
     duration_ms: 0, stopped_reason: 'skipped_tired', items: [],
     derived: { total_correct: 0, total_attempted: 0, percent: 0, last_attempted_position: null } });
   expect(validateResult(r).valid).toBe(true);
@@ -131,6 +135,12 @@ test('skippedResult refuses a non-skip reason and an unknown language', () => {
   expect(() => skippedResult(q, 'xh', 'completed')).toThrow(TypeError);
   expect(() => skippedResult(q, 'af', 'skipped_other')).toThrow(TypeError);
 });
+test('bundledItemSetFor is version-aware', () => {
+  expect(bundledItemSetFor('letter_sounds', '2026.1', 'en')).toBe(LETTER_SOUNDS_2026_1_EN);
+  expect(bundledItemSetFor('letter_sounds', '2026.2', 'en')).toBe(LETTER_SOUNDS_2026_2_EN);
+  expect(bundledItemSetFor('word_reading', '2026.1', 'af')).toBe(WORD_READING_2026_1_AF);
+  expect(bundledItemSetFor('wela_plus_read_words', '2099.1', 'en')).toBeNull();
+});
 ```
 
 - [ ] **Step 2: Run the tests and confirm they fail**
@@ -138,10 +148,16 @@ test('skippedResult refuses a non-skip reason and an unknown language', () => {
   - Expected: FAIL. `batteryFor` and the others are not exported yet.
 
 - [ ] **Step 3: Implement the package surface**
-  - `bundledItemSets.ts` maps each battery `question_code` to the same `{en, xh}` constants its
-    component passes to `resolveItemSet`.
-  - Q1 `letter_sounds` uses `LETTER_SOUNDS_2026_2_EN/XH`.
-  - Only list what a component bundles, so no `af` entries. A later Afrikaans battery adds them.
+  - `bundledItemSets.ts` is keyed `` `${code}@${version}` `` → `{ [language]: ItemSet }`. It
+    lists every bundled item set exported from `itemsets/index.ts`:
+    - the eleven `wela_plus_*@2024.1` sets (EN/XH);
+    - `letter_sounds@2026.1` and `letter_sounds@2026.2` (with AF on 2026.2);
+    - `word_reading@2026.1` (EN/XH/AF).
+  - An Afrikaans battery later only adds entries here, plus `af` in its `languages`.
+  - **Fixture migration:** every typed `BatteryConfig`/`BatteryQuestion` fixture now needs
+    `title` (and `aboutMinutes` on configs). Update
+    `battery/__tests__/evaluateBatteryState.test.ts` and any other fixture that
+    `npm run test:types` flags.
   - `registry.ts` holds a `const BATTERIES = [WELA_PLUS_FULL_2024_1]`.
 
 - [ ] **Step 4: Run the package suite and type check**
@@ -150,7 +166,60 @@ test('skippedResult refuses a non-skip reason and an unknown language', () => {
 
 - [ ] **Step 5: Commit** with the message `feat(battery): registry, Question titles, bundled item sets, skippedResult`.
 
-### Task 2: Run code and run view model
+### Task 2: Every Question reports `onStart`
+
+`QuestionProps.onStart` is documented as "called exactly once when the Question leaves its intro
+phase", but today only `SequentialCapture` calls it (`progress/SequentialCapture.tsx:157-160`).
+The other ten components only flip an internal phase (for example
+`ReadWordsQuestion/index.tsx:256`, `ListenAndAnswerStoryQuestion/index.tsx:189`). The host relies
+on `onStart` to arm its leave guard and to hide the materials block, so this contract defect
+must be fixed first.
+
+**Files:**
+- Modify the intro → capture transition in each of these
+  `src/assessment-questions/questions/<Q>/index.tsx` files:
+  - `ListenAndAnswerStoryQuestion`
+  - `ListenFirstSoundQuestion`
+  - `ListenPhonemeBlendQuestion`
+  - `LetterWritingFromPicturesQuestion`
+  - `ReadWordsQuestion` (the grid path; its sequential path already goes through
+    `SequentialCapture`)
+  - `ReadSentencesQuestion`
+  - `ReadPassageQuestion`
+  - `WriteCvcsQuestion`
+  - `WriteSentencesFromDictationQuestion`
+  - `StoryWritingRubricQuestion`
+- Test: `src/assessment-questions/__tests__/onStartContract.test.tsx` (new)
+
+**Interfaces:**
+- Consumes: `WELA_PLUS_FULL_2024_1`, `questionComponentFor`, and `bundledItemSetFor` (Task 1).
+- Produces: every component calls `props.onStart?.()` exactly once, at the moment its own intro
+  Start is pressed. It never calls it on re-render, on a re-read or review sub-phase, on
+  completion, or on skip. No other behaviour changes. The frozen files (reducers, clock,
+  `applyProgress`, `Result` construction) keep a zero diff.
+
+- [ ] **Step 1: Write the failing test.** It parameterizes over all 11 battery Questions × `en`
+  and `xh`, using the **real** components with
+  `itemSet={bundledItemSetFor(code, version, lang)}` and `instructions={q.instructions[lang]}`.
+  The test checks four things:
+  - `onStart` is not called on mount;
+  - pressing the intro Start button calls it exactly once;
+  - re-rendering does not call it again;
+  - pressing the in-Question Skip control and choosing "Other" emits one `onComplete`, whose
+    `item_set_id`, `question_code` and `question_version` equal the passed item set's, and
+    still never calls `onStart` a second time.
+  Find each component's Start and Skip controls by role and label, as their existing tests do.
+- [ ] **Step 2: Run the test and confirm it fails**
+  - Run: `npx jest src/assessment-questions/__tests__/onStartContract.test.tsx`
+  - Expected: FAIL for the ten listed components; `letter_sounds` passes.
+- [ ] **Step 3: Call `props.onStart?.()` beside each component's `setPhase('active')`** (or its
+  equivalent) for the intro Start, and nowhere else.
+- [ ] **Step 4: Run the package suite and type check**
+  - Run: `npx jest src/assessment-questions && npm run test:types`
+  - Expected: PASS, with the existing component tests unchanged.
+- [ ] **Step 5: Commit** with the message `fix(questions): every Question calls onStart once when capture begins`.
+
+### Task 3: Run code and run view model
 
 **Files:**
 - Create: `src/utils/batteryRun.js`
@@ -162,8 +231,9 @@ test('skippedResult refuses a non-skip reason and an unknown language', () => {
   `question_code`, `stopped_reason`, `score`, `total_items` and a parsed `derived`.
 - Produces:
   - `runCode(uuid: string): string`, for example `'KWY-2M4'`.
-  - `buildRunView(battery, run): RunView`. Here `run` is
-    `{ id, status, started_here, language, results }` and the return value is:
+  - `buildRunView(battery, run, { activeProgrammeId, childAssigned }): RunView`. Here `run`
+    is `{ id, status, started_here, programme_id, language, results }` and the return value
+    is:
 
 ```js
 // RunView
@@ -171,7 +241,8 @@ test('skippedResult refuses a non-skip reason and an unknown language', () => {
   code, decidedCount, totalCount, eligibleToFinalize,
   next: BatteryQuestion | null,            // evaluator's nextQuestion
   autoSkips: [{ question_code, reason }],  // evaluator passthrough
-  writable: run.status === 'in_progress' && run.started_here === 1,
+  writable,      // in_progress && started_here===1 && programme_id===activeProgrammeId && childAssigned
+  readOnlyReason: null | 'closed' | 'other_phone' | 'unassigned', // 'unassigned' = child or programme lost (spec §8)
   writingSheetReminder: boolean,           // next is the battery's FIRST materials.item==='writing_sheet' Question
   hasWritingSheet: boolean,                // any Question uses the writing sheet
   rows: [{ number, question, state: 'done'|'skipped'|'next'|'not_started',
@@ -182,11 +253,11 @@ test('skippedResult refuses a non-skip reason and an unknown language', () => {
 
 - `materialsLine(question, language, battery)` returns either `null` (oral) or
   `{ item: 'Reading Card', side: 'side B' | null, footer }`. The footer rule matches approved
-  frame 5, and the printed footers in Task 10 use the same string:
+  frame 5, and the printed footers in Task 11 use the same string:
   `<battery.title> <battery_version> · <LANGUAGE CODE, upper case> · <side ? 'side X' : item>`.
   Examples: `WelaPLUS 2024.1 · XH · side B` and `WelaPLUS 2024.1 · EN · Writing Sheet`.
 - `formatRunStart(iso: string, now: Date): string` returns `'Today 09:12'` on the same local
-  day, and otherwise `'Tue 14:05'` (short weekday, 24-hour clock). Tasks 4, 5 and 9 use it.
+  day, and otherwise `'Tue 14:05'` (short weekday, 24-hour clock). Tasks 5, 6 and 10 use it.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -204,7 +275,8 @@ test('skipped row uses the package label', ...);                           // sk
 test('writing-sheet reminder only before the first writing-sheet Question', ...); // Q1-4 decided -> true; Q1-5 decided -> false
 test('not-started timed Question says the minutes', ...);                  // Q6 -> 'Not started · 1 min'
 test('all decided -> eligibleToFinalize, next null', ...);
-test('pulled or terminal run is not writable', ...);                       // started_here 0 or status 'completed'
+test('pulled or terminal run is not writable', ...);                       // started_here 0 -> 'other_phone'; status 'completed' -> 'closed'
+test('lost child or programme is read-only "unassigned"', ...);           // childAssigned false; or activeProgrammeId null / different from run.programme_id
 test('materialsLine: oral null; card with side; sheet without side', ...); // Q2 -> null; Q6 xh -> footer 'WelaPLUS 2024.1 · XH · side B'; Q5 -> { item:'Writing Sheet', side:null, footer:'WelaPLUS 2024.1 · EN · Writing Sheet' }
 test('formatRunStart: same local day -> "Today 09:12"; earlier -> "Tue 14:05"', ...);
 ```
@@ -226,7 +298,7 @@ test('formatRunStart: same local day -> "Today 09:12"; earlier -> "Tue 14:05"', 
 
 - [ ] **Step 5: Commit** with the message `feat(battery): run code and pure run view model`.
 
-### Task 3: Repository run rules
+### Task 4: Repository run rules
 
 **Files:**
 - Modify: `src/db/repositories/batteryRunsRepository.js`
@@ -247,10 +319,15 @@ test('formatRunStart: same local day -> "Today 09:12"; earlier -> "Tue 14:05"', 
     `TypeError`. `abandonRun(id)` is unchanged.
   - `getUnfinishedRunsForUser(userId)` rows gain `question_count` (number), counted like
     `getRunsForUser`.
-  - `saveQuestionResult({ batteryRunId })`. When `batteryRunId` is set, it runs inside the write
-    transaction **before** the duplicate checks and throws `error.code = 'RUN_NOT_WRITABLE'`
-    unless the run exists with `started_here = 1`, `status = 'in_progress'`, the same
-    `child_id`, the same `user_id`, and the same `programme_id` as the resolved programme.
+  - `saveQuestionResult({ batteryRunId })`. When `batteryRunId` is set, the run guard runs first
+    inside the write transaction, **before** `resolveProgrammeId` and the duplicate checks.
+    - It reads the active programme with the non-throwing `getActiveProgrammeId`.
+    - It throws `error.code = 'RUN_NOT_WRITABLE'` unless the run exists with `started_here = 1`,
+      `status = 'in_progress'`, the same `child_id`, the same `user_id`, and a `programme_id`
+      equal to the non-null active programme.
+    - It then saves with `programmeId: run.programme_id`.
+    - So a programme that ends mid-capture is a non-retryable refusal, never the generic
+      `No active programme` error. The standalone path (no `batteryRunId`) is unchanged.
   - Existing codes are unchanged: `ASSESSMENT_ALREADY_SAVED` and `QUESTION_ALREADY_DECIDED`.
 
 - [ ] **Step 1: Write the failing real-SQLite tests** in `batteryRunsRepository.test.js`:
@@ -261,8 +338,9 @@ test('a second unfinished run for the same child is refused with the existing ru
 // a different child and a terminal run do not block; outbox holds exactly one battery_runs row after the refusal
 test('startRun with abandonRunId abandons and starts atomically', ...);
 // both rows' outbox payloads present; old status 'abandoned', new 'in_progress'
-test('startRun with abandonRunId rolls both back when the insert fails', ...);
-// inject outbox failure as the existing "fails atomically" test does; old run still in_progress
+test('startRun with abandonRunId rolls both back when the new run\'s outbox insert fails', ...);
+// a SQLite trigger that raises only for new.id = 'battery_runs:<newId>:insert', so the abandon of the
+// old run succeeds first inside the transaction; after the throw the old run is still in_progress with its original outbox row
 test('abandonRunId for another child is refused and nothing changes', ...);
 test('finalizeRun refuses an incomplete run and finalizes a complete one', ...);
 // save 2 skipped results via saveQuestionResult; finalizeRun(id,{questionCodes:[a,b,c]}) -> RUN_INCOMPLETE; with [a,b] -> completed
@@ -272,7 +350,20 @@ test.each([
   ['another child', 'child'], ['missing run', 'missing'],
 ])('saveQuestionResult refuses a %s with RUN_NOT_WRITABLE and writes nothing', ...);
 // assert no assessments, assessment_items or assessments outbox rows were written
+test.each(['ended', 'changed'])('saveQuestionResult refuses with RUN_NOT_WRITABLE when the programme assignment %s after start', ...);
+// end the staff_programme_assignments row (or move the EA to another programme) after startRun; zero writes
 ```
+
+**Existing fixtures this task must migrate.** They break under the new rules, so they are part of
+this task:
+- `batteryRunsRepository.test.js:53-64`: finalize without `questionCodes`.
+- `:140-148`: five unfinished runs for one child.
+- `:184-195`: finalize before saving a Question.
+
+Add a `decide(runId, codes)` helper that saves skipped results, and pass those codes to
+`finalizeRun`. Build the scope and history rows with distinct children, or with direct SQL
+inserts, rather than repeated `startRun` calls for one child. The behaviour each existing test
+asserts stays the same.
 
 - [ ] **Step 2: Run the tests and confirm they fail**
   - Run: `npx jest __tests__/batteryRunsRepository.test.js`
@@ -281,6 +372,7 @@ test.each([
 - [ ] **Step 3: Implement the three rules**
   - Keep each rule's check inside the existing write transaction, so that two quick taps cannot
     both pass it.
+  - `finalizeRun` requires a non-empty `questionCodes` array.
   - Update the contract map's producer notes for `battery_runs` (one unfinished run, atomic
     replace) and `assessments` (the run guard).
 
@@ -290,7 +382,7 @@ test.each([
 
 - [ ] **Step 5: Commit** with the message `feat(battery): one unfinished run per child, run guard on save, finalize completeness`.
 
-### Task 4: Assessments tab (frame 1)
+### Task 5: Assessments tab (frame 1)
 
 **Files:**
 - Modify: `src/screens/main/AssessmentsScreen.js`
@@ -298,8 +390,8 @@ test.each([
 
 **Interfaces:**
 - Consumes:
-  - `batteryFor` (Task 1) and `runCode` (Task 2);
-  - `repositories.batteryRuns.getUnfinishedRunsForUser` (Task 3);
+  - `batteryFor` (Task 1) and `runCode` (Task 3);
+  - `repositories.batteryRuns.getUnfinishedRunsForUser` (Task 4);
   - `programmeGate.programme.default_battery_code` / `default_battery_version`.
 - Produces navigation:
   - `navigate('AssessmentChildSelect', { batteryCode, batteryVersion })` for **Start a run**;
@@ -330,7 +422,7 @@ test('quick assessments are compact rows titled from STANDALONE_TESTS and still 
   - The language line comes from the battery's `languages` mapped through `LANGUAGE_LABELS` and
     joined with " or ".
   - "about 30 min" comes from `battery.aboutMinutes` (Task 1).
-  - Format the start time with `formatRunStart` (Task 2).
+  - Format the start time with `formatRunStart` (Task 3).
   - Children's names come from `useChildren()`. A run whose child is missing shows "Child no
     longer assigned".
   - Reload on focus, as the existing stats do.
@@ -342,7 +434,7 @@ test('quick assessments are compact rows titled from STANDALONE_TESTS and still 
 
 - [ ] **Step 5: Commit** with the message `feat(assess-tab): WelaPLUS card, unfinished runs, quick assessments`.
 
-### Task 5: Child select in battery mode (frames 2–3)
+### Task 6: Child select in battery mode (frames 2–3)
 
 **Files:**
 - Modify: `src/screens/assessments/AssessmentChildSelectScreen.js`
@@ -401,7 +493,7 @@ test('test mode (testCode) is unchanged', ...); // keep AssessmentChildSelectScr
 
 - [ ] **Step 5: Commit** with the message `feat(battery): child select battery mode with C22 language gate and unfinished-run sheet`.
 
-### Task 6: Extract the guarded save from StandaloneTestScreen
+### Task 7: Extract the guarded save from StandaloneTestScreen
 
 **Files:**
 - Create: `src/hooks/useGuardedQuestionSave.js`
@@ -413,7 +505,9 @@ test('test mode (testCode) is unchanged', ...); // keep AssessmentChildSelectScr
 - Produces:
   `useGuardedQuestionSave({ navigation, persist: (result) => Promise<void>, onSaved: () => void, fatalCodes = [] })`,
   which returns
-  `{ onStart, onComplete, result, saveError, fatalError, retry, leaveSheet: { visible, hasResult, onConfirm, onCancel } }`.
+  `{ onStart, onComplete, result, saveError, dismissSaveError, fatalError, retry, leaveSheet: { visible, hasResult, onConfirm, onCancel } }`.
+  - `dismissSaveError` hides the save-error sheet. It keeps the captured result and keeps the
+    leave guard armed, as `StandaloneTestScreen.js:135-140` does today.
   - `persist` rejecting with an `error.code` in `fatalCodes` sets `fatalError` to that code
     instead of `saveError`, and releases the leave guard.
   - `onSaved` runs after the leave guard has released. This replaces the current
@@ -422,7 +516,9 @@ test('test mode (testCode) is unchanged', ...); // keep AssessmentChildSelectScr
 - [ ] **Step 1: Add one hook test** in `__tests__/useGuardedQuestionSave.test.js`, through a tiny
   host component. A `persist` that rejects with `{code:'RUN_NOT_WRITABLE'}`, where
   `fatalCodes:['RUN_NOT_WRITABLE']`, sets `fatalError` to `'RUN_NOT_WRITABLE'`, leaves
-  `saveError` false, and lets `goBack` leave without the discard sheet.
+  `saveError` false, and lets `goBack` leave without the discard sheet. A second test covers a
+  fatal rejection that arrives while the discard sheet is already open: it closes the discard
+  sheet and shows the fatal state once.
 - [ ] **Step 2: Run it and confirm it fails**
   - Run: `npx jest __tests__/useGuardedQuestionSave.test.js`
   - Expected: FAIL.
@@ -434,11 +530,11 @@ test('test mode (testCode) is unchanged', ...); // keep AssessmentChildSelectScr
   - Expected: PASS, with `StandaloneTestScreen.test.js` byte-identical to `main`.
 - [ ] **Step 5: Commit** with the message `refactor(assess): extract useGuardedQuestionSave from StandaloneTestScreen`.
 
-### Task 7: Battery overview (frames 4 and 6)
+### Task 8: Battery overview (frames 4 and 6)
 
 **Files:**
 - Create: `src/screens/assessments/battery/BatteryOverviewScreen.js`
-- Modify: `src/navigation/AppNavigator.js` (add the `BatteryOverview` route only; header title is
+- Modify: `src/navigation/AppNavigator.js` (add the `BatteryOverview` route only, and add it to the exhaustive route lists in `__tests__/AppNavigator.headers.test.js:115-120`; header title is
   the child's name, set by the screen)
 - Test: `__tests__/BatteryOverviewScreen.test.js` (new)
 
@@ -466,7 +562,7 @@ test('a skip of a Question that is no longer undecided (QUESTION_ALREADY_DECIDED
 test('all decided: footer becomes "Review and finalize" and opens BatteryRunSummary', ...);
 test('Abandon run asks via ConfirmSheet, then abandons and goes back', ...);
 test('autoSkips from the evaluator are saved once as skipped_prerequisite_unmet (test battery with a gate)', ...);
-test('child no longer in useChildren: read-only note and only Abandon', ...);         // Review Focus 4
+test('child no longer in useChildren, or active programme gone or different: read-only note "This child is no longer assigned to you — you can abandon this run." and only Abandon', ...); // Review Focus 4
 test('pulled or terminal run: replaces to BatteryRunSummary', ...);
 test('reloads on focus after returning from a Question', ...);
 test('double tap on Start next pushes one screen', ...);                               // Review Focus 1
@@ -496,19 +592,19 @@ test('double tap on Start next pushes one screen', ...);                        
 
 - [ ] **Step 5: Commit** with the message `feat(battery): run overview with skip, reminder, abandon`.
 
-### Task 8: Battery Question host (frame 5)
+### Task 9: Battery Question host (frame 5)
 
 **Files:**
 - Create: `src/screens/assessments/battery/BatteryQuestionScreen.js`
 - Create: `src/components/assessments/MaterialsBlock.js`
-- Modify: `src/navigation/AppNavigator.js` (add the `BatteryQuestion` route only;
+- Modify: `src/navigation/AppNavigator.js` (add the `BatteryQuestion` route only, and add it to the exhaustive route lists in `__tests__/AppNavigator.headers.test.js:115-120`;
   `headerShown: false`)
 - Test: `__tests__/BatteryQuestionScreen.test.js` (new). Mock `questionComponentFor`, as
   `StandaloneTestScreen.test.js` mocks the components.
 
 **Interfaces:**
 - Consumes:
-  - `questionComponentFor`, `batteryFor`, `materialsLine`, `runCode`;
+  - `questionComponentFor`, `batteryFor`, `bundledItemSetFor`, `materialsLine`, `runCode`;
   - `useGuardedQuestionSave({ fatalCodes: ['RUN_NOT_WRITABLE', 'QUESTION_ALREADY_DECIDED'] })`;
   - `saveQuestionResult({ assessmentId, result, childId, userId, batteryRunId, captureMode: result.derived.capture_mode ?? null })`.
 - Produces: `goBack()` to the overview after a save, and a call to `triggerBackgroundSync()`.
@@ -517,7 +613,8 @@ test('double tap on Start next pushes one screen', ...);                        
 
 ```js
 test('TestFrame title "6 · Reading words", subtitle "Lwazi Mbeki · isiXhosa · KWY-2M4"', ...);
-test('passes language, instructions[language], durationSec, childName, allowSkip and extraProps to the component', ...);
+test('passes itemSet === bundledItemSetFor(code, version, language), language, instructions[language], durationSec, childName, allowSkip and extraProps', ...);
+test('real ReadWordsQuestion in a real stack: Start hides the materials block and Back then shows the discard sheet', ...); // no component mock: proves Task 2's onStart wiring end to end
 test('materials block "Hand Lwazi" / "Reading Card · side B" / "Footer: WelaPLUS 2024.1 · XH · side B" until onStart, then hidden', ...);
 test('oral Question shows "No materials, oral"', ...);
 test('onComplete saves once with batteryRunId and goes back to the overview', ...);
@@ -540,7 +637,8 @@ test('opening a Question that is already decided or not next renders the closed 
   - The closed state is a `BottomSheet`, "This run is closed", with body "This answer can't be
     saved because the run is no longer open." and a footer "Back to run".
   - On mount, check with `buildRunView` that `questionCode === view.next?.question_code` and that
-    `view.writable`.
+    `view.writable`. Pass `activeProgrammeId` from `getActiveProgrammeGate` and `childAssigned`
+    from `useChildren()`.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
   - Run: `npx jest __tests__/BatteryQuestionScreen.test.js __tests__/StandaloneTestScreen.test.js`
@@ -548,13 +646,13 @@ test('opening a Question that is already decided or not next renders the closed 
 
 - [ ] **Step 5: Commit** with the message `feat(battery): Question host with materials block`.
 
-### Task 9: Run summary, finalize, and history rows (frames 7–8)
+### Task 10: Run summary, finalize, and history rows (frames 7–8)
 
 **Files:**
 - Create: `src/screens/assessments/battery/BatteryRunSummaryScreen.js`
 - Create: `src/components/assessments/ChecklistRow.js`
 - Modify: `src/screens/assessments/AssessmentHistoryScreen.js:120-170` (run rows)
-- Modify: `src/navigation/AppNavigator.js` (add the `BatteryRunSummary` route only, title
+- Modify: `src/navigation/AppNavigator.js` (add the `BatteryRunSummary` route only, and add it to the exhaustive route lists in `__tests__/AppNavigator.headers.test.js:115-120`, title
   "Review run")
 - Test: `__tests__/BatteryRunSummaryScreen.test.js` (new); `__tests__/AssessmentHistoryScreen.plan5.test.js` (extend)
 
@@ -595,7 +693,7 @@ test('history: standalone rows unchanged', ...);
 
 - [ ] **Step 5: Commit** with the message `feat(battery): run summary with finalize checklist; history rows open runs`.
 
-### Task 10: Docs and printout pack brief
+### Task 11: Docs and printout pack brief
 
 **Files:**
 - Create: `documentation/welaplus-printout-pack.md`. This is the designer's brief: Release 1
@@ -604,7 +702,7 @@ test('history: standalone rows unchanged', ...);
   - Content type is **Andika Regular**.
   - The **Writing Sheet** header keeps the boxed Run code field.
   - The **Q6/Q8 card** layout matches the phone's paging rule (spec 2026-10-22 status note).
-  - Every printed footer uses Task 2's footer rule exactly (`WelaPLUS 2024.1 · XH · side B`,
+  - Every printed footer uses Task 3's footer rule exactly (`WelaPLUS 2024.1 · XH · side B`,
     `WelaPLUS 2024.1 · EN · Writing Sheet`, `WelaPLUS 2024.1 · EN · Picture Cards`), so the
     card and the app never drift.
   - The only EA tick in the app is the run-code tick (no filing tick).
@@ -624,7 +722,7 @@ test('history: standalone rows unchanged', ...);
   - Expected: no hits outside `documentation/archive/` and dated historical notes.
 - [ ] **Step 3: Commit** with the message `docs(welaplus): Plan 3 host docs and printout pack brief`.
 
-### Task 11: Device gate (controller, not Codex)
+### Task 12: Device gate (controller, not Codex)
 
 These steps run on a sqlite-staging build. Jim signs in on each device himself.
 
