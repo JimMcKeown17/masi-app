@@ -32,6 +32,34 @@
 > `src/assessment-questions/ui/Text.tsx:30`). The original body remains the 2026-10-14
 > record; capture verification and remaining native gates live in `documentation/build-log.md`.
 
+> **Status note — 2026-10-23 (Plan 3 host, Jim's decisions):** Jim approved eight Bold Red
+> screens for the host Run flow (plan: `docs/superpowers/plans/2026-10-23-welaplus-plan-3-host-run-flow.md`).
+> They amend §5 and §5.4 as follows:
+> - **Tab layout:** the WelaPLUS card comes first, with its unfinished runs listed directly
+>   under it. The letter and word tests become compact "Quick assessments" rows below.
+> - **Children offered:** every child in the EA's active programme, ECD included, with no grade
+>   filter.
+> - **Afrikaans (C22):** a child whose class language is not in the battery's `languages` stays
+>   visible but greyed, with "Not available in Afrikaans yet" (or the language's own name).
+>   A child whose class has no language gets a picker listing only the battery's languages.
+>   The rule reads `battery.languages`, so adding `af` to a battery lifts the gate with no
+>   host change.
+> - **Finalize checklist:** **one** required tick, "Write run code K7Q-4MD and the child's name
+>   on the Writing Sheet". §5.4's second item, "File the sheet for Head Office with this week's
+>   sheets", is dropped. The tick is shown only when the battery has a Writing Sheet Question.
+> - **Materials line:** the host draws a dark "Hand <child>" block above the package intro,
+>   naming the item, side and footer text (`WelaPLUS 2024.1 · XH · side B`). Oral Questions
+>   show "No materials, oral". The block hides once capture starts.
+> - **Skip from the overview:** ⋯ on any undecided row opens the five manual reasons with a
+>   confirm button. Skips inside a Question are unchanged.
+> - **History:** each run row opens the run summary. A run started on another phone is
+>   read-only (AR §11.4).
+> - **Run-code reminder:** shown on the overview before the battery's first Writing Sheet
+>   Question (Q5 in 2024.1).
+>
+> Q6 and Q8 are already timed at 60 s in the battery (`battery/wela_plus_full.ts`), matching
+> Jim's 2026-10-23 answer to §4.3 item 4 (one minute each).
+
 **Date:** 2026-10-14
 **Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec approved by Jim 2026-10-14.
 **Parent PRD:** [`documentation/wela-plus-battery-prd-2026.md`](../../../documentation/wela-plus-battery-prd-2026.md)
