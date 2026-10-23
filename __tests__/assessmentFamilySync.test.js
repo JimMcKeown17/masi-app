@@ -232,7 +232,12 @@ describe('one assessment family, one call, one acknowledgement through real SQLi
     await f.db.runAsync('update sync_outbox set payload = ? where id = ?', JSON.stringify(initial.payload), initial.id);
     const engine = f.engine(client);
     expect(await engine.syncAll()).toMatchObject({ totalSynced: 1 });
-    await f.runs.finalizeRun(id);
+    // This header-only sync case starts with its required Question already acknowledged.
+    const decision = await f.save(0, { batteryRunId: id,
+      result: questionResult(0, { stopped_reason: 'skipped_tired', duration_ms: 0 }) });
+    await f.db.runAsync("update assessments set sync_status = 'synced' where id = ?", decision.id);
+    await f.db.runAsync('delete from sync_outbox where id = ?', `assessments:${decision.id}:insert`);
+    await f.runs.finalizeRun(id, { questionCodes: ['letter_sounds'] });
     expect(await f.outbox.getById(`battery_runs:${id}:update`)).not.toBeNull();
     client.rpc.mockResolvedValue({ data: response, error: null });
     expect(await engine.syncAll()).toMatchObject({ totalSynced: 1 });

@@ -126,7 +126,19 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     const verdict = validateResult(result);
     if (!verdict.valid) throw new TypeError(`Invalid Question result: ${verdict.errors.join('; ')}`);
     return runWrite(transaction, async (txn) => {
-      const programmeId = await resolveProgrammeId(txn, { userId });
+      let run;
+      if (batteryRunId) {
+        run = await txn.getFirstAsync('select * from battery_runs where id = ?', batteryRunId);
+        const activeProgrammeId = await getActiveProgrammeId(txn, userId);
+        if (!run || run.started_here !== 1 || run.status !== 'in_progress'
+          || run.child_id !== childId || run.user_id !== userId
+          || !activeProgrammeId || run.programme_id !== activeProgrammeId) {
+          const error = new Error('RUN_NOT_WRITABLE: this Run cannot accept a Question result');
+          error.code = 'RUN_NOT_WRITABLE';
+          throw error;
+        }
+      }
+      const programmeId = await resolveProgrammeId(txn, { userId, programmeId: run?.programme_id });
       const now = new Date();
       const createdAt = now.toISOString();
       const record = {
