@@ -28,12 +28,21 @@ const resolveInput = (input) => {
   return out;
 };
 const inputFor = (file, c) => deepFreeze(resolveInput({ ...(file.defaults?.[c.fn] ?? {}), ...(c.input ?? {}) }));
-const call = (file, c) => {
+const withIndex = input => ({
+  ...input,
+  ...(input.pack ? { packIndex: engine.indexPack(input.pack) } : {}),
+  ...(input.groups ? { groups: input.groups.map(group => ({ ...group,
+    ...(group.pack ? { packIndex: engine.indexPack(group.pack) } : {}),
+  })) } : {}),
+});
+const call = (file, c, indexed = false) => {
   const fn = engine[c.fn];
   if (typeof fn !== 'function') throw new Error(`${c.fn} is not exported by the engine`);
   const copy = (value) => deepFreeze(JSON.parse(JSON.stringify(value)));
   if (c.args) return fn(...copy(c.args));
-  return c.options ? fn(inputFor(file, c), copy(c.options)) : fn(inputFor(file, c));
+  const input = inputFor(file, c);
+  const resolved = indexed ? deepFreeze(withIndex(input)) : input;
+  return c.options ? fn(resolved, copy(c.options)) : fn(resolved);
 };
 const summary = (choices) => ({
   tiers: choices.tiers.map((t) => ({ tier: t.tier, childIds: t.childIds, suggested: t.suggested.map((i) => i.text), pool: t.pool.map((i) => i.text) })),
@@ -51,8 +60,12 @@ describe.each(FILES)('%s', (name) => {
   test('pins the engine version', () => expect(file.version).toBe(engine.ENGINE_VERSION));
   test.each(file.cases.map((c) => [c.name, c]))('%s', (_, c) => {
     expect(typeof c.spec).toBe('string');
-    if (c.throws) { expect(() => call(file, c)).toThrow(c.throws); return; }
+    if (c.throws) {
+      for (const indexed of [false, true]) expect(() => call(file, c, indexed)).toThrow(c.throws);
+      return;
+    }
     let result = call(file, c);
+    expect(call(file, c, true)).toEqual(result);
     if (c.fn === 'computeLessonPlan') expect(Object.keys(result)).toEqual(PLAN_KEYS);
     if (c.view === 'summary') result = summary(result);
     if (c.exact || typeof c.expect !== 'object' || c.expect === null) expect(result).toEqual(c.expect);
@@ -65,12 +78,13 @@ const PLAN_CASES = FILES.flatMap((name) => {
   return file.cases.filter((c) => c.fn === 'computeLessonPlan' && !c.throws).map((c) => [`${name}: ${c.name}`, file, c]);
 });
 test.each(PLAN_CASES)('plan and choices agree: %s', (_, file, c) => {
-  const input = inputFor(file, c);
-  const plan = engine.computeLessonPlan(input);
-  const choices = engine.computeLessonChoices(input);
-  expect(plan.blend_tier).toBe(choices.tiers[0]?.tier ?? null);
-  expect(plan.suggested_blends).toEqual((choices.tiers[0]?.suggested ?? []).map((i) => i.text));
-  expect(plan.suggested_blends.length).toBeLessThanOrEqual(engine.BLEND_SUGGESTION_COUNT);
-  expect(choices.books.filter((b) => b.suggested).map((b) => b.id)).toEqual(plan.suggested_book ? [plan.suggested_book] : []);
-  expect(engine.computeLessonChoices(input, { plan })).toEqual(choices);          // the frozen-plan anchor is the identity on its own plan
+  for (const input of [inputFor(file, c), withIndex(inputFor(file, c))]) {
+    const plan = engine.computeLessonPlan(input);
+    const choices = engine.computeLessonChoices(input);
+    expect(plan.blend_tier).toBe(choices.tiers[0]?.tier ?? null);
+    expect(plan.suggested_blends).toEqual((choices.tiers[0]?.suggested ?? []).map((i) => i.text));
+    expect(plan.suggested_blends.length).toBeLessThanOrEqual(engine.BLEND_SUGGESTION_COUNT);
+    expect(choices.books.filter((b) => b.suggested).map((b) => b.id)).toEqual(plan.suggested_book ? [plan.suggested_book] : []);
+    expect(engine.computeLessonChoices(input, { plan })).toEqual(choices);
+  }
 });

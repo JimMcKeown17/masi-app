@@ -14,6 +14,7 @@ import { computeLessonPlan, rankGroups } from '../src/lessonPlan/engine';
 import * as lessonClasses from '../src/lessonPlan/engine/lessonClass';
 import * as groupEngine from '../src/lessonPlan/engine/groups';
 import { getPack } from '../src/lessonPlan/packs';
+import { packIndexFor } from '../src/lessonPlan/inputs/packIndexCache';
 import * as previewContent from '../src/lessonPlan/packs/previewContent';
 import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
 
@@ -259,7 +260,9 @@ test('lesson base reports missing dependencies and honours an explicit programme
 test('lesson input uses a pinned pack and respects preview eligibility and unsupported languages', async () => {
   jest.spyOn(previewContent, 'isPreviewContentEnabled').mockReturnValue(true);
   expect((await input({ languageCode: 'xh', packId: 'isixhosa-interim-letters-v1' })).pack.id).toBe('isixhosa-interim-letters-v1');
-  expect((await input({ languageCode: 'xh' })).pack.id).toBe('isixhosa-candidates-preview-v1');
+  const loadedPreview = await input({ languageCode: 'xh' });
+  expect(loadedPreview.pack.id).toBe('isixhosa-candidates-preview-v1');
+  expect(loadedPreview.packIndex).toBe(packIndexFor(loadedPreview.pack));
   previewContent.isPreviewContentEnabled.mockReturnValue(false);
   expect((await input({ languageCode: 'xh', packId: 'isixhosa-candidates-preview-v1' })).pack).toBeNull();
   for (const languageCode of ['zu', null]) {

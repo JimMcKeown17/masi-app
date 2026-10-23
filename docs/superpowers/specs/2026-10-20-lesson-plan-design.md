@@ -100,6 +100,7 @@ follows it:
 | J21 | Track B1 is AR Plans 2–3, written and built in this workstream, with the lesson plan's asks (§7.6). (rev 2) |
 | J22 | The isiXhosa test-pack script may use `yaml@2.8.2` as an exact-pinned devDependency; it is already in `package-lock.json` through Expo tooling. (rev 2) |
 | J23 | A child in one of an EA's groups is always one of that EA's own children (a direct child assignment). There are no group-only children. (rev 2) |
+| J24 | "We should only be reviewing letters that are known, though if it's the first level, it's harmless to learn and review at the same time." (2026-10-23) |
 
 ---
 
@@ -282,7 +283,7 @@ evidence and EA confirmation.
   one). This is Zazi rev 4.1's rule: a group that already knows `l` gets `o m a`, not just `o m`. When
   all of step 1 is known, the normal two-letter rule applies.
 - **All letters known** = nothing left to suggest (C9).
-- **Review letters** = the unlocked letters (§4.5) minus today's suggested letters, in teaching order.
+- **Review letters** = the letters the group knows, plus the step-1 letters, minus today's suggested letters, in teaching order (J24). Letters beyond step 1 are reviewed only once known.
 
 ### 4.5 Unlocked letters
 

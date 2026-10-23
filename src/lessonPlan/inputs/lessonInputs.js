@@ -5,6 +5,7 @@ import { rankGroups, resolveLessonClass } from '../engine';
 import { getPack, getPackById } from '../packs';
 import { isPreviewContentEnabled } from '../packs/previewContent';
 import { loadKnownLetters } from './knownLetters';
+import { packIndexFor } from './packIndexCache';
 
 const packFor = (languageCode, packId, allowPreview) => packId
   ? getPackById(packId, { allowPreview }) : getPack(languageCode, { allowPreview });
@@ -119,9 +120,10 @@ export const loadLessonInput = async ({ handle, repositories, services, base, le
     services.sessionHistory.completenessByChild({ childIds, programmeId: base.programmeId }),
     services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId: base.programmeId }),
   ]);
+  const pack = packFor(lesson.languageCode, lesson.packId, isPreviewContentEnabled());
   return {
     ...base, groupId: lesson.groupId, upNextGroupId: lesson.upNextGroupId,
-    languageCode: lesson.languageCode, pack: packFor(lesson.languageCode, lesson.packId, isPreviewContentEnabled()),
+    languageCode: lesson.languageCode, pack, packIndex: packIndexFor(pack),
     alphabet: PEDAGOGICAL_ORDERS[lesson.languageCode] ?? null, isEcd: lesson.isEcd,
     presentChildren: childIds.map(id => childInput(childrenById[id] ?? { id }, knownLetters[id], historyByChild, masteryByChild)),
   };
