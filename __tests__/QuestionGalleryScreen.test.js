@@ -25,14 +25,14 @@ const openFixture = screen => {
   fireEvent.press(screen.getByRole('button', { name: 'Test fixture' }));
 };
 
-test('the gallery lists two standalone tests and eleven WelaPLUS Questions', () => {
+test('the gallery lists standalone, WelaPLUS and all EGRA Questions', () => {
   const navigation = { navigate: jest.fn() };
   const screen = renderWithProviders(<QuestionGalleryScreen navigation={navigation} />);
   expect(screen.getByRole('header', { name: 'Standalone tests' })).toBeTruthy();
   expect(screen.getByRole('header', { name: 'WelaPLUS battery' })).toBeTruthy();
   const entryButtons = screen.getAllByRole('button').filter(button => !/^(Language|Content),/.test(button.props.accessibilityLabel));
-  expect(entryButtons).toHaveLength(13);
-  entryButtons.forEach((button, index) => {
+  expect(entryButtons).toHaveLength(26);
+  entryButtons.slice(0, 13).forEach((button, index) => {
     fireEvent.press(button);
     const code = index < 2 ? STANDALONE_TESTS[index].code : WELA_PLUS_FULL_2024_1.questions[index - 2].question_code;
     expect(navigation.navigate).toHaveBeenLastCalledWith('QuestionGalleryRun', {
@@ -159,3 +159,37 @@ test.each(WELA_PLUS_FULL_2024_1.questions.map(question => [question.question_cod
     expect(props.language).toBe('xh');
   },
 );
+
+test('EGRA rows always open their own form language and bundled content', () => {
+  const { EGRA_GALLERY_ENTRIES } = require('../src/utils/questionGallery');
+  const navigation = { navigate: jest.fn() };
+  const screen = renderWithProviders(<QuestionGalleryScreen navigation={navigation} />);
+  openFixture(screen);
+  let expanded;
+  for (const entry of EGRA_GALLERY_ENTRIES) {
+    if (expanded !== entry.formId) {
+      fireEvent.press(screen.getByRole('button', { name: entry.formTitle }));
+      expanded = entry.formId;
+    }
+    fireEvent.press(screen.getByRole('button', { name: entry.title }));
+    expect(navigation.navigate).toHaveBeenLastCalledWith('QuestionGalleryRun', {
+      entryKey: entry.entryKey, languageCode: entry.fixedLanguage, contentMode: 'bundled',
+    });
+  }
+});
+
+test('EGRA run uses its exact item set and fixed language even with conflicting route preferences', () => {
+  const { EGRA_GALLERY_ENTRIES } = require('../src/utils/questionGallery');
+  const entry = EGRA_GALLERY_ENTRIES.find(value => value.fixedLanguage === 'af' && value.questionCode === 'reading_comprehension');
+  const screen = renderWithProviders(<QuestionGalleryRunScreen navigation={{ goBack: jest.fn() }}
+    route={{ params: { entryKey: entry.entryKey, languageCode: 'xh', contentMode: 'fixture' } }} />);
+  const props = screen.UNSAFE_getByType(questionComponentFor(entry.questionCode).Component).props;
+  expect(props.itemSet).toBe(entry.itemSet);
+  expect(props.language).toBe('af');
+  expect(props.instructions).toBe(entry.instructions.af);
+  fireEvent.press(screen.getByText('Ask the questions'));
+  fireEvent.press(screen.getByText('Finish'));
+  fireEvent.press(screen.getByText('Save as Not asked'));
+  expect(screen.getByText('stopped_reason: completed')).toBeTruthy();
+  expect(screen.getByText('0 / 0')).toBeTruthy();
+});

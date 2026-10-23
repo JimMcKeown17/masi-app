@@ -924,6 +924,19 @@ Start at 50 parents.
 
 ## 12. Adding a new assessment type
 
+> **Status note — 2026-10-23 (EGRA content pack):** The shared pack `content/egra/` brings 13
+> forms, including the isiZulu SMRS form this section uses as its example. They are integrated as
+> this section describes, with no server, sync or storage change. Jim's decisions amend the table
+> in four places:
+> - EGRA letters are `letter_sounds` and EGRA familiar words are `word_reading`;
+> - the stop rule is `first_row_all_wrong` for letters and words, and the passage has no line
+>   rule (the pack has no line data);
+> - comprehension is marked Correct / Wrong / Not asked by the assessor, with no `requires_position`;
+> - practice items are EA instruction copy, not an item-set field.
+>
+> See `docs/superpowers/plans/2026-10-23-egra-content-pack-integration.md`. The table below is the
+> original design record.
+
 Using the government isiZulu EGRA as the worked example:
 
 | Need | Where it goes | Server / sync / storage change |

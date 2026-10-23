@@ -13,3 +13,4 @@ export { PagedGrid, type TileSize } from './PagedGrid';
 export { TileGroups } from './TileGroups';
 export { TimerBar } from './TimerBar';
 export { Canvas } from './Canvas';
+export { AssessmentChoiceCard } from './AssessmentChoiceCard';

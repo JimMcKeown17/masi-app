@@ -1,4 +1,5 @@
 import type React from 'react';
+import { ReadingComprehensionQuestion } from '../questions/ReadingComprehensionQuestion';
 import { LetterSoundsQuestion } from '../questions/LetterSoundsQuestion';
 import { ListenAndAnswerStoryQuestion } from '../questions/ListenAndAnswerStoryQuestion';
 import { ListenFirstSoundQuestion } from '../questions/ListenFirstSoundQuestion';
@@ -18,6 +19,8 @@ export interface QuestionEntry {
 }
 
 const components = new Map<string, QuestionEntry>([
+  ['reading_comprehension', { Component: ReadingComprehensionQuestion, extraProps: {} }],
+  ['oral_reading', { Component: ReadPassageQuestion, extraProps: { markingPolarity: 'tap_wrong' } }],
   ['letter_sounds', { Component: LetterSoundsQuestion, extraProps: {} }],
   ['wela_plus_listen_and_answer_story', { Component: ListenAndAnswerStoryQuestion, extraProps: {} }],
   ['wela_plus_first_sound', { Component: ListenFirstSoundQuestion, extraProps: {} }],

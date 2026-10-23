@@ -83,3 +83,22 @@ test('development runtime enables the gallery even on an OTA with a native chann
   Constants.expoConfig.extra = {};
   expect(isQuestionGalleryEnabled()).toBe(true);
 });
+
+test('EGRA gallery has every form and section with fixed source language and exact item set', () => {
+  const { EGRA_GALLERY_ENTRIES, questionGalleryEntry } = require('../src/utils/questionGallery');
+  const { EGRA_FORMS, egraBatteryFor, egraItemSetFor } = require('../src/assessment-questions');
+  expect(EGRA_GALLERY_ENTRIES).toHaveLength(52);
+  for (const form of EGRA_FORMS) {
+    for (const code of ['letter_sounds', 'word_reading', 'oral_reading', 'reading_comprehension']) {
+      const key = `egra:${form.id}:${code}`;
+      const entry = questionGalleryEntry(key);
+      expect(entry.fixedLanguage).toBe(form.languageCode);
+      const version = egraBatteryFor('egra', form.id).questions.find(q => q.question_code === code).question_version;
+      expect(entry.itemSet).toBe(egraItemSetFor(code, version, form.languageCode));
+      expect(entry.itemSet).not.toBeNull();
+      expect(entry.title).toMatch(form.title);
+      expect(entry.instructions[form.languageCode]).toBeTruthy();
+      expect(entry.durationSec).toBe(code === 'reading_comprehension' ? undefined : 60);
+    }
+  }
+});

@@ -196,7 +196,7 @@ export function SequentialCapture({
             transition('skip-picker');
           } : undefined} />
       </View>
-      {state.stopped && stopRule ? <StopCard childName={childName} stopAt={stopRule.stop_at}
+      {state.stopped && stopRule ? <StopCard childName={childName} stopRule={stopRule}
         onSave={() => { if (stateRef.current.stopped) finish('stop_rule'); }}
         onUndo={() => dispatch({ type: 'undoStop' })} /> : null}
       {phase === 'end-confirmation' ? <ConfirmSheet testID="end-confirmation"

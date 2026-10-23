@@ -295,7 +295,7 @@ function ReadPassageQuestionContent(
   const renderWord = ({ word: w, idx }: { word: ReadPassageWord; idx: number }) => {
     const key = keyFor(idx, w.word);
     const marked = isMarked(key);
-    const labelState = marked ? 'correct' : 'idle';
+    const labelState = marked ? (markingPolarity === 'tap_wrong' ? 'incorrect' : 'correct') : 'idle';
     return (
       <MarkTile
         key={idx}

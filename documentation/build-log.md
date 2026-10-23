@@ -3722,10 +3722,177 @@ Oct 22, 1:14 PM"; the label carries U+00A0 before PM, and it renders without a b
 360 dp / 1.3x. The fallback commit `df72cf5` came after this build and is covered by renderer tests
 only.
 
+### 2026-10-23 — EGRA content pack integration (A–E)
+
+Implemented `docs/superpowers/plans/2026-10-23-egra-content-pack-integration.md` on
+`feat/egra-content-pack`. The adapter loads the immutable catalog through `content/egra/index.js`
+and builds 13 batteries and 52 item sets, preserving all 920 letter positions, 990 word positions,
+65 comprehension prompts, original case/repeats, practice separation and source discrepancies.
+The passage adapter preserves paragraph boundaries, joins the punctuation-only token in `Lebo .`
+and keeps `uNomehlo- mancinane.` as two marking tokens. No printed source count drives scoring.
+
+The shared reducer and validator now support `first_row_all_wrong`; consecutive-wrong behavior
+and its existing tests are unchanged. Comprehension uses explicit assessor choices (Correct,
+Wrong, Not asked), a visible answer guide, story sheet, unmarked confirmation and empty-item
+skips. A new package UI choice-card primitive keeps styling and accessibility within `ui/`.
+Oral reading is registered with `tap_wrong`; marked passage tiles now display and announce
+incorrect under that polarity. Default WelaPLUS passage marking remains unchanged.
+
+The dev gallery has all 52 EGRA entries grouped under expandable form rows, with fixed form
+languages and exact item sets taking precedence over global gallery preferences. An initial
+always-expanded list was cumbersome and slowed renderer navigation; disclosure groups keep the
+list usable. The gallery retains its result-only, non-persisting behavior.
+
+Behavior evidence includes first-row widths 5/6/8/10, undo/Back, timer-before-row precedence,
+timed/untimed real letter/word components, comprehension states and selection changes, no text
+grading, missing item sets, and a real rendered-output comparison for every synthetic section
+builder. Real SQLite saves all 52 form/section families, and an English FAL 2 run covers four
+decisions, fresh-repository resume, ordered items, duplicate rejection by error code, finalize,
+five pending offline outbox rows, `assertSubmitShape`/`toSubmitArgs`, latest letter evidence and
+all-reached-occurrences mastery. The mastery test additionally saves a later standalone EGRA
+letter attempt with one wrong repeated letter to prove the positive and negative mastery cases.
+
+RED evidence: first-row reducer/validator tracer had 5 failing tests; passage polarity tracer had
+1 failed / 6 passed; gallery registry tracer had 1 failed / 19 passed. Adapter and comprehension
+tracers initially failed on the absent modules. Test development also corrected the expected
+source punctuation (`mancinane.`), existing skip-button copy and synthetic passage metadata
+(reached passage items omit metadata; unreached ones explicitly carry `reached: false`). No
+frozen product decision changed.
+
+All JavaScript verification commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command after the Node 20 PATH prefix | Result |
+| --- | --- |
+| `npx jest src/assessment-questions` (final exact invocation) | PASS, exit 0: 66 suites, 813 tests, 0 failures, 0 snapshots. Includes boundary/style/hex guards and unchanged consecutive-wrong, standalone and WelaPLUS tests. |
+| `npx jest --maxWorkers=2 --testTimeout=30000 --silent` (final full gate) | PASS, exit 0: 405 suites, 5,674 tests, 0 failures, 0 snapshots (895.442 s). |
+| `npm run test:types` (final) | PASS, exit 0: no diagnostics; no test count. |
+| `git diff --check` (final) | PASS, exit 0: no whitespace errors. |
+| `npm run test:content` (final) | PASS, exit 0: 5 tests passed, 0 failed, 0 skipped; pinned content SHA-256 unchanged. |
+| `npx jest __tests__/egraRun.integration.test.js --runInBand` | PASS: 1 suite, 2 tests. All 52 families plus the four-Question run/resume/finalize/mastery integration use real SQLite. |
+| `npx jest src/assessment-questions/__tests__/boundary.test.ts --runInBand` | PASS: 1 suite, 19 tests, including the live import scan. |
+| `npx jest __tests__/AppNavigator.headers.test.js __tests__/HomeScreen.test.js __tests__/LiteracySessionForm.submit.test.js --runInBand --testTimeout=30000 --silent` | PASS, exit 0: 3 suites, 76 tests. |
+| `node_modules/react-native/sdks/hermesc/osx-bin/hermes /tmp/egra-unicode-engine-check.js` | PASS, exit 0: four Unicode letter/digit assertions, using the bundled Hermes executable. This is an expression sanity check, not native UI/device acceptance. |
+
+**Verification problems and corrections.** The initial exact package invocation completed with
+65 suites passed / 1 failed and 812 tests passed / 1 failed (813 total): the existing boundary
+scanner exceeded its five-second deadline during severe host contention. The isolated boundary
+check and final exact package command pass. Host load averages reached 260 on 12 available CPUs.
+An initial default full run and an overlapping serial repeat were interrupted (exit 130), so they
+have no final Jest test totals. Verification then used two workers, a 30-second per-test runner
+limit and suppressed console output; repository runner settings and assertions were not changed.
+
+The first completed bounded full run used the parent checkout's incomplete dependency directory:
+402 suites passed / 3 failed (405 total), 5,627 tests passed / 7 failed (5,634 total). Every failure
+was the declared-but-uninstalled Andika font in app-root imports. Verification now reuses the
+existing assessment-style dependency tree; its `package-lock.json` is byte-identical to this
+worktree's. No package was installed and no manifest/lockfile was edited.
+
+The next exact `npx jest` completed with 402 suites passed / 3 failed (405 total), 5,637 tests
+passed / 3 failed (5,640 total). LiteracySessionForm submit and HomeScreen hit five-second test
+timeouts. AppNavigator headers failed to load because its narrow gallery mock exported only
+`isQuestionGalleryEnabled`, while the new form grouping reads the gallery entries at module load.
+The supporting regression fixture now spreads the real exports and preserves its flag override;
+no header assertions were weakened. The targeted 76-test regression gate above passes. The
+AppNavigator mock update is an additional supporting regression change beyond the two gallery
+test files named in E; it preserves the frozen product decisions.
+The final full gate above runs every suite after that correction with the matching dependencies.
+
+Scope audit: no content-pack, standalone test/item-set, WelaPLUS definition, migration, Supabase,
+repository, sync, outbox or dependency-manifest changes. Concurrent edits to CONTEXT, the
+roadmap and the design-spec status note were preserved; they were not authored by this build.
+Committed as `87c104b` after Claude review. Host battery-registry wiring/form selection and native device,
+force-quit, hosted-sync and results-screen gates remain the explicit Plan 3 follow-up.
+
+**Claude review and independent verification (2026-10-23).** Claude reviewed the full diff against
+the plan. It confirmed:
+- the content SHA-256 is unchanged;
+- `consecutive_wrong` is behaviorally identical;
+- `CURRENT_ITEM_SETS` and the WelaPLUS definition are untouched;
+- no reader pins `letter_sounds` to a card version;
+- the instruction copy matches the real button labels (Correct, Incorrect, End test).
+
+The standalone detail screen refuses battery-run results, and EGRA results always belong to a run.
+So its letter/word grid can't mislabel story or comprehension results; the run view is Plan 3's job.
+
+Claude fixed one copy nit: a single unmarked comprehension question now reads "1 question not
+marked. Save it as Not asked?", with a new test.
+
+Claude re-ran the checks under Node 20:
+
+| Command | Result |
+| --- | --- |
+| `npm run test:content` | 5/5 pass |
+| `npm run test:types` | clean |
+| Package + EGRA + gallery + navigator suites | 69/70 suites, 891/892 tests |
+| `__tests__/QuestionGalleryScreen.test.js` alone | 23/23 |
+| `npx jest --maxWorkers=3 --testTimeout=30000 --silent` (full, after the copy fix) | **405/405 suites, 5,675/5,675 tests**, exit 0 |
+
+The single failure was the existing story-writing gallery test timing out at load average ~58.
+
+Local `node_modules` here is a set of per-package symlinks into the `assessment-style` worktree.
+The lockfiles are byte-identical (`cmp`), but if that worktree is removed, run `npm ci` here.
+
+Codex adversarial review (`gpt-6-astra`, base `81e47ef`) returned **approve** with no material
+findings. It independently checked:
+- TypeScript;
+- the content tests;
+- the adapter's exactness across all 13 forms;
+- 1,376 first-row decision patterns.
+
+Its two Plan 3 follow-ups are now on the roadmap:
+- real-screen stop → Undo → timer and End → cancel;
+- a run results view that shows Not asked separately and uses the asked count.
+
+Evidence class: everything above is local (jest with real SQLite through `better-sqlite3`). No
+device, hosted Supabase or sync-to-server check was run; none is possible until the Plan 3 host
+can start an EGRA run.
+
+### 2026-10-23 — EGRA follow-up: 60-letter minimum and story-questions auto-skip
+
+After reviewing the integration, Jim decided:
+- **Story questions auto-skip** when the child read no story words. Each EGRA battery now declares
+  `prerequisites.reading_comprehension = { depends_on: 'oral_reading', minScore: 1 }`, which the
+  existing `evaluateBatteryState` turns into a `skipped_prerequisite_unmet` auto-skip. A story
+  with "Nothing attempted" scores 0, and a skipped story has no score; both trigger the skip.
+  Persisting the skip is the Plan 3 host's job, as for every prerequisite.
+- **Stronger skip rules later.** Letters 0 → no words or story. This is recorded on the roadmap,
+  not built, because one dependency per Question can't express the full rule set.
+- **The story first-line stop rule is wanted.** It needs printed line data the pack lacks
+  (roadmap).
+- **No Masi letter card under 60 letters.** The four Grade 1 forms (xh/en HL/en FAL/af, 40
+  letters each) get 20 Masi letters appended. Selection rules:
+  - 20 different letters, least-used first;
+  - skip letters DBE leaves off both its Grade 1 and Grade 2 cards in that language (Afrikaans c
+    and q, English HL q);
+  - 10 capitals, preferring letters whose capital looks different;
+  - a seeded shuffle with no repeated or easily confused neighbours.
+
+  The selection script was run once, and its output is committed as data in
+  `src/assessment-questions/egra/letterExtensions.ts`. The pack is untouched. Extended cards use
+  version `<form id>-masi60`. The adapter rejects any future short card that has no extension.
+  Resulting cards:
+  - isiXhosa, English FAL: all 26 letters;
+  - English HL: 25 letters (no q);
+  - Afrikaans: 24 letters (no c, q);
+  - at most 4 of any one letter, which equals DBE's own maximum on these cards.
+
+  **Field consequence:** the printed DBE charts show 40 letters, so Masi must print 60-letter
+  cards for these four forms before field use (roadmap).
+
+Tests: adapter (extension identity, balance and neighbour rules, short-card rejection, the
+prerequisite through the real `evaluateBatteryState`), gallery lookups by question version.
+
+Verification (Node 20, local):
+- `npm run test:content`: 5/5 pass.
+- `npm run test:types`: clean.
+- `npx jest --maxWorkers=3 --testTimeout=30000 --silent`: **405/405 suites, 5,678/5,678 tests**.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
 | --- | --- | --- | --- |
+| 2026-10-23 | Masi letter cards are never shorter than 60 letters; the four 40-letter DBE Grade 1 EGRA cards get 20 fixed Masi letters, versioned `<form id>-masi60`. | Letter results are ranked on raw 60-second score; a 40-letter card caps a fast reader at 40. A new version keeps DBE positions 0–39 comparable and labels the change. | DBE publishes 60+-letter Grade 1 cards, or EGRA results need DBE-norm comparison. |
+| 2026-10-23 | EGRA story questions auto-skip when the story scored 0 or was skipped (battery `prerequisites`). Stronger skip rules (letters 0 → no words/story) are deferred to a designed rule set. | Asking story questions of a child who read nothing is pointless and embarrassing; the existing prerequisite mechanism expresses this exactly. | Design of the full EGRA skip rule set. |
 | 2026-10-21 | AR Plan 3 review round 2 enforces cached assessment owner/year visibility in the canonical parent SQL and count aggregate. The active-year test stays inside the same statement; nested run reads supply their bound reading EA. The plan's two-round adversarial-review cap is reached. | A cached, once-authorized co-EA result must not remain readable after its year expires. Retaining rows preserves owner history, and a SQL predicate protects every accessor path before item hydration without weakening query budgets or relying on caller date filters. | A release/device gate exposes a concrete remaining visibility mismatch; further work requires explicit scope beyond this completed review cap. |
 | 2026-10-21 | AR Plan 3 review round 1 uses outbox ownership for mastery acknowledgement, permits equal-watermark display repair without owed work, hydrates tools through the existing full reference refresh, and restarts both Programme walks after a recovery year change. Combined status checks read-time active-window context. | A restored display id cannot own a refused payload's Retry, a watermark must describe the displayed accepted value, a valid FK must be hydrated before page apply, and a completed cursor from the previous year cannot establish current completeness. Existing CAS, one-refresh budget and session semantics remain load-bearing. | Controller adversarial review or physical refusal/Retry, non-null tool, or between-walk year-change gates expose a further convergence or authority mismatch. |
 | 2026-10-21 | AR Plan 3 Task 11 derives mastery-input completeness from both completed cursors and both current grant sets, through one read-only handle-bound accessor. Battery Run state is excluded, and no answer is persisted or cached. | Completed coverage records what was downloaded; a live scope check detects a later grant loss. Reusing C1's predicate preserves failure/year semantics, and the existing coverage-drop/re-walk lifecycle prevents a returning child from looking complete before older mastery is restored. | Lesson-engine integration or physical handover/year-rollover gates expose missing coverage, actor leakage or a need for different completeness semantics. |

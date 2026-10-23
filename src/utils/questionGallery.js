@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
-import { WELA_PLUS_FULL_2024_1, testFixtures } from '../assessment-questions';
+import { EGRA_FORMS, egraBatteryFor, egraItemSetFor, WELA_PLUS_FULL_2024_1, testFixtures } from '../assessment-questions';
 import { STANDALONE_TESTS } from './assessmentRegistry';
 
 export function isQuestionGalleryEnabled() {
@@ -48,7 +48,15 @@ export const BATTERY_GALLERY_ENTRIES = WELA_PLUS_FULL_2024_1.questions.map((ques
   title: `Q${index + 1} · ${batteryTitles[question.question_code]}`,
   durationSec: question.durationSec, instructions: question.instructions, standalone: false,
 }));
-const entries = new Map([...STANDALONE_GALLERY_ENTRIES, ...BATTERY_GALLERY_ENTRIES,
+export const EGRA_GALLERY_ENTRIES = EGRA_FORMS.flatMap(form =>
+  egraBatteryFor('egra', form.id).questions.map(question => ({
+    entryKey: `egra:${form.id}:${question.question_code}`, questionCode: question.question_code,
+    title: `${form.title} · ${question.title}`, formId: form.id, formTitle: form.title,
+    fixedLanguage: form.languageCode, itemSet: egraItemSetFor(question.question_code, question.question_version, form.languageCode),
+    durationSec: question.durationSec, instructions: question.instructions,
+  })),
+);
+const entries = new Map([...STANDALONE_GALLERY_ENTRIES, ...BATTERY_GALLERY_ENTRIES, ...EGRA_GALLERY_ENTRIES,
   { entryKey: 'null_question', questionCode: 'null_question', title: 'Null Question' },
 ].map(entry => [entry.entryKey, entry]));
 

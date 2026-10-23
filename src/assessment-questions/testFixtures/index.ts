@@ -9,3 +9,4 @@ export { FIXTURE_READ_PASSAGE_EN } from './readPassage';
 export { FIXTURE_WRITE_CVCS_EN } from './writeCvcs';
 export { FIXTURE_WRITE_SENTENCES_DICTATION_EN } from './writeSentencesDictation';
 export { FIXTURE_STORY_WRITING_EN } from './storyWriting';
+export { FIXTURE_READING_COMPREHENSION_EN } from './readingComprehension';

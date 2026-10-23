@@ -1,3 +1,5 @@
+import type { StopRule } from '../progress/stepByStep';
+
 export interface ValidationVerdict {
   valid: boolean;
   errors: string[];
@@ -41,7 +43,7 @@ const STOPPED_REASONS = [
   'skipped_other',
 ] as const;
 
-export function validateResult(result: unknown, opts?: { stopAt?: number }): ValidationVerdict {
+export function validateResult(result: unknown, opts?: { stopAt?: number; stopRule?: StopRule }): ValidationVerdict {
   if (typeof result !== 'object' || result === null) {
     return { valid: false, errors: ['result must be an object'] };
   }
@@ -140,8 +142,8 @@ export function validateResult(result: unknown, opts?: { stopAt?: number }): Val
     }
   }
 
-  if (r.stopped_reason === 'stop_rule' && opts?.stopAt !== undefined) {
-    const stopAt = opts.stopAt;
+  const stopAt = opts?.stopRule?.kind === 'consecutive_wrong' ? opts.stopRule.stop_at : opts?.stopAt;
+  if (r.stopped_reason === 'stop_rule' && stopAt !== undefined) {
     const lastPosition = derivedObj?.last_attempted_position;
     const reached = (Array.isArray(r.items) ? r.items : [])
       .filter((item): item is Record<string, unknown> => (
@@ -158,6 +160,18 @@ export function validateResult(result: unknown, opts?: { stopAt?: number }): Val
       reached.some((item) => item.is_correct !== false)
     ) {
       errors.push(`stop_rule: the last ${stopAt} reached items ending at last_attempted_position must all be wrong`);
+    }
+  }
+
+  if (r.stopped_reason === 'stop_rule' && opts?.stopRule?.kind === 'first_row_all_wrong') {
+    const width = opts.stopRule.first_row_length;
+    const items = Array.isArray(r.items) ? r.items : [];
+    if (!Number.isInteger(width) || width <= 0 || derivedObj?.last_attempted_position !== width - 1 ||
+        Array.from({ length: width }, (_, position) => {
+          const matches = items.filter(item => item?.position === position);
+          return matches.length === 1 && matches[0].is_correct === false && matches[0].metadata?.reached === true;
+        }).some(valid => !valid)) {
+      errors.push('stop_rule: every item in the first row must be reached and wrong, ending at first_row_length - 1');
     }
   }
 

@@ -1,4 +1,6 @@
-export type StopRule = { kind: 'consecutive_wrong'; stop_at: number };
+export type StopRule =
+  | { kind: 'consecutive_wrong'; stop_at: number }
+  | { kind: 'first_row_all_wrong'; first_row_length: number };
 
 export type StepState = {
   cursor: number;
@@ -39,7 +41,10 @@ export function stepReducer(
         ...state,
         cursor,
         decisions,
-        stopped: ctx.stopRule !== null && run >= ctx.stopRule.stop_at,
+        stopped: ctx.stopRule !== null && (ctx.stopRule.kind === 'consecutive_wrong'
+          ? run >= ctx.stopRule.stop_at
+          : cursor === ctx.stopRule.first_row_length &&
+            Array.from({ length: cursor }, (_, i) => decisions[i]).every(value => value === false)),
         maxConsecutiveWrong: longestConsecutiveWrong(decisions, cursor),
       };
     }

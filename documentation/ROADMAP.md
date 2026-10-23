@@ -800,6 +800,32 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 - [ ] Replace placeholder EGRA word lists with authoritative English, isiXhosa and Afrikaans content
   (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
   becomes a new version).
+- [ ] **EGRA forms (13, from `content/egra/`): host wiring and device gate.** The package and data side is
+  on `feat/egra-content-pack` (plan: `docs/superpowers/plans/2026-10-23-egra-content-pack-integration.md`).
+  It is runnable today only through the dev Question gallery. After WelaPLUS Plan 3 merges:
+  - register `EGRA_BATTERIES` and `egraItemSetFor` in its battery registry;
+  - add a form picker that keeps English HL and FAL distinct, with `fixedLanguage` per form;
+  - print Masi 60-letter reading cards for the four Grade 1 forms (DBE's charts show only 40; the
+    extra 20 are in `src/assessment-questions/egra/letterExtensions.ts`);
+  - persist the story-questions auto-skip (`prerequisites` on each EGRA battery) as a skipped
+    result, like any other prerequisite skip;
+  - run the device gate: selection, capture, save, force-quit resume, finalize, offline then sync,
+    and results;
+  - on the real screens, check first-row stop → Undo → timer expiry, and End → cancel;
+  - make the run results view show comprehension "Not asked" separately and use the asked count
+    (`derived.questions_asked`) for accuracy. Today's per-result grid assumes letters or words.
+- [ ] **EGRA open decisions (Jim):**
+  - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
+  - **Stronger skip rules (decided in principle, Jim 2026-10-23; build later).** A child who reads
+    no letter sounds should not be asked to read words or the story. Design the full rule set
+    (letters 0 → skip words and story; whether words 0 skips the story) before building it.
+    Today's prerequisite format allows one dependency per Question.
+  - **Story first-line stop rule (wanted, Jim 2026-10-23).** It needs the printed line breaks of
+    each story, which the pack does not have; get them from the source charts first.
+  - **Score bands.** Should `oral_reading` and `reading_comprehension` get score bands?
+  - **isiZulu mastery.** isiZulu letter mastery needs an isiZulu 26-letter order.
+  - **Rankings.** Resolved 2026-10-23: no Masi letter card is shorter than 60 letters, so the
+    60-second raw score is not capped below 60. Cards of 70–110 letters remain.
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
   tested synced-table configuration path exists.
