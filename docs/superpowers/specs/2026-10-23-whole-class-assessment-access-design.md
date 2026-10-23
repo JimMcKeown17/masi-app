@@ -113,8 +113,12 @@ class foreign key holds.
   (`…alignment_schema.sql:855-859`).
 - Persistence writes the closed rows first, carrying their real server `exited_at`, then the
   open rows. Every row goes through the existing per-id version guard
-  (`domainRepositoryUtils.js:143-155`). So a stale older snapshot of either row can never
-  reopen or override a newer one, whichever pull path arrives first.
+  (`domainRepositoryUtils.js:143-155`), which refuses a **lower** `row_version`.
+  It does not order equal versions: the server's `enforce_row_version` refuses decreases but does
+  not bump on update (`20261018180000_upload_contract_row_version.sql:28-43`). So a stale open
+  copy at the same version, applied after the closed one within one pull cycle, can reopen it
+  (Task 2 report). That is accepted: the window is seconds, and the next pull's class or delivery
+  reconcile ends the reopened row, after which the replacement lands.
 - No exit date is ever inferred. If an open local `synced` row still conflicts after the closed
   rows are applied, the incoming open row is skipped and logged, and the next pull converges.
   The same applies when the conflicting row is pending, failed or terminal.
