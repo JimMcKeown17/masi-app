@@ -1,7 +1,6 @@
-import { normalizeToken, tokenizeText } from '../../utils/decodability';
 import { BLEND_TIERS, BOOK_RECENT_SESSIONS } from './constants';
 import { lessonBookIds } from './history';
-import { soundsOf } from './sounds';
+import { indexPack } from './packIndex';
 
 export const bookCatalogue = (pack) => {
   const readers = pack?.readers ?? {};
@@ -23,23 +22,13 @@ export const bookCatalogue = (pack) => {
   return entries.map(({ id }) => id);
 };
 
-const readableWith = (pack, readerId, unlockedSet, tokensFor, soundsFor) => {
-  if (!Object.prototype.hasOwnProperty.call(pack?.readers ?? {}, readerId)) return false;
-  const reader = pack.readers[readerId];
-  if (!reader) return false;
-  const tricky = new Set((Array.isArray(reader.tricky_words) ? reader.tricky_words : [])
-    .filter((text) => typeof text === 'string').map(normalizeToken));
-  return (Array.isArray(reader.pages) ? reader.pages : []).every((page) => (
-    tokensFor(page).every((token) => {
-      if (tricky.has(token)) return true;
-      const sounds = soundsFor(token);
-      return sounds !== null && sounds.length > 0 && sounds.every((sound) => unlockedSet.has(sound));
-    })
-  ));
-};
+const readableWith = (reader, unlockedSet) => Boolean(reader) && reader.tokens.every(({ token, sounds }) => (
+  reader.tricky.has(token)
+    || (sounds !== null && sounds.length > 0 && sounds.every(sound => unlockedSet.has(sound)))
+));
 
 export const isReadable = (pack, readerId, unlockedSet) => readableWith(
-  pack, readerId, unlockedSet, tokenizeText, (text) => soundsOf(text, pack)
+  indexPack(pack).readers[readerId], unlockedSet
 );
 
 const compareReads = (a, b) => {
@@ -51,7 +40,7 @@ const compareReads = (a, b) => {
   return 0;
 };
 
-export const bookChoices = ({ pack, catalogue, children, childSessions, unlockedLetters, plan, tokensFor, soundsFor }) => {
+export const bookChoices = ({ pack, index, catalogue, children, childSessions, unlockedLetters, plan }) => {
   const recent = new Set(children.flatMap((child) => (
     childSessions(child.id).slice(0, BOOK_RECENT_SESSIONS).flatMap(lessonBookIds)
   )));
@@ -66,7 +55,7 @@ export const bookChoices = ({ pack, catalogue, children, childSessions, unlocked
     id,
     title: pack.readers[id].title,
     step: pack.readers[id].step,
-    readable: readableWith(pack, id, unlockedSet, tokensFor, soundsFor),
+    readable: readableWith(index.readers[id], unlockedSet),
     suggested: false,
     lastReadOn: latest.get(id)?.session_date ?? null,
   }));

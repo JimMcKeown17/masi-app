@@ -9,6 +9,7 @@ import { useLessonDraft } from '../src/hooks/useLessonDraft';
 import * as transitions from '../src/lessonPlan/lessonDraftState';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { planForSave } from '../src/lessonPlan/engine';
+import { saveLesson } from '../src/services/lessonSave';
 
 let handle, start;
 // Dispose mounted screens before the global default-handle teardown publishes closed.
@@ -196,4 +197,34 @@ testHook('a new lesson takes only group members on the visible roster, as the pi
   const { result } = mount({ start: { groupId: 'group-1', upNextGroupId: 'group-1' } });
   await ready(result);
   expect(result.current.draft.attendance.childIds).toEqual(['c1', 'c2']);
+});
+
+testHook('a frozen version-1 draft keeps its stored review letters when resumed and saved', async () => {
+  await handle.withTransaction(async db => {
+    for (const id of ['c1', 'c2']) {
+      await db.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at) values (?, ?, 'class-1', 'year-2026', '2026-01-15')", id, id);
+      await db.runAsync("insert into child_programme_enrollments (id, child_id, programme_id) values (?, ?, 'programme-a')", id, id);
+    }
+  });
+  const storedPlan = { ...draftStart().plan, engine_version: 1,
+    known_letters: ['m', 'l', 'a'], suggested_letters: ['o', 'k'],
+    review_letters: ['m', 'l', 'a', 'u'], unlocked_letters: ['o', 'm', 'l', 'a', 'k', 'u'],
+    blend_tier: null, suggested_blends: [], suggested_book: null };
+  const row = await handle.repositories.lessonDrafts.create(draftStart({
+    class_id: 'class-2', language_code: 'xh', pack_id: 'isixhosa-interim-letters-v1',
+    plan: storedPlan, plan_fixed_at: MON,
+  }));
+  const planSpy = jest.spyOn(engine, 'computeLessonPlan');
+  const { result } = mount({ draftId: row.id });
+  await ready(result);
+  await waitFor(() => expect(result.current.choices).not.toBeNull());
+  expect(result.current.plan).toEqual(storedPlan);
+  await change(result, transitions.setNotes, 'Keep the original review.');
+  let saving;
+  await act(async () => { saving = await result.current.beginSave(); });
+  expect(saving.plan).toEqual(storedPlan);
+  await act(async () => { await saveLesson({ handle, draft: saving, nowIso: MON }); });
+  const sessions = await handle.repositories.sessions.getSessions({ userId: handle.userId });
+  expect(sessions.find(session => session.id === row.session_id).activities.lesson.plan).toEqual(storedPlan);
+  expect(planSpy).not.toHaveBeenCalled();
 });
