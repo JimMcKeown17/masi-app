@@ -128,7 +128,7 @@ describe('ListenPhonemeBlendQuestion — Skip flow', () => {
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('Skip question'));
-    fireEvent.press(getByText('Child tired'));
+    fireEvent.press(getByText('Child is tired'));
 
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_tired');
   });

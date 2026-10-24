@@ -8,8 +8,8 @@ export type ManualSkipReason = Extract<
 /** EA-selectable skip reasons. skipped_prerequisite_unmet is host-only (battery gates). */
 export const MANUAL_SKIP_REASONS: ReadonlyArray<{ reason: ManualSkipReason; label: string }> = [
   { reason: 'skipped_child_refused', label: 'Child refused' },
-  { reason: 'skipped_tired', label: 'Child tired' },
+  { reason: 'skipped_tired', label: 'Child is tired' },
   { reason: 'skipped_time', label: 'Out of time' },
-  { reason: 'skipped_age', label: 'Age inappropriate' },
-  { reason: 'skipped_other', label: 'Other' },
+  { reason: 'skipped_age', label: "Not suitable for this child's age" },
+  { reason: 'skipped_other', label: 'Other reason' },
 ];

@@ -2,6 +2,8 @@ import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStat
 import { describeCombinedHistoryState } from '../../utils/syncStatusPresenter';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
+import { batteryFor } from '../../assessment-questions';
+import StatusBadge from '../../components/common/StatusBadge';
 import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
@@ -18,10 +20,16 @@ import { colors, spacing } from '../../constants/colors';
 import { toLocalDateString } from '../../utils/localDate';
 
 
-function formatDate(dateString) {
+const RUN_STATUS = {
+  completed: { label: 'Finalized', tone: 'success' },
+  in_progress: { label: 'Open', tone: 'warning' },
+  abandoned: { label: 'Abandoned', tone: 'neutral' },
+};
+
+function formatDate(dateString, short = false) {
   const [year, month, day] = dateString.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(short ? 'en-GB' : 'en-US', short ? { day: 'numeric', month: 'short' } : {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -121,28 +129,39 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const renderItem = ({ item, index }) => {
     const isRun = item.kind === 'run';
     const synced = item.sync_status === 'synced';
-    const title = STANDALONE_TESTS.find(test => test.code === item.question_code)?.title || item.question_code;
-    const status = isRun ? item.status.replace(/_/g, ' ').replace(/^./, char => char.toUpperCase()) : null;
-    const Row = isRun ? View : Pressable;
+    const battery = isRun ? batteryFor(item.battery_code, item.battery_version) : null;
+    const title = isRun
+      ? battery?.title ?? item.battery_code
+      : STANDALONE_TESTS.find(test => test.code === item.question_code)?.title || item.question_code;
+    const status = isRun ? RUN_STATUS[item.status] : null;
     const info = childInfoMap[item.child_id];
     const childName = info ? info.name : 'Unknown child';
     const isHidden = info?.hidden;
+    const date = formatDate(item.assessment_date);
+    const decidedCount = isRun
+      ? `${item.question_count}${battery ? ` of ${battery.questions.length}` : ''} decided`
+      : null;
 
     return (
-      <Row testID="assessment-history-row" style={styles.row}
-        {...(!isRun && { accessibilityRole: 'button', onPress: () => navigation.navigate('AssessmentDetail', { assessmentId: item.id, childName }) })}
+      <Pressable testID="assessment-history-row" style={styles.row} accessibilityRole="button"
+        accessibilityLabel={isRun ? [date, title, childName, status.label,
+          LANGUAGE_LABELS[item.language] || item.language, decidedCount].join(', ') : undefined}
+        onPress={() => isRun
+          ? navigation.navigate('BatteryRunSummary', { runId: item.id })
+          : navigation.navigate('AssessmentDetail', { assessmentId: item.id, childName })}
       >
         <View style={styles.cardHeader}>
           <Text variant="titleSmall" style={styles.cardDate}>
-            {formatDate(item.assessment_date)}
+            {date}
           </Text>
           <View style={styles.cardHeaderRight}>
+            {isRun ? <StatusBadge label={status.label} tone={status.tone} /> :
             <View style={[styles.syncBadge, synced ? styles.syncBadgeSynced : styles.syncBadgePending]}>
               <Text variant="bodySmall" style={[styles.syncBadgeText, synced ? styles.syncTextSynced : styles.syncTextPending]}>
                 {synced ? 'Synced' : 'Pending sync'}
               </Text>
-            </View>
-            {!isRun && <Text style={styles.chevron}>{'\u203A'}</Text>}
+            </View>}
+            <Text style={styles.chevron}>{'\u203A'}</Text>
           </View>
         </View>
 
@@ -155,17 +174,19 @@ export default function AssessmentHistoryScreen({ navigation }) {
 
         <View style={styles.typeRow}>
           <Text variant="labelSmall" style={styles.typeBadgeText}>
-            {isRun ? `WelaPLUS · ${status} · ${item.question_count} Questions` : title}
+            {title}
           </Text>
           <Text variant="bodyMedium" style={styles.language}>
             {LANGUAGE_LABELS[item.language] || item.language}
           </Text>
         </View>
-        {!isRun && <View style={styles.statsRow}>
-          <Text variant="bodySmall" style={styles.stat}>{item.score} / {item.total_items}</Text>
-        </View>}
+        <View style={styles.statsRow}>
+          <Text variant="bodySmall" style={styles.stat}>{isRun
+            ? decidedCount
+            : `${item.score} / ${item.total_items}`}</Text>
+        </View>
         {index < assessments.length - 1 && <View testID="history-row-divider" pointerEvents="none" style={styles.rowDivider} />}
-      </Row>
+      </Pressable>
     );
   };
 

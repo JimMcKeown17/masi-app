@@ -23,7 +23,7 @@ const headerPayload = run => Object.fromEntries(HEADER_COLUMNS.map(field => [fie
 export const createBatteryRunsRepository = ({ database } = {}) => {
   const assessments = createAssessmentsRepository({ database });
 
-  const startRun = async ({ id, userId, childId, classId = null, batteryCode, batteryVersion, language }) => {
+  const startRun = async ({ id, userId, childId, classId = null, batteryCode, batteryVersion, language, abandonRunId = null }) => {
     for (const [field, value] of [['id', id], ['user_id', userId], ['child_id', childId]]) {
       assertUuid(value, field);
     }
@@ -42,6 +42,18 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
       if (await txn.getFirstAsync('select id from battery_runs where id = ?', id)) {
         throw new Error('Battery Run already exists');
       }
+      if (abandonRunId) await finishRunInTransaction(txn, abandonRunId, 'abandoned', { childId });
+      const unfinished = await txn.getFirstAsync(`
+        select id from battery_runs
+        where user_id = ? and child_id = ? and programme_id = ?
+          and status = 'in_progress' and started_here = 1
+      `, userId, childId, programmeId);
+      if (unfinished) {
+        const error = new Error('UNFINISHED_RUN_EXISTS: this child already has an unfinished Run');
+        error.code = 'UNFINISHED_RUN_EXISTS';
+        error.runId = unfinished.id;
+        throw error;
+      }
       const now = new Date().toISOString();
       const run = {
         id, user_id: userId, child_id: childId, programme_id: programmeId, class_id: classId,
@@ -56,11 +68,24 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     });
   };
 
-  const finishRun = (id, status) => runRepositoryTransaction(database, async (txn) => {
+  const finishRunInTransaction = async (txn, id, status, { childId, questionCodes } = {}) => {
+    if (status === 'completed' && (!Array.isArray(questionCodes) || questionCodes.length === 0)) {
+      throw new TypeError('questionCodes: must be a non-empty array');
+    }
     const existing = await txn.getFirstAsync('select * from battery_runs where id = ?', id);
     if (!existing) throw new Error('Battery Run not found');
     if (existing.started_here !== 1) throw new Error('Battery Run was not started on this installation');
     if (existing.status !== 'in_progress') throw new Error('Battery Run must be in_progress');
+    if (childId && existing.child_id !== childId) throw new Error('Battery Run belongs to another child');
+    if (status === 'completed') {
+      const decisions = await txn.getAllAsync('select question_code from assessments where battery_run_id = ?', id);
+      const decided = new Set(decisions.map(row => row.question_code));
+      if (!questionCodes.every(code => decided.has(code))) {
+        const error = new Error('RUN_INCOMPLETE: every Question must have a saved decision');
+        error.code = 'RUN_INCOMPLETE';
+        throw error;
+      }
+    }
     const now = new Date().toISOString();
     const run = {
       ...existing, status, completed_at: status === 'completed' ? now : null,
@@ -71,7 +96,10 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     const insert = await txn.getFirstAsync('select id from sync_outbox where id = ?', `battery_runs:${id}:insert`);
     await enqueueDomainOutbox(txn, 'battery_runs', id, insert ? 'insert' : 'update', headerPayload(run));
     return { id };
-  });
+  };
+
+  const finishRun = (id, status, options) => runRepositoryTransaction(database,
+    txn => finishRunInTransaction(txn, id, status, options ?? {}));
 
   const getRunsForUser = async (userId) => {
     const db = await resolveDatabase(database);
@@ -90,7 +118,8 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
     const programmeId = await getActiveProgrammeId(db, userId);
     if (!programmeId) return [];
     const rows = await db.getAllAsync(`
-      select * from battery_runs
+      select r.*, (select count(*) from assessments a where a.battery_run_id = r.id) as question_count
+      from battery_runs r
       where user_id = ? and programme_id = ? and status = 'in_progress' and started_here = 1
       order by started_at desc, created_at desc
     `, userId, programmeId);
@@ -134,7 +163,7 @@ export const createBatteryRunsRepository = ({ database } = {}) => {
 
   return {
     startRun,
-    finalizeRun: id => finishRun(id, 'completed'),
+    finalizeRun: (id, options) => finishRun(id, 'completed', options),
     abandonRun: id => finishRun(id, 'abandoned'),
     getRunsForUser,
     getUnfinishedRunsForUser,

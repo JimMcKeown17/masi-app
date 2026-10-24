@@ -212,7 +212,7 @@ test('Skip defaults to allowed; cancel retains decisions and a chosen reason emi
   expect(onComplete).not.toHaveBeenCalled();
   expect(r.getByLabelText('l, correct')).toBeTruthy();
   fireEvent.press(r.getByText('Skip question'));
-  const tired = r.getByText('Child tired');
+  const tired = r.getByText('Child is tired');
   act(() => { fireEvent.press(tired); fireEvent.press(tired); });
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'skipped_tired', items: [],

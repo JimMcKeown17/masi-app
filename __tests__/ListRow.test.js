@@ -93,3 +93,10 @@ test('readOnly renders its leading tile within the single accessible row', () =>
   expect(flat(ui.getByTestId('list-row-divider')).left).toBe(68);
   expect(ui.queryByRole('button')).toBeNull();
 });
+
+test('custom trailing elements are centred without shrinking', () => {
+  const ui = render(<ListRow title="Question" trailing={<View testID="custom-trailing" />} />);
+  let wrapper = ui.getByTestId('custom-trailing').parent;
+  while (wrapper.type !== 'View') wrapper = wrapper.parent;
+  expect(flat(wrapper)).toMatchObject({ alignSelf: 'center', flexShrink: 0 });
+});

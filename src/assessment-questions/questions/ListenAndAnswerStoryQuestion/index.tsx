@@ -186,7 +186,7 @@ function ListenAndAnswerStoryQuestionContent(
         testID="intro-story"
         instructions={instructions}
         startLabel="I've finished reading"
-        onStart={() => setPhase('active')}
+        onStart={() => { props.onStart?.(); setPhase('active'); }}
       >
         <ContentText size="story">{effectiveItemSet.story}</ContentText>
       </QuestionIntro>

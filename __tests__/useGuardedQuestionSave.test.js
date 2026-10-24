@@ -1,0 +1,85 @@
+import React from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { act, fireEvent } from '@testing-library/react-native';
+import { usePreventRemoveContext } from '@react-navigation/native';
+import { renderInTestStack } from '../test-support/renderInTestStack';
+import { useGuardedQuestionSave } from '../src/hooks/useGuardedQuestionSave';
+
+const RESULT = { question_code: 'test', items: [], derived: { total_correct: 0 } };
+const deferred = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+function EntryScreen() { return null; }
+
+function renderHost(persist, fatalCodes = ['RUN_NOT_WRITABLE']) {
+  let current;
+  let nativeGuards;
+  const onSaved = jest.fn();
+  function Host({ navigation }) {
+    current = useGuardedQuestionSave({ navigation, persist, onSaved, fatalCodes });
+    nativeGuards = usePreventRemoveContext().preventedRoutes;
+    return <View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Start" onPress={current.onStart}><Text>Start</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Complete" onPress={() => current.onComplete(RESULT)}><Text>Complete</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Retry" onPress={current.retry}><Text>Retry</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Dismiss save error" onPress={current.dismissSaveError}><Text>Dismiss save error</Text></Pressable>
+      {current.saveError && <Text>Save error</Text>}
+      {current.fatalError && <Text accessibilityRole="alert">Fatal: {current.fatalError}</Text>}
+      {current.leaveSheet.visible && <View testID="discard-sheet">
+        <Text>{current.leaveSheet.hasResult ? 'Discard result?' : 'Discard test?'}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Discard" onPress={current.leaveSheet.onConfirm}><Text>Discard</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Cancel discard" onPress={current.leaveSheet.onCancel}><Text>Cancel discard</Text></Pressable>
+      </View>}
+    </View>;
+  }
+  const screen = renderInTestStack({ routes: [
+    { name: 'Entry', component: EntryScreen },
+    { name: 'Question', component: Host },
+  ] });
+  const routeKey = screen.navigationRef.getRootState().routes[1].key;
+  return { ...screen, onSaved, state: () => current, nativeGuard: () => nativeGuards[routeKey] };
+}
+
+test('a fatal save refusal exposes its code instead of a retry error and releases the leave guard', async () => {
+  const persist = jest.fn().mockRejectedValue({ code: 'RUN_NOT_WRITABLE' });
+  const screen = renderHost(persist);
+  fireEvent.press(screen.getByRole('button', { name: 'Start' }));
+  expect(screen.nativeGuard()?.preventRemove).toBe(true);
+  fireEvent.press(screen.getByRole('button', { name: 'Complete' }));
+  expect(await screen.findByText('Fatal: RUN_NOT_WRITABLE')).toBeTruthy();
+  expect(screen.state()).toMatchObject({ result: RESULT, fatalError: 'RUN_NOT_WRITABLE', saveError: false });
+  expect(screen.queryByText('Save error')).toBeNull();
+  expect(screen.state().leaveSheet.visible).toBe(false);
+  expect(screen.nativeGuard()).toBeUndefined();
+  expect(screen.onSaved).not.toHaveBeenCalled();
+  act(() => { screen.navigationRef.goBack(); });
+  expect(screen.routeNames()).toEqual(['Entry']);
+  expect(screen.queryByTestId('discard-sheet')).toBeNull();
+  expect(persist).toHaveBeenCalledTimes(1);
+});
+
+test('a fatal refusal arriving while discard is open closes it and shows the fatal state once', async () => {
+  const pending = deferred();
+  const persist = jest.fn().mockReturnValue(pending.promise);
+  const screen = renderHost(persist);
+  fireEvent.press(screen.getByRole('button', { name: 'Start' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Complete' }));
+  act(() => { screen.navigationRef.goBack(); });
+  expect(screen.getByTestId('discard-sheet')).toBeTruthy();
+  expect(screen.state().leaveSheet.hasResult).toBe(true);
+  expect(screen.routeNames()).toEqual(['Entry', 'Question']);
+
+  await act(async () => { pending.reject({ code: 'RUN_NOT_WRITABLE' }); });
+  expect(screen.queryByTestId('discard-sheet')).toBeNull();
+  expect(screen.getAllByText('Fatal: RUN_NOT_WRITABLE')).toHaveLength(1);
+  expect(screen.state().saveError).toBe(false);
+  expect(screen.nativeGuard()).toBeUndefined();
+  expect(screen.onSaved).not.toHaveBeenCalled();
+  act(() => { screen.state().onComplete(RESULT); screen.state().retry(); });
+  expect(persist).toHaveBeenCalledTimes(1);
+  expect(screen.getAllByText('Fatal: RUN_NOT_WRITABLE')).toHaveLength(1);
+  act(() => { screen.navigationRef.goBack(); });
+  expect(screen.routeNames()).toEqual(['Entry']);
+});

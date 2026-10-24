@@ -5,7 +5,7 @@ import { createMigratedDatabase } from '../test-support/sqliteRepositoryTestUtil
 import { bindTestActor } from '../test-support/actorTestUtils';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createBatteryRunsRepository } from '../src/db/repositories/batteryRunsRepository';
-import { EGRA_FORMS, adaptEgraForm, egraFormFor } from '../src/assessment-questions/egra';
+import { EGRA_FORMS, adaptEgraForm, egraBatteryFor, egraFormFor } from '../src/assessment-questions/egra';
 import { validateResult } from '../src/assessment-questions/contractTest/validateResult';
 import { assertSubmitShape, toSubmitArgs } from '../src/services/assessmentFamilyPayload';
 import { computeAssessmentMastery } from '../src/utils/letterMastery';
@@ -74,7 +74,11 @@ test('English FAL 2 resumes four decided Questions, finalizes offline and suppli
     await assessments.saveQuestionResult({ assessmentId: uuid(), userId, childId, batteryRunId: runId, result: results[0] });
     throw new Error('duplicate should have been rejected');
   } catch (error) { expect(error.code).toBe('QUESTION_ALREADY_DECIDED'); }
-  await runs.finalizeRun(runId);
+  // Plan 3: finalize requires every battery Question decided.
+  // From the battery, as the host does, so this also proves the saved results cover it.
+  await runs.finalizeRun(runId, {
+    questionCodes: egraBatteryFor('egra', form.id).questions.map(question => question.question_code),
+  });
   expect((await runs.getRunWithResults(runId)).status).toBe('completed');
   const outbox = await db.getAllAsync('select * from sync_outbox');
   expect(outbox).toHaveLength(5);

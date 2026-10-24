@@ -225,7 +225,7 @@ function WriteCvcsQuestionContent(
   );
 
   if (phase === 'intro') {
-    return <QuestionIntro instructions={instructions} onStart={() => setPhase('active')} />;
+    return <QuestionIntro instructions={instructions} onStart={() => { props.onStart?.(); setPhase('active'); }} />;
   }
 
   if (phase === 'finished') {
