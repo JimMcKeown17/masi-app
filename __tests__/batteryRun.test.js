@@ -236,3 +236,20 @@ test('comprehension-like done row uses derived.questions_asked for 2 / 3 rather 
   }] });
   expect(state.rows[1]).toMatchObject({ state: 'done', detail: 'Done', scoreText: '2 / 3' });
 });
+
+test.each([
+  [{ status: 'abandoned' }, access],
+  [{ status: 'completed' }, access],
+  [{ started_here: 0 }, access],
+  [{}, { ...access, childAssigned: false }],
+])('read-only undecided rows say Not started, preserving timed minutes and the returned next (%p, %p)', (changes, options) => {
+  const state = view(changes, options);
+  expect(state.writable).toBe(false);
+  expect(state.next).toBe(battery.questions[0]);
+  expect(state.rows.every(row => row.state === 'not_started')).toBe(true);
+  expect(state.rows[0].detail).toBe('Not started · 1 min');
+  expect(state.rows[1].detail).toBe('Not started');
+  expect(state.rows[4].detail).toBe('Not started');
+  expect(state.rows[5].detail).toBe('Not started · 1 min');
+  expect(state.rows.some(row => row.detail.startsWith('Next'))).toBe(false);
+});

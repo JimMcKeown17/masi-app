@@ -29,6 +29,9 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
   const { triggerBackgroundSync } = useOffline();
   const { show: showToast } = useToast();
   const { all, loading: rosterLoading } = useAssessableChildren();
+  const rosterRef = useRef({ all, loading: rosterLoading });
+  rosterRef.current = { all, loading: rosterLoading };
+  const observedRosterLoading = useRef(rosterLoading);
   const onScroll = useHeaderHairline(navigation);
   const insets = useSafeAreaInsets();
   const [data, setData] = useState({ loading: true });
@@ -52,14 +55,14 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
     // Preserve the summary during refresh; first load alone owns the spinner.
     setData(previous => previous.handle === handle && previous.run?.id === runId
       ? { ...previous, refreshing: true } : { handle, runId, loading: true });
-    if (rosterLoading) return;
+    if (rosterRef.current.loading) return;
     try {
       const [run, gate] = await Promise.all([
         repositories.batteryRuns.getRunWithResults(runId),
         getActiveProgrammeGate({ handle, userId: user.id }),
       ]);
       if (!active()) return;
-      const child = run && all.find(row => row.id === run.child_id);
+      const child = run && rosterRef.current.all.find(row => row.id === run.child_id);
       let childName = child && [child.first_name, child.last_name].filter(Boolean).join(' ');
       if (run && !childName) {
         const names = await repositories.children.getChildNamesByIds([run.child_id]);
@@ -71,7 +74,7 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
     } catch (error) {
       if (active() && !isStaleActorError(error)) setData({ handle, runId, loading: false, error: true });
     }
-  }, [handle, repositories, runId, user.id, all, rosterLoading]);
+  }, [handle, repositories, runId, user.id]);
 
   useFocusEffect(useCallback(() => {
     focused.current = true;
@@ -80,6 +83,14 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
     void load();
     return () => { focused.current = false; generation.current += 1; };
   }, [load]));
+
+  // A first read deferred for the roster must resume when it settles. Later
+  // roster identities update the rendered child without restarting focus/load.
+  useEffect(() => {
+    const wasLoading = observedRosterLoading.current;
+    observedRosterLoading.current = rosterLoading;
+    if (wasLoading && !rosterLoading && focused.current) void load();
+  }, [rosterLoading, load]);
 
   const ready = data.handle === handle && data.runId === runId && !data.loading && handle.isCurrent();
   const run = ready ? data.run : null;

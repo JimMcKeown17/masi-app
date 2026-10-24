@@ -4139,6 +4139,8 @@ git grep -n "File the sheet for Head Office\|5 rows × 12" -- documentation CONT
 Build 39 (`70f8f40`, EAS preview, staging `segygjzpujphwvrubusm`) on the A03s at `wm density 320`
 (360dp), font scale 1.0, signed in as the Test EA.
 
+S1 (found on build 40 at font 1.3): a background sync closed the overview's open "Abandon this run?" sheet and the confirm tap landed on Start underneath. Root cause: `load` depended on the roster array, so every roster refetch re-ran the focus effect, and `load` cleared both sheets. Fix: roster changes only resume a deferred first load (the view already derives the child at render); sheets close on blur or when their action becomes invalid. Same dependency removed from the summary. After: 421 suites / 6,137 tests.
+
 Passed:
 - Full isiXhosa run (ZP2-JVH) finalized with the one tick. Staging shows `completed`, 11 results.
 - Force-quit mid-Question online and offline. The run resumes and the unsaved attempt is dropped.
@@ -4163,6 +4165,7 @@ Found and fixed (none visible to Jest before; each now has a test):
 | D7 | Picker lacked "last run 24 Oct" (mockup) | From completed runs of this battery on the phone |
 | D8 | "Its 1 saved Questions"; red left-aligned Cancel | Singular/plural/zero copy; ink Cancel |
 | D9 | Skip reason wording differed from the mockup | Labels only ("Child is tired", "Not suitable for this child's age", "Other reason") |
+| F19 | Abandoned/read-only summaries still labelled an undecided Question "Next" | `buildRunView` now marks a row Next only when writable; read-only undecided rows say Not started, retain timed minutes, and leave the returned `next` unchanged |
 
 Filed, not fixed (also on `main`): #102 two "End the test?" sheets with opposite outcomes;
 #103 "n items unmarked — finish anyway?" fires when blank means wrong. Content gaps for the
