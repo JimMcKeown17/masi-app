@@ -306,6 +306,38 @@ test('unfinished-run load failure offers Retry and keeps starting blocked until 
   await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
 });
 
+test('last-run history failure leaves unfinished runs visible and resumable without an error note', async () => {
+  const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    repositories.batteryRuns.getRunsForUser.mockRejectedValue(new Error('history read failed'));
+    repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished()]);
+    const screen = await ready(renderSelect());
+    expect(screen.getByText('Unfinished 4/11')).toBeTruthy();
+    expect(screen.queryByText(/last run/)).toBeNull();
+    expect(screen.queryByText("Couldn't load unfinished runs. Try again.")).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(warning).toHaveBeenCalled();
+    fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+    await screen.findByRole('header', { name: 'Lwazi has an unfinished run' });
+    expect(screen.getByRole('button', { name: 'Resume run' })).not.toBeDisabled();
+    fireEvent.press(screen.getByRole('button', { name: 'Resume run' }));
+    await waitFor(() => expect(screen.routes()[1].params).toEqual({ runId: ID }));
+    expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+  } finally {
+    warning.mockRestore();
+  }
+});
+
+test('last-run history that never resolves does not delay starting a run', async () => {
+  repositories.batteryRuns.getRunsForUser.mockReturnValue(deferred().promise);
+  const screen = await ready(renderSelect());
+  expect(screen.queryByText(/last run/)).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+});
+
 test('failed abandon-and-start keeps the saved run sheet open with an accessible error and permits a manual retry', async () => {
   repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished()]);
   repositories.batteryRuns.startRun.mockRejectedValueOnce(new Error('disk full'));

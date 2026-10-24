@@ -81,6 +81,17 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   const [viewportHeight, setViewportHeight] = useState(0);
   const [listLayout, setListLayout] = useState(null);
   const [rowLayouts, setRowLayouts] = useState({});
+  const setScrollRef = useCallback(node => {
+    scrollRef.current = node;
+    if (!node) {
+      // Reveal state and geometry belong to this mounted list, which restarts at the top.
+      revealed.current = null;
+      scrollY.current = 0;
+      setViewportHeight(0);
+      setListLayout(null);
+      setRowLayouts({});
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const ticket = ++generation.current;
@@ -274,7 +285,7 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   </View>;
 
   return <View style={styles.page}>
-    <ScrollView ref={scrollRef} testID="battery-overview-scroll" style={styles.scroll}
+    <ScrollView ref={setScrollRef} testID="battery-overview-scroll" style={styles.scroll}
       contentContainerStyle={styles.content} onLayout={event => setViewportHeight(event.nativeEvent.layout.height)}
       onScroll={event => { scrollY.current = event.nativeEvent.contentOffset.y; onScroll(event); }} scrollEventThrottle={16}>
       <View style={styles.headerLine}>

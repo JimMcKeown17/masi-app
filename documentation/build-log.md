@@ -4174,6 +4174,8 @@ Gates after the fixes: `npx jest` 421 suites / 6,116 tests; `npx jest src/assess
 68 / 873; `npm run test:types` clean. Still open: build 40 re-check, font scale 1.3, the
 control-child check as TestB Second, iPhone.
 
+Review fixes R1–R3 decouple optional picker history from unfinished-run gating, restore dated History accessibility labels with the displayed decided count, and reset overview reveal state and geometry on ScrollView unmount (Node `v20.19.4`: failing-first regression coverage; three touched suites pass 84 tests; `npx jest --silent` passes 421 suites / 6,121 tests; `npm run test:types` passes).
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
