@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '../../context/AuthContext';
-import { useChildren } from '../../context/ChildrenContext';
+import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 import { useClasses } from '../../context/ClassesContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useTimeTracking } from '../../hooks/useTimeTracking';
@@ -43,7 +43,7 @@ export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
   const { user, profile } = useAuth();
-  const { children: childrenList } = useChildren();
+  const { all: assessableChildren } = useAssessableChildren();
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
   const { needsAttentionCount = 0 } = useOffline();
   const {
@@ -98,7 +98,7 @@ export default function HomeScreen({ navigation }) {
       ]);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
       setWeekCounts(getWeekSessionCounts(sessions));
-      setCoverage(getCoverageFromCounts(childrenList, assessmentCounts));
+      setCoverage(getCoverageFromCounts(assessableChildren, assessmentCounts));
       setSessionGoal(dailyGoal);
       setProgrammeName(programmeGate.programme?.name || '');
       setHasActiveProgramme(Boolean(programmeGate.hasActiveProgramme));
@@ -113,7 +113,7 @@ export default function HomeScreen({ navigation }) {
     } finally {
       if (seq === loadSeqRef.current) setStatsLoading(false);
     }
-  }, [handle, sessionsRepository, assessmentsRepository, homeAttention, childrenList, user.id, pageVersion, runVersion, assessmentHistory.pageVersion, assessmentHistory.runVersion]);
+  }, [handle, sessionsRepository, assessmentsRepository, homeAttention, assessableChildren, user.id, pageVersion, runVersion, assessmentHistory.pageVersion, assessmentHistory.runVersion]);
 
   // Load on focus, roster or history changes; reload on foreground.
   useFocusEffect(

@@ -1,4 +1,4 @@
-import { getTestWriter } from '../test-support/testDatabase';
+import { getTestWriter, TEST_ACTOR_ID } from '../test-support/testDatabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { childrenRepository } from '../src/db/repositories/childrenRepository';
 import { classesRepository } from '../src/db/repositories/classesRepository';
@@ -80,6 +80,7 @@ describe('ClassesContext repository operations', () => {
       first_name: 'Alice',
       last_name: 'A',
       class_id: 'class-1',
+      created_by: TEST_ACTOR_ID, // the signed-in EA's own child: archive cascades only to delivery or creator children
       synced: true,
     };
     const child2 = {

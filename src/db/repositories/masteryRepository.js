@@ -112,16 +112,24 @@ export const createMasteryRepository = ({ database } = {}) => {
     const id = letterMasteryDomainId({ childId, letter, language });
 
     return runWrite(transaction, async (txn) => {
-      const changed_by = getConnectionActor(txn);
+      const changed_by = getConnectionActor(txn) ?? database?.userId ?? null;
       if (changed_by === null) throw new Error('letter_mastery.changed_by requires the signed-in EA');
+      // Anchor the existing keyed read on delivery authority. The left join still
+      // returns a row for an authorised child's first confirmation.
       const existing = await txn.getFirstAsync(`
         select lm.*, o.status as outbox_status
-        from letter_mastery lm
+        from (select 1 from child_ea_assignments
+          where child_id = ? and user_id = ? and unassigned_at is null limit 1) delivery
+        left join (select * from letter_mastery lm where lm.id = ?) lm on 1 = 1
         left join sync_outbox o
           on o.table_name = 'letter_mastery' and o.record_id = lm.id
          and o.status in ('pending', 'failed', 'in_flight')
-        where lm.id = ?
-      `, id);
+      `, childId, changed_by, id);
+      if (!existing) {
+        const error = new Error('Letter mastery requires an active delivery assignment');
+        error.code = 'NOT_DELIVERY_CHILD';
+        throw error;
+      }
       if (existing?.outbox_status != null
         && Math.min(Date.parse(existing.changed_at), nowMs) > Date.parse(changed_at)) {
         return mapMastery(existing);

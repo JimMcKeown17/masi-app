@@ -24,6 +24,8 @@ const seedChildren = async (db, count) => {
       insert into children (id, first_name, last_name, class_id, created_by, sync_status)
       values (?, 'Child', ?, 'class-1', 'user-1', 'synced')
     `, `child-${index}`, String(index));
+    await db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values (?, ?, 'user-1', 'synced')`, `delivery-${index}`, `child-${index}`);
   }
 };
 

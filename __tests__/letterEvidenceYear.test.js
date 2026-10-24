@@ -138,6 +138,8 @@ describe('current academic year letter evidence through real SQLite', () => {
 
   test('with no active year there is no assessment evidence; confirmations still show', async () => {
     await store(oldPhone, 1, '2026-03-01', ['a']);
+    await oldPhone.db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values ('letter-evidence-delivery', ?, ?, 'synced')`, CHILD, USER);
     await oldPhone.repositories.mastery.setLetterMastery({ childId: CHILD, letter: 'm', language: 'en', confirmed: true });
     await oldPhone.db.runAsync('update academic_years set is_active = 0');
     const state = await load(oldPhone);

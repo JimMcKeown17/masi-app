@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'),
   useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
@@ -180,4 +187,13 @@ test('current-class grade fallback survives an unassigned class missing from the
     await f.db.closeAsync();
     jest.useRealTimers();
   }
+});
+
+test('class-only children join the assessment not-assessed list', async () => {
+  const delivery = { id: 'delivery', first_name: 'Dina', last_name: 'Delivery' };
+  mockChildren.push(delivery);
+  useAssessableChildren.mockReturnValue({ all: [delivery, { id: 'control', first_name: 'Cora', last_name: 'Control' }], loading: false });
+  const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);
+  expect(await screen.findByText('Cora C.')).toBeTruthy();
+  expect(screen.getAllByText('Not assessed')).toHaveLength(2);
 });

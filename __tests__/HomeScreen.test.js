@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 const mockUseAuth = jest.fn();
 const mockUseOffline = jest.fn();
 const mockUseChildren = jest.fn();
@@ -546,4 +553,15 @@ describe('HomeScreen', () => {
 
     expect(mockStatusBar).not.toHaveBeenCalled();
   });
+  test('assessment-due coverage includes class-only children while sessions keep their own goal', async () => {
+    const delivery = { id: 'delivery' };
+    mockUseChildren.mockReturnValue({ children: [delivery] });
+    useAssessableChildren.mockReturnValue({ all: [delivery, { id: 'control' }], loading: false });
+    mockGetAssessmentCountsSince.mockResolvedValue([{ child_id: 'delivery', count: 1 }]);
+    const screen = renderHome();
+    expect(await screen.findByText('1 of 2 children assessed')).toBeTruthy();
+    expect(screen.getByText('1 child to assess')).toBeTruthy();
+    expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
+  });
+
 });

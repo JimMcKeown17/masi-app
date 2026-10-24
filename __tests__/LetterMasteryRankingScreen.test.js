@@ -34,7 +34,7 @@ let repositories;
 beforeEach(async () => {
   jest.useFakeTimers();
   jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
-  fixture = await createFamilySyncFixture();
+  fixture = await createFamilySyncFixture({ withDelivery: true });
   await fixture.db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
     values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
   repositories = {
@@ -121,6 +121,8 @@ test.each([null, undefined, 'isiZulu'])(
 
 test('a confirmation recorded by another EA counts', async () => {
   const otherEa = uuid();
+  await fixture.db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values (?, ?, ?, 'synced')`, uuid(), fixture.childId, otherEa);
   bindTestActor(fixture.db, otherEa);
   await repositories.mastery.setLetterMastery({
     childId: fixture.childId, letter: 'b', language: 'xh', confirmed: true,

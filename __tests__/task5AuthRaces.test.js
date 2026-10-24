@@ -194,6 +194,7 @@ test.each([['TOKEN_REFRESHED', false], ['INITIAL_SESSION', false], ['TOKEN_REFRE
   const classAssignment = { id: 'class-assignment', class_id: classroom.id, ea_user_id: A, programme_id: programme.id, assigned_at: '2026-01-01', created_by: A };
   const rows = { schools: [school], programmes: [programme], academic_years: [year],
     staff_programme_assignments: [{ id: 'spa', user_id: A, programme_id: programme.id }],
+    class_ea_assignments: [classAssignment],
     children: [child], child_ea_assignments: [{ ...cea, children: child }], child_programme_enrollments: [cpe],
     child_class_memberships: [{ ...ccm, classes: classroom }], classes: [{ ...classroom, class_ea_assignments: [classAssignment] }] };
   const snapshot = { schema_version: 1, complete: true, user_id: A, active_programme_id: programme.id,
@@ -976,6 +977,7 @@ test('online transition and reconnect nonce during initial SQLite reads run one 
   const ccm = { id: 'ccm', child_id: child.id, class_id: classroom.id, academic_year_id: year.id, entered_at: '2026-01-01', created_by: A };
   const classAssignment = { id: 'class-assignment', class_id: classroom.id, ea_user_id: A, programme_id: programme.id, assigned_at: '2026-01-01', created_by: A };
   const rows = { schools: [school], programmes: [programme], academic_years: [year], staff_programme_assignments: [assignment],
+    class_ea_assignments: [classAssignment],
     children: [child], child_ea_assignments: [{ ...cea, children: child }], child_programme_enrollments: [cpe],
     child_class_memberships: [{ ...ccm, classes: classroom }], classes: [{ ...classroom, class_ea_assignments: [classAssignment] }] };
   const snapshot = { schema_version: 1, complete: true, user_id: A, active_programme_id: programme.id,

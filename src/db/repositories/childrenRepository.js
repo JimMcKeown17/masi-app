@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { getConnectionActor } from '../../session/signedInHandle';
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
@@ -11,6 +12,7 @@ import {
   childProgrammeEnrollmentDomainId,
   enqueueDomainOutbox,
   getActiveAcademicYear,
+  getActiveProgrammeId,
   mapDomainRow,
   normalizeSyncFields,
   resolveProgrammeId,
@@ -288,6 +290,49 @@ export const createChildrenRepository = ({ database } = {}) => {
     });
   };
 
+  const buildClassRosterMembershipReconcile = ({
+    rosterClassIds, rosterMembershipIds, deliveryChildIds, pulledAt, bypassBreaker = false,
+  } = {}) => {
+    if (!Array.isArray(rosterClassIds) || !Array.isArray(rosterMembershipIds)
+      || !Array.isArray(deliveryChildIds) || !pulledAt) {
+      return async () => ({ ended: 0, reconcileCompleted: false });
+    }
+    const classIdsJson = JSON.stringify(rosterClassIds);
+    const deliveryIdsJson = JSON.stringify(deliveryChildIds);
+    const membershipIdsJson = JSON.stringify(rosterMembershipIds);
+    const activeScopeSql = `
+      from child_class_memberships
+      where class_id in (select value from json_each(?))
+        and child_id not in (select value from json_each(?))
+        and exited_at is null
+        and sync_status = 'synced'
+    `;
+    const absentSql = `${activeScopeSql}
+      and id not in (select value from json_each(?))
+    `;
+    return (transaction) => runReconcileWithMassEndBreaker({
+      transaction,
+      scope: 'classRosterMemberships',
+      pulledAt,
+      bypassBreaker,
+      countCandidates: async (txn) => (await txn.getFirstAsync(
+        `select count(*) as count ${activeScopeSql}`, classIdsJson, deliveryIdsJson
+      ))?.count,
+      countWouldEnd: async (txn) => (await txn.getFirstAsync(
+        `select count(*) as count ${absentSql}`, classIdsJson, deliveryIdsJson, membershipIdsJson
+      ))?.count,
+      apply: async (txn) => (await txn.runAsync(`
+        update child_class_memberships
+        set exited_at = ?, updated_at = ?
+        where class_id in (select value from json_each(?))
+          and child_id not in (select value from json_each(?))
+          and exited_at is null
+          and sync_status = 'synced'
+          and id not in (select value from json_each(?))
+      `, pulledAt, pulledAt, classIdsJson, deliveryIdsJson, membershipIdsJson)).changes,
+    });
+  };
+
   const getChildNamesByIds = async (ids = []) => {
     if (!ids.length) return {};
     const db = await resolveDatabase(database);
@@ -428,6 +473,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     await assertNotHistoryReference(txn, id);
     const existing = await txn.getFirstAsync('select * from children where id = ?', id);
     if (!existing) return false;
+    await assertDeliveryChild(txn, id);
 
     const next = normalizeSyncFields({
       ...normalizeChildRecord({
@@ -766,6 +812,75 @@ export const createChildrenRepository = ({ database } = {}) => {
     return rows.map(mapChild);
   };
 
+  const getAssessableChildren = async (userId) => {
+    const db = await resolveDatabase(database);
+    // Delivery is owned by getMyChildren. Its population must not drift when the
+    // separate assessment roster gains class-only children.
+    const [deliveryChildren, programmeId] = await Promise.all([
+      getMyChildren(userId),
+      getActiveProgrammeId(db, userId),
+    ]);
+    const deliveryIds = new Set(deliveryChildren.map((child) => child.id));
+    const rows = await db.getAllAsync(`
+      with assigned_memberships as (
+        select ccm.child_id, ccm.id as membership_id, ccm.class_id,
+          classes.grade, classes.home_language,
+          row_number() over (
+            partition by ccm.child_id
+            order by case when ay.is_active = 1 then 0 else 1 end,
+              ccm.enrolled_at desc, ccm.id asc
+          ) as membership_rank
+        from child_class_memberships ccm
+        join classes on classes.id = ccm.class_id and classes.archived_at is null
+        join class_ea_assignments cea
+          on cea.class_id = ccm.class_id
+         and cea.ea_user_id = ?
+         and cea.programme_id = ?
+         and cea.unassigned_at is null
+        -- The year FK guarantees the row; left join keeps C3 prior-year memberships even if it ever lapses.
+        left join academic_years ay on ay.id = ccm.academic_year_id
+        where ccm.exited_at is null
+      )
+      select children.*,
+        coalesce(m.class_id, children.class_id) as assessable_class_id,
+        case when m.membership_id is not null then m.grade else fallback.grade end as grade,
+        case when m.membership_id is not null then m.home_language else fallback.home_language end as home_language,
+        m.membership_id
+      from children
+      left join assigned_memberships m
+        on m.child_id = children.id and m.membership_rank = 1
+      left join classes fallback on fallback.id = children.class_id
+      where children.id in (select value from json_each(?))
+        or (m.membership_id is not null
+          and children.archived_at is null
+          and children.history_reference = 0)
+      order by children.first_name, children.last_name
+    `, userId, programmeId, JSON.stringify([...deliveryIds]));
+
+    return rows.map(({ assessable_class_id, ...row }) => mapChild({
+      ...row,
+      class_id: assessable_class_id,
+      is_delivery: deliveryIds.has(row.id),
+    }));
+  };
+
+  const assertDeliveryChild = async (txn, childId) => {
+    const actor = getConnectionActor(txn) ?? database?.userId;
+    const allowed = actor && await txn.getFirstAsync(`
+      select 1 from children c where c.id = ? and (
+        c.created_by = ? or exists (
+          select 1 from child_ea_assignments a
+          where a.child_id = c.id and a.user_id = ? and a.unassigned_at is null
+        )
+      )
+    `, childId, actor, actor);
+    if (!allowed) {
+      const error = new Error('This child is not in your delivery scope');
+      error.code = 'NOT_DELIVERY_CHILD';
+      throw error;
+    }
+  };
+
   const archiveChild = async (childId, {
     actorUserId,
     archivedAt = new Date().toISOString(),
@@ -773,6 +888,7 @@ export const createChildrenRepository = ({ database } = {}) => {
     transaction,
   } = {}) => runWrite(transaction, async (txn) => {
     await assertNotHistoryReference(txn, childId);
+    await assertDeliveryChild(txn, childId);
     await txn.runAsync(`
       update children
       set archived_at = ?,
@@ -815,6 +931,9 @@ export const createChildrenRepository = ({ database } = {}) => {
 
   const deleteIfNoHistory = async (childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await assertNotHistoryReference(txn, childId);
+    const child = await txn.getFirstAsync('select created_by from children where id = ?', childId);
+    if (!child) return false;
+    await assertDeliveryChild(txn, childId);
     const checks = [
       "select 1 from session_attendees where child_id = ? limit 1",
       "select 1 from assessments where child_id = ? limit 1",
@@ -831,12 +950,6 @@ export const createChildrenRepository = ({ database } = {}) => {
         return false;
       }
     }
-
-    const child = await txn.getFirstAsync(
-      'select created_by from children where id = ?',
-      childId
-    );
-    if (!child) return false;
 
     // Sync status describes the latest edit, not whether INSERT was acknowledged.
     // Any attempted INSERT may have committed remotely, including a failed request
@@ -881,9 +994,14 @@ export const createChildrenRepository = ({ database } = {}) => {
     getChildren,
     getChildNamesByIds,
     getMyChildren,
+    buildClassMembershipReconcile,
+    buildClassRosterMembershipReconcile,
+    getAssessableChildren,
     save,
     saveChild: save,
     saveChildRecord,
+    saveServerChildRow,
+    withTransaction: (task) => runWrite(null, task),
     saveServerChildRows,
     updateChild,
     getUnsyncedChildren,

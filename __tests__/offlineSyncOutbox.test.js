@@ -2329,6 +2329,8 @@ describe('SQLite outbox offline sync', () => {
 
   test('keeps foreign-key and RLS failures visible as terminal failed items', async () => {
     const { assessmentId } = await seedAssessmentFamily(db);
+    await db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values ('family-delivery', ?, ?, 'synced')`, FAMILY_IDS.childId, FAMILY_IDS.userId);
     const written = await createMasteryRepository({ database: db }).setLetterMastery({
       childId: FAMILY_IDS.childId, programmeId: FAMILY_IDS.programmeId,
       letter: 'a', language: 'en', confirmed: true,

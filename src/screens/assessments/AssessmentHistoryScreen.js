@@ -12,7 +12,7 @@ import { View, Pressable, StyleSheet, FlatList, RefreshControl } from 'react-nat
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { useChildren } from '../../context/ChildrenContext';
+import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 import { colors, spacing } from '../../constants/colors';
 import { toLocalDateString } from '../../utils/localDate';
@@ -42,10 +42,9 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const history = describeCombinedHistoryState({ running, pullStates });
 
   const { user } = useAuth();
-  // Use allChildren (includes hidden) so historical assessments still resolve
-  // child names. Hidden children render with a "(removed)" badge so users know
-  // why the child no longer appears in their active list.
-  const { allChildren } = useChildren();
+  // Class-roster names are available directly. History-only/removed children
+  // still resolve through getChildNamesByIds below.
+  const { all: assessableChildren } = useAssessableChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,7 +80,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
             ...runs.map(run => ({ ...run, kind: 'run', assessment_date: toLocalDateString(run.started_at) })),
           ].sort((a, b) => b.assessment_date.localeCompare(a.assessment_date)
             || (b.created_at || '').localeCompare(a.created_at || ''));
-          const rosterIds = new Set(allChildren.map(child => child.id));
+          const rosterIds = new Set(assessableChildren.map(child => child.id));
           const missingIds = [...new Set(cached.map(row => row.child_id).filter(id => !rosterIds.has(id)))];
           const names = missingIds.length ? await childrenRepository.getChildNamesByIds(missingIds) : {};
           if (active) {
@@ -105,19 +104,19 @@ export default function AssessmentHistoryScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [user?.id, toast, assessmentsRepository, batteryRuns, childrenRepository, services, allChildren, pageVersion, runVersion])
+    }, [user?.id, toast, assessmentsRepository, batteryRuns, childrenRepository, services, assessableChildren, pageVersion, runVersion])
   );
 
   const childInfoMap = React.useMemo(() => {
     const map = { ...referenceNames };
-    for (const c of allChildren) {
+    for (const c of assessableChildren) {
       map[c.id] = {
         name: `${c.first_name} ${c.last_name}`,
         hidden: !!c.hidden_at,
       };
     }
     return map;
-  }, [allChildren, referenceNames]);
+  }, [assessableChildren, referenceNames]);
 
   const renderItem = ({ item, index }) => {
     const isRun = item.kind === 'run';

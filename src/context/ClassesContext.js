@@ -52,8 +52,11 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const {
     children: childrenList,
     refreshFromCache: refreshChildrenFromCache,
+    notifyClassAssignmentsChanged,
   } = useChildren();
 
+  const [assignmentsVersion, setAssignmentsVersion] = useState(0);
+  const publishedAssignmentSetRef = useRef('[]');
   const [schools, setSchools] = useState([]);
   const [classes, setClasses] = useState([]);
   const [incompleteOnboardingClassId, setIncompleteOnboardingClassId] = useState(null);
@@ -350,6 +353,17 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         await stampPullIfComplete();
       }
 
+      const activeAssignments = (await classEaAssignmentsRepository.getAll())
+        .filter(row => row.ea_user_id === activeUserId && row.programme_id === activeProgrammeId && !row.unassigned_at);
+      const assignmentClassIds = [...new Set(activeAssignments.map(row => row.class_id))].sort();
+      const assignmentSet = JSON.stringify(activeAssignments
+        .map(row => [row.id, row.class_id, row.programme_id]).sort((a, b) => a[0].localeCompare(b[0])));
+      if (activeUserIdRef.current !== activeUserId) return;
+      if (publishedAssignmentSetRef.current !== assignmentSet) {
+        publishedAssignmentSetRef.current = assignmentSet;
+        setAssignmentsVersion(version => version + 1);
+        notifyClassAssignmentsChanged?.(assignmentClassIds);
+      }
       const freshClasses = await classesRepository.getClasses({ userId: activeUserId });
       if (activeUserIdRef.current !== activeUserId) return;
       setClasses(freshClasses);
@@ -385,7 +399,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
         setLoading(false);
       }
     }
-  }, [user?.id, isOnline, refreshFromCache, publishClassBootstrapStatus]);
+  }, [user?.id, isOnline, refreshFromCache, publishClassBootstrapStatus, notifyClassAssignmentsChanged]);
 
   const pullFromServer = useCallback(() => {
     const userId = user?.id;
@@ -586,6 +600,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
   const value = useMemo(() => ({
     schools,
     classes,
+    assignmentsVersion,
     loading,
     incompleteOnboardingClassId,
     classBootstrapStatus: classBootstrap.userId === (user?.id || null)
@@ -599,7 +614,7 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     deleteClass,
     getChildrenInClass,
   }), [
-    schools, classes, loading, incompleteOnboardingClassId, classBootstrap, user?.id, loadSchools,
+    assignmentsVersion, schools, classes, loading, incompleteOnboardingClassId, classBootstrap, user?.id, loadSchools,
     loadClasses, addClass, completeClassOnboarding, updateClass, deleteClass, getChildrenInClass,
   ]);
 

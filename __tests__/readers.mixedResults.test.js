@@ -1,3 +1,7 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => {
+  const { allChildren } = require('../src/context/ChildrenContext').useChildren();
+  return { all: allChildren, yourChildren: allChildren, restOfClass: [], loading: false };
+} }));
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {},
@@ -91,7 +95,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
       .toEqual([children[1].id, children[0].id]);
     expect(getAssessmentsTabStats(children, results, year))
       .toEqual({ totalAssessments: 2, percentAssessed: 50, avgScore: 25 });
-    expect(getChildrenTabStats(children, [], results, year).unassessedCount).toBe(2);
+    expect(getChildrenTabStats(children, children, [], results, year).unassessedCount).toBe(2);
     const counts = await f.assessments.getAssessmentCountsSince({ userId: f.userId });
     expect(counts).toEqual(expect.arrayContaining([
       { child_id: children[0].id, count: 1 }, { child_id: children[1].id, count: 1 },
@@ -153,7 +157,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
     expect(getCoverageFromCounts(children, counts)).toEqual({ assessed: 0, total: 4, percent: 0 });
     expect(getAssessmentsTabStats(children, results, null))
       .toEqual({ totalAssessments: 0, percentAssessed: 0, avgScore: 0 });
-    expect(getChildrenTabStats(children, [], results, null).unassessedCount).toBe(4);
+    expect(getChildrenTabStats(children, children, [], results, null).unassessedCount).toBe(4);
     expect(getAssessmentCoverage(children, results, null)).toEqual({ assessed: 0, total: 4, percent: 0 });
   });
 

@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'),
   useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),

@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'),
   useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
@@ -91,4 +98,13 @@ test('retains the active-programme gate for starting tests', async () => {
   const screen = render(<PaperProvider><AssessmentsScreen navigation={{ navigate: jest.fn() }} /></PaperProvider>);
   await screen.findByText(/No active programme/);
   expect(screen.queryByText('Start assessment')).toBeNull();
+});
+
+test('coverage uses the assessable roster when delivery contains only one of two children', async () => {
+  mockChildren.push({ id: 'delivery' });
+  useAssessableChildren.mockReturnValue({ all: [...mockChildren, { id: 'control' }], loading: false });
+  mockGetLetterResults.mockResolvedValue([{ child_id: 'delivery', question_code: 'letter_sounds',
+    stopped_reason: 'completed', assessment_date: '2026-06-01', score: 10 }]);
+  const screen = render(<PaperProvider><AssessmentsScreen navigation={{ navigate: jest.fn() }} /></PaperProvider>);
+  expect(await screen.findByText('50%')).toBeTruthy();
 });
