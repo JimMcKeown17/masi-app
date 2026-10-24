@@ -3990,6 +3990,59 @@ parallel runs timed out in unchanged suites; every such suite passed serially. F
 suites, 1,127 tests**; `npm run test:types` clean. Earlier: `96da985` 410 / 5,905 and 82 / 1,127;
 `1d2eda1` 411 / 5,919 and 82 / 1,127.
 
+### 2026-10-24 — Lesson flow device re-run, Galaxy A03s (builds 36 and 37)
+
+**Setup.** Same phone, account and backend as the 23 October run. EAS builds from `e06a2fc`:
+36 (`preview-content`) installed over 35 with `adb install -r` (data kept), then 37 (`preview`)
+over 36. 360 dp (`wm density 320`) at 1.0× and 1.3× text, cold relaunch after each change.
+Timing from `screenrecord` frames at 60 fps. Jim has iOS 19 (`preview-content`) and 20
+(`preview`) from the same commit.
+
+| Check | 23 Oct (33 / 34) | 24 Oct (36 / 37) | Result |
+|---|---|---|---|
+| Picker rows after the picker appears (budget 500 ms) | 470–530 ms / 550–620 ms | **100–183 ms** on 36 (20 runs), **166–267 ms** on 37 (3 runs; the slowest is the first after a cold start) | Pass |
+| Picker letters | arrived with the rows | 350–450 ms after the rows (16 measured runs), 516–583 ms after the picker appears (717 ms on the first run after a cold start); rows keep their order | As designed |
+| Attendance redraw (budget 300 ms) | plan blank and Wrap up disabled 330 ms / 3.2 s | Chip and plan change in the **same frame**; nothing blanks, Wrap up stays enabled. Same-knowledge pair (Gua & Samia) on 36 and 37; plan-changing pair on 36 (Plan & Amanda: "o m", Review "l a" ↔ Amanda alone, first lesson "o m l a") | Pass |
+| First Leave on a picker-started lesson | returned to the lesson 3/3 | Header Back and Android back each leave in one press; both videos settle on Home at 1.2 s with no return | Pass |
+| Header | "last seen Not seen yet" | "Gr 1 · isiXhosa · last seen Thu", "Gr 1 · English · not seen yet" | Pass |
+| Review (J24) | "m l a u" | Gua & Samia "m l a" (today o); Plan "m l a" (today o k; u is gone, still in the blend "ku" by the whole-step rule); Nola, English, "a m s n i f d h b l k e v u y", her 15 known letters (tracker 15/26) | Pass |
+
+**Polish confirmed on 36.** No one new yet is a chip: dark with a tick when chosen, a checked
+checkbox to TalkBack. The heading's letters are red ("Who knows **o** without help?"). Add a
+child, Make a group and Not in a group yet show full names with the class; Ênê sorts after
+Aviwe. Put in a group names groups by their children, with the picker's dot. Sheet dividers
+start at the text. At 1.3× "2 · Blending · 15 min · 2-letter" wraps as "2 · Blending · 15 min"
+over "· 2-letter": the dot leads the continued line, as `joinDetail` intends.
+
+**Passed again.** Back before any change returns to the picker with no warning. The first tick
+freezes the plan (Plan absent after ticking o keeps "o m", Review "l a"). Android back opens
+and closes the leave sheet; Keep teaching; Resume from Home ("Lesson in progress with Gua and
+Samia. Resume"); Discard lesson returns Home. Add a child recomputes the plan. On 37: "No
+blends/books for isiXhosa yet", and "…for English yet" after the language question.
+
+**New finding, fixed.** Wrap up with no letters taught left 12 dp extra between each child's
+name and their tracker link (`w-24-wrapup-1.3x.png`): the empty chip row took the row's `gap`
+on both sides. `WrapUpChildRow` now draws the chips and No one new yet only when there are
+letters. The new Wrap up test failed first (two empty rows) and passes now. Committed
+`598a325`; gates on it: unit **411/411 suites, 5,921 tests**, integration **82/82 suites,
+1,127 tests**, types clean.
+
+**Measurement notes.** Android `screenrecord` writes a frame only when the screen changes and
+can drop the last one when nothing follows, and this phone does not record "show touches" dots.
+6 of the first 15 picker runs lost the letters frame that way. Pulling the notification shade
+down and up 2 s after the tap, in an 8 s recording, kept it in 5 of 5 (`v1b_trials.py <prefix>
+<n> flush`). A tap through `adb shell input` takes about 0.7 s to land on the A03, so a 5 s
+recording ended before the first version of the flush.
+
+**Observations, not changed.** Opening Wrap up starts the lesson (it needs a draft), so Back
+from a lesson that has only visited Wrap up asks to leave. A group of three is named
+"Alunamida & Nwabisa & Xola" and wraps in the picker. Review lists every known letter (15 for
+Nola). The tier ("2-letter") shows when the language has no blends yet. The test account's two
+Amanda Manqina 1A rows cannot be told apart (same name and class).
+
+**Staging data.** None: four test lessons were discarded on the phone and nothing was saved.
+Screenshots and videos: session scratchpad `device/w-*.png`, `device/w*.mp4`, `device/x*.mp4`.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
