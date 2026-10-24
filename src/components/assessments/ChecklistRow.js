@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
-export default function ChecklistRow({ label, checked, onToggle }) {
+export default function ChecklistRow({ label, checked, onToggle, children }) {
   return <Pressable accessibilityRole="checkbox" accessibilityLabel={label}
     accessibilityState={{ checked, ...(onToggle ? {} : { disabled: true }) }}
     disabled={!onToggle} onPress={onToggle} style={styles.row}>
@@ -12,7 +12,7 @@ export default function ChecklistRow({ label, checked, onToggle }) {
       style={[styles.box, checked && styles.checked]}>
       {checked && <Ionicons name="checkmark" size={16} color={colors.onDark} />}
     </View>
-    <Text style={styles.label}>{label}</Text>
+    <Text style={styles.label}>{children ?? label}</Text>
   </Pressable>;
 }
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import SelectSheet from '../../../components/common/SelectSheet';
 import StatusBadge from '../../../components/common/StatusBadge';
 import { useHeaderHairline } from '../../../components/common/ScreenHeader';
 import { borderRadius, colors, spacing } from '../../../constants/colors';
-import { typeRoles } from '../../../constants/typography';
+import { fontFamilies, typeRoles } from '../../../constants/typography';
 import { useAuth } from '../../../context/AuthContext';
 import { useOffline } from '../../../context/OfflineContext';
 import { useSignedInEA } from '../../../context/SignedInEAContext';
@@ -28,14 +28,15 @@ const SKIP_OPTIONS = MANUAL_SKIP_REASONS.map(({ reason, label }) => ({ key: reas
 const UNASSIGNED = 'This child is no longer assigned to you — you can abandon this run.';
 const UNAVAILABLE = "This run's assessment isn't available in this version of the app.";
 
-function QuestionRow({ row, writable, onStart, onSkip, showDivider }) {
+function QuestionRow({ row, writable, onStart, onSkip, showDivider, onLayout }) {
   const undecided = row.state === 'next' || row.state === 'not_started';
   const startable = writable && row.state === 'next';
   const trailing = row.state === 'done'
     ? <StatusBadge tone="success" label={row.scoreText ?? 'Done'} />
     : row.state === 'skipped' ? <StatusBadge tone="neutral" label="Skipped" />
       : writable ? <View style={styles.skipSpace} /> : null;
-  return <View>
+  // Re-measure a newly highlighted row even when its outer bounds did not change.
+  return <View key={row.state} testID={`battery-row-${row.question.question_code}`} onLayout={onLayout}>
     <ListRow title={row.question.title} subtitle={row.detail} showDivider={showDivider}
       accessibilityLabel={`${row.number}. ${row.question.title}, ${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
       disabled={!startable} onPress={() => onStart(row.question.question_code)}
@@ -74,6 +75,12 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   const mutationRef = useRef(null);
   const autoSaving = useRef(null);
   const current = useRef(null);
+  const scrollRef = useRef(null);
+  const scrollY = useRef(0);
+  const revealed = useRef(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [listLayout, setListLayout] = useState(null);
+  const [rowLayouts, setRowLayouts] = useState({});
 
   const load = useCallback(async () => {
     const ticket = ++generation.current;
@@ -171,6 +178,24 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   current.current = ready && view && !data.refreshing ? { run, battery, view } : null;
   const mutating = mutation?.handle === handle || Boolean(data.refreshing);
   const canPublish = () => focused.current && handle.isCurrent();
+  const nextCode = view?.next?.question_code;
+  const writingSheetReminder = Boolean(view?.writable && view.writingSheetReminder);
+
+  useEffect(() => {
+    const row = rowLayouts[nextCode];
+    if (!ready || !focused.current || !view?.writable || !nextCode || !row?.isNext || !viewportHeight || !listLayout
+      || listLayout.writingSheetReminder !== writingSheetReminder) return;
+    if (revealed.current?.handle === handle && revealed.current.runId === runId
+      && revealed.current.nextCode === nextCode) return;
+    revealed.current = { handle, runId, nextCode };
+    const top = listLayout.y + row.y;
+    const bottom = top + row.height;
+    let y;
+    if (top < scrollY.current) y = Math.max(0, top - spacing.md);
+    else if (bottom > scrollY.current + viewportHeight) y = bottom - viewportHeight + spacing.md;
+    if (y !== undefined) scrollRef.current?.scrollTo({ y, animated: true });
+  }, [ready, view?.writable, nextCode, rowLayouts, viewportHeight, listLayout,
+    writingSheetReminder, handle, runId]);
 
   const launch = questionCode => {
     const snapshot = current.current;
@@ -249,18 +274,28 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   </View>;
 
   return <View style={styles.page}>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}>
+    <ScrollView ref={scrollRef} testID="battery-overview-scroll" style={styles.scroll}
+      contentContainerStyle={styles.content} onLayout={event => setViewportHeight(event.nativeEvent.layout.height)}
+      onScroll={event => { scrollY.current = event.nativeEvent.contentOffset.y; onScroll(event); }} scrollEventThrottle={16}>
       <View style={styles.headerLine}>
         <Text style={styles.meta}>{battery.title} · {LANGUAGE_LABELS[run.language] ?? run.language} · {view.decidedCount} of {view.totalCount} decided</Text>
         <StatusBadge label={view.code} />
       </View>
       {view.readOnlyReason === 'unassigned' && <InlineNote tone="warning">{UNASSIGNED}</InlineNote>}
       {view.writable && view.writingSheetReminder && <InlineNote tone="warning">
-        {`Next is ${view.next.title}. Write run code ${view.code} and ${child.first_name}'s name on the Writing Sheet before you hand it over.`}
+        {`Next is ${view.next.title}. Write run code `}<Text style={styles.runCode}>{view.code}</Text>{` and ${child.first_name}'s name on the Writing Sheet before you hand it over.`}
       </InlineNote>}
-      <ListGroup>{view.rows.map(row => <QuestionRow key={row.question.question_code} row={row}
-        writable={view.writable && !mutating} onStart={launch}
-        onSkip={question => { if (!launching.current) setSkipQuestion(question); }} />)}</ListGroup>
+      <View testID="battery-question-list" onLayout={event => setListLayout({
+        y: event.nativeEvent.layout.y, writingSheetReminder,
+      })}>
+        <ListGroup>{view.rows.map(row => <QuestionRow key={row.question.question_code} row={row}
+          onLayout={event => {
+            const { y, height } = event.nativeEvent.layout;
+            setRowLayouts(previous => ({ ...previous, [row.question.question_code]: { y, height, isNext: row.state === 'next' } }));
+          }}
+          writable={view.writable && !mutating} onStart={launch}
+          onSkip={question => { if (!launching.current) setSkipQuestion(question); }} />)}</ListGroup>
+      </View>
     </ScrollView>
     <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
       {view.writable && (view.eligibleToFinalize
@@ -289,6 +324,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.ms },
   headerLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   meta: { ...typeRoles.textCaption, color: colors.textSecondary, flexGrow: 1, flexShrink: 1 },
+  runCode: { fontFamily: fontFamilies.textBold },
   next: { backgroundColor: colors.red50 },
   number: { width: 32, minHeight: 32, borderRadius: borderRadius.pill, backgroundColor: colors.background,
     alignItems: 'center', justifyContent: 'center' },

@@ -54,7 +54,7 @@ test.each(CASES)('$code/$language reports its first capture start once and prese
   expect(onStart).toHaveBeenCalledTimes(1);
   expect(onComplete).not.toHaveBeenCalled();
   fireEvent.press(screen.getByRole('button', { name: 'Skip question' }));
-  fireEvent.press(screen.getByRole('button', { name: 'Other' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Other reason' }));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({
     item_set_id: itemSet.item_set_id,
@@ -111,7 +111,7 @@ test.each(WELA_PLUS_FULL_2024_1.languages)(
     screen.rerender(<Component {...props} />);
     expect(onStart).toHaveBeenCalledTimes(1);
     fireEvent.press(screen.getByRole('button', { name: 'Skip question' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Other' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Other reason' }));
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0]).toMatchObject({
       item_set_id: itemSet.item_set_id,

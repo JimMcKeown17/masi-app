@@ -24,6 +24,7 @@ import InlineNote from '../../components/common/InlineNote';
 import Avatar from '../../components/common/Avatar';
 import ListRow from '../../components/common/ListRow';
 import SelectSheet from '../../components/common/SelectSheet';
+import { toLocalDateString } from '../../utils/localDate';
 
 function formatShortDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -63,6 +64,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   const [pendingAbandonRunId, setPendingAbandonRunId] = useState(null);
   const [assessmentMap, setAssessmentMap] = useState({});
   const [unfinishedRuns, setUnfinishedRuns] = useState([]);
+  const [lastRuns, setLastRuns] = useState({});
   const [unfinishedSelection, setUnfinishedSelection] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [runsLoading, setRunsLoading] = useState(batteryMode);
@@ -81,14 +83,22 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         setStarting(startPendingRef.current);
         setRunsLoading(true);
         setStartError(null);
-        batteryRuns.getUnfinishedRunsForUser(user.id).then(runs => {
-          if (active && handle.isCurrent()) {
-            setUnfinishedRuns(runs);
-            setRunsLoading(false);
-          }
-        }).catch(() => {
-          if (active && handle.isCurrent()) setStartError("Couldn't load unfinished runs. Try again.");
-        });
+        Promise.all([batteryRuns.getUnfinishedRunsForUser(user.id), batteryRuns.getRunsForUser(user.id)])
+          .then(([runs, history]) => {
+            if (active && handle.isCurrent()) {
+              const latest = {};
+              for (const run of history) {
+                if (run.status !== 'completed' || run.battery_code !== batteryCode
+                  || run.battery_version !== batteryVersion) continue;
+                if (!latest[run.child_id] || run.started_at > latest[run.child_id]) latest[run.child_id] = run.started_at;
+              }
+              setLastRuns(latest);
+              setUnfinishedRuns(runs);
+              setRunsLoading(false);
+            }
+          }).catch(() => {
+            if (active && handle.isCurrent()) setStartError("Couldn't load unfinished runs. Try again.");
+          });
         return () => {
           active = false;
           focusedRef.current = false;
@@ -249,12 +259,18 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       const language = classLanguage(item);
       const unfinished = unfinishedRuns.find(run => run.child_id === item.id);
       const unavailable = !battery?.fixedLanguage && language && !battery?.languages.includes(language);
+      const lastRun = lastRuns[item.id];
+      const lastRunDate = lastRun && new Date(`${toLocalDateString(lastRun)}T12:00:00`).toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'short',
+      });
       return <ListRow title={`${item.first_name} ${item.last_name}`}
-        subtitle={[gradeLabel(item.grade), language ? LANGUAGE_LABELS[language] ?? item.home_language : 'class language not set'].filter(Boolean).join(' · ')}
-        lead={<Avatar label={`${item.first_name?.[0] ?? ''}${item.last_name?.[0] ?? ''}`.toUpperCase()} />}
-        trailing={unavailable
-          ? <Text style={styles.unavailable}>Not available in {LANGUAGE_LABELS[language] ?? item.home_language} yet</Text>
-          : unfinished && battery
+        subtitle={[gradeLabel(item.grade), language ? LANGUAGE_LABELS[language] ?? item.home_language : 'class language not set',
+          lastRunDate ? `last run ${lastRunDate}` : null].filter(Boolean).join(' · ')}
+        titleStyle={unavailable ? styles.unavailableName : undefined}
+        note={unavailable ? `Not available in ${LANGUAGE_LABELS[language] ?? item.home_language} yet` : undefined}
+        noteStyle={styles.unavailable}
+        lead={<Avatar muted={Boolean(unavailable)} label={`${item.first_name?.[0] ?? ''}${item.last_name?.[0] ?? ''}`.toUpperCase()} />}
+        trailing={!unavailable && unfinished && battery
             ? <StatusBadge tone="warning" label={`Unfinished ${unfinished.question_count}/${battery.questions.length}`} />
             : undefined}
         disabled={!battery || Boolean(unavailable) || loading || runsLoading}
@@ -326,9 +342,11 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         <View style={styles.sheetActions}>
           {startError && <InlineNote>{startError}</InlineNote>}
           <BrandButton label="Resume run" onPress={resumeRun} disabled={starting || loading || runsLoading} />
-          <InlineNote tone="warning">{`Starting new closes the old run as abandoned. Its ${unfinishedSelection?.run.question_count} saved Questions stay in ${unfinishedSelection?.child.first_name}'s history.`}</InlineNote>
+          <InlineNote tone="warning">{`Starting new closes the old run as abandoned. ${unfinishedSelection?.run.question_count
+            ? `Its ${unfinishedSelection.run.question_count} saved ${unfinishedSelection.run.question_count === 1 ? 'Question stays' : 'Questions stay'} in ${unfinishedSelection.child.first_name}'s history.`
+            : 'Nothing was saved in it yet.'}`}</InlineNote>
           <BrandButton label="Abandon it and start new" variant="warning" onPress={abandonAndStart} loading={starting} disabled={loading || runsLoading} />
-          <BrandButton label="Cancel" variant="tertiary" onPress={dismissUnfinished} disabled={starting} />
+          <BrandButton label="Cancel" variant="tertiary" tone="ink" onPress={dismissUnfinished} disabled={starting} />
         </View>
       </BottomSheet>
 
@@ -355,7 +373,8 @@ const styles = StyleSheet.create({
   },
   errorNote: { marginHorizontal: spacing.md, gap: spacing.sm },
   sheetActions: { gap: spacing.md },
-  unavailable: { ...typeRoles.textCaption, color: colors.textSecondary, flexShrink: 1, maxWidth: '45%' },
+  unavailable: { ...typeRoles.textNote, color: colors.warningText },
+  unavailableName: { color: colors.disabled },
   batterySubtitle: { ...typeRoles.textParagraph, color: colors.textSecondary, margin: spacing.md, marginBottom: 0 },
   searchbar: {
     margin: spacing.md,

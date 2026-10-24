@@ -11,7 +11,7 @@ import ListRow from '../../../components/common/ListRow';
 import StatusBadge from '../../../components/common/StatusBadge';
 import { useHeaderHairline } from '../../../components/common/ScreenHeader';
 import { borderRadius, colors, spacing } from '../../../constants/colors';
-import { typeRoles } from '../../../constants/typography';
+import { fontFamilies, typeRoles } from '../../../constants/typography';
 import { useAuth } from '../../../context/AuthContext';
 import { useOffline } from '../../../context/OfflineContext';
 import { useSignedInEA } from '../../../context/SignedInEAContext';
@@ -91,6 +91,9 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
     activeProgrammeId: data.activeProgrammeId, childAssigned: Boolean(child),
   });
   const canFinalize = Boolean(view?.writable && view.eligibleToFinalize);
+  useEffect(() => {
+    if (ready && run) navigation.setOptions({ title: canFinalize ? 'Review run' : 'Run summary' });
+  }, [ready, run, canFinalize, navigation]);
   const checked = confirmation?.handle === handle && confirmation.runId === runId;
   const refreshing = Boolean(data.refreshing || rosterLoading);
   const busy = refreshing || (operation?.handle === handle && operation.runId === runId);
@@ -189,7 +192,9 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
         <Text style={styles.section}>Before you finish</Text>
         <View style={styles.checklist}>
           <ChecklistRow label={`Write run code ${runCode(run.id)} and ${child.first_name}'s name on the Writing Sheet`}
-            checked={checked} onToggle={busy ? undefined : toggle} />
+            checked={checked} onToggle={busy ? undefined : toggle}>
+            Write run code <Text style={styles.runCode}>{runCode(run.id)}</Text>{` and ${child.first_name}'s name on the Writing Sheet`}
+          </ChecklistRow>
         </View>
       </>}
     </ScrollView>
@@ -211,6 +216,7 @@ const styles = StyleSheet.create({
   name: { ...typeRoles.textRowTitle, color: colors.text },
   identityName: { flexGrow: 1, flexShrink: 1 },
   meta: { ...typeRoles.textCaption, color: colors.textSecondary },
+  runCode: { fontFamily: fontFamilies.textBold },
   number: { ...typeRoles.textData, color: colors.textSecondary },
   section: { ...typeRoles.textSectionLabel, color: colors.textSecondary },
   checklist: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md },

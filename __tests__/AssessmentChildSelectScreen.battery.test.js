@@ -6,7 +6,10 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { colors } from '../src/constants/colors';
+import { fontFamilies, typeRoles } from '../src/constants/typography';
+import ListRow from '../src/components/common/ListRow';
 import { act, configure, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
@@ -74,7 +77,7 @@ beforeEach(() => {
   handle = { userId: 'ea-1', epoch: 1, isCurrent: jest.fn(() => true) };
   repositories = {
     assessments: { getQuestionResults: jest.fn().mockResolvedValue([]) },
-    batteryRuns: { getUnfinishedRunsForUser: jest.fn().mockResolvedValue([]),
+    batteryRuns: { getRunsForUser: jest.fn().mockResolvedValue([]), getUnfinishedRunsForUser: jest.fn().mockResolvedValue([]),
       startRun: jest.fn().mockImplementation(async ({ id }) => ({ id })) },
   };
   batteryFor.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
@@ -96,7 +99,14 @@ test.each([['af', 'Afrikaans'], ['isiZulu', 'isiZulu']])(
     mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
     const screen = renderSelect();
     await screen.findByText(`Not available in ${label} yet`);
-    expect(screen.getByText(`Grade 2 · ${label}`)).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByText(`Grade 2 · ${label}`).props.style).color).toBe(colors.textSecondary);
+    expect(StyleSheet.flatten(screen.getByText('Lwazi Mbeki').props.style).color).toBe(colors.disabled);
+    expect(StyleSheet.flatten(screen.getByText(`Not available in ${label} yet`).props.style)).toMatchObject({
+      fontSize: typeRoles.textCaption.fontSize, fontFamily: fontFamilies.textSemi, color: colors.warningText,
+    });
+    expect(StyleSheet.flatten(screen.getByText('LM', { includeHiddenElements: true }).props.style).color).toBe(colors.disabled);
+    expect(StyleSheet.flatten(screen.getByTestId('avatar', { includeHiddenElements: true }).props.style).backgroundColor).toBe(colors.border);
+    expect(screen.UNSAFE_getByType(ListRow).props.trailing).toBeUndefined();
     const row = screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' });
     expect(row).toBeDisabled();
     expect(row.props.accessibilityState.disabled).toBe(true);
@@ -400,4 +410,47 @@ test('leaving the picker dismisses its unfinished sheet; refocusing reloads the 
   expect(screen.getByText('Unfinished 5/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
   await screen.findByText('Started Tue 14:05 · 5 of 11 Questions done · run KWY-2M4');
+});
+
+test('battery picker shows the latest finalized run start day for this battery only', async () => {
+  repositories.batteryRuns.getRunsForUser.mockResolvedValue([
+    unfinished({ status: 'completed', started_at: '2026-09-03T12:00:00Z' }),
+    unfinished({ status: 'abandoned', started_at: '2026-10-23T12:00:00Z' }),
+    unfinished({ status: 'in_progress', started_at: '2026-10-23T14:00:00Z' }),
+    unfinished({ status: 'completed', started_at: '2026-10-23T15:00:00Z', battery_code: 'another_battery' }),
+    unfinished({ status: 'completed', started_at: '2026-10-23T16:00:00Z', child_id: 'other-child' }),
+    unfinished({ status: 'completed', started_at: '2026-10-19T22:30:00Z', started_here: 0 }),
+  ]);
+  const screen = await ready(renderSelect());
+  expect(screen.getByText('Grade 2 · isiXhosa · last run 20 Oct')).toBeTruthy();
+  expect(repositories.batteryRuns.getRunsForUser).toHaveBeenCalledWith('ea-1');
+});
+
+test('battery picker omits last run for unfinished and abandoned runs', async () => {
+  repositories.batteryRuns.getRunsForUser.mockResolvedValue([
+    unfinished({ status: 'in_progress' }), unfinished({ status: 'abandoned' }),
+  ]);
+  const screen = await ready(renderSelect());
+  expect(screen.getByText('Grade 2 · isiXhosa')).toBeTruthy();
+  expect(screen.queryByText(/last run/)).toBeNull();
+});
+
+test('quick assessment mode does not read or display last battery runs', async () => {
+  const screen = renderSelect({ testCode: 'letter_sounds' });
+  await waitFor(() => expect(repositories.assessments.getQuestionResults).toHaveBeenCalled());
+  expect(repositories.batteryRuns.getRunsForUser).not.toHaveBeenCalled();
+  expect(screen.queryByText(/last run/)).toBeNull();
+});
+
+test.each([
+  [0, 'Nothing was saved in it yet.'],
+  [1, "Its 1 saved Question stays in Lwazi's history."],
+  [2, "Its 2 saved Questions stay in Lwazi's history."],
+])('unfinished sheet warning agrees with %s saved Questions and Cancel is centred ink', async (count, copy) => {
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({ question_count: count })]);
+  const screen = await ready(renderSelect());
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  expect(await screen.findByText(`Starting new closes the old run as abandoned. ${copy}`)).toBeTruthy();
+  expect(StyleSheet.flatten(screen.getByText('Cancel').props.style).color).toBe(colors.text);
+  expect(StyleSheet.flatten(screen.getByRole('button', { name: 'Cancel' }).props.style).alignSelf).not.toBe('flex-start');
 });

@@ -116,8 +116,9 @@ describe('readers share stored standalone and battery Question evidence', () => 
   test('history renders four rows, opens both run summaries, and opens standalone detail by id', async () => {
     const navigation = { navigate: jest.fn() };
     const screen = renderReader(<AssessmentHistoryScreen navigation={navigation} />);
-    await screen.findByText('wela_plus · 20 Oct · 2');
-    expect(screen.getByText('wela_plus · 20 Oct · 1')).toBeTruthy();
+    await screen.findByText('2 decided');
+    expect(screen.getByText('1 decided')).toBeTruthy();
+    expect(screen.getAllByText('wela_plus')).toHaveLength(2);
     expect(screen.getAllByText(/^[ABCD] Child$/)).toHaveLength(4);
     expect(screen.getByText('Letter Sounds')).toBeTruthy();
     expect(screen.getByText('Word Reading')).toBeTruthy();
@@ -188,7 +189,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
     const counts = await f.assessments.getAssessmentCountsSince({ userId: f.userId });
     expect(getCoverageFromCounts(children, counts).assessed).toBe(3);
     const screen = renderReader(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
-    await screen.findByText('wela_plus · 20 Oct · 2');
+    await screen.findByText('2 decided');
     expect(screen.getAllByText(/^[ABCD] Child$/)).toHaveLength(4);
   });
 

@@ -11,7 +11,7 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
@@ -21,6 +21,7 @@ import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import { borderRadius, colors } from '../src/constants/colors';
 import ListRow from '../src/components/common/ListRow';
+import { fontFamilies } from '../src/constants/typography';
 import StatusBadge from '../src/components/common/StatusBadge';
 import BatteryRunSummaryScreen from '../src/screens/assessments/battery/BatteryRunSummaryScreen';
 import BatteryOverviewScreen from '../src/screens/assessments/battery/BatteryOverviewScreen';
@@ -51,6 +52,7 @@ function RetainedStack({ children }) {
   const { state, descriptors, NavigationContent } = useNavigationBuilder(StackRouter, { children });
   return <NavigationContent>{state.routes.map((route, index) => (
     <View key={route.key} style={index === state.index ? { flex: 1 } : { display: 'none' }}>
+      {index === state.index && <Text accessibilityRole="header">{descriptors[route.key].options.title}</Text>}
       {descriptors[route.key].render()}
     </View>
   ))}</NavigationContent>;
@@ -113,14 +115,14 @@ afterEach(async () => {
 test('eligible run: child name, run code, "WelaPLUS · isiXhosa · 11 of 11 decided", first four rows and "Show all 11" expands', async () => {
   const screen = await ready(renderSummary());
   expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
-  expect(screen.getByText('KWY-2M4')).toBeTruthy();
+  expect(screen.UNSAFE_getAllByType(StatusBadge).some(badge => badge.props.label === 'KWY-2M4')).toBe(true);
   expect(getActiveProgrammeGate).toHaveBeenCalledWith({ handle, userId: 'ea-1' });
   expect(repositories.children.getChildNamesByIds).not.toHaveBeenCalled();
   const rows = screen.UNSAFE_getAllByType(ListRow);
   expect(rows).toHaveLength(4);
   expect(rows[0].props.subtitle).toBe('Done');
   expect(within(rows[0]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: '34 / 60', tone: 'success' });
-  expect(rows[2].props.subtitle).toBe('Skipped · Child tired');
+  expect(rows[2].props.subtitle).toBe('Skipped · Child is tired');
   expect(within(rows[2]).getByText('Skipped')).toBeTruthy();
   expect(screen.queryByText('Letter writing')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Show all 11' }));
@@ -133,6 +135,8 @@ test('one checklist row "Write run code KWY-2M4 and Lwazi\'s name on the Writing
   const label = "Write run code KWY-2M4 and Lwazi's name on the Writing Sheet";
   const checkbox = screen.getByRole('checkbox', { name: label });
   expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+  expect(checkbox).toHaveTextContent(label);
+  expect(StyleSheet.flatten(within(checkbox).getByText('KWY-2M4').props.style).fontFamily).toBe(fontFamilies.textBold);
   expect(checkbox.props.accessibilityState).toMatchObject({ checked: false });
   expect(StyleSheet.flatten(checkbox.props.style).minHeight).toBeGreaterThanOrEqual(48);
   const boxStyle = () => checkbox.findAllByType(View).map(node => StyleSheet.flatten(node.props.style))
@@ -380,7 +384,7 @@ test('an unavailable battery version is read-only with its run code and exact un
   const screen = renderSummary();
   await screen.findByText("This run's assessment isn't available in this version of the app.");
   expect(batteryFor).toHaveBeenCalledWith(run.battery_code, '2099.1');
-  expect(screen.getByText('KWY-2M4')).toBeTruthy();
+  expect(screen.UNSAFE_getAllByType(StatusBadge).some(badge => badge.props.label === 'KWY-2M4')).toBe(true);
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Finalize run' })).toBeNull();
 });
@@ -472,4 +476,18 @@ test('RUN_INCOMPLETE preserves the real overview beneath the summary and returns
   await waitFor(() => expect(screen.routeNames()).toEqual(['Entry', 'BatteryOverview']));
   expect(await screen.findByRole('button', { name: 'Review and finalize' })).toBeTruthy();
   expect(mockSync).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['in_progress', 1, 11, 'Review run'],
+  ['completed', 1, 11, 'Run summary'],
+  ['abandoned', 1, 11, 'Run summary'],
+  ['in_progress', 0, 11, 'Run summary'],
+  ['in_progress', 1, 4, 'Run summary'],
+])('summary header for status %s, started_here %s and %s decided is %s', async (status, startedHere, count, title) => {
+  run.status = status;
+  run.started_here = startedHere;
+  run.results = decide(count);
+  const screen = await ready(renderSummary());
+  expect(screen.getByRole('header', { name: title })).toBeTruthy();
 });
