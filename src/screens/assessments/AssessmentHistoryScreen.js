@@ -131,7 +131,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
     const synced = item.sync_status === 'synced';
     const battery = isRun ? batteryFor(item.battery_code, item.battery_version) : null;
     const title = isRun
-      ? `${battery?.title ?? item.battery_code} · ${formatDate(item.assessment_date, true)} · ${item.question_count}${battery ? `/${battery.questions.length}` : ''}`
+      ? battery?.title ?? item.battery_code
       : STANDALONE_TESTS.find(test => test.code === item.question_code)?.title || item.question_code;
     const status = isRun ? RUN_STATUS[item.status] : null;
     const info = childInfoMap[item.child_id];
@@ -146,8 +146,8 @@ export default function AssessmentHistoryScreen({ navigation }) {
           : navigation.navigate('AssessmentDetail', { assessmentId: item.id, childName })}
       >
         <View style={styles.cardHeader}>
-          <Text variant="titleSmall" style={[styles.cardDate, isRun && styles.runTitle]}>
-            {isRun ? title : formatDate(item.assessment_date)}
+          <Text variant="titleSmall" style={styles.cardDate}>
+            {formatDate(item.assessment_date)}
           </Text>
           <View style={styles.cardHeaderRight}>
             {isRun ? <StatusBadge label={status.label} tone={status.tone} /> :
@@ -156,7 +156,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
                 {synced ? 'Synced' : 'Pending sync'}
               </Text>
             </View>}
-            {!isRun && <Text style={styles.chevron}>{'\u203A'}</Text>}
+            <Text style={styles.chevron}>{'\u203A'}</Text>
           </View>
         </View>
 
@@ -168,16 +168,18 @@ export default function AssessmentHistoryScreen({ navigation }) {
         </Text>
 
         <View style={styles.typeRow}>
-          {!isRun && <Text variant="labelSmall" style={styles.typeBadgeText}>
+          <Text variant="labelSmall" style={styles.typeBadgeText}>
             {title}
-          </Text>}
+          </Text>
           <Text variant="bodyMedium" style={styles.language}>
             {LANGUAGE_LABELS[item.language] || item.language}
           </Text>
         </View>
-        {!isRun && <View style={styles.statsRow}>
-          <Text variant="bodySmall" style={styles.stat}>{item.score} / {item.total_items}</Text>
-        </View>}
+        <View style={styles.statsRow}>
+          <Text variant="bodySmall" style={styles.stat}>{isRun
+            ? `${item.question_count}${battery ? ` of ${battery.questions.length}` : ''} decided`
+            : `${item.score} / ${item.total_items}`}</Text>
+        </View>
         {index < assessments.length - 1 && <View testID="history-row-divider" pointerEvents="none" style={styles.rowDivider} />}
       </Pressable>
     );
@@ -238,7 +240,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...typeRoles.textData,
   },
-  runTitle: { flex: 1, marginRight: spacing.sm },
   cardHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',

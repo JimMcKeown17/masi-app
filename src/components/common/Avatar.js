@@ -9,13 +9,13 @@ const iconSizes = { 28: 14, 40: 18, 64: 28 };
 // The 28dp stack disc is overlapped by its neighbour, so its initials stay at 1x.
 const decorative = { accessible: false, accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' };
 
-export default function Avatar({ label = '', size = 40, shape = 'circle', icon, ring = false, testID = 'avatar', style }) {
+export default function Avatar({ label = '', size = 40, shape = 'circle', icon, ring = false, muted = false, testID = 'avatar', style }) {
   const radius = shape === 'tile' ? borderRadius.md : size / 2;
   const disc = (
-    <View {...decorative} testID={testID} style={[styles.disc, { width: size, height: size, borderRadius: radius }, ring && styles.edge, !ring && style]}>
-      {icon ? <Ionicons name={icon} size={iconSizes[size]} color={colors.red700} /> : (
+    <View {...decorative} testID={testID} style={[styles.disc, { width: size, height: size, borderRadius: radius }, muted && styles.mutedDisc, ring && styles.edge, !ring && style]}>
+      {icon ? <Ionicons name={icon} size={iconSizes[size]} color={muted ? colors.disabled : colors.red700} /> : (
         <Text
-          style={[shape === 'tile' ? typeRoles.textButton : initialsRoles[size], styles.label]}
+          style={[shape === 'tile' ? typeRoles.textButton : initialsRoles[size], styles.label, muted && styles.mutedLabel]}
           maxFontSizeMultiplier={size <= 28 ? 1 : 1.2}
           numberOfLines={1}
           adjustsFontSizeToFit={shape === 'tile'}
@@ -33,6 +33,8 @@ export default function Avatar({ label = '', size = 40, shape = 'circle', icon, 
 const styles = StyleSheet.create({
   disc: { backgroundColor: colors.red50, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   label: { color: colors.red700, textAlign: 'center' },
+  mutedDisc: { backgroundColor: colors.border },
+  mutedLabel: { color: colors.disabled },
   edge: { borderWidth: 1, borderColor: tints.avatarEdge },
   ring: { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', margin: -2 },
 });

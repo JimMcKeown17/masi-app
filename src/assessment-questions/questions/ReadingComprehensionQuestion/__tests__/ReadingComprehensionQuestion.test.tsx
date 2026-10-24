@@ -57,7 +57,7 @@ test('one unmarked question uses singular copy', () => {
 test('skip emits no items', () => {
   const { screen, onComplete } = start();
   fireEvent.press(screen.getByText('Skip question'));
-  fireEvent.press(screen.getByText('Child tired'));
+  fireEvent.press(screen.getByText('Child is tired'));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'skipped_tired', items: [], derived: { total_attempted: 0 } });
 });
 test.each([undefined, {}, { ...SET, questions: [{ item_key: '0', prompt: 'test' }] }])('missing or invalid item set has no bundled fallback', itemSet => {

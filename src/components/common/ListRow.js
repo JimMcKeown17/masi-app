@@ -8,11 +8,11 @@ const glyphs = { chevron: 'chevron-forward', external: 'open-outline', share: 's
 export default function ListRow({
   title, subtitle, lead, trailing, onPress, variant = 'action', busy = false, expanded,
   disabled = false, showDivider = false, accessibilityLabel, accessibilityRole,
-  style, accessibilityState, titleNumberOfLines, titleAccessory,
+  style, accessibilityState, titleNumberOfLines, titleAccessory, titleStyle, note, noteStyle,
 }) {
   const readOnly = variant === 'readOnly';
   const nested = variant === 'nested';
-  const label = accessibilityLabel ?? [title, subtitle].filter(Boolean).join(', ');
+  const label = accessibilityLabel ?? [title, subtitle, note].filter(Boolean).join(', ');
   const rowStyle = [styles.row, nested && styles.nested, style];
   const divider = showDivider ? <View testID="list-row-divider" pointerEvents="none"
     style={[styles.divider, { left: nested ? 104 : lead ? 68 : 16 }]} /> : null;
@@ -26,7 +26,7 @@ export default function ListRow({
   </View>;
   const disclosure = trailing === 'disclosure';
   const glyph = disclosure ? (expanded ? 'chevron-up' : 'chevron-down') : glyphs[trailing];
-  const titleText = <Text numberOfLines={titleNumberOfLines} ellipsizeMode="tail" style={[styles.title, nested && styles.nestedTitle]}>{title}</Text>;
+  const titleText = <Text numberOfLines={titleNumberOfLines} ellipsizeMode="tail" style={[styles.title, nested && styles.nestedTitle, titleStyle]}>{title}</Text>;
   return <Pressable onPress={onPress} disabled={disabled || busy} accessibilityRole={accessibilityRole ?? 'button'}
     accessibilityLabel={label} accessibilityState={{ ...accessibilityState, busy, disabled: disabled || busy, ...(expanded === undefined ? {} : { expanded }) }}
     style={({ pressed }) => [rowStyle, pressed && styles.pressed]}>
@@ -34,10 +34,11 @@ export default function ListRow({
     <View style={styles.copy}>
       {titleAccessory != null ? <View style={styles.titleLine}>{titleText}{titleAccessory}</View> : titleText}
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {note ? <Text style={[styles.subtitle, noteStyle]}>{note}</Text> : null}
     </View>
     {busy ? <ActivityIndicator size={20} color={colors.textSecondary} />
       : glyph ? <Ionicons name={glyph} size={20} color={disclosure && expanded ? colors.text : colors.textSecondary} />
-        : React.isValidElement(trailing) ? trailing : null}
+        : React.isValidElement(trailing) ? <View style={styles.trailing}>{trailing}</View> : null}
     {divider}
   </Pressable>;
 }
@@ -47,6 +48,7 @@ const styles = StyleSheet.create({
   lead: { width: 40 },
   nestedLead: { width: 24 },
   copy: { flex: 1 },
+  trailing: { alignSelf: 'center', flexShrink: 0 },
   titleLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   title: { ...typeRoles.textRowTitle, color: colors.text },
   nestedTitle: { ...typeRoles.textBodyStrong },

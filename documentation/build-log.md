@@ -4134,6 +4134,46 @@ git grep -n "File the sheet for Head Office\|5 rows × 12" -- documentation CONT
 - Deferred artifacts/photos, Settings/support export, OSS publication and the HQ calibration
   path remain tracked in ROADMAP §8; the Release 1 host build does not close them.
 
+#### 2026-10-24 — Plan 3 + whole-class device pass 1 (Galaxy A03, build 39)
+
+Build 39 (`70f8f40`, EAS preview, staging `segygjzpujphwvrubusm`) on the A03s at `wm density 320`
+(360dp), font scale 1.0, signed in as the Test EA.
+
+Passed:
+- Full isiXhosa run (ZP2-JVH) finalized with the one tick. Staging shows `completed`, 11 results.
+- Force-quit mid-Question online and offline. The run resumes and the unsaved attempt is dropped.
+- Skip from the overview ⋯ and from inside a Question.
+- Afrikaans rows cannot start. No-language child gets the English/isiXhosa picker.
+- Unfinished-run sheet → Abandon it and start new. Staging shows the old run `abandoned` with
+  its result and the new run `in_progress`.
+- Offline: Q1 saved, "3 waiting", all uploaded within about a minute of Wi-Fi returning.
+- Back after finalize lands on the Assess tab (no Summary↔Overview loop). History opens the run.
+
+Found and fixed (none visible to Jest before; each now has a test):
+
+| # | Finding | Root cause / fix |
+|---|---|---|
+| — | Overview blanked to a spinner for ~1 s after a skip | `useAssessableChildren` set `loading` on every sync-triggered refetch; now only until the first read per EA (PR #100, `25181a3`) |
+| D1 | Score/Unfinished badges top-aligned in rows | `StatusBadge` has `alignSelf: 'flex-start'`; `ListRow` now wraps element trailings in a centred, non-shrinking container |
+| D2 | Afrikaans row not greyed; note squeezed the subtitle | Muted avatar and name, note as a third amber line (mockup frame 2) |
+| D3 | Run code not bold where the EA copies it | Bold code in the Writing Sheet reminder and the finalize tick |
+| D4 | From Q8 the Next row hid under the footer | Overview scrolls the Next row into view once per Question |
+| D5 | Finalized run still titled "Review run" | "Run summary" when it cannot be finalized |
+| D6 | History run rows: no chevron, different hierarchy | Same layout as the test rows: date, status, chevron, child, battery, language, decided count |
+| D7 | Picker lacked "last run 24 Oct" (mockup) | From completed runs of this battery on the phone |
+| D8 | "Its 1 saved Questions"; red left-aligned Cancel | Singular/plural/zero copy; ink Cancel |
+| D9 | Skip reason wording differed from the mockup | Labels only ("Child is tired", "Not suitable for this child's age", "Other reason") |
+
+Filed, not fixed (also on `main`): #102 two "End the test?" sheets with opposite outcomes;
+#103 "n items unmarked — finish anyway?" fires when blank means wrong. Content gaps for the
+content owners: isiXhosa instructions for Q1, Q3 and Q5 are partly English; Q5 tile "drum".
+Kept by call: picker title "Select child"; the Assess-tab run subtitle wraps the code to a
+second line at 360dp (it cannot fit one line).
+
+Gates after the fixes: `npx jest` 421 suites / 6,116 tests; `npx jest src/assessment-questions`
+68 / 873; `npm run test:types` clean. Still open: build 40 re-check, font scale 1.3, the
+control-child check as TestB Second, iPhone.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

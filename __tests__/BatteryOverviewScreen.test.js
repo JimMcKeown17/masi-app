@@ -12,7 +12,7 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
@@ -20,7 +20,9 @@ import { AllProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 import { batteryFor, MANUAL_SKIP_REASONS, skippedResult, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
-import { colors } from '../src/constants/colors';
+import { colors, spacing } from '../src/constants/colors';
+import { fontFamilies } from '../src/constants/typography';
+import InlineNote from '../src/components/common/InlineNote';
 import ListRow from '../src/components/common/ListRow';
 import StatusBadge from '../src/components/common/StatusBadge';
 import BatteryOverviewScreen from '../src/screens/assessments/battery/BatteryOverviewScreen';
@@ -118,7 +120,7 @@ afterEach(async () => {
 
 test('header line "WelaPLUS · isiXhosa · 4 of 11 decided" and the run code badge', async () => {
   const screen = await ready(renderOverview());
-  expect(screen.getByText('KWY-2M4')).toBeTruthy();
+  expect(screen.UNSAFE_getAllByType(StatusBadge).some(badge => badge.props.label === 'KWY-2M4')).toBe(true);
   expect(screen.navigation.setOptions).toHaveBeenCalledWith({ title: 'Lwazi Mbeki' });
   expect(getActiveProgrammeGate).toHaveBeenCalledWith({ handle, userId: 'ea-1' });
   expect(repositories.children.getChildNamesByIds).not.toHaveBeenCalled();
@@ -132,7 +134,7 @@ test('rows: done shows score / max and a success badge; skipped shows reason; ne
   expect(rows).toHaveLength(11);
   expect(within(rows[0]).getByText('Done')).toBeTruthy();
   expect(within(rows[0]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: '34 / 60', tone: 'success' });
-  expect(within(rows[2]).getByText('Skipped · Child tired')).toBeTruthy();
+  expect(within(rows[2]).getByText('Skipped · Child is tired')).toBeTruthy();
   expect(within(rows[2]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: 'Skipped', tone: 'neutral' });
   expect(StyleSheet.flatten(rows[4].props.style)).toMatchObject({ backgroundColor: colors.red50 });
   expect(screen.getByRole('button', { name: 'Skip Letter writing' })).toHaveTextContent('⋯');
@@ -150,7 +152,10 @@ test('only the next Question is startable: footer "Start Letter writing" navigat
 
 test('writing-sheet reminder shows before the first writing-sheet Question and names the run code and child', async () => {
   const screen = await ready(renderOverview());
-  expect(screen.getByText("Next is Letter writing. Write run code KWY-2M4 and Lwazi's name on the Writing Sheet before you hand it over.")).toBeTruthy();
+  const reminder = screen.UNSAFE_getAllByType(InlineNote).find(note => note.props.tone === 'warning');
+  const note = within(reminder);
+  expect(note.getByText("Next is Letter writing. Write run code KWY-2M4 and Lwazi's name on the Writing Sheet before you hand it over.")).toBeTruthy();
+  expect(StyleSheet.flatten(note.getByText('KWY-2M4').props.style).fontFamily).toBe(fontFamilies.textBold);
 });
 
 test('⋯ opens "Skip Reading words?" with the five package reasons; confirm disabled until a reason is picked', async () => {
@@ -160,7 +165,7 @@ test('⋯ opens "Skip Reading words?" with the five package reasons; confirm dis
   expect(screen.getByText("It is saved as skipped with your reason. You can't undo a skip in this run.")).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Skip Question' })).toBeDisabled();
   MANUAL_SKIP_REASONS.forEach(({ label }) => expect(screen.getByRole('button', { name: label })).toBeTruthy());
-  fireEvent.press(screen.getByRole('button', { name: 'Child tired' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
   expect(screen.getByRole('button', { name: 'Skip Question' })).not.toBeDisabled();
   expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
 });
@@ -168,7 +173,7 @@ test('⋯ opens "Skip Reading words?" with the five package reasons; confirm dis
 test('confirming a skip saves skippedResult with batteryRunId and refreshes the row', async () => {
   const screen = await ready(renderOverview());
   openSkip(screen);
-  fireEvent.press(screen.getByRole('button', { name: 'Child tired' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
   fireEvent.press(screen.getByRole('button', { name: 'Skip Question' }));
   await waitFor(() => expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1));
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledWith({
@@ -176,7 +181,7 @@ test('confirming a skip saves skippedResult with batteryRunId and refreshes the 
     result: skippedResult(BATTERY.questions[5], 'xh', 'skipped_tired'),
   });
   await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
-  expect(screen.UNSAFE_getAllByType(ListRow)[5].props.subtitle).toBe('Skipped · Child tired');
+  expect(screen.UNSAFE_getAllByType(ListRow)[5].props.subtitle).toBe('Skipped · Child is tired');
   expect(mockSync).toHaveBeenCalledTimes(1);
 });
 
@@ -187,7 +192,7 @@ test('a skip of a Question that is no longer undecided (QUESTION_ALREADY_DECIDED
   });
   const screen = await ready(renderOverview());
   openSkip(screen);
-  fireEvent.press(screen.getByRole('button', { name: 'Other' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Other reason' }));
   fireEvent.press(screen.getByRole('button', { name: 'Skip Question' }));
   await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
   expect(mockToast).not.toHaveBeenCalled();
@@ -360,7 +365,7 @@ test('a skip completing while blurred does not leave the next action disabled on
   });
   const screen = await ready(renderOverview());
   openSkip(screen, 4);
-  fireEvent.press(screen.getByRole('button', { name: 'Child tired' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
   fireEvent.press(screen.getByRole('button', { name: 'Skip Question' }));
   act(() => screen.navigationRef.navigate('Away'));
   await act(async () => pending.resolve());
@@ -399,7 +404,7 @@ test('double confirming a skip writes once while its save is pending', async () 
   });
   const screen = await ready(renderOverview());
   openSkip(screen);
-  fireEvent.press(screen.getByRole('button', { name: 'Child tired' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
   const confirm = screen.getByRole('button', { name: 'Skip Question' });
   act(() => { fireEvent.press(confirm); fireEvent.press(confirm); });
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
@@ -412,7 +417,7 @@ test('a failed skip shows an error and leaves the Question undecided for a retry
   repositories.assessments.saveQuestionResult.mockRejectedValueOnce(new Error('disk unavailable'));
   const screen = await ready(renderOverview());
   openSkip(screen, 4);
-  fireEvent.press(screen.getByRole('button', { name: 'Child tired' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
   fireEvent.press(screen.getByRole('button', { name: 'Skip Question' }));
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith({ tone: 'error',
     message: "Couldn't skip this Question. Try again." }));
@@ -420,8 +425,59 @@ test('a failed skip shows an error and leaves the Question undecided for a retry
   expect(screen.getByRole('button', { name: 'Start Letter writing' })).not.toBeDisabled();
   openSkip(screen, 4);
   expect(screen.getByRole('button', { name: 'Skip Question' })).toBeDisabled();
-  fireEvent.press(screen.getByRole('button', { name: 'Other' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Other reason' }));
   fireEvent.press(screen.getByRole('button', { name: 'Skip Question' }));
   await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(2);
+});
+
+const layout = (screen, testID, values) => fireEvent(screen.getByTestId(testID), 'layout', {
+  nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 64, ...values } },
+});
+test('Next row below the viewport scrolls fully above the footer with md clearance, only once per Question', async () => {
+  run.results = decide(7);
+  const screen = await ready(renderOverview());
+  const scrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo;
+  scrollTo.mockClear();
+  layout(screen, 'battery-overview-scroll', { height: 400 });
+  layout(screen, 'battery-question-list', { y: 80, height: 800 });
+  layout(screen, `battery-row-${BATTERY.questions[7].question_code}`, { y: 448, height: 80 });
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: 80 + 448 + 80 - 400 + spacing.md, animated: true });
+  fireEvent.scroll(screen.getByTestId('battery-overview-scroll'), { nativeEvent: { contentOffset: { y: 0 } } });
+  layout(screen, `battery-row-${BATTERY.questions[7].question_code}`, { y: 448, height: 90 });
+  screen.refresh();
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  layout(screen, `battery-row-${BATTERY.questions[8].question_code}`, { y: 538, height: 80 });
+  run.results = decide(8);
+  act(() => screen.navigationRef.navigate('Away'));
+  act(() => screen.navigationRef.goBack());
+  await screen.findByText('WelaPLUS · isiXhosa · 8 of 11 decided');
+  expect(scrollTo).toHaveBeenCalledTimes(1); // the old Not started geometry is stale
+  layout(screen, `battery-row-${BATTERY.questions[8].question_code}`, { y: 548, height: 90 });
+  expect(scrollTo).toHaveBeenCalledTimes(2);
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: 80 + 548 + 90 - 400 + spacing.md, animated: true });
+});
+
+test('Next row already fully visible does not scroll or fight later EA scrolling', async () => {
+  const screen = await ready(renderOverview());
+  const scrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo;
+  scrollTo.mockClear();
+  layout(screen, `battery-row-${BATTERY.questions[4].question_code}`, { y: 100, height: 64 });
+  layout(screen, 'battery-question-list', { y: 80, height: 800 });
+  layout(screen, 'battery-overview-scroll', { height: 400 });
+  expect(scrollTo).not.toHaveBeenCalled();
+  fireEvent.scroll(screen.getByTestId('battery-overview-scroll'), { nativeEvent: { contentOffset: { y: 300 } } });
+  layout(screen, 'battery-overview-scroll', { height: 350 });
+  expect(scrollTo).not.toHaveBeenCalled();
+});
+
+test('Next row above the current scroll offset scrolls back to its top with md clearance', async () => {
+  const screen = await ready(renderOverview());
+  const scrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo;
+  scrollTo.mockClear();
+  fireEvent.scroll(screen.getByTestId('battery-overview-scroll'), { nativeEvent: { contentOffset: { y: 300 } } });
+  layout(screen, 'battery-overview-scroll', { height: 400 });
+  layout(screen, 'battery-question-list', { y: 80, height: 800 });
+  layout(screen, `battery-row-${BATTERY.questions[4].question_code}`, { y: 100, height: 64 });
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: 180 - spacing.md, animated: true });
 });

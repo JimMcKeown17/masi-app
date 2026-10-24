@@ -79,7 +79,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     ['completed', 'Finalized', 'success'],
     ['in_progress', 'Open', 'warning'],
     ['abandoned', 'Abandoned', 'neutral'],
-  ])('history: %s run is a button "WelaPLUS · 22 Oct · 11/11" with %s badge and opens BatteryRunSummary', async (status, label, tone) => {
+  ])('history: %s run shows date, child, battery and decided count with %s badge and opens BatteryRunSummary', async (status, label, tone) => {
     assessmentsRepository.getQuestionResults.mockResolvedValue([
       { id: 'q1', child_id: 'child-1', battery_run_id: 'run-1', question_code: 'letter_sounds', assessment_date: '2026-10-22' },
       { id: 'q6', child_id: 'child-1', battery_run_id: 'run-1', question_code: 'wela_plus_read_words', assessment_date: '2026-10-22' },
@@ -91,8 +91,15 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     ]);
     const navigation = { navigate: jest.fn() };
     const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
-    const row = await screen.findByRole('button', { name: /WelaPLUS · 22 Oct · 11\/11/ });
-    expect(within(row).getByText('WelaPLUS · 22 Oct · 11/11')).toBeTruthy();
+    const row = await screen.findByRole('button', { name: `WelaPLUS, Amahle Dlamini, ${label}, isiXhosa` });
+    expect(within(row).getByText('Thu, Oct 22, 2026')).toBeTruthy();
+    expect(within(row).getByText('WelaPLUS')).toBeTruthy();
+    expect(within(row).getByText('11 of 11 decided')).toBeTruthy();
+    expect(within(row).getByText('›')).toBeTruthy();
+    const texts = within(row).getAllByText(/Thu, Oct|Amahle Dlamini|^WelaPLUS$|^isiXhosa$|decided/);
+    expect(texts.map(text => text.props.children)).toEqual([
+      'Thu, Oct 22, 2026', expect.anything(), 'WelaPLUS', 'isiXhosa', '11 of 11 decided',
+    ]);
     expect(within(row).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label, tone });
     expect(screen.getAllByTestId('assessment-history-row')).toHaveLength(1);
     expect(within(row).getByText('Amahle Dlamini')).toBeTruthy();
@@ -103,6 +110,19 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('BatteryRunSummary', { runId: 'run-1' });
   });
 
+  test('unknown battery run keeps its code, chevron and decided count without inventing a total', async () => {
+    assessmentsRepository.getQuestionResults.mockResolvedValue([]);
+    batteryRunsRepository.getRunsForUser.mockResolvedValue([
+      { id: 'future-run', child_id: 'child-1', status: 'completed', question_count: 3, language: 'en',
+        battery_code: 'future_battery', battery_version: '99', started_at: '2026-10-22T10:00:00Z' },
+    ]);
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    const row = await screen.findByRole('button', { name: 'future_battery, Amahle Dlamini, Finalized, English' });
+    expect(within(row).getByText('3 decided')).toBeTruthy();
+    expect(within(row).getByText('future_battery')).toBeTruthy();
+    expect(within(row).getByText('›')).toBeTruthy();
+  });
+
   test('a run row is dated by the South African day it started, not the UTC day', async () => {
     assessmentsRepository.getQuestionResults.mockResolvedValue([]);
     batteryRunsRepository.getRunsForUser.mockResolvedValue([
@@ -110,8 +130,8 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
         battery_code: BATTERY.battery_code, battery_version: BATTERY.battery_version, started_at: '2026-10-19T22:30:00Z', sync_status: 'synced' },
     ]);
     const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
-    await screen.findByText('WelaPLUS · 20 Oct · 11/11');
-    expect(screen.queryByText(/19 Oct/)).toBeNull();
+    await screen.findByText('Tue, Oct 20, 2026');
+    expect(screen.queryByText(/Oct 19/)).toBeNull();
   });
 
   beforeEach(() => {
@@ -242,7 +262,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     }]);
     const navigation = { navigate: jest.fn() };
     const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
-    const row = await screen.findByRole('button', { name: /WelaPLUS · 22 Oct · 4\/11/ });
+    const row = await screen.findByRole('button', { name: 'WelaPLUS, Amahle Dlamini, Open, isiXhosa' });
     expect(within(row).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: 'Open', tone: 'warning' });
     fireEvent.press(row);
     expect(navigation.navigate).toHaveBeenCalledWith('BatteryRunSummary', { runId: 'pulled-run' });
@@ -259,11 +279,12 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     }]);
     const navigation = { navigate: jest.fn() };
     const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
-    const title = `${code} · 22 Oct · 3`;
+    const title = code;
     await screen.findByText(title);
     const row = screen.getByRole('button', { name: new RegExp(code) });
     expect(within(row).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: 'Abandoned', tone: 'neutral' });
-    expect(screen.queryByText(`${title}/11`)).toBeNull();
+    expect(within(row).getByText('3 decided')).toBeTruthy();
+    expect(screen.queryByText('3 of 11 decided')).toBeNull();
     fireEvent.press(row);
     expect(navigation.navigate).toHaveBeenCalledWith('BatteryRunSummary', { runId: 'unknown-run' });
   });

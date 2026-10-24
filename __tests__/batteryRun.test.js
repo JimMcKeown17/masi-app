@@ -210,7 +210,7 @@ test('result mapping agrees with evaluator for duplicate and unrelated result co
   ] });
   expect(state.decidedCount).toBe(1);
   expect(state.next).toBe(battery.questions[1]);
-  expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Child tired', scoreText: null });
+  expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Child is tired', scoreText: null });
 });
 
 test('score formatting preserves zero and handles missing parsed derived data', () => {

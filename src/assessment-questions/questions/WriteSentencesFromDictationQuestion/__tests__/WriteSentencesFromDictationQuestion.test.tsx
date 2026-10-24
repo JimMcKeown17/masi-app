@@ -132,7 +132,7 @@ describe('WriteSentencesFromDictationQuestion — Finish & Skip', () => {
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('Skip question'));
-    fireEvent.press(getByText('Child tired'));
+    fireEvent.press(getByText('Child is tired'));
     const result = onComplete.mock.calls[0][0];
     expect(result.stopped_reason).toBe('skipped_tired');
     expect(result.items).toEqual([]);
