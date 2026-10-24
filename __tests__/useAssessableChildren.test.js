@@ -105,6 +105,31 @@ it('reloads after each context list identity changes but not an unrelated render
   expect(read).toHaveBeenCalledTimes(3);
 });
 
+it.each(['children', 'classes', 'rosterVersion', 'assignmentsVersion'])(
+  'keeps loading false and previous rows visible while a same-handle %s refetch is pending',
+  async (dependency) => {
+    await seedChild('initial', 'Initial');
+    const { result, rerender } = renderHook(useAssessableChildren, { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const previousRows = result.current.all;
+    await seedChild('new', 'New');
+    const newRows = await repository.getAssessableChildren(handle.userId);
+    const pending = deferred();
+    const read = jest.spyOn(repository, 'getAssessableChildren').mockReturnValueOnce(pending.promise);
+    if (dependency === 'children') childrenValue = { ...childrenValue, children: [] };
+    if (dependency === 'classes') classesValue = { ...classesValue, classes: [] };
+    if (dependency === 'rosterVersion') childrenValue = { ...childrenValue, rosterVersion: 1 };
+    if (dependency === 'assignmentsVersion') classesValue = { ...classesValue, assignmentsVersion: 1 };
+    rerender({});
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.all).toBe(previousRows);
+    await act(async () => { pending.resolve(newRows); });
+    expect(result.current.all.map(row => row.id)).toEqual(['initial', 'new']);
+    expect(result.current.loading).toBe(false);
+  },
+);
+
 it('reloads SQLite on screen focus even with unchanged context lists', async () => {
   await seedChild('initial', 'Initial');
   const { result } = renderHook(useAssessableChildren, { wrapper });
@@ -156,7 +181,7 @@ it('does not publish old-EA rows after the signed-in handle changes', async () =
   expect(result.current.loading).toBe(false);
 });
 
-it('clears a previously published roster on an EA change while the new read is pending', async () => {
+it('hides previous rows immediately on a handle change and loads until the new handle fetch settles', async () => {
   await seedChild('previous-ea', 'Previous EA');
   const { result, rerender } = renderHook(useAssessableChildren, { wrapper });
   await waitFor(() => expect(result.current.all).toHaveLength(1));
@@ -167,21 +192,41 @@ it('clears a previously published roster on an EA change while the new read is p
   rerender({});
   expect(result.current.all).toEqual([]);
   expect(result.current.loading).toBe(true);
-  await act(async () => { pending.resolve([]); });
+  const newRows = [{ id: 'new-ea', first_name: 'New EA', is_delivery: false }];
+  await act(async () => { pending.resolve(newRows); });
+  expect(result.current.all).toEqual(newRows);
   expect(result.current.loading).toBe(false);
 });
 
-it('ends loading and clears rows after a failed refresh without changing the return shape', async () => {
+it('keeps previous rows and loading false after a same-handle refetch rejects', async () => {
   await seedChild('initial', 'Initial');
   const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
   const { result, rerender } = renderHook(useAssessableChildren, { wrapper });
   await waitFor(() => expect(result.current.all).toHaveLength(1));
-  jest.spyOn(repository, 'getAssessableChildren').mockRejectedValueOnce(new Error('SQLite read failed'));
+  const previousRows = result.current.all;
+  const pending = deferred();
+  const error = new Error('SQLite read failed');
+  jest.spyOn(repository, 'getAssessableChildren').mockReturnValueOnce(pending.promise);
   classesValue = { classes: [] };
   rerender({});
+  await act(async () => { pending.reject(error); });
+  expect(result.current.loading).toBe(false);
+  expect(result.current.all).toBe(previousRows);
+  expect(errorLog).toHaveBeenCalledWith('Error loading assessable children:', error);
+});
+
+it('settles a first-load error with empty rows and loading false', async () => {
+  const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const error = new Error('SQLite read failed');
+  const pending = deferred();
+  jest.spyOn(repository, 'getAssessableChildren').mockReturnValueOnce(pending.promise);
+  const { result } = renderHook(useAssessableChildren, { wrapper });
+  expect(result.current.loading).toBe(true);
+  expect(result.current.all).toEqual([]);
+  await act(async () => { pending.reject(error); });
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.all).toEqual([]);
-  expect(errorLog).toHaveBeenCalledWith('Error loading assessable children:', expect.any(Error));
+  expect(errorLog).toHaveBeenCalledWith('Error loading assessable children:', error);
 });
 
 it('refuses a stale actor failure without logging it as a database error or retrying', async () => {

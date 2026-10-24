@@ -20,9 +20,10 @@ export function useAssessableChildren() {
   useFocusEffect(useCallback(() => {
     let active = true;
     const canPublish = () => active && handle.isCurrent();
-    setRoster(previous => ({
+    // Loading covers only the first settled read for this handle, not background refreshes.
+    setRoster(previous => previous.handle === handle ? previous : ({
       handle,
-      rows: previous.handle === handle ? previous.rows : EMPTY_ROWS,
+      rows: EMPTY_ROWS,
       loading: true,
     }));
     (async () => {
@@ -32,7 +33,11 @@ export function useAssessableChildren() {
       } catch (error) {
         if (!canPublish()) return;
         if (!isStaleActorError(error)) console.error('Error loading assessable children:', error);
-        setRoster({ handle, rows: EMPTY_ROWS, loading: false });
+        setRoster(previous => ({
+          handle,
+          rows: previous.handle === handle ? previous.rows : EMPTY_ROWS,
+          loading: false,
+        }));
       }
     })();
     return () => { active = false; };
