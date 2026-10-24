@@ -137,17 +137,22 @@ export default function AssessmentHistoryScreen({ navigation }) {
     const info = childInfoMap[item.child_id];
     const childName = info ? info.name : 'Unknown child';
     const isHidden = info?.hidden;
+    const date = formatDate(item.assessment_date);
+    const decidedCount = isRun
+      ? `${item.question_count}${battery ? ` of ${battery.questions.length}` : ''} decided`
+      : null;
 
     return (
       <Pressable testID="assessment-history-row" style={styles.row} accessibilityRole="button"
-        accessibilityLabel={isRun ? [title, childName, status.label, LANGUAGE_LABELS[item.language] || item.language].join(', ') : undefined}
+        accessibilityLabel={isRun ? [date, title, childName, status.label,
+          LANGUAGE_LABELS[item.language] || item.language, decidedCount].join(', ') : undefined}
         onPress={() => isRun
           ? navigation.navigate('BatteryRunSummary', { runId: item.id })
           : navigation.navigate('AssessmentDetail', { assessmentId: item.id, childName })}
       >
         <View style={styles.cardHeader}>
           <Text variant="titleSmall" style={styles.cardDate}>
-            {formatDate(item.assessment_date)}
+            {date}
           </Text>
           <View style={styles.cardHeaderRight}>
             {isRun ? <StatusBadge label={status.label} tone={status.tone} /> :
@@ -177,7 +182,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
         </View>
         <View style={styles.statsRow}>
           <Text variant="bodySmall" style={styles.stat}>{isRun
-            ? `${item.question_count}${battery ? ` of ${battery.questions.length}` : ''} decided`
+            ? decidedCount
             : `${item.score} / ${item.total_items}`}</Text>
         </View>
         {index < assessments.length - 1 && <View testID="history-row-divider" pointerEvents="none" style={styles.rowDivider} />}

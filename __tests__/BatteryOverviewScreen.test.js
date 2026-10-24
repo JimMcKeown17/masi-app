@@ -471,6 +471,41 @@ test('Next row already fully visible does not scroll or fight later EA scrolling
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
+test('retry after a refresh error reveals the same Next Question again using only the remounted list geometry', async () => {
+  run.results = decide(7);
+  const screen = await ready(renderOverview());
+  const nextRow = `battery-row-${BATTERY.questions[7].question_code}`;
+  const firstScrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo;
+  firstScrollTo.mockClear();
+  layout(screen, 'battery-overview-scroll', { height: 400 });
+  layout(screen, 'battery-question-list', { y: 80, height: 800 });
+  layout(screen, nextRow, { y: 448, height: 80 });
+  expect(firstScrollTo).toHaveBeenCalledTimes(1);
+  expect(firstScrollTo).toHaveBeenLastCalledWith({ y: 80 + 448 + 80 - 400 + spacing.md, animated: true });
+  // The old instance's manual offset must not affect the new list, which mounts at the top.
+  fireEvent.scroll(screen.getByTestId('battery-overview-scroll'), { nativeEvent: { contentOffset: { y: 900 } } });
+  repositories.batteryRuns.getRunWithResults.mockRejectedValueOnce(new Error('refresh failed'));
+  act(() => screen.navigationRef.navigate('Away'));
+  act(() => screen.navigationRef.goBack());
+  await screen.findByText("Couldn't load this run. Try again.");
+  expect(screen.queryByTestId('battery-overview-scroll')).toBeNull();
+  firstScrollTo.mockClear();
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  await ready(screen);
+  const scrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo;
+  expect(scrollTo).not.toHaveBeenCalled();
+  layout(screen, nextRow, { y: 500, height: 90 });
+  expect(scrollTo).not.toHaveBeenCalled();
+  layout(screen, 'battery-question-list', { y: 110, height: 900 });
+  expect(scrollTo).not.toHaveBeenCalled();
+  layout(screen, 'battery-overview-scroll', { height: 350 });
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: 110 + 500 + 90 - 350 + spacing.md, animated: true });
+  fireEvent.scroll(screen.getByTestId('battery-overview-scroll'), { nativeEvent: { contentOffset: { y: 0 } } });
+  layout(screen, nextRow, { y: 500, height: 100 });
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+});
+
 test('Next row above the current scroll offset scrolls back to its top with md clearance', async () => {
   const screen = await ready(renderOverview());
   const scrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo;

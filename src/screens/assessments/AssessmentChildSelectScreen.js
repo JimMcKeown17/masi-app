@@ -83,8 +83,18 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         setStarting(startPendingRef.current);
         setRunsLoading(true);
         setStartError(null);
-        Promise.all([batteryRuns.getUnfinishedRunsForUser(user.id), batteryRuns.getRunsForUser(user.id)])
-          .then(([runs, history]) => {
+        setLastRuns({});
+        batteryRuns.getUnfinishedRunsForUser(user.id)
+          .then(runs => {
+            if (active && handle.isCurrent()) {
+              setUnfinishedRuns(runs);
+              setRunsLoading(false);
+            }
+          }).catch(() => {
+            if (active && handle.isCurrent()) setStartError("Couldn't load unfinished runs. Try again.");
+          });
+        batteryRuns.getRunsForUser(user.id)
+          .then(history => {
             if (active && handle.isCurrent()) {
               const latest = {};
               for (const run of history) {
@@ -93,11 +103,9 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
                 if (!latest[run.child_id] || run.started_at > latest[run.child_id]) latest[run.child_id] = run.started_at;
               }
               setLastRuns(latest);
-              setUnfinishedRuns(runs);
-              setRunsLoading(false);
             }
           }).catch(() => {
-            if (active && handle.isCurrent()) setStartError("Couldn't load unfinished runs. Try again.");
+            if (active && handle.isCurrent()) console.warn("Couldn't load last battery runs.");
           });
         return () => {
           active = false;
