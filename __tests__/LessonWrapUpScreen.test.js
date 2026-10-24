@@ -76,6 +76,15 @@ test('the heading names the ticked letters; no ticked letters skips the section'
   expect(empty.queryByText(/Who knows/)).toBeNull();
   expect(empty.queryByText("Teaching it today doesn't count.")).toBeNull();
 });
+test('no ticked letters leaves no empty chip row between the name and the tracker', async () => {
+  // An empty row would still take the row's gap on both sides (A03, 2026-10-24: 12 dp extra).
+  mockInitial = draftStart();
+  const view = mount(); await ready(view);
+  expect(view.queryAllByTestId('wrap-up-letter-chips')).toHaveLength(0);
+  expect(view.queryByText('No one new yet')).toBeNull();
+  expect(row(view).getByText('Amahle')).toBeTruthy();
+  expect(row(view).getByLabelText(/Amahle, letter tracker/)).toBeTruthy();
+});
 test('a chip records a mark in the lesson language with the tap time', async () => {
   mockInitial.language_code = 'xh';
   const view = mount(); await ready(view);

@@ -17,7 +17,8 @@ export default function WrapUpChildRow({ child, letters, languageOrder, authorit
   return <View testID={`wrap-up-child-${child.id}`} style={styles.row}>
     <Text style={styles.name}>{child.first_name}</Text>
     {authority.deliver ? languageOrder ? <>
-      <View testID="wrap-up-letter-chips" style={styles.chips}>{letters.map(letter => {
+      {/* No letters, no chip row: an empty row would still take the row's gap on both sides. */}
+      {letters.length > 0 ? <><View testID="wrap-up-letter-chips" style={styles.chips}>{letters.map(letter => {
         const locked = assessmentMastered.has(letter);
         const added = changes[letter]?.mastered === true;
         const known = changes[letter]?.mastered ?? taughtLetters.has(letter);
@@ -28,7 +29,7 @@ export default function WrapUpChildRow({ child, letters, languageOrder, authorit
           disabled={locked || !mastery} accessibilityLabel={`${letter}, ${description}`}
           accessibilityState={{ selected: locked || known }} onPress={() => onLetter(letter)} />;
       })}</View>
-      {letters.length > 0 ? <ToggleChip selected={!!noOneNew} label="No one new yet" onPress={onNoOneNew} /> : null}
+      <ToggleChip selected={!!noOneNew} label="No one new yet" onPress={onNoOneNew} /></> : null}
       <BrandButton variant="tertiary" label={`${count}/26 ›`}
         accessibilityLabel={`${child.first_name}, letter tracker, ${count}/26`} onPress={onOpenTracker} />
     </> : null : <Text style={styles.note}>Letters can't be updated for this child</Text>}
