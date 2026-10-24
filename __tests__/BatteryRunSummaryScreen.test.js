@@ -1,6 +1,9 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'ea-1' } }) }));
-jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => mockRoster }));
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => mockRealRoster
+  ? jest.requireActual('../src/hooks/useAssessableChildren').useAssessableChildren() : mockRoster }));
+jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockChildrenContext }));
+jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockClassesContext }));
 jest.mock('../src/services/activeProgrammeGate', () => ({ getActiveProgrammeGate: jest.fn() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: () => ({ triggerBackgroundSync: mockSync }) }));
 jest.mock('../src/context/ToastContext', () => ({
@@ -45,7 +48,7 @@ const deferred = () => {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 };
-let mockRoster, run, repositories, handle;
+let mockRoster, mockRealRoster, mockChildrenContext, mockClassesContext, run, repositories, handle;
 function EmptyScreen() { return null; }
 // Preserve inactive screens as native stack does, so blur/refocus tests keep state.
 function RetainedStack({ children }) {
@@ -58,7 +61,8 @@ function RetainedStack({ children }) {
   ))}</NavigationContent>;
 }
 const Stack = createNavigatorFactory(RetainedStack)();
-function renderSummary({ initialRoutes, overviewComponent = EmptyScreen } = {}) {
+function renderSummary({ initialRoutes, overviewComponent = EmptyScreen, realRoster = false } = {}) {
+  mockRealRoster = realRoster;
   let navigation, rerenderHost;
   function Host(props) {
     navigation = props.navigation;
@@ -94,6 +98,9 @@ async function ready(screen) {
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockRealRoster = false;
+  mockChildrenContext = { children: [], rosterVersion: 0 };
+  mockClassesContext = { classes: [], assignmentsVersion: 0 };
   mockRoster = { yourChildren: [], restOfClass: [CHILD], all: [CHILD], loading: false };
   run = { id: ID, user_id: 'ea-1', child_id: CHILD.id, status: 'in_progress', started_here: 1,
     programme_id: 'programme-1', battery_code: BATTERY.battery_code, battery_version: BATTERY.battery_version,
@@ -102,7 +109,7 @@ beforeEach(() => {
   repositories = {
     batteryRuns: { getRunWithResults: jest.fn(async () => clone(run)),
       finalizeRun: jest.fn(async () => { run.status = 'completed'; return { id: ID }; }) },
-    children: { getChildNamesByIds: jest.fn().mockResolvedValue({ [CHILD.id]: { name: 'Lwazi Mbeki', hidden: false } }) },
+    children: { getAssessableChildren: jest.fn(async () => clone(mockRoster.all)), getChildNamesByIds: jest.fn().mockResolvedValue({ [CHILD.id]: { name: 'Lwazi Mbeki', hidden: false } }) },
   };
   getActiveProgrammeGate.mockReset().mockResolvedValue({ hasActiveProgramme: true, programme: { id: 'programme-1' } });
   batteryFor.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
@@ -490,4 +497,37 @@ test.each([
   run.results = decide(count);
   const screen = await ready(renderSummary());
   expect(screen.getByRole('header', { name: title })).toBeTruthy();
+});
+
+
+test('a sync roster refetch leaves the Writing Sheet tick checked and Finalize enabled throughout', async () => {
+  const screen = await ready(renderSummary({ realRoster: true }));
+  fireEvent.press(screen.getByRole('checkbox'));
+  // If a roster identity change starts a run read, hold it so transient disabling is observable.
+  const pending = deferred();
+  repositories.batteryRuns.getRunWithResults.mockReturnValueOnce(pending.promise);
+  mockChildrenContext = { ...mockChildrenContext, rosterVersion: 1 };
+  screen.refresh();
+  await waitFor(() => expect(repositories.children.getAssessableChildren).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(screen.getByRole('checkbox').props.accessibilityState.checked).toBe(true);
+  expect(screen.getByRole('button', { name: 'Finalize run' })).not.toBeDisabled();
+  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
+  fireEvent.press(screen.getByRole('button', { name: 'Finalize run' }));
+  await act(async () => pending.resolve(clone(run)));
+  await screen.findByText('Finalized');
+  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
+});
+
+test('an abandoned run summary labels undecided Questions Not started without a Next row', async () => {
+  run.status = 'abandoned';
+  run.results = [];
+  const screen = await ready(renderSummary());
+  expect(screen.getByText('Abandoned')).toBeTruthy();
+  expect(screen.getByLabelText('1. Letter sounds, Not started · 1 min')).toBeTruthy();
+  expect(screen.getByLabelText('2. Listen to a story, Not started')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Show all 11' }));
+  expect(screen.getByLabelText('5. Letter writing, Not started')).toBeTruthy();
+  expect(screen.queryByText(/^Next(?: ·|$)/)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Finalize run' })).toBeNull();
 });

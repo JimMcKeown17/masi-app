@@ -61,6 +61,9 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   const { handle, repositories } = useSignedInEA();
   const { user } = useAuth();
   const { all, loading: rosterLoading } = useAssessableChildren();
+  const rosterRef = useRef({ all, loading: rosterLoading });
+  rosterRef.current = { all, loading: rosterLoading };
+  const observedRosterLoading = useRef(rosterLoading);
   const { triggerBackgroundSync } = useOffline();
   const { show: showToast } = useToast();
   const insets = useSafeAreaInsets();
@@ -100,9 +103,7 @@ export default function BatteryOverviewScreen({ navigation, route }) {
     // Keep showing the last loaded run while refreshing (e.g. back from a Question); spinner only on first load.
     setData(previous => (previous.handle === handle && previous.run && previous.run.id === runId
       ? { ...previous, refreshing: true } : { handle, loading: true }));
-    setSkipQuestion(null);
-    setAbandonVisible(false);
-    if (rosterLoading) return;
+    if (rosterRef.current.loading) return;
     try {
       // A previous focus/load may still be committing auto-skips. Read only after it settles.
       if (autoSaving.current?.handle === handle) await autoSaving.current.promise.catch(() => {});
@@ -113,7 +114,7 @@ export default function BatteryOverviewScreen({ navigation, route }) {
       ]);
       if (!active()) return;
       const battery = run && batteryFor(run.battery_code, run.battery_version);
-      const child = run && all.find(row => row.id === run.child_id);
+      const child = run && rosterRef.current.all.find(row => row.id === run.child_id);
       if (battery) {
         const view = buildRunView(battery, run, {
           activeProgrammeId: gate.programme?.id ?? null, childAssigned: Boolean(child),
@@ -155,19 +156,18 @@ export default function BatteryOverviewScreen({ navigation, route }) {
       }
       if (!active()) return;
       if (childName) navigation.setOptions({ title: childName });
-      if (run && battery) {
-        const view = buildRunView(battery, run, {
-          activeProgrammeId: gate.programme?.id ?? null, childAssigned: Boolean(child),
-        });
-        if (view.readOnlyReason === 'closed' || view.readOnlyReason === 'other_phone') {
-          navigation.replace('BatteryRunSummary', { runId });
-        }
+      const view = run && battery && buildRunView(battery, run, {
+        activeProgrammeId: gate.programme?.id ?? null, childAssigned: Boolean(child),
+      });
+      if (view?.readOnlyReason === 'closed' || view?.readOnlyReason === 'other_phone') {
+        navigation.replace('BatteryRunSummary', { runId });
       }
-      setData({ handle, loading: false, run, activeProgrammeId: gate.programme?.id ?? null });
+      setData({ handle, loading: false, run, childFirstName: child?.first_name || childName?.split(' ')[0],
+        activeProgrammeId: gate.programme?.id ?? null });
     } catch (error) {
       if (active() && !isStaleActorError(error)) setData({ handle, loading: false, error: true });
     }
-  }, [handle, repositories, runId, user.id, all, rosterLoading, navigation, triggerBackgroundSync]);
+  }, [handle, repositories, runId, user.id, navigation, triggerBackgroundSync]);
 
   useFocusEffect(useCallback(() => {
     focused.current = true;
@@ -175,8 +175,21 @@ export default function BatteryOverviewScreen({ navigation, route }) {
     // A save can finish while native stack keeps this screen mounted but blurred.
     setMutation(mutationRef.current);
     void load();
-    return () => { focused.current = false; generation.current += 1; };
+    return () => {
+      focused.current = false;
+      generation.current += 1;
+      setSkipQuestion(null);
+      setAbandonVisible(false);
+    };
   }, [load]));
+
+  // Resume a first load deferred for the roster. Later roster identities update
+  // the rendered child and writability without restarting focus or reading the run.
+  useEffect(() => {
+    const wasLoading = observedRosterLoading.current;
+    observedRosterLoading.current = rosterLoading;
+    if (wasLoading && !rosterLoading && focused.current) void load();
+  }, [rosterLoading, load]);
 
   const ready = data.handle === handle && !data.loading && !rosterLoading && handle.isCurrent();
   const run = ready ? data.run : null;
@@ -188,6 +201,15 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   // Actions wait for a refresh to finish, so a just-finished Question can't be started from stale rows.
   current.current = ready && view && !data.refreshing ? { run, battery, view } : null;
   const mutating = mutation?.handle === handle || Boolean(data.refreshing);
+  useEffect(() => {
+    if (!ready || data.refreshing || data.error) return;
+    setSkipQuestion(question => view?.writable && view.rows.some(row =>
+      row.question.question_code === question?.question_code && ['next', 'not_started'].includes(row.state))
+      ? question : null);
+    // Losing an assignment still allows abandoning; a closed/remote run does not.
+    if (!run || ['closed', 'other_phone'].includes(view?.readOnlyReason)) setAbandonVisible(false);
+  }, [ready, data.refreshing, data.error, run, view?.writable, view?.readOnlyReason]);
+
   const canPublish = () => focused.current && handle.isCurrent();
   const nextCode = view?.next?.question_code;
   const writingSheetReminder = Boolean(view?.writable && view.writingSheetReminder);
@@ -256,7 +278,8 @@ export default function BatteryOverviewScreen({ navigation, route }) {
     }
   };
   const abandon = async () => {
-    if (!current.current) return;
+    const snapshot = current.current;
+    if (!snapshot || ['closed', 'other_phone'].includes(snapshot.view.readOnlyReason)) return;
     const token = beginMutation();
     if (!token) return;
     try {
@@ -322,7 +345,8 @@ export default function BatteryOverviewScreen({ navigation, route }) {
       options={SKIP_OPTIONS} selectedKey={null} onSelect={saveSkip}
       confirmLabel="Skip Question" cancelLabel="Cancel" onDismiss={() => setSkipQuestion(null)} />
     <ConfirmSheet visible={abandonVisible} title="Abandon this run?"
-      body="The saved Questions stay in this child's history. You can't continue this run."
+      body={view.decidedCount === 0 ? "Nothing was saved in this run yet. You can't continue it."
+        : `The ${view.decidedCount} saved ${view.decidedCount === 1 ? 'Question stays' : 'Questions stay'} in ${child?.first_name || data.childFirstName || 'this child'}'s history. You can't continue this run.`}
       confirmLabel="Abandon" cancelLabel="Keep run" onConfirm={abandon} onCancel={() => setAbandonVisible(false)} />
   </View>;
 }

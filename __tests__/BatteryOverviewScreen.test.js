@@ -1,6 +1,9 @@
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'ea-1' } }) }));
-jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => mockRoster }));
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => mockRealRoster
+  ? jest.requireActual('../src/hooks/useAssessableChildren').useAssessableChildren() : mockRoster }));
+jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockChildrenContext }));
+jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockClassesContext }));
 jest.mock('../src/services/activeProgrammeGate', () => ({ getActiveProgrammeGate: jest.fn() }));
 jest.mock('../src/context/ToastContext', () => ({
   ...jest.requireActual('../src/context/ToastContext'), useToast: () => ({ show: mockToast }),
@@ -35,7 +38,7 @@ const mockSync = jest.fn();
 const CHILD = { id: 'child-1', first_name: 'Lwazi', last_name: 'Mbeki', is_delivery: false,
   class_id: 'class-1', grade: '2', home_language: 'isiXhosa', membership_id: 'membership-1' };
 const ID = '9f3c2a10-5b7e-4c1d-8e2f-0123456789ab';
-let mockRoster, run, repositories, handle;
+let mockRoster, mockRealRoster, mockChildrenContext, mockClassesContext, run, repositories, handle;
 const clone = value => JSON.parse(JSON.stringify(value));
 const resultRow = (question, index = 0) => ({ id: `assessment-${index}`, question_code: question.question_code,
   stopped_reason: 'completed', score: 34, total_items: 60, derived: {} });
@@ -61,7 +64,8 @@ function RetainedStack({ children }) {
   ))}</NavigationContent>;
 }
 const Stack = createNavigatorFactory(RetainedStack)();
-function renderOverview() {
+function renderOverview({ realRoster = false } = {}) {
+  mockRealRoster = realRoster;
   const navigation = { navigate: jest.fn(), replace: jest.fn(), goBack: jest.fn(), setOptions: jest.fn() };
   let rerenderHost;
   function Host() {
@@ -96,6 +100,9 @@ const openSkip = (screen, index = 5) => fireEvent.press(screen.getByRole('button
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockRealRoster = false;
+  mockChildrenContext = { children: [], rosterVersion: 0 };
+  mockClassesContext = { classes: [], assignmentsVersion: 0 };
   mockRoster = { yourChildren: [], restOfClass: [CHILD], all: [CHILD], loading: false };
   run = { id: ID, user_id: 'ea-1', child_id: CHILD.id, status: 'in_progress', started_here: 1,
     programme_id: 'programme-1', battery_code: BATTERY.battery_code, battery_version: BATTERY.battery_version,
@@ -107,7 +114,7 @@ beforeEach(() => {
       run.results.push({ question_code: result.question_code, stopped_reason: result.stopped_reason,
         score: result.derived.total_correct, total_items: result.items.length, derived: result.derived });
     }) },
-    children: { getChildNamesByIds: jest.fn().mockResolvedValue({ [CHILD.id]: { name: 'Lwazi Mbeki', hidden: false } }) },
+    children: { getAssessableChildren: jest.fn(async () => clone(mockRoster.all)), getChildNamesByIds: jest.fn().mockResolvedValue({ [CHILD.id]: { name: 'Lwazi Mbeki', hidden: false } }) },
   };
   getActiveProgrammeGate.mockReset().mockResolvedValue({ hasActiveProgramme: true, programme: { id: 'programme-1' } });
   batteryFor.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
@@ -376,7 +383,7 @@ test('a skip completing while blurred does not leave the next action disabled on
   expect(screen.getByRole('button', { name: 'Start Reading words' })).not.toBeDisabled();
 });
 
-test('an overlapping roster reload waits for in-flight auto-skips instead of saving twice', async () => {
+test('a roster identity change during in-flight auto-skips does not reread the run or save twice', async () => {
   batteryFor.mockReturnValue(writingGateBattery());
   const pending = deferred();
   const save = repositories.assessments.saveQuestionResult.getMockImplementation();
@@ -389,6 +396,7 @@ test('an overlapping roster reload waits for in-flight auto-skips instead of sav
   mockRoster = { ...mockRoster, all: [CHILD] };
   screen.refresh();
   expect(screen.getByLabelText('Loading assessment run')).toBeTruthy();
+  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
   await act(async () => pending.resolve());
   await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
@@ -515,4 +523,105 @@ test('Next row above the current scroll offset scrolls back to its top with md c
   layout(screen, 'battery-question-list', { y: 80, height: 800 });
   layout(screen, `battery-row-${BATTERY.questions[4].question_code}`, { y: 100, height: 64 });
   expect(scrollTo).toHaveBeenLastCalledWith({ y: 180 - spacing.md, animated: true });
+});
+
+test('an open abandon sheet survives a sync roster refetch and its confirm abandons instead of starting a Question', async () => {
+  run.results = [];
+  const screen = await ready(renderOverview({ realRoster: true }));
+  fireEvent.press(screen.getByRole('button', { name: 'Abandon run' }));
+  mockChildrenContext = { ...mockChildrenContext, rosterVersion: 1 };
+  screen.refresh();
+  await waitFor(() => expect(repositories.children.getAssessableChildren).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(screen.getByText('Abandon this run?')).toBeTruthy();
+  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
+  fireEvent.press(screen.getByRole('button', { name: 'Abandon' }));
+  await waitFor(() => expect(screen.navigation.goBack).toHaveBeenCalledTimes(1));
+  expect(repositories.batteryRuns.abandonRun).toHaveBeenCalledWith(ID);
+  expect(screen.navigation.navigate).not.toHaveBeenCalled();
+});
+
+test('a selected skip reason survives a sync roster refetch without rereading the run and its confirm saves the skip', async () => {
+  const screen = await ready(renderOverview({ realRoster: true }));
+  openSkip(screen);
+  fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
+  mockClassesContext = { ...mockClassesContext, assignmentsVersion: 1 };
+  screen.refresh();
+  await waitFor(() => expect(repositories.children.getAssessableChildren).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Skip Reading words?')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Child is tired' }).props.accessibilityState.selected).toBe(true);
+  expect(screen.getByRole('button', { name: 'Skip Question' })).not.toBeDisabled();
+  fireEvent.press(screen.getByRole('button', { name: 'Skip Question' }));
+  await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledWith({
+    assessmentId: expect.any(String), userId: 'ea-1', childId: CHILD.id, batteryRunId: ID,
+    result: skippedResult(BATTERY.questions[5], 'xh', 'skipped_tired'),
+  });
+  expect(screen.navigation.navigate).not.toHaveBeenCalled();
+});
+
+test.each([
+  [0, "Nothing was saved in this run yet. You can't continue it."],
+  [1, "The 1 saved Question stays in Lwazi's history. You can't continue this run."],
+  [4, "The 4 saved Questions stay in Lwazi's history. You can't continue this run."],
+])('abandon copy agrees with %i decided Questions, including skips', async (count, body) => {
+  run.results = decide(count).map(row => ({ ...row, stopped_reason: 'skipped_tired' }));
+  const screen = await ready(renderOverview());
+  fireEvent.press(screen.getByRole('button', { name: 'Abandon run' }));
+  expect(screen.getByText(body)).toBeTruthy();
+});
+
+test('a first load attempted during the real roster read resumes exactly once when it settles', async () => {
+  const pending = deferred();
+  repositories.children.getAssessableChildren.mockReturnValueOnce(pending.promise);
+  const screen = renderOverview({ realRoster: true });
+  expect(screen.getByLabelText('Loading assessment run')).toBeTruthy();
+  expect(repositories.batteryRuns.getRunWithResults).not.toHaveBeenCalled();
+  await act(async () => pending.resolve([CHILD]));
+  await ready(screen);
+  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Start Letter writing' })).not.toBeDisabled();
+});
+
+test.each(['abandon', 'skip'])('blur closes the %s sheet before returning to the overview', async kind => {
+  const screen = await ready(renderOverview());
+  if (kind === 'abandon') fireEvent.press(screen.getByRole('button', { name: 'Abandon run' }));
+  else openSkip(screen);
+  const title = kind === 'abandon' ? 'Abandon this run?' : 'Skip Reading words?';
+  expect(screen.getByText(title)).toBeTruthy();
+  act(() => screen.navigationRef.navigate('Away'));
+  await waitFor(() => expect(screen.queryByText(title)).toBeNull());
+  act(() => screen.navigationRef.goBack());
+  await ready(screen);
+  expect(screen.queryByText(title)).toBeNull();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start Letter writing' })).not.toBeDisabled());
+  fireEvent.press(screen.getByRole('button', { name: 'Start Letter writing' }));
+  expect(screen.navigation.navigate).toHaveBeenCalledTimes(1);
+});
+
+test.each(['skip', 'abandon'])('a roster removal updates sheet validity without rereading the run (%s)', async kind => {
+  const screen = await ready(renderOverview({ realRoster: true }));
+  if (kind === 'skip') {
+    openSkip(screen);
+    fireEvent.press(screen.getByRole('button', { name: 'Child is tired' }));
+  } else fireEvent.press(screen.getByRole('button', { name: 'Abandon run' }));
+  mockRoster = { ...mockRoster, all: [], restOfClass: [] };
+  mockChildrenContext = { ...mockChildrenContext, rosterVersion: 1 };
+  screen.refresh();
+  await waitFor(() => expect(repositories.children.getAssessableChildren).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  if (kind === 'skip') {
+    expect(screen.queryByText('Skip Reading words?')).toBeNull();
+    expect(screen.getByText('This child is no longer assigned to you — you can abandon this run.')).toBeTruthy();
+  } else {
+    expect(screen.getByText('Abandon this run?')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Abandon' }));
+    await waitFor(() => expect(screen.navigation.goBack).toHaveBeenCalledTimes(1));
+    expect(repositories.batteryRuns.abandonRun).toHaveBeenCalledWith(ID);
+  }
+  expect(screen.queryByRole('button', { name: /^Start / })).toBeNull();
 });

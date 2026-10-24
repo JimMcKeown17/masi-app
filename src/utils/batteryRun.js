@@ -48,7 +48,7 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
         if (result.score != null && max != null) scoreText = `${result.score} / ${max}`;
       }
     } else {
-      const isNext = question === state.nextQuestion;
+      const isNext = readOnlyReason === null && question === state.nextQuestion;
       rowState = isNext ? 'next' : 'not_started';
       detail = isNext ? 'Next' : 'Not started';
       if (isNext && question.materials) detail += ` · ${MATERIAL_LABELS[question.materials.item]}`;
