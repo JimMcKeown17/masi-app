@@ -18,8 +18,11 @@ persistence, sync payloads, session lifecycle, and reporting. The dependency ord
 ## Locked domain rules
 
 - One completed session represents one group block of work.
-- EAs need whole-class visibility for control-group assessment and replacing a child who leaves a
-  delivery group. Assessment scope can therefore be wider than delivery scope. The access model that
+- Assessment scope is the whole assigned class: delivery children plus control children, with no
+  child Programme enrollment required for the class arm. Assessment pickers use
+  `useAssessableChildren`; My Children, ClassDetail, session/attendee pickers, groups, daily
+  targets and delivery rankings retain the delivery population. Whole-class visibility also
+  supplies the replacement pool; it does not authorize editing another EA's group. The model that
   makes this coexist with assignment-scoped delivery is settled in
   [ADR-0005](../docs/adr/0005-assessment-delivery-scope-two-tier-access.md): class assignment =
   assessment scope, delivery assignment = delivery scope, group assignment = composition-edit scope;
@@ -43,7 +46,11 @@ persistence, sync payloads, session lifecycle, and reporting. The dependency ord
 
 Do not start the group-first UI before these contracts are settled:
 
-1. **Done — session-group grant evidence (B2 Task 5, 2026-10-21).**
+1. **Whole-class assessment access built on `feat/whole-class-assessment` (2026-10-23), staging
+   and device gates open.** Class roster pull/reconcile and the SQLite assessable read model are
+   implemented independently of the later group editor. See the
+   [build entry](./build-log.md#2026-10-23--whole-class-assessment-access).
+   **Done — session-group grant evidence (B2 Task 5, 2026-10-21).**
    Existing `GRANT_SUBJECTS` already represents class/group-membership-mediated child grants.
    [B2](../docs/superpowers/plans/2026-10-20-lesson-plan-b2-session-group.md) adds the session and
    attendee held-group evidence: this EA's owed assignment insert counts even when it has ended.
@@ -76,7 +83,9 @@ Do not start the group-first UI before these contracts are settled:
 
 - Show current members and the group's latest literacy-session letters.
 - Make the next action obvious: record a session for this group.
-- Keep access to child results, assessment, letter mastery, and edit paths.
+- Keep access to child results, assessment and letter evidence. Assessment links may use the
+  wider class roster; session attendance and group members remain delivery-scoped. Mastery
+  confirmations require delivery authority, and child edits require delivery or creator authority.
 - Empty, stale, pending, and failed sync states must be explicit.
 
 ### 3. Session capture becomes group-first

@@ -1,3 +1,4 @@
+import { classRosterDependencyScope, pullClassRoster, persistClassRoster } from './classRosterPull';
 import { isStaleActorError } from '../session/staleActor';
 
 export const PULL_SCOPE_COMPLETENESS_LIMIT = 1000;
@@ -135,6 +136,8 @@ export const pullReconcileAcknowledgments = async ({
         groupEaAssignmentIds: data.group_ea_assignment_ids,
         groupIds: data.group_ids,
         childGroupMembershipIds: data.child_group_membership_ids,
+        ...(Array.isArray(data.roster_class_ids) ? { rosterClassIds: data.roster_class_ids } : {}),
+        ...(Array.isArray(data.roster_membership_ids) ? { rosterMembershipIds: data.roster_membership_ids } : {}),
       },
     };
   } catch (error) {
@@ -254,6 +257,7 @@ export const pullPreloadedChildData = async ({
       scopes: {
         programmeAssignment,
         ...dependencyScopes(),
+        classRoster: classRosterDependencyScope(),
       },
     };
   }
@@ -361,6 +365,11 @@ export const pullPreloadedChildData = async ({
     ? successfulScope(rawChildrenGroups.rows.map(markSynced))
     : rawChildrenGroups;
 
+  const classRoster = await pullClassRoster({
+    userId, activeProgrammeId, supabaseClient, queryScope: queuedQueryScope,
+    downloadedChildren: children.ok ? children.rows : [],
+  });
+
   return {
     activeProgrammeId,
     reconcileAcknowledgments,
@@ -374,8 +383,51 @@ export const pullPreloadedChildData = async ({
       groups,
       groupEaAssignments,
       childrenGroups,
+      classRoster,
     },
   };
+};
+
+// Defer only when the new snapshot can supply a class pass. Completeness is
+// finalized by roster persistence, so the shared pair checks it only afterward.
+export const shouldDeferMembershipReconcile = ({ activeProgrammeId, scopes, reconcileAcknowledgments }) => (
+  Boolean(activeProgrammeId) && scopes.programmeAssignment.ok && Boolean(scopes.classRoster)
+  && reconcileAcknowledgments?.ok === true && reconcileAcknowledgments.complete === true
+  && reconcileAcknowledgments.data.activeProgrammeId === activeProgrammeId
+  && Array.isArray(reconcileAcknowledgments.data.rosterClassIds)
+  && Array.isArray(reconcileAcknowledgments.data.rosterMembershipIds)
+  && Array.isArray(reconcileAcknowledgments.data.visibleChildIds)
+);
+
+export const reconcilePulledClassMemberships = async ({
+  pulled, repositories, pulledAt, authorizedBreakerScopes = new Set(),
+}) => {
+  if (!shouldDeferMembershipReconcile(pulled)) return [];
+  const { scopes, reconcileAcknowledgments: { data: ack } } = pulled;
+  const deliveryReady = scopes.childClassMemberships.ok;
+  const rosterReady = scopes.classRoster.ok && scopes.classRoster.complete === true;
+  if (!deliveryReady && !rosterReady) return [];
+  return repositories.children.withTransaction(async txn => {
+    const results = [];
+    if (deliveryReady) {
+      results.push({ scope: 'childClassMemberships', ...await repositories.children.buildClassMembershipReconcile({
+        acknowledgedIds: ack.childClassMembershipIds,
+        acknowledgedChildIds: ack.visibleChildIds,
+        pulledAt,
+        bypassBreaker: authorizedBreakerScopes.has('childClassMemberships'),
+      })(txn) });
+    }
+    if (rosterReady) {
+      results.push({ scope: 'classRosterMemberships', ...await repositories.children.buildClassRosterMembershipReconcile({
+        rosterClassIds: ack.rosterClassIds,
+        rosterMembershipIds: ack.rosterMembershipIds,
+        deliveryChildIds: ack.visibleChildIds,
+        pulledAt,
+        bypassBreaker: authorizedBreakerScopes.has('classRosterMemberships'),
+      })(txn) });
+    }
+    return results;
+  });
 };
 
 // The handle service persists using the same guarded repositories and acknowledged scopes as
@@ -410,12 +462,15 @@ export const persistPreloadedChildData = async ({
   await save('childProgrammeEnrollments', repositories.children.saveServerChildProgrammeEnrollmentRows, kept('childProgrammeEnrollments'),
     canReconcile ? { acknowledgedIds: ack.childProgrammeEnrollmentIds, acknowledgedAssignedChildIds: ack.assignedChildIds, programmeId: activeProgrammeId } : null);
   await save('childClassMemberships', repositories.children.saveServerChildClassMembershipRows, kept('childClassMemberships'),
-    canReconcile ? { acknowledgedIds: ack.childClassMembershipIds, acknowledgedChildIds: ack.visibleChildIds } : null);
+    canReconcile && !shouldDeferMembershipReconcile(pulled)
+      ? { acknowledgedIds: ack.childClassMembershipIds, acknowledgedChildIds: ack.visibleChildIds } : null);
   if (scopes.groups.ok) await repositories.groups.saveServerGroupRows(scopes.groups.rows);
   await save('groupEaAssignments', repositories.groupEaAssignments.saveServerRows, scopes.groupEaAssignments.rows,
     canReconcile ? { acknowledgedGroupIds: ack.groupIds, userId, programmeId: activeProgrammeId } : null);
   await save('childrenGroups', repositories.groups.saveServerChildrenGroupRows, scopes.childrenGroups.rows,
     canReconcile ? { acknowledgedIds: ack.childGroupMembershipIds, acknowledgedGroupIds: ack.groupIds } : null);
+  await persistClassRoster({ scope: scopes.classRoster, repositories, deletedChildIds: deleted });
+  reconciles.push(...await reconcilePulledClassMemberships({ pulled, repositories, pulledAt, authorizedBreakerScopes }));
   if (pullCanBeStamped(pulled, reconciles)) {
     await repositories.syncState.setPullState('child_data_pull', { lastPulledAt: pulledAt });
   }
@@ -423,7 +478,8 @@ export const persistPreloadedChildData = async ({
 };
 
 const pullCanBeStamped = ({ activeProgrammeId, scopes, reconcileAcknowledgments: ack }, reconciles) => (
-  ack?.ok === true && ack.complete === true && ack.data.activeProgrammeId === activeProgrammeId
+  (!scopes.classRoster || (scopes.classRoster.ok && scopes.classRoster.complete))
+  && ack?.ok === true && ack.complete === true && ack.data.activeProgrammeId === activeProgrammeId
   && !Object.values(scopes).some((scope) => scope.failureKind === 'transport' || (scope.ok && !scope.complete))
   && reconciles.every((result) => result?.reconcileCompleted === true)
 );

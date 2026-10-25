@@ -484,3 +484,94 @@ describe('literacySessionPersistence', () => {
     } finally { await db.closeAsync(); }
   });
 });
+
+describe('literacy session survives attendee delivery changes', () => {
+  test.each(['unassigned', 'assignment-ended'])(
+    'commits the session and authorised child writes when another attendee is %s', async scope => {
+      const db = await createMigratedDatabase(runMigrations);
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await seedCoreData(db);
+        const children = createChildrenRepository({ database: db });
+        await children.save({ id: 'delivery', first_name: 'Delivery', last_name: 'Child',
+          class_id: 'class-1', created_by: 'office', synced: true }, { actorUserId: 'user-1' });
+        await children.saveChildRecord({ id: 'non-delivery', first_name: 'Other', last_name: 'Child',
+          class_id: 'class-1', created_by: 'office', synced: true });
+        if (scope === 'assignment-ended') await children.saveStaffChild({
+          id: 'ended-delivery', child_id: 'non-delivery', user_id: 'user-1', created_by: 'office',
+          assigned_at: '2026-01-15', unassigned_at: '2026-10-22', synced: true,
+        });
+        await db.runAsync('delete from sync_outbox');
+        const untouched = await db.getFirstAsync("select * from children where id = 'non-delivery'");
+        const mark = { mastered: true, languageCode: 'en', madeAt: MADE_AT };
+        await expect(persistLiteracySession({ database: db,
+          session: { id: 'mixed-session', user_id: 'user-1', programme_id: 'programme-a',
+            session_date: '2026-10-23', children_ids: ['non-delivery', 'delivery'], synced: false,
+            activities: { child_reading_levels: {
+              'non-delivery': 'Sentence Reading', delivery: 'Word Reading',
+            } } },
+          letterTrackerChanges: {
+            'non-delivery': { a: mark, m: mark }, delivery: { a: mark },
+          }, nowIso: '2026-10-23T10:00:00.000Z',
+        })).resolves.toBe(true);
+
+        const session = await db.getFirstAsync("select * from sessions where id = 'mixed-session'");
+        expect(session).toMatchObject({ sync_status: 'pending' });
+        expect(JSON.parse(session.activities).child_reading_levels).toEqual({
+          'non-delivery': 'Sentence Reading', delivery: 'Word Reading',
+        });
+        expect(await db.getAllAsync("select child_id from session_attendees where session_id = 'mixed-session' order by child_id"))
+          .toEqual([{ child_id: 'delivery' }, { child_id: 'non-delivery' }]);
+        expect(await db.getFirstAsync("select reading_level, sync_status from children where id = 'delivery'"))
+          .toEqual({ reading_level: 'Word Reading', sync_status: 'pending' });
+        expect(await db.getAllAsync('select child_id, letter, confirmed, sync_status from letter_mastery'))
+          .toEqual([{ child_id: 'delivery', letter: 'a', confirmed: 1, sync_status: 'pending' }]);
+        expect(await db.getFirstAsync("select * from children where id = 'non-delivery'")).toEqual(untouched);
+        const slots = await db.getAllAsync('select table_name, record_id, payload from sync_outbox');
+        expect(slots.map(row => row.table_name).sort())
+          .toEqual(['children', 'letter_mastery', 'session_attendees', 'session_attendees', 'sessions']);
+        expect(slots.filter(row => row.table_name === 'children').map(row => row.record_id)).toEqual(['delivery']);
+        expect(slots.filter(row => row.table_name === 'letter_mastery').map(row => JSON.parse(row.payload)))
+          .toEqual([expect.objectContaining({ child_id: 'delivery', letter: 'a', confirmed: true })]);
+        // The attendee outbox remains necessary for both children. No child-state
+        // or mastery outbox may be emitted for the refused current-state writes.
+        expect(slots.filter(row => ['children', 'letter_mastery'].includes(row.table_name))
+          .some(row => row.record_id === 'non-delivery' || JSON.parse(row.payload).child_id === 'non-delivery')).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+          childId: 'non-delivery', code: 'NOT_DELIVERY_CHILD',
+        }));
+      } finally { warn.mockRestore(); await db.closeAsync(); }
+    }
+  );
+});
+
+test('an unrelated reading-level storage error still rolls back the entire literacy session', async () => {
+  const db = await createMigratedDatabase(runMigrations);
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    await seedCoreData(db);
+    await createChildrenRepository({ database: db }).save({
+      id: 'delivery', first_name: 'Delivery', last_name: 'Child', created_by: 'office',
+      class_id: 'class-1', synced: true,
+    }, { actorUserId: 'user-1' });
+    await db.runAsync('delete from sync_outbox');
+    const before = await db.getFirstAsync("select * from children where id = 'delivery'");
+    await db.execAsync(`create trigger reject_reading_level before update on children
+      when new.reading_level is not old.reading_level
+      begin select raise(abort, 'reading level storage failed'); end;`);
+    await expect(persistLiteracySession({ database: db,
+      session: { id: 'failed-session', user_id: 'user-1', programme_id: 'programme-a',
+        session_date: '2026-10-23', children_ids: ['delivery'], synced: false,
+        activities: { child_reading_levels: { delivery: 'Word Reading' } } },
+      letterTrackerChanges: { delivery: { a: {
+        mastered: true, languageCode: 'en', madeAt: MADE_AT,
+      } } },
+    })).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_TRIGGER', message: 'reading level storage failed' });
+    for (const table of ['sessions', 'session_attendees', 'letter_mastery', 'sync_outbox']) {
+      expect(await db.getAllAsync(`select * from ${table}`)).toEqual([]);
+    }
+    expect(await db.getFirstAsync("select * from children where id = 'delivery'")).toEqual(before);
+    expect(warn).not.toHaveBeenCalled();
+  } finally { warn.mockRestore(); await db.closeAsync(); }
+});

@@ -77,6 +77,20 @@ describe('LetterMasteryPanel', () => {
     expect(screen.queryByText('New this session')).toBeNull();
   });
 
+  test('a non-delivery child shows mastery evidence without any confirmation controls', async () => {
+    assessmentsRepository.latestLetterResult.mockResolvedValue({
+      id: 'control-assessment', child_id: child.id, question_code: 'letter_sounds',
+      language: 'en', assessment_date: '2026-07-01',
+      items: [{ prompt: 'A', is_correct: true, metadata: { reached: true } }],
+    });
+    const screen = render(panel({ isDelivery: false }));
+    expect(await screen.findByText('1 / 26 letters mastered')).toBeTruthy();
+    expect(screen.getAllByText(/^[a-z]$/)).toHaveLength(26);
+    expect(screen.queryAllByRole('button', { includeHiddenElements: true })).toHaveLength(0);
+    fireEvent.press(screen.getByText('m'));
+    expect(masteryRepository.setLetterMastery).not.toHaveBeenCalled();
+  });
+
   test('assessment mastery stays locked and cannot be pressed', async () => {
     assessmentsRepository.latestLetterResult.mockResolvedValue({
       id: 'letter-assessment', child_id: child.id, question_code: 'letter_sounds',
@@ -276,7 +290,7 @@ describe('LetterMasteryPanel read/tap ordering with real SQLite', () => {
   };
 
   beforeEach(async () => {
-    f = await createFamilySyncFixture();
+    f = await createFamilySyncFixture({ withDelivery: true });
     mastery = createMasteryRepository({ database: f.db });
     readRecords = mastery.getLetterMastery;
     writeRecord = mastery.setLetterMastery;

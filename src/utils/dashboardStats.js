@@ -322,12 +322,12 @@ export function getDistinctSessionCount(children, sessions) {
 /**
  * Children tab summary stats.
  */
-export function getChildrenTabStats(children, classes, assessments, academicYear) {
-  const coverage = getAssessmentCoverage(children, assessments, academicYear);
+export function getChildrenTabStats(deliveryChildren, assessableChildren, classes, assessments, academicYear) {
+  const coverage = getAssessmentCoverage(assessableChildren, assessments, academicYear);
   return {
-    childrenCount: children.length,
+    childrenCount: deliveryChildren.length,
     classCount: classes.length,
-    unassessedCount: children.length - coverage.assessed,
+    unassessedCount: assessableChildren.length - coverage.assessed,
   };
 }
 

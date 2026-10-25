@@ -1,7 +1,8 @@
+import { persistClassRoster } from '../services/classRosterPull';
 import { isStaleActorError } from '../session/staleActor';
 import { useSignedInEA } from './SignedInEAContext';
 import React, { createContext, useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
-import { pullPreloadedChildData } from '../services/preloadedChildData';
+import { pullPreloadedChildData, shouldDeferMembershipReconcile, reconcilePulledClassMemberships } from '../services/preloadedChildData';
 
 import { useAuth } from './AuthContext';
 import { useOffline } from './OfflineContext';
@@ -14,6 +15,7 @@ const CHILD_RECONCILE_BREAKER_SCOPES = [
   'childEaAssignments',
   'childProgrammeEnrollments',
   'childClassMemberships',
+  'classRosterMemberships',
   'groupEaAssignments',
   'childrenGroups',
 ];
@@ -41,6 +43,12 @@ export const ChildrenProvider = ({ children }) => {
   const [childrenList, setChildrenList] = useState([]);
   const [groups, setGroups] = useState([]);
   const [childrenGroups, setChildrenGroups] = useState([]);
+  const [rosterVersion, setRosterVersion] = useState(0);
+  const [classAssignmentsVersion, setClassAssignmentsVersion] = useState(0);
+  const classRosterCoverageRef = useRef(null);
+  if (classRosterCoverageRef.current?.handle !== handle || classRosterCoverageRef.current?.userId !== user?.id) {
+    classRosterCoverageRef.current = { handle, userId: user?.id, coveredSet: null, pendingClassIds: null };
+  }
   const [loading, setLoading] = useState(true);
   const activeUserIdRef = useRef(null);
   const historyActorRef = useRef(user?.id || null);
@@ -61,6 +69,20 @@ export const ChildrenProvider = ({ children }) => {
   refreshSyncStatusRef.current = refreshSyncStatus;
   hasReconcileBreakerAuthorizationRef.current = hasReconcileBreakerAuthorization;
   consumeReconcileBreakerAuthorizationRef.current = consumeReconcileBreakerAuthorization;
+
+  const notifyClassAssignmentsChanged = useCallback((assignmentClassIds) => {
+    const coverage = classRosterCoverageRef.current;
+    if (coverage.handle !== handle || coverage.userId !== user?.id || !handle.isCurrent()) return;
+    // A publish can precede this flight's roster commit. Compare after the
+    // flight settles, when we know which classes it actually persisted.
+    if (activePullRef.current?.userId === user?.id) {
+      coverage.pendingClassIds = assignmentClassIds;
+      return;
+    }
+    if (coverage.coveredSet !== JSON.stringify(assignmentClassIds)) {
+      setClassAssignmentsVersion(version => version + 1);
+    }
+  }, [handle, user?.id]);
 
   // Active children only — hidden_at IS NULL. This is what every list view,
   // picker, and stats helper should consume. Hidden children stay in
@@ -260,7 +282,7 @@ export const ChildrenProvider = ({ children }) => {
           'childClassMemberships',
           childrenRepository.saveServerChildClassMembershipRows,
           pulledChildClassMemberships,
-          reconcileAuthorityComplete && programmeScopeOk
+          reconcileAuthorityComplete && programmeScopeOk && !shouldDeferMembershipReconcile(pulled)
             ? {
               acknowledgedIds: acknowledgmentData.childClassMembershipIds,
               acknowledgedChildIds: acknowledgmentData.visibleChildIds,
@@ -302,14 +324,32 @@ export const ChildrenProvider = ({ children }) => {
         );
       }
 
+      const rosterPersisted = await persistClassRoster({
+        scope: scopes.classRoster, repositories, deletedChildIds: pendingChildDeleteIds,
+      });
+      if (rosterPersisted && scopes.classRoster.ok && scopes.classRoster.complete
+        && classRosterCoverageRef.current.handle === handle && activeUserIdRef.current === activeUserId) {
+        classRosterCoverageRef.current.coveredSet = JSON.stringify([...new Set(scopes.classRoster.rows.classEaAssignments
+          .filter(row => row.ea_user_id === activeUserId && row.programme_id === activeProgrammeId && !row.unassigned_at)
+          .map(row => row.class_id))].sort());
+      }
+      const membershipResults = await reconcilePulledClassMemberships({
+        pulled, repositories, pulledAt, authorizedBreakerScopes,
+      });
+      reconcileResults.push(...membershipResults);
+      if (membershipResults.some(result => authorizedBreakerScopes.has(result.scope) && result.reconcileCompleted)) {
+        bypassedReconcileCompleted = true;
+      }
       if (activeUserIdRef.current !== activeUserId) return;
+      if (rosterPersisted) setRosterVersion(version => version + 1);
       const transportFailed = Object.values(scopes)
         .some((scope) => scope.failureKind === 'transport')
         || reconcileAcknowledgments?.failureKind === 'transport';
       const reconcilesCompleted = reconcileResults
         .every((result) => result?.reconcileCompleted === true);
       if (
-        !transportFailed
+        (!scopes.classRoster || (scopes.classRoster.ok && scopes.classRoster.complete))
+        && !transportFailed
         && incompletePullScopes.length === 0
         && reconcileAuthorityComplete
         && reconcilesCompleted
@@ -347,16 +387,17 @@ export const ChildrenProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  }, [user?.id, isOnline, refreshFromCache]);
+  }, [user?.id, isOnline, refreshFromCache, handle]);
 
   const pullFromServer = useCallback(() => {
     const userId = user?.id;
-    const inputs = { isOnline, domainPullNonce, run: performPullFromServer };
+    const inputs = { isOnline, domainPullNonce, classAssignmentsVersion, run: performPullFromServer };
     const active = activePullRef.current;
     if (active && active.userId === userId) {
       // A join with newer inputs owes another pass; it cannot inherit the old
       // pass's captured offline state or consume a reconnect request silently.
-      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce) {
+      if (active.inputs.isOnline !== isOnline || active.inputs.domainPullNonce !== domainPullNonce
+        || active.inputs.classAssignmentsVersion !== classAssignmentsVersion) {
         active.pending = inputs;
       } else {
         active.pending = null;
@@ -379,11 +420,19 @@ export const ChildrenProvider = ({ children }) => {
           pass = flight.pending || (authorizedFollowUpNeeded ? flight.inputs : null);
         }
       } finally {
-        if (activePullRef.current === flight) activePullRef.current = null;
+        if (activePullRef.current === flight) {
+          activePullRef.current = null;
+          const coverage = classRosterCoverageRef.current;
+          if (coverage.handle === handle && coverage.userId === userId && coverage.pendingClassIds !== null) {
+            const pendingClassIds = coverage.pendingClassIds;
+            coverage.pendingClassIds = null;
+            notifyClassAssignmentsChanged(pendingClassIds);
+          }
+        }
       }
     })();
     return flight.promise;
-  }, [user?.id, isOnline, domainPullNonce, performPullFromServer, handle]);
+  }, [user?.id, isOnline, domainPullNonce, classAssignmentsVersion, performPullFromServer, handle, notifyClassAssignmentsChanged]);
 
   // Load data on mount when user is authenticated
   useEffect(() => {
@@ -723,6 +772,8 @@ export const ChildrenProvider = ({ children }) => {
   // historical name resolution where dropping a name to "Unknown" would degrade UX.
   const value = useMemo(() => ({
     children: visibleChildren,
+    rosterVersion,
+    notifyClassAssignmentsChanged,
     allChildren: childrenList,
     getChildById,
     groups,
@@ -742,7 +793,7 @@ export const ChildrenProvider = ({ children }) => {
     getChildrenInGroup,
     getGroupsForChild,
   }), [
-    visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
+    rosterVersion, notifyClassAssignmentsChanged, visibleChildren, childrenList, getChildById, groups, childrenGroups, loading,
     refreshFromCache, loadChildren, addChild, updateChild, deleteChild, loadGroups, addGroup,
     updateGroup, deleteGroup, addChildToGroup, removeChildFromGroup,
     getChildrenInGroup, getGroupsForChild,

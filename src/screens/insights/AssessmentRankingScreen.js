@@ -9,7 +9,7 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { useChildren } from '../../context/ChildrenContext';
+import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 import { useClasses } from '../../context/ClassesContext';
 
 import { getLetterScoreRanking, getWordAssessmentRanking } from '../../utils/dashboardStats';
@@ -55,7 +55,7 @@ export default function AssessmentRankingScreen({ navigation }) {
   const { assessments: assessmentsRepository, childClassMemberships: membershipsRepository } = repositories;
 
   const { user } = useAuth();
-  const { children: childrenList } = useChildren();
+  const { all: assessableChildren } = useAssessableChildren();
   const { classes } = useClasses();
   const [assessments, setAssessments] = useState([]);
   const [memberships, setMemberships] = useState([]);
@@ -84,11 +84,11 @@ export default function AssessmentRankingScreen({ navigation }) {
   const modeConfig = MODES[mode];
   // Toggling re-ranks the already-fetched assessments — no refetch needed.
   const assessed = useMemo(
-    () => modeConfig.rank(childrenList, assessments, classes, memberships),
-    [modeConfig, childrenList, assessments, classes, memberships]
+    () => modeConfig.rank(assessableChildren, assessments, classes, memberships),
+    [modeConfig, assessableChildren, assessments, classes, memberships]
   );
   const assessedIds = new Set(assessed.map(row => row.child.id));
-  const notAssessed = childrenList.filter(child => !assessedIds.has(child.id)).map(child => ({ child }));
+  const notAssessed = assessableChildren.filter(child => !assessedIds.has(child.id)).map(child => ({ child }));
   const ranking = [...assessed, ...notAssessed];
 
   if (loading) {

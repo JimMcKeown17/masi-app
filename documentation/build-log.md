@@ -3887,6 +3887,101 @@ Verification (Node 20, local):
 - `npm run test:types`: clean.
 - `npx jest --maxWorkers=3 --testTimeout=30000 --silent`: **405/405 suites, 5,678/5,678 tests**.
 
+### 2026-10-23 — Whole-class assessment access
+
+Tasks 1–8 are committed on `feat/whole-class-assessment`, rebased onto `origin/main` `53f63a7`
+through branch HEAD `6215c04`. Task 9 here is the docs step only. Implementation and local
+verification are complete; staging application and device proof remain open.
+
+Commit inventory: `git log --reverse --format='%h %s' origin/main..HEAD`. The design/plan commits
+are `feb4323`, `c98eb49`, `febcdd5`, `c0f1b49` and `c95849b`. The build order was Task 1,
+Task 5, then Tasks 2–4 and 6–8. Commit IDs below are the rebased IDs:
+
+| Task | Commit | Shipped behavior and source |
+| --- | --- | --- |
+| 1 — server contract | `122f038` | [Migration](../supabase/migrations/20261023120000_whole_class_assessment_access.sql) adds optional `roster_class_ids` / `roster_membership_ids` with schema version still 1, and Johannesburg-day `user_held_grant_on` grace for new families/runs. Current authority, committed-family replay, existing-run lifecycle and class-at-started_at checks remain. [Disposable harness](../scripts/assessment-results-postgres-harness.cjs) and offline probe checks cover it. |
+| 5 — assessable read model | `5e3a861` | [Repository query](../src/db/repositories/childrenRepository.js) unions the exact `getMyChildren` population with full class-only children, without child enrollment. [Hook](../src/hooks/useAssessableChildren.js) returns `yourChildren`, `restOfClass`, `all`, `loading`, with chosen-membership metadata and actor-safe reloads. |
+| 2 — membership convergence | `bb63564` | [persistRosterMemberships](../src/db/repositories/rosterMembershipPersist.js) saves server-closed rows before open rows, never infers an exit, and skips/logs unresolved open conflicts for replay. Lower numeric versions are rejected; the existing equal-version limit is accepted. |
+| 3 — class-roster pull | `ed3acf3` | [Shared pull/persist](../src/services/classRosterPull.js) runs in both child-data paths, starting from own active-Programme class grants. Classes, assignments, children and memberships persist in one transaction. Adds `rosterVersion` / `assignmentsVersion`. Controller review put classes before assignments, removing the need for deferred FK validation. |
+| 4 — class reconcile | `ba9b28b` | [Paired reconcile](../src/services/preloadedChildData.js) uses one snapshot and transaction after roster persistence. The class pass requires final complete scope and both optional keys, excludes delivery-acknowledged children, and uses its own `classRosterMemberships` breaker. Old-server snapshots retain delivery-only behavior. |
+| 6 — delivery-write guards | `3b9720f` | Child edits/deletes/archive and class cascades require delivery-or-creator authority; mastery requires active delivery only. [Panel](../src/components/assessment/LetterMasteryPanel.js) gains `isDelivery`. [Literacy persistence](../src/services/literacySessionPersistence.js) skips refused per-attendee delivery writes while retaining the session and authorized writes. |
+| 7 — assessment surfaces | `a333a62` | Picker shows “Your children” then “Rest of the class”, with search/sorting and membership language. Assess/Home coverage, Children unassessed counts, assessment ranking and History names use the wider roster. [Stats](../src/utils/dashboardStats.js) takes both populations; delivery surfaces remain unchanged. Also fixes Task 3's duplicate pull and reuses full delivery rows downloaded in the same pass. |
+| 8 — upload classification | `6215c04` | [Control-child tests](../__tests__/controlChildSync.test.js) exercise real SQLite/outbox/classification and postgrest-js with a fake transport: pending class-grant retry, recovery, run-before-Question ordering, authenticated terminal denial, and success with no delivery row. No production classifier gap was found. |
+
+#### Review findings and fixes
+
+- **Task 3 double-pull regression, caught during Task 7.** The first assignment publication
+  scheduled a second full children pull on sign-in, credential recovery or reconnect. Task 7
+  compares sorted notified class IDs with the last complete persisted roster's covered set,
+  per handle/user. Notifications during a flight wait for its final coverage. Equal sets cause
+  no second pull; uncovered grants get one follow-up. The four `task5AuthRaces` failures were
+  introduced by Task 3, not pre-existing on `origin/main`. Both completion orders and a grant
+  arriving during an older transaction are covered. Inconsistent grant-response fixtures and
+  actor-mismatched archive fixtures were aligned without weakening assertions (`a333a62`).
+- **Task 6 session-save skip.** A recently ended/non-delivery attendee's reading-level or mastery
+  refusal could roll back the whole session. The persistence boundary catches only
+  `NOT_DELIVERY_CHILD`, warns once per child, and continues. Session/attendee rows and authorized
+  child/outbox writes still commit; other errors still roll back. Mixed-attendee and unrelated
+  failure SQLite tests pin both paths (`3b9720f`).
+- **Task 6 time-of-day test fixture.** Default “now” assignment timestamps could exceed a fixed
+  archive time and violate `unassigned_at >= assigned_at`. Pinned fixture timestamps and
+  `archivedAt = '2099-01-01T00:00:00.000Z'` remove that clock dependency without relaxing any
+  guard or CHECK (`3b9720f`, [guard tests](../__tests__/nonDeliveryGuards.test.js)).
+- **Accepted equal-version guard limit.** The saver rejects lower numeric versions on synced
+  rows, but has no timestamp tie-breaker for equal versions. Missing versions also bypass the
+  comparison; terminal rows keep their existing convergence behavior. An old equal-version open
+  row can temporarily reopen a closed membership. This was characterized and accepted: a
+  complete class/delivery reconcile can close the stale absent row, then replay can land the
+  replacement (`bb63564`). This is eventual convergence, not a guarantee against every stale
+  overwrite. The design and contract map record the qualification.
+
+#### Verification
+
+**Controller verification:** full suite 413/413 suites, 5824/5824 tests on origin/main 53f63a7 base; test:integration 76/941; test:types green.
+
+Those counts were supplied by the controller for the rebased branch. This docs-only session did
+not rerun the full suite, integration suite, typecheck, PostgreSQL harness or any hosted probe.
+
+| Check | Recorded result |
+| --- | --- |
+| `npm run verify:assessment-results:postgres`, disposable local PostgreSQL 17 | Controller **113/113 GREEN** (53 baseline + 60 new) and **RED without the migration**, recorded in `122f038`. Harness includes `whole-class-migration-applied-twice`. This supersedes Task 1's agent-side sandbox connection limitation; it is not hosted proof. |
+| Other server-contract checks | Controller reports assessment-history, upload-contract and history-authorization harnesses GREEN; offline `rlsVisibilityProbe` unit **5/5** (`122f038`). No new hosted probe was run for this branch. |
+| Task 2 targeted | **2 suites / 43 tests**: `rosterMembershipPersist.test.js`, `childrenRepository*.test.js`; includes lower-version rejection, equal-version characterization, conflict/replay and no-outbox assertions. |
+| Task 5 targeted | **3 suites / 42 tests**: `assessableChildren.test.js`, `useAssessableChildren.test.js`, `childrenRepository.test.js`. |
+| Task 3 targeted | **10 suites / 138 tests**: shared pull, preloaded persistence, providers, both completion orders, new-grant uptake, missing-parent safety and chunking. |
+| Task 4 targeted | **12 suites / 200 tests**; new reconcile suite has 22 cases, including real 12-of-40 breaker tests in both orders, absent versus empty keys, and rollback. |
+| Task 6 targeted | Original **37 suites / 884 tests** before the session-save review fix; follow-up persistence **20/20**, including mixed attendees and unrelated-error rollback. Initial UI reruns had load/timing failures and were not marked passing; the controller's full-suite result above is the final branch verification. |
+| Task 7 final targeted | **42 suites / 714 tests**, including all 40 auth-race cases, both covered-set orders, new-grant uptake, 16 assessment-scope cases and language-picker regressions. |
+| Task 8 final targeted | **7 suites / 129 tests**, including all six control-child sync cases. |
+
+Task reports retain incremental RED/GREEN evidence and full targeted manifests. Exact Task 7
+command (the manifest contains its 42 named files):
+
+```sh
+PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH node node_modules/jest/bin/jest.js $(cat /tmp/whole-class-task7-regression-targeted-files.txt) --runInBand --testTimeout=60000
+```
+
+Exact Task 8 command:
+
+```sh
+PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH node node_modules/jest/bin/jest.js __tests__/controlChildSync.test.js __tests__/assessmentFamilySync.test.js __tests__/assessmentFamilyRpcError.test.js __tests__/classifyErrorHardening.test.js __tests__/offlineSyncOutbox.test.js __tests__/offlineSyncAuthGate.test.js __tests__/batteryRunsRepository.test.js --runInBand --testTimeout=60000
+```
+
+The Task 9 docs step reconciles CONTEXT, PRD, ROADMAP, the design status, group workflow, the
+contract map and this log; appends ADR-0005's implementation status without rewriting its
+Decision; and checks stale claims, local Markdown links and `git diff --check`. The controller's
+external `GRANT_SUBJECTS` memory note is outside this step. No application code or env files changed.
+
+#### Remaining gates
+
+- **Staging application needs Jim's go.** Apply
+  `20261023120000_whole_class_assessment_access.sql` only after that go; verify both new
+  acknowledgment keys and a class-only EA's control-child submission. Staging was not contacted.
+- **A03 and iPhone device gate.** See “Rest of the class”, assess/sync a control child with the
+  letter test and WelaPLUS once its host flow is available, verify server rows, then end the
+  membership, pull and see the child leave the picker. Confirm delivery lists/counts remain
+  unchanged. Neither device gate was performed in this docs step.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

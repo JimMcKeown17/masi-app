@@ -1,3 +1,4 @@
+import { getConnectionActor } from '../src/session/signedInHandle';
 import { resetReferenceDataBarrierForTests } from '../test-support/handleServiceTestAccess';
 jest.mock('../test-support/handleServiceMocks', () => ({
 startSessionHistoryPull: jest.fn(),
@@ -338,6 +339,8 @@ afterEach(async () => {
 
 test('a child edit made while the network pull is pending survives in React state and SQLite', async () => {
   await seedContextRows(testDb);
+  await testDb.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('editing-actor-delivery', 'child-1', ?, 'synced')`, getConnectionActor(testDb));
   const deferredPull = createDeferred();
   mockPullPreloadedChildData.mockReturnValue(deferredPull.promise);
   const { result } = renderHook(() => useChildren(), { wrapper });

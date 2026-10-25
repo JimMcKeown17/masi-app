@@ -370,6 +370,8 @@ test('T9: an EA edit to a Head Office child heals an unmarked 42501 by its stamp
   await db.runAsync("insert into programmes (id, code, name) values ('literacy', 'lit', 'Literacy')");
   await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
     values ('office-child', 'Test', 'Child', ?, 'synced')`, B);
+  await db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('office-delivery', 'office-child', ?, 'synced')`, A);
   await handle.repositories.children.updateChild('office-child', { reading_level: 'words' });
   const [edit] = await handle.repositories.syncOutbox.getReadyRecords();
   expect(edit).toMatchObject({ owner_user_id: A, operation: 'update', payload: { created_by: B } });

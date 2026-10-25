@@ -1,3 +1,4 @@
+import { getConnectionActor } from '../../session/signedInHandle';
 import {
   resolveDatabase,
   runBatchWithPerRowFallback,
@@ -216,9 +217,15 @@ export const createClassesRepository = ({ database } = {}) => {
       });
     }
 
+    const actor = getConnectionActor(txn) ?? database?.userId ?? null;
+    const deliveryChildren = `select c.id from children c where c.created_by = ? or exists (
+      select 1 from child_ea_assignments a
+      where a.child_id = c.id and a.user_id = ? and a.unassigned_at is null
+    )`;
     const childClassRows = await txn.getAllAsync(
-      'select id from child_class_memberships where class_id = ? and exited_at is null',
-      classId
+      `select id from child_class_memberships where class_id = ? and exited_at is null
+        and child_id in (${deliveryChildren})`,
+      classId, actor, actor
     );
     await txn.runAsync(`
       update child_class_memberships
@@ -227,7 +234,8 @@ export const createClassesRepository = ({ database } = {}) => {
           updated_at = ?
       where class_id = ?
         and exited_at is null
-    `, archivedAt, archivedAt, classId);
+        and child_id in (${deliveryChildren})
+    `, archivedAt, archivedAt, classId, actor, actor);
     for (const membership of childClassRows) {
       await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'archive', {
         id: membership.id,
@@ -236,8 +244,9 @@ export const createClassesRepository = ({ database } = {}) => {
     }
 
     const childRows = await txn.getAllAsync(
-      'select * from children where class_id = ? and archived_at is null',
-      classId
+      `select * from children where class_id = ? and archived_at is null
+        and id in (${deliveryChildren})`,
+      classId, actor, actor
     );
     await txn.runAsync(`
       update children
@@ -246,7 +255,8 @@ export const createClassesRepository = ({ database } = {}) => {
           updated_at = ?
       where class_id = ?
         and archived_at is null
-    `, archivedAt, classId);
+        and id in (${deliveryChildren})
+    `, archivedAt, classId, actor, actor);
     for (const child of childRows) {
       const payload = normalizeSyncFields({
         ...mapDomainRow(child),

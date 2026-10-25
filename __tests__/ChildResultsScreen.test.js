@@ -1,3 +1,6 @@
+jest.mock('../src/context/ChildrenContext', () => ({ useChildren: jest.fn() }));
+import { useChildren } from '../src/context/ChildrenContext';
+beforeEach(() => useChildren.mockReturnValue({ children: [{ id: 'child-1' }] }));
 import { useAssessmentHistoryStatus } from '../src/services/assessmentHistoryStatus';
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'), useAssessmentHistoryStatus: jest.fn(),
@@ -8,6 +11,7 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import ChildResultsScreen from '../src/screens/assessments/ChildResultsScreen';
+import LetterMasteryPanel from '../src/components/assessment/LetterMasteryPanel';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { useAuth } from '../src/context/AuthContext';
 
@@ -102,4 +106,17 @@ describe('ChildResultsScreen', () => {
     expect(screen.queryByText('View detail')).toBeNull();
   });
 
+});
+
+test.each([true, false])('mastery confirmation follows delivery context (%s) and assessment routes use membership metadata', async isDelivery => {
+  const child = { id: 'scoped-child', first_name: 'Scope', last_name: 'Child',
+    class_id: 'membership-class', grade: '2', home_language: 'Afrikaans', is_delivery: !isDelivery };
+  useChildren.mockReturnValue({ children: isDelivery ? [child] : [] });
+  const navigation = { navigate: jest.fn() };
+  const screen = render(<PaperProvider><ChildResultsScreen navigation={navigation}
+    route={{ params: { child, classItem: { id: 'stale-class', home_language: 'English' } } }} /></PaperProvider>);
+  await screen.findByText('MASTERY_PANEL');
+  expect(screen.UNSAFE_getByType(LetterMasteryPanel).props).toMatchObject({
+    isDelivery, classItem: { id: 'membership-class', grade: '2', home_language: 'Afrikaans' },
+  });
 });

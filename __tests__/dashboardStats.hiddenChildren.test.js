@@ -104,7 +104,7 @@ test('counts only non-skipped letter results inside both inclusive academic year
   expect(getAssessmentsTabStats(children, rows, academicYear)).toEqual({
     percentAssessed: 50, totalAssessments: 2, avgScore: 15,
   });
-  expect(getChildrenTabStats(children, [{ id: 'class' }], rows, academicYear)).toEqual({
+  expect(getChildrenTabStats(children, children, [{ id: 'class' }], rows, academicYear)).toEqual({
     childrenCount: 4, classCount: 1, unassessedCount: 2,
   });
   expect(getAssessmentCoverage(children, rows, academicYear)).toEqual({ assessed: 2, total: 4, percent: 50 });
@@ -114,7 +114,7 @@ test.each([undefined, null, { ...academicYear, is_active: 0 }])('no active acade
   const children = [{ id: 'c1' }];
   const rows = [yearResult()];
   expect(getAssessmentsTabStats(children, rows, year)).toEqual({ percentAssessed: 0, totalAssessments: 0, avgScore: 0 });
-  expect(getChildrenTabStats(children, [], rows, year).unassessedCount).toBe(1);
+  expect(getChildrenTabStats(children, children, [], rows, year).unassessedCount).toBe(1);
   expect(getAssessmentCoverage(children, rows, year)).toEqual({ assessed: 0, total: 1, percent: 0 });
 });
 
@@ -122,7 +122,7 @@ test('typed result readers never interpret a missing Question code as a count su
   const children = [{ id: 'c1' }];
   const rows = [yearResult({ question_code: undefined, count: 2 })];
   expect(getAssessmentCoverage(children, rows, academicYear)).toEqual({ assessed: 0, total: 1, percent: 0 });
-  expect(getChildrenTabStats(children, [], rows, academicYear).unassessedCount).toBe(1);
+  expect(getChildrenTabStats(children, children, [], rows, academicYear).unassessedCount).toBe(1);
   expect(getAssessmentsTabStats(children, rows, academicYear))
     .toEqual({ percentAssessed: 0, totalAssessments: 0, avgScore: 0 });
 });
@@ -144,4 +144,15 @@ test('average uses the latest qualifying letter score per child with created_at 
     yearResult({ score: 50, question_code: 'word_reading', assessment_date: '2026-07-01' }),
     yearResult({ score: 0, stopped_reason: 'skipped_tired', assessment_date: '2026-07-02' }),
   ], academicYear)).toEqual({ percentAssessed: 100, totalAssessments: 4, avgScore: 25 });
+});
+
+test('children tab keeps delivery child count, held class count and assessable unassessed count independent', () => {
+  const delivery = [{ id: 'delivery' }];
+  const assessable = [...delivery, { id: 'control-a' }, { id: 'control-b' }];
+  const classes = [{ id: 'delivery-class' }, { id: 'control-class' }];
+  const results = [{ child_id: 'delivery', question_code: 'letter_sounds',
+    stopped_reason: 'completed', assessment_date: '2026-06-01', score: 20 }];
+  expect(getChildrenTabStats(delivery, assessable, classes, results, academicYear)).toEqual({
+    childrenCount: 1, classCount: 2, unassessedCount: 2,
+  });
 });

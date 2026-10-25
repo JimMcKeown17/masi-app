@@ -1,3 +1,10 @@
+jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
+import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
+beforeEach(() => useAssessableChildren.mockImplementation(() => {
+  const state = require('../src/context/ChildrenContext').useChildren();
+  const all = state.children ?? state.allChildren ?? [];
+  return { all, yourChildren: all, restOfClass: [], loading: false };
+}));
 import { useAssessmentHistoryStatus } from '../src/services/assessmentHistoryStatus';
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'), useAssessmentHistoryStatus: jest.fn(),
@@ -199,4 +206,19 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentDetail', { assessmentId: 'assessment-1', childName: 'Amahle Dlamini' });
     expect(supabase.from).not.toHaveBeenCalled();
   });
+  test('uses assessable names directly and retains the SQLite fallback for history-only children', async () => {
+    const control = { id: 'control', first_name: 'Cora', last_name: 'Control' };
+    useChildren.mockReturnValue({ allChildren: [] });
+    useAssessableChildren.mockReturnValue({ all: [control], yourChildren: [], restOfClass: [control], loading: false });
+    assessmentsRepository.getQuestionResults.mockResolvedValue(['control', 'history-only'].map((child_id, index) => ({
+      id: `result-${index}`, child_id, question_code: 'letter_sounds', assessment_date: '2026-05-20',
+      score: 1, total_items: 1, language: 'en', sync_status: 'synced',
+    })));
+    mockGetChildNamesByIds.mockResolvedValue({ 'history-only': { name: 'Historic Child', hidden: false } });
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    expect(await screen.findByText('Historic Child')).toBeTruthy();
+    expect(screen.getByText('Cora Control')).toBeTruthy();
+    expect(mockGetChildNamesByIds).toHaveBeenCalledWith(['history-only']);
+  });
+
 });

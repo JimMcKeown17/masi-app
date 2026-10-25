@@ -14,7 +14,7 @@ describe('loadMasteryState', () => {
   beforeEach(async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
-    f = await createFamilySyncFixture();
+    f = await createFamilySyncFixture({ withDelivery: true });
     await f.db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
       values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
     repositories = {

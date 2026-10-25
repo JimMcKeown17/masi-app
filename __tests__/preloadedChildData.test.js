@@ -97,7 +97,9 @@ const assignedRows = (count) => Array.from({ length: count }, (_, index) => ({
 const expectDependency = (scope) => {
   expect(scope).toEqual({
     ok: false,
-    rows: [],
+    rows: Array.isArray(scope.rows) ? [] : {
+      classEaAssignments: [], classes: [], children: [], memberships: [],
+    },
     complete: false,
     failureKind: 'dependency',
   });
@@ -392,6 +394,7 @@ describe('preloaded child-data pull', () => {
       'groups',
       'groupEaAssignments',
       'childrenGroups',
+      'classRoster',
     ]);
     Object.entries(result.scopes)
       .filter(([name]) => name !== 'programmeAssignment')

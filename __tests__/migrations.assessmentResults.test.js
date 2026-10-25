@@ -221,6 +221,8 @@ describe('assessment results schema v15', () => {
     });
 
     test('deleteIfNoHistory refuses an unsynced zero-Question run and preserves child, run and outbox', async () => {
+      await db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+        values ('delete-delivery', 'child-1', 'user-1', 'synced')`);
       await insertRun({ started_here: 1 });
       await db.runAsync(`
         insert into sync_outbox (id, table_name, record_id, operation, payload, owner_user_id)

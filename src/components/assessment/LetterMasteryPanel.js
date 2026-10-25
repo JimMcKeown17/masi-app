@@ -15,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 
 
-export default function LetterMasteryPanel({ child, classItem }) {
+export default function LetterMasteryPanel({ child, classItem, isDelivery = true }) {
   const { repositories } = useSignedInEA();
   const { mastery: masteryRepository } = repositories;
 
@@ -69,7 +69,7 @@ export default function LetterMasteryPanel({ child, classItem }) {
 
   const handleCellTap = async (letter) => {
     // Assessment-mastered cells are locked
-    if (!pedagogicalOrder || assessmentMastered.has(letter)) return;
+    if (!isDelivery || !pedagogicalOrder || assessmentMastered.has(letter)) return;
     if (updatingLetter || writeInFlight.current) return;
 
     writeInFlight.current = true;
@@ -160,7 +160,18 @@ export default function LetterMasteryPanel({ child, classItem }) {
         })}
       </View>
 
-      <LetterToggleGrid letters={pedagogicalOrder} onPressLetter={handleCellTap} tileFor={(letter) => {
+      {!isDelivery ? <View style={styles.readOnlyGrid}>
+        {pedagogicalOrder.map(letter => {
+          const state = getCellState(letter);
+          const palette = letterStateColors[state];
+          return <View key={letter} style={[styles.readOnlyTile, {
+            backgroundColor: palette.bg, borderColor: palette.border,
+          }]} accessible accessibilityLabel={`${letter}, ${state === 'assessment'
+            ? 'mastered from assessment' : state === 'taught' ? 'taught by coach' : 'not mastered'}`}>
+            <Text style={[styles.readOnlyLetter, { color: palette.text }]}>{letter.toLowerCase()}</Text>
+          </View>;
+        })}
+      </View> : <LetterToggleGrid letters={pedagogicalOrder} onPressLetter={handleCellTap} tileFor={(letter) => {
         const state = getCellState(letter);
         const locked = state === 'assessment';
         const disabled = locked || Boolean(updatingLetter);
@@ -169,12 +180,18 @@ export default function LetterMasteryPanel({ child, classItem }) {
           accessibilityState: { disabled, selected: state !== 'default' },
           accessibilityLabel: `${letter}, ${locked ? 'mastered from assessment, locked' : state === 'taught' ? 'taught by coach' : 'not mastered'}`,
         };
-      }} />
+      }} />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  readOnlyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  readOnlyTile: {
+    minWidth: 56, minHeight: 56, padding: spacing.sm, borderWidth: 1.5,
+    borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center',
+  },
+  readOnlyLetter: { ...typeRoles.textLetter },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

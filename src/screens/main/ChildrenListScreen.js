@@ -1,3 +1,4 @@
+import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useMemo, useRef } from 'react';
@@ -58,6 +59,7 @@ export default function ChildrenListScreen({ navigation }) {
   const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
 
   const { user } = useAuth();
+  const { all: assessableChildren } = useAssessableChildren();
   const {
     children,
     childrenGroups,
@@ -112,10 +114,10 @@ export default function ChildrenListScreen({ navigation }) {
           academicYearsRepository.getAll(),
         ]);
         const activeAcademicYear = academicYears.find(year => year.is_active === true || year.is_active === 1) ?? null;
-        setTabStats(getChildrenTabStats(children, classes, results, activeAcademicYear));
+        setTabStats(getChildrenTabStats(children, assessableChildren, classes, results, activeAcademicYear));
       };
       loadStats();
-    }, [children, classes, user.id, pageVersion, runVersion])
+    }, [children, assessableChildren, classes, user.id, pageVersion, runVersion])
   );
 
   // Count-aware landing: jump a single-class EA directly into that class. Keys off

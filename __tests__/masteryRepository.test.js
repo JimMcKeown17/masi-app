@@ -24,6 +24,8 @@ beforeEach(async () => {
   db = await createMigratedDatabase(runMigrations);
   await seedCoreData(db);
   await db.runAsync("insert into children (id, first_name, last_name) values ('child-1', 'Test', 'Child')");
+  await db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('delivery-user-1', 'child-1', 'user-1', 'synced')`);
   repository = createMasteryRepository({ database: db });
 });
 afterEach(async () => {
@@ -160,6 +162,8 @@ test('refuses a letter outside the order, an unknown language, a label and a non
 });
 
 test('changed_by is the signed-in EA', async () => {
+  await db.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+    values ('delivery-user-2', 'child-1', 'user-2', 'synced')`);
   bindTestActor(db, 'user-2');
   expect(await change()).toMatchObject({ changed_by: 'user-2', programme_id: null });
   expect((await readOutbox())[0].owner_user_id).toBe('user-2');

@@ -1,3 +1,4 @@
+import { getConnectionActor } from '../src/session/signedInHandle';
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -353,6 +354,9 @@ describe('server pull guard repository reads stay consistent with SQLite', () =>
     const serverRow = serverChild();
 
     await childrenRepository.saveChildRecord(serverRow);
+    const writer = await getTestWriter();
+    await writer.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values ('guard-delivery', 'child-1', ?, 'synced')`, getConnectionActor(writer));
     await childrenRepository.updateChild(
       'child-1',
       { first_name: 'Amahle-Edited', synced: false },
@@ -369,6 +373,9 @@ describe('server pull guard repository reads stay consistent with SQLite', () =>
 
   test('repository reads report the current sync_status', async () => {
     await childrenRepository.saveChildRecord(serverChild());
+    const writer = await getTestWriter();
+    await writer.runAsync(`insert into child_ea_assignments (id, child_id, user_id, sync_status)
+      values ('guard-delivery', 'child-1', ?, 'synced')`, getConnectionActor(writer));
     await childrenRepository.updateChild(
       'child-1',
       { first_name: 'Amahle-Edited', synced: false },

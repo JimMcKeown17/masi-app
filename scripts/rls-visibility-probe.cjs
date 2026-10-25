@@ -76,6 +76,8 @@ const RECONCILE_SNAPSHOT_KEYS = [
   'group_ea_assignment_ids',
   'group_ids',
   'child_group_membership_ids',
+  'roster_class_ids',
+  'roster_membership_ids',
 ];
 
 const sorted = (values) => [...values].sort();
@@ -321,16 +323,26 @@ const seedReconcileRelationships = async ({ admin, context }) => {
   const childId = context.createdIds.children[0];
   const classId = context.createdIds.classes[0];
   const groupId = context.createdIds.groups[0];
+  const classOnlyChildId = randomUUID();
   const ids = {
     child_ea_assignments: [randomUUID()],
     child_programme_enrollments: [randomUUID()],
-    child_class_memberships: [randomUUID()],
+    child_class_memberships: [randomUUID(), randomUUID()],
     class_ea_assignments: [randomUUID()],
     group_ea_assignments: [randomUUID()],
     child_group_memberships: [randomUUID()],
   };
 
   context.createdIds = { ...context.createdIds, ...ids };
+  // This control child has only a class membership: no delivery assignment or
+  // programme enrollment. It belongs in the roster keys, not the delivery keys.
+  context.createdIds.children.push(classOnlyChildId);
+  await expectNoError('class-only control child seed', admin.from('children').insert({
+    id: classOnlyChildId,
+    first_name: 'RLS Control',
+    last_name: 'Class-only',
+    created_by: context.userId,
+  }));
   await expectNoError('academic year seed', admin.from('academic_years').insert({
     id: context.academicYearId,
     label: `RLS Probe ${context.academicYearId}`,
@@ -357,6 +369,15 @@ const seedReconcileRelationships = async ({ admin, context }) => {
     .insert({
       id: ids.child_class_memberships[0],
       child_id: childId,
+      class_id: classId,
+      academic_year_id: context.academicYearId,
+      created_by: context.userId,
+    }));
+  await expectNoError('class-only membership seed', admin
+    .from('child_class_memberships')
+    .insert({
+      id: ids.child_class_memberships[1],
+      child_id: classOnlyChildId,
       class_id: classId,
       academic_year_id: context.academicYearId,
       created_by: context.userId,
@@ -389,12 +410,14 @@ const seedReconcileRelationships = async ({ admin, context }) => {
     assigned_child_ids: [childId],
     visible_child_ids: [childId],
     child_programme_enrollment_ids: ids.child_programme_enrollments,
-    child_class_membership_ids: ids.child_class_memberships,
+    child_class_membership_ids: [ids.child_class_memberships[0]],
     class_ea_assignment_ids: ids.class_ea_assignments,
     class_ids: [classId],
     group_ea_assignment_ids: ids.group_ea_assignments,
     group_ids: [groupId],
     child_group_membership_ids: ids.child_group_memberships,
+    roster_class_ids: [classId],
+    roster_membership_ids: ids.child_class_memberships,
   };
 };
 

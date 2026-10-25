@@ -25,7 +25,7 @@ const reply = result => ({ data: [result], error: null });
 describe('letter mastery correction sync', () => {
   let f, mastery, client;
   beforeEach(async () => {
-    f = await createFamilySyncFixture();
+    f = await createFamilySyncFixture({ withDelivery: true });
     mastery = createMasteryRepository({ database: f.db });
     ({ supabaseClient: client } = createSupabaseMock({ rpcResults: {
       set_letter_mastery: reply(winner()),
@@ -179,8 +179,9 @@ describe('letter mastery correction sync', () => {
 
   test('42501 stays retriable while the child assignment is pending, then terminal with the authenticated marker', async () => {
     await write();
-    const assignmentId = uuid();
-    await f.db.runAsync("insert into child_ea_assignments (id, user_id, child_id, sync_status) values (?, ?, ?, 'pending')", assignmentId, f.userId, f.childId);
+    const { id: assignmentId } = await f.db.getFirstAsync(
+      'select id from child_ea_assignments where child_id = ? and user_id = ? and unassigned_at is null', f.childId, f.userId);
+    await f.db.runAsync("update child_ea_assignments set sync_status = 'pending' where id = ?", assignmentId);
     await f.outbox.enqueue({ tableName: 'child_ea_assignments', recordId: assignmentId, operation: 'insert', payload: { id: assignmentId, user_id: f.userId, child_id: f.childId } });
     client.rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'RLS denied' } });
     const engine = f.engine(client);
