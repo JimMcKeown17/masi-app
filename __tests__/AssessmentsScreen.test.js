@@ -33,7 +33,9 @@ test.each([true, false])('Full EGRA is offered after the default card when prese
   } : {} });
   const screen = renderTab();
   await screen.findByRole('header', { name: 'Full EGRA' });
-  expect(screen.getByText('Letter sounds, familiar words, a story and story questions · 13 forms · about 6 min')).toBeTruthy();
+  // No normalizer: the default one turns non-breaking spaces into ordinary spaces.
+  expect(screen.getByText('Letter sounds, familiar words, a story and story questions · 13 forms · about\u00A06\u00A0min',
+    { normalizer: text => text })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Start a Full EGRA' })).not.toBeDisabled();
   const card = screen.UNSAFE_getAllByType(SurfaceCard).at(-1);
   expect(within(card).queryAllByText(/run/i)).toHaveLength(0);

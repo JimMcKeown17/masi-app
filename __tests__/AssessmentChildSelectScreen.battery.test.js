@@ -33,6 +33,34 @@ test.each(EGRA_BATTERIES)('$title starts in the form language instead of the cla
   });
 });
 
+
+test('an EGRA form names its own language in the header, not the class language', async () => {
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: 'dbe-egra-en-fal-2-v1' }));
+  expect(screen.getByText('English FAL EGRA 2 · in English')).toBeTruthy();
+  expect(screen.queryByText("English FAL EGRA 2 · in the child's class language")).toBeNull();
+});
+
+test('WelaPLUS picker still lets an Afrikaans child resume an unfinished EGRA, but not start WelaPLUS', async () => {
+  const child = { ...CHILD, home_language: 'af' };
+  mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({
+    battery_code: 'egra', battery_version: 'dbe-egra-af-hl-1-v1', language: 'af', question_count: 2,
+  })]);
+  const screen = await ready(renderSelect());
+  expect(screen.getByText('Not available in Afrikaans yet')).toBeTruthy();
+  expect(screen.getByText('Unfinished 2/4')).toBeTruthy();
+  const row = screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' });
+  expect(row).not.toBeDisabled();
+  fireEvent.press(row);
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
+  expect(screen.getByText('Afrikaans EGRA 1 · Started Tue 14:05 · 2 of 4 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(screen.getByText("WelaPLUS isn't available in Afrikaans yet, so this assessment can only be resumed.")).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Abandon it and start new' })).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Resume' }));
+  await waitFor(() => expect(screen.routes()[1]).toMatchObject({ name: 'BatteryOverview', params: { runId: ID } }));
+  expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+});
+
 configure({ asyncUtilTimeout: 5000 });
 const CHILD = { id: 'child-1', first_name: 'Lwazi', last_name: 'Mbeki', class_id: 'membership-class',
   grade: '2', home_language: 'xh', membership_id: 'membership-1', is_delivery: false };
@@ -177,7 +205,7 @@ test.each(['af', null, 'xh'])(
     const child = { ...CHILD, home_language: homeLanguage };
     mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
     const screen = await ready(renderSelect({ batteryCode: fixture.battery_code, batteryVersion: fixture.battery_version }));
-    expect(screen.getByText("Fixture reading · in the child's class language")).toBeTruthy();
+    expect(screen.getByText('Fixture reading · in English')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
     await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
     expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({

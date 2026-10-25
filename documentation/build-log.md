@@ -5549,5 +5549,30 @@ sweep's wording plus the extra card). Fixes made in review, each test-first:
 | `npm run test:types` / `npm run test:content` | exit 0 / `# pass 5`, `# fail 0` |
 | `git diff --check` | PASS |
 
+**Codex adversarial review (gpt-6-astra, branch vs `d553501`): needs-attention, 1 medium finding,
+verified and fixed.** It confirmed 52 EGRA lookups, 208 wrong-language rejections, the four
+`-masi60` cards and 28 unchanged item-set identities, and found no defect in the picker,
+finalize or copy. Finding: in the WelaPLUS child list, an Afrikaans-class child with an unfinished
+EGRA was disabled ("Not available in Afrikaans yet") with no badge, so the EGRA could not be resumed
+from there. Fix: starting and resuming are now separate. The row stays tappable and shows its
+badge when the child has an unfinished assessment; the sheet offers only Resume, with "WelaPLUS
+isn't available in Afrikaans yet, so this assessment can only be resumed."; Abandon-and-start-new
+is hidden and guarded. Test: Afrikaans child, unfinished EGRA, WelaPLUS selected → resumes by run id,
+never starts.
+
+Rebased onto Plan 3 `02537f0` (non-breaking "about N min"; header "<title> · in the child's class
+language"). That header was wrong for any fixed-language battery, so an EGRA form now reads
+"English FAL EGRA 2 · in English" (the Plan 3 fixture test that pinned the old text for a
+fixed-English battery was corrected). The Full EGRA card uses the same non-breaking spaces; its
+test matches text exactly, because RNTL's default normalizer turns U+00A0 into a plain space and
+would pass either way (the WelaPLUS card test has the same blind spot; reported to the Plan 3 session).
+
+| Gate (after the review fix, at `02537f0` + 3 commits) | Result |
+|---|---|
+| `npx jest` | `Test Suites: 421 passed, 421 total`; `Tests: 6292 passed, 6292 total` |
+| `npm run test:integration` | `Test Suites: 77 passed, 77 total`; `Tests: 956 passed, 956 total` |
+| `npm run test:types` / `npm run test:content` | exit 0 / `# pass 5`, `# fail 0` |
+| `git diff --check` | PASS |
+
 - Print the four Masi 60-letter Grade 1 cards and resolve the pack source notes before field use.
   Stronger skip rules, score bands and the other EGRA open decisions are unchanged.

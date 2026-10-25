@@ -161,7 +161,7 @@ export default function AssessmentsScreen({ navigation }) {
       <SurfaceCard style={styles.card}>
         <Text accessibilityRole="header" style={styles.cardTitle}>Full EGRA</Text>
         <Text style={styles.cardDescription}>
-          {`Letter sounds, familiar words, a story and story questions · ${EGRA_BATTERIES.length} forms · about ${EGRA_MINUTES} min`}
+          {`Letter sounds, familiar words, a story and story questions · ${EGRA_BATTERIES.length} forms · about\u00A0${EGRA_MINUTES}\u00A0min`}
         </Text>
         <BrandButton label="Start an assessment" accessibilityLabel="Start a Full EGRA" variant="primary"
           style={styles.startButton} disabled={gateChecking} onPress={() => setEgraPickerVisible(true)} />
