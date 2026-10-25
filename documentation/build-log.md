@@ -5565,9 +5565,16 @@ language"). That header was wrong for any fixed-language battery, so an EGRA for
 "English FAL EGRA 2 · in English" (the Plan 3 fixture test that pinned the old text for a
 fixed-English battery was corrected). The Full EGRA card uses the same non-breaking spaces; its
 test matches text exactly, because RNTL's default normalizer turns U+00A0 into a plain space and
-would pass either way (the WelaPLUS card test has the same blind spot; reported to the Plan 3 session).
+would pass either way (the WelaPLUS card test had the same blind spot; Plan 3 fixed it in `9ae36da`).
 
-| Gate (after the review fix, at `02537f0` + 3 commits) | Result |
+**Codex adversarial review round 2 (gpt-6-astra, branch vs `02537f0`): approve, no findings.**
+It traced `pendingAbandonRunId`, `handleLanguageConfirm`, unfinished-run reloads and
+`UNFINISHED_RUN_EXISTS` recovery and found no path that starts an unsupported battery or abandons by
+mistake; all 13 fixed-language headers resolve (isiZulu included); every existing-run screen resolves
+the battery from the saved run. Its own Jest run was blocked by a sandbox cache write, so the gates
+below are the test evidence. Branch then rebased onto Plan 3 `9ae36da` (test-only).
+
+| Gate (after the review fix; rerun after rebasing onto `9ae36da`) | Result |
 |---|---|
 | `npx jest` | `Test Suites: 421 passed, 421 total`; `Tests: 6292 passed, 6292 total` |
 | `npm run test:integration` | `Test Suites: 77 passed, 77 total`; `Tests: 956 passed, 956 total` |
