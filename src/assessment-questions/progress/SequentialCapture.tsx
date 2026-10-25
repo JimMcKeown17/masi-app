@@ -212,7 +212,7 @@ export function SequentialCapture({
           labelFor={body.kind === 'grid' ? body.labelFor : undefined}
           onPrevious={phase === 'review' ? () => setReviewPage(page => Math.max(0, page - 1)) : undefined}
           onNext={phase === 'review' ? () => setReviewPage(page => Math.min(pages.length - 1, page + 1)) : undefined} />
-        <CaptureBody body={body} pages={pages} pageIndex={pageIndex} onTapPosition={onTapPosition}
+        <CaptureBody body={body} pages={pages} pageIndex={pageIndex} itemCount={cardItems.length} onTapPosition={onTapPosition}
           tileFor={position => {
             const item = cardItems[position];
             const decision = state.decisions[position];

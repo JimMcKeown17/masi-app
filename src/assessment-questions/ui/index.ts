@@ -13,6 +13,7 @@ export { FlipNotice } from './FlipNotice';
 export { MarkTile, type TileState, type TileVariant } from './MarkTile';
 export { PagedGrid, type TileSize } from './PagedGrid';
 export { TileGroups } from './TileGroups';
+export { FollowScrollView, FollowTarget, scrollOffsetFor } from './FollowScrollView';
 export { TimerBar } from './TimerBar';
 export { Canvas } from './Canvas';
 export { AssessmentChoiceCard } from './AssessmentChoiceCard';
