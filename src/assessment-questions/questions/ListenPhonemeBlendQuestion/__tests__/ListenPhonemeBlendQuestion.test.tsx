@@ -103,11 +103,11 @@ describe('ListenPhonemeBlendQuestion — intro and active phases', () => {
     );
     fireEvent.press(getByText('Start'));
 
-    expect(getByLabelText('s-u-n, current')).toBeTruthy();
+    expect(getByLabelText('s-u-n, (sun), current')).toBeTruthy();
     fireEvent.press(getByText('Correct'));
-    expect(getByLabelText('s-u-n, correct. Double-tap to change to incorrect')).toBeTruthy();
-    fireEvent.press(getByLabelText('s-u-n, correct. Double-tap to change to incorrect'));
-    expect(getByLabelText('s-u-n, incorrect. Double-tap to change to correct')).toBeTruthy();
+    expect(getByLabelText('s-u-n, (sun), correct. Double-tap to change to incorrect')).toBeTruthy();
+    fireEvent.press(getByLabelText('s-u-n, (sun), correct. Double-tap to change to incorrect'));
+    expect(getByLabelText('s-u-n, (sun), incorrect. Double-tap to change to correct')).toBeTruthy();
   });
 });
 
@@ -331,14 +331,14 @@ test('prompt cards are rounded, full width, and solid green when marked', () => 
   fireEvent.press(r.getByText('Start'));
   expect(StyleSheet.flatten(r.UNSAFE_getByType(FollowScrollView).props.contentContainerStyle))
     .toMatchObject({ padding: tokens.space.lg, gap: 10 });
-  expect(r.getByLabelText('s-u-n, current')).toHaveStyle({
+  expect(r.getByLabelText('s-u-n, (sun), current')).toHaveStyle({
     borderRadius: tokens.radius.tile,
     alignSelf: 'stretch',
     backgroundColor: tokens.color.surface,
     borderColor: tokens.color.ink,
   });
   fireEvent.press(r.getByText('Correct'));
-  expect(r.getByLabelText('s-u-n, correct. Double-tap to change to incorrect')).toHaveStyle({
+  expect(r.getByLabelText('s-u-n, (sun), correct. Double-tap to change to incorrect')).toHaveStyle({
     borderRadius: tokens.radius.tile,
     alignSelf: 'stretch',
     backgroundColor: tokens.color.marked,
@@ -377,8 +377,8 @@ test('End confirmation preserves the active scroller and hides its controls unti
   });
   expect(sheet.props.accessibilityViewIsModal).toBe(true);
   expect(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).toBe(scroller);
-  expect(within(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).getByTestId('tile-0', { includeHiddenElements: true }).props.accessibilityLabel).toBe('s-u-n, correct');
-  expect(r.queryByLabelText('s-u-n, correct. Double-tap to change to incorrect')).toBeNull();
+  expect(within(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).getByTestId('tile-0', { includeHiddenElements: true }).props.accessibilityLabel).toBe('s-u-n, (sun), correct');
+  expect(r.queryByLabelText('s-u-n, (sun), correct. Double-tap to change to incorrect')).toBeNull();
   expect(r.queryByText('Correct')).toBeNull();
   expect(r.queryByText('Back')).toBeNull();
   let activeView = scroller.parent;
@@ -391,7 +391,7 @@ test('End confirmation preserves the active scroller and hides its controls unti
   fireEvent.press(r.getByText('Keep marking'));
   expect(r.queryByTestId('end-confirmation')).toBeNull();
   expect(r.getByTestId('prompt-scroll')).toBe(scroller);
-  expect(r.getByLabelText('s-u-n, correct. Double-tap to change to incorrect')).toBeTruthy();
+  expect(r.getByLabelText('s-u-n, (sun), correct. Double-tap to change to incorrect')).toBeTruthy();
   expect(activeView?.props.accessibilityElementsHidden).toBe(false);
   expect(activeView?.props.importantForAccessibility).toBe('auto');
   expect(activeView?.props.pointerEvents).toBe('auto');
@@ -409,13 +409,13 @@ test('repeated item keys keep independent positional marks and result identities
   fireEvent.press(r.getByText('Start'));
   const body = within(r.getByTestId('prompt-scroll'));
   fireEvent.press(r.getByText('Correct'));
-  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, current');
+  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, (two), current');
   fireEvent.press(r.getByText('Correct'));
   fireEvent.press(body.getByTestId('tile-0'));
-  expect(body.getByTestId('tile-0').props.accessibilityLabel).toBe('same prompt, incorrect. Double-tap to change to correct');
-  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, correct. Double-tap to change to incorrect');
+  expect(body.getByTestId('tile-0').props.accessibilityLabel).toBe('same prompt, (one), incorrect. Double-tap to change to correct');
+  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, (two), correct. Double-tap to change to incorrect');
   fireEvent.press(r.getByText('Back'));
-  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, current');
+  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, (two), current');
   fireEvent.press(r.getByText('Correct'));
   expect(onItemMarked.mock.calls.map(([item]) => [item.position, item.item_key, item.is_correct]))
     .toEqual([[0, 'same', true], [1, 'same', true], [0, 'same', false], [1, 'same', true]]);

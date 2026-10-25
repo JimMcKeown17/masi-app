@@ -179,3 +179,16 @@ test.each(['letter_sounds', 'word_reading'] as const)('%s reviews all marks befo
   expect(result).toEqual(buildEgraResult(set, { reason: 'completed', attempted: total,
     correct: Array.from({ length: total }, (_, i) => i), durationMs: result.duration_ms, timed: true }));
 });
+
+test('EGRA story questions speak the answer guide on the tile in every state', () => {
+  const { Component } = questionComponentFor('reading_comprehension')!;
+  const screen = render(<Component language="en" itemSet={itemSets.reading_comprehension} onComplete={jest.fn()} />);
+  fireEvent.press(screen.getByText('Ask the questions'));
+  const [first, second] = itemSets.reading_comprehension.questions;
+  const tile = (position: number) => within(screen.getByTestId('prompt-scroll')).getByTestId(`tile-${position}`);
+  expect(tile(0).props.accessibilityLabel).toBe(`${first.prompt}, Answer guide: ${first.answer_guide}, current`);
+  expect(tile(1).props.accessibilityLabel).toBe(`${second.prompt}, Answer guide: ${second.answer_guide}, not reached`);
+  fireEvent.press(screen.getByText('Correct'));
+  expect(tile(0).props.accessibilityLabel)
+    .toBe(`${first.prompt}, Answer guide: ${first.answer_guide}, correct. Double-tap to change to incorrect`);
+});

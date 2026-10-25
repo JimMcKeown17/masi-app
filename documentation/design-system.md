@@ -901,6 +901,8 @@ with `noun` set to letter, word or question by
   text. Filled prompt cards carry a ✓ or ✕ corner mark. Current and not-reached items are not
   buttons; marked items are buttons with labels such as
   `${label}, correct. Double-tap to change to incorrect` (or the reverse).
+  A tile is one accessible element, so its gloss is spoken after the prompt: the answer guide
+  on story questions, the target word on Q4 (`s-u-n, (sun), current`).
 - **Actions.** Correct / Incorrect mark the current item and advance the ring in reading order.
   Back clears the previous decision and puts the ring on it. The grid turns pages with the
   ring; cards and groups use `FollowScrollView` to keep it visible. All prompt cards remain in

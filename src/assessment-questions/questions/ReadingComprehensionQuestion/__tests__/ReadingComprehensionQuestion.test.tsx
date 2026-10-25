@@ -36,8 +36,8 @@ test('EGRA: Show story opens the passage and Close returns to the same question'
   fireEvent.press(screen.getByText('Show story'));
   expect(screen.getByText(SET.passage)).toBeTruthy();
   fireEvent.press(screen.getByLabelText('Close'));
-  expect(screen.getByLabelText(`${SET.questions[1].prompt}, current`)).toBeTruthy();
-  expect(screen.getByLabelText(`${SET.questions[0].prompt}, correct. Double-tap to change to incorrect`)).toBeTruthy();
+  expect(screen.getByLabelText(`${SET.questions[1].prompt}, Answer guide: ${SET.questions[1].answer_guide}, current`)).toBeTruthy();
+  expect(screen.getByLabelText(`${SET.questions[0].prompt}, Answer guide: ${SET.questions[0].answer_guide}, correct. Double-tap to change to incorrect`)).toBeTruthy();
   expect(onComplete).not.toHaveBeenCalled();
 });
 test('End with nothing asked confirms, can be cancelled, and saves an unreached tail', () => {
@@ -46,7 +46,7 @@ test('End with nothing asked confirms, can be cancelled, and saves an unreached 
   expect(screen.getByText("0 marked. The 3 not marked won't count towards the score.")).toBeTruthy();
   expect(onComplete).not.toHaveBeenCalled();
   fireEvent.press(screen.getByText('Keep marking'));
-  expect(screen.getByLabelText(`${SET.questions[0].prompt}, current`)).toBeTruthy();
+  expect(screen.getByLabelText(`${SET.questions[0].prompt}, Answer guide: ${SET.questions[0].answer_guide}, current`)).toBeTruthy();
   fireEvent.press(screen.getByTestId('story-end'));
   fireEvent.press(screen.getByText('End question'));
   const result = onComplete.mock.calls[0][0];

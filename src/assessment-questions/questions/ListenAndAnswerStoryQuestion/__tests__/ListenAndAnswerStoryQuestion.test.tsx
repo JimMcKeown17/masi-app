@@ -108,9 +108,9 @@ describe('ListenAndAnswerStoryQuestion — marking', () => {
     );
     fireEvent.press(getByText("I've finished reading"));
 
-    expect(getByLabelText('What was the name of the bird?, current')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
     fireEvent.press(getByText('Correct'));
-    expect(getByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeTruthy();
   });
 
   test('tap a marked prompt flips it to incorrect', () => {
@@ -125,9 +125,9 @@ describe('ListenAndAnswerStoryQuestion — marking', () => {
     fireEvent.press(getByText("I've finished reading"));
 
     fireEvent.press(getByText('Correct'));
-    fireEvent.press(getByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect'));
-    expect(getByLabelText('What was the name of the bird?, incorrect. Double-tap to change to correct')).toBeTruthy();
-    expect(getByLabelText('Where did Pip live?, current')).toBeTruthy();
+    fireEvent.press(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect'));
+    expect(getByLabelText('What was the name of the bird?, Pip, incorrect. Double-tap to change to correct')).toBeTruthy();
+    expect(getByLabelText('Where did Pip live?, a tree, in a tree, tree, current')).toBeTruthy();
   });
 });
 
@@ -181,7 +181,7 @@ describe('ListenAndAnswerStoryQuestion — Re-read story modal', () => {
     fireEvent.press(getByText('Re-read story'));
     fireEvent.press(getByText('Close'));
 
-    expect(getByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeTruthy();
   });
 });
 
@@ -218,7 +218,7 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
     fireEvent.press(getByText('Keep marking'));
 
     expect(queryByText('End this question?')).toBeNull();
-    expect(getByLabelText('What was the name of the bird?, current')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
     expect(onComplete).not.toHaveBeenCalled();
   });
 
@@ -325,7 +325,7 @@ describe('ListenAndAnswerStoryQuestion — Skip flow', () => {
     fireEvent.press(getByText('Cancel'));
 
     expect(onComplete).not.toHaveBeenCalled();
-    expect(getByLabelText('What was the name of the bird?, current')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
   });
 });
 
@@ -515,7 +515,7 @@ describe('ListenAndAnswerStoryQuestion — onItemMarked', () => {
     );
     fireEvent.press(getByText("I've finished reading"));
     fireEvent.press(getByText('Correct'));
-    fireEvent.press(getByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect'));
+    fireEvent.press(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect'));
 
     expect(onItemMarked).toHaveBeenCalledTimes(2);
     expect(onItemMarked.mock.calls[1][0].is_correct).toBe(false);
@@ -568,14 +568,14 @@ test('prompt cards are rounded, full width, and solid green when marked', () => 
   fireEvent.press(r.getByText("I've finished reading"));
   expect(StyleSheet.flatten(r.UNSAFE_getByType(FollowScrollView).props.contentContainerStyle))
     .toMatchObject({ padding: tokens.space.lg, gap: 10 });
-  expect(r.getByLabelText('What was the name of the bird?, current')).toHaveStyle({
+  expect(r.getByLabelText('What was the name of the bird?, Pip, current')).toHaveStyle({
     borderRadius: tokens.radius.tile,
     alignSelf: 'stretch',
     backgroundColor: tokens.color.surface,
     borderColor: tokens.color.ink,
   });
   fireEvent.press(r.getByText('Correct'));
-  expect(r.getByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect')).toHaveStyle({
+  expect(r.getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toHaveStyle({
     borderRadius: tokens.radius.tile,
     alignSelf: 'stretch',
     backgroundColor: tokens.color.marked,
@@ -595,7 +595,7 @@ test('End confirmation preserves the active scroller and hides its controls unti
   fireEvent.press(r.getByText("I've finished reading"));
   fireEvent.press(r.getByText('Correct'));
   const scroller = r.getByTestId('prompt-scroll');
-  const markedLabel = 'What was the name of the bird?, correct. Double-tap to change to incorrect';
+  const markedLabel = 'What was the name of the bird?, Pip, correct. Double-tap to change to incorrect';
   fireEvent.press(r.getByTestId('story-end'));
   const sheet = r.getByTestId('end-confirmation');
   expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({
@@ -604,8 +604,8 @@ test('End confirmation preserves the active scroller and hides its controls unti
   expect(sheet.props.accessibilityViewIsModal).toBe(true);
   expect(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).toBe(scroller);
   expect(within(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).getByTestId('tile-0', { includeHiddenElements: true }).props.accessibilityLabel)
-    .toBe('What was the name of the bird?, correct');
-  expect(r.queryByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect')).toBeNull();
+    .toBe('What was the name of the bird?, Pip, correct');
+  expect(r.queryByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeNull();
   expect(r.queryByText('Finish')).toBeNull();
   let activeView = scroller.parent;
   while (activeView && activeView.props.accessibilityElementsHidden === undefined) {
@@ -638,7 +638,7 @@ test('repeated item keys keep independent positional marks', () => {
   fireEvent.press(r.getByText('Incorrect'));
   fireEvent.press(body.getByTestId('tile-0'));
   fireEvent.press(r.getByText('Back'));
-  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, current');
+  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, two, current');
   fireEvent.press(r.getByText('Correct'));
   expect(onItemMarked.mock.calls.map(([item]) => [item.position, item.item_key, item.is_correct]))
     .toEqual([[0, 'same', true], [1, 'same', false], [0, 'same', false], [1, 'same', true]]);
@@ -661,9 +661,9 @@ test('the answer screen starts the Re-read story control 16dp below the header',
 test('Q2: the ring starts on question 1, and later questions are faded', () => {
   const r = render(<ListenAndAnswerStoryQuestion language="en" itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN} onComplete={jest.fn()} />);
   fireEvent.press(r.getByText("I've finished reading"));
-  expect(r.getByLabelText('What was the name of the bird?, current')).toBeTruthy();
+  expect(r.getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
   const second = within(r.getByTestId('prompt-scroll')).getByTestId('tile-1');
-  expect(second.props.accessibilityLabel).toBe('Where did Pip live?, not reached');
+  expect(second.props.accessibilityLabel).toBe('Where did Pip live?, a tree, in a tree, tree, not reached');
   expect(second).toHaveStyle({ opacity: 0.55 });
 });
 
@@ -691,8 +691,8 @@ test('Q2: Re-read story keeps marks and the ring', () => {
   fireEvent.press(r.getByText('Correct'));
   fireEvent.press(r.getByText('Re-read story'));
   fireEvent.press(r.getByText('Close'));
-  expect(r.getByLabelText('What was the name of the bird?, correct. Double-tap to change to incorrect')).toBeTruthy();
-  expect(r.getByLabelText('Where did Pip live?, current')).toBeTruthy();
+  expect(r.getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeTruthy();
+  expect(r.getByLabelText('Where did Pip live?, a tree, in a tree, tree, current')).toBeTruthy();
 });
 
 test('Q2: was_timed is false even when the host passes durationSec', () => {

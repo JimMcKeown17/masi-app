@@ -221,8 +221,10 @@ export function SequentialCapture({
             const tappable = position < state.cursor && (phase === 'active' || phase === 'review') && !state.stopped;
             const label = tileState === 'idle' || tileState === 'notReached' ? 'not reached' : tileState;
             const hint = tappable ? `. Double-tap to change to ${decision ? 'incorrect' : 'correct'}` : '';
+            // The tile is one accessible element, so the gloss (answer guide, target word) must be spoken too.
+            const gloss = item.gloss ? `, ${item.gloss}` : '';
             return { state: tileState, text: item.text ?? item.prompt, gloss: item.gloss, caption: item.caption,
-              tappable, accessibilityLabel: `${item.label ?? item.prompt}, ${label}${hint}` };
+              tappable, accessibilityLabel: `${item.label ?? item.prompt}${gloss}, ${label}${hint}` };
           }} />
         <View><FlipNotice notice={notice} /></View>
         {!state.stopped && <PositionLine parts={phase === 'review'
