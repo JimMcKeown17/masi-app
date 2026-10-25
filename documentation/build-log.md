@@ -4196,6 +4196,29 @@ Syntax-tree comparison confirms only literal/JSX copy changed in all nine produc
 `git diff --check` passed. No new documentation file or guard-test file; no device check in this copy task.
 A03 build 42 (d553501) showed the new copy; two lines left one orphan word at 360dp, so "about 30 min" now uses non-breaking spaces and the picker header reads "WelaPLUS · in the child's class language" (2 suites / 61 tests pass).
 
+### 2026-10-25 — Device pass 2 (Galaxy A03 builds 42–43, iPhone builds 21–22)
+
+- **Whole-class control child, passed.** A03 build 43, signed in as TestB Second (Jim authorised the
+  sign-in): the picker lists 9 "Your children" and 8 "Rest of the class". Assessed Gua McKeown (a
+  control child) from Rest of the class: Letter sounds 8 / 60. Staging: `battery_runs` row by
+  TestB, `in_progress`, `xh`, 1 result, score 8, and no active `child_ea_assignments` row for
+  TestB and Gua.
+- **New copy on device, passed.** Start an assessment, Unfinished assessments, Resume, Abandon
+  assessment / Keep going, last assessed 25 Oct, Assessment summary. Build 43 fixes the two
+  360dp orphan words (`02537f0`); `9ae36da` makes the AssessmentsScreen test compare the raw
+  non-breaking spaces (the default RNTL normalizer collapses U+00A0, so the old assertion passed
+  either way).
+- **Cross-device, passed.** A run finalized on another device today (Alunamida, AN3-3WJ; likely Jim's iPhone) pulled to the
+  A03 and opened read-only as "Assessment summary"; the picker showed "last assessed 25 Oct".
+- **Found: History blanks on every reload (pre-existing on main).** Returning from a summary showed
+  a full-screen "Loading…" for about 5 s and lost the scroll position; taps during that window did
+  nothing, which first looked like dead rows. The same shape exists in Session History and three
+  Insights rankings. Fixed on its own branch off main (`fix/lists-keep-rows-on-refresh`), not in
+  this PR.
+- **Found: "No active programme" during the first sync (pre-existing).** Right after signing in,
+  Home said "No active programme — contact your supervisor" for about 40 s until the first pull
+  landed. A new EA would read that as a setup error. Not fixed here.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
