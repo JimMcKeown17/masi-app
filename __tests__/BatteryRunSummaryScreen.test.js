@@ -16,16 +16,17 @@ jest.mock('../src/assessment-questions', () => ({
 import React from 'react';
 import { egraBatteryFor } from '../src/assessment-questions/egra';
 
-test('EGRA summary names the form, scores comprehension out of asked questions and finalizes its four codes', async () => {
+test.each([[3, 2, 'completed', '2 / 3'], [0, 0, 'ea_ended', '—']])(
+  'EGRA summary names the form, scores comprehension with %i asked and finalizes its four codes', async (asked, score, stoppedReason, scoreText) => {
   const battery = egraBatteryFor('egra', 'dbe-egra-en-fal-2-v1');
   run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en',
     results: battery.questions.map((question, index) => ({ id: `egra-${index}`, question_code: question.question_code,
-      stopped_reason: 'completed', score: index === 3 ? 2 : 34, total_items: index === 3 ? 5 : 60,
-      derived: index === 3 ? { questions_asked: 3 } : {} })) };
+      stopped_reason: index === 3 ? stoppedReason : 'completed', score: index === 3 ? score : 34, total_items: index === 3 ? 5 : 60,
+      derived: index === 3 ? { questions_asked: asked } : {} })) };
   const screen = renderSummary();
   await screen.findByText(`${battery.title} · English · 4 of 4 decided`);
   expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(4);
-  expect(screen.getByRole('text', { name: '4. Story questions, Done, 2 / 3' })).toBeTruthy();
+  expect(screen.getByRole('text', { name: `4. Story questions, Done, ${scoreText}` })).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));

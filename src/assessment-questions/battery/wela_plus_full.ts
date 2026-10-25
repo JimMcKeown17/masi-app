@@ -1,5 +1,7 @@
 import type { BatteryConfig, BatteryQuestion } from '../types/BatteryConfig';
 
+import { markingSentence } from './markingSentence';
+
 const V = '2024.1';
 const MARK = 'If the child gets an item correct, tap it (it turns green). If they get it wrong, leave it blank.';
 const both = (text: string) => ({ en: text, xh: text });
@@ -9,7 +11,7 @@ const Q: BatteryQuestion[] = [
     materials: { item: 'reading_card', side: 'A' },
     instructions: both('Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The test stops by itself after 10 wrong in a row. Otherwise STOP at 1 minute.') },
   { title: 'Listen to a story', question_code: 'wela_plus_listen_and_answer_story', question_version: V, materials: null,
-    instructions: both('Say: "I am going to read you a short story aloud ONCE and then ask you some questions. Please listen carefully and answer the questions as best you can. Do you understand what you must do? Ready, let\'s begin." Read the story slowly, about one word per second. You may only read it once.') },
+    instructions: both('Say: "I am going to read you a short story aloud ONCE and then ask you some questions. Please listen carefully and answer the questions as best you can. Do you understand what you must do? Ready, let\'s begin." Read the story slowly, about one word per second. You may only read it once.' + ` Then ask each question. ${markingSentence('question')}`) },
   { title: 'First sounds', question_code: 'wela_plus_first_sound', question_version: V, materials: null,
     instructions: {
       en: `Practise first! Say: "Look, I am sitting. Listen carefully. Can you hear that 'sit' starts with the sound sss?" Then say each word and ask: "What sound does this word start with?" ${MARK}`,

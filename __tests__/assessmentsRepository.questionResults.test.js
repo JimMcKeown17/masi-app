@@ -71,7 +71,7 @@ const componentCases = [
   ['ListenPhonemeBlendQuestion', ListenPhonemeBlendQuestion, fixtures.FIXTURE_PHONEME_BLEND_EN,
     r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('s-u-n, idle')); press(r, 'Finish', 'Yes, finish'); }],
   ['ListenAndAnswerStoryQuestion', ListenAndAnswerStoryQuestion, fixtures.FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
-    r => { press(r, "I've finished reading"); fireEvent.press(r.getByLabelText('What was the name of the bird?, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, "I've finished reading", 'Correct'); endSequential(r, 'story'); }],
   ['LetterWritingFromPicturesQuestion', LetterWritingFromPicturesQuestion, fixtures.FIXTURE_LETTER_WRITING_EN,
     r => { press(r, 'Start'); fireEvent.press(r.getByTestId('cell-q5.item_1')); press(r, 'Finish', 'Yes, finish'); }],
   ['WriteCvcsQuestion', WriteCvcsQuestion, fixtures.FIXTURE_WRITE_CVCS_EN,
@@ -257,8 +257,9 @@ describe('question result persistence through real SQLite', () => {
       expect(row.payload.score).toBe(12);
     }
     if (name === 'ListenAndAnswerStoryQuestion') {
-      expect(result.items.every(i => i.metadata === undefined)).toBe(true);
-      expect(read.items.every(i => JSON.stringify(i.metadata) === '{}')).toBe(true);
+      const expected = result.items.map((_, position) => ({ reached: position === 0, asked: position === 0 }));
+      expect(result.items.map(i => i.metadata)).toEqual(expected);
+      expect(read.items.map(i => i.metadata)).toEqual(expected);
     }
   });
 

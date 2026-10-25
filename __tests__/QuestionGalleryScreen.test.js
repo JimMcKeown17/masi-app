@@ -48,7 +48,7 @@ test('running a gallery entry mounts its Question and shows its result', async (
   { motion: noMotion });
   expect(await screen.findByRole('header', { name: 'Result' })).toBeTruthy();
   expect(screen.getByText('stopped_reason: completed')).toBeTruthy();
-  expect(screen.getByText('0 / 0')).toBeTruthy();
+  expect(screen.getByText('—')).toBeTruthy();
   expect(screen.getByText('duration_ms: 0')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Run again' }));
   expect(await screen.findByRole('header', { name: 'Result' })).toBeTruthy();
@@ -189,8 +189,8 @@ test('EGRA run uses its exact item set and fixed language even with conflicting 
   expect(props.language).toBe('af');
   expect(props.instructions).toBe(entry.instructions.af);
   fireEvent.press(screen.getByText('Ask the questions'));
-  fireEvent.press(screen.getByText('Finish'));
-  fireEvent.press(screen.getByText('Save as Not asked'));
-  expect(screen.getByText('stopped_reason: completed')).toBeTruthy();
-  expect(screen.getByText('0 / 0')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('story-end'));
+  fireEvent.press(screen.getByText('End question'));
+  expect(screen.getByText('stopped_reason: ea_ended')).toBeTruthy();
+  expect(screen.getByText('—')).toBeTruthy();
 });

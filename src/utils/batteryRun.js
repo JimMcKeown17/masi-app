@@ -45,7 +45,8 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
         rowState = 'done';
         detail = 'Done';
         const max = result.derived?.max ?? result.derived?.questions_asked ?? result.total_items;
-        if (result.score != null && max != null) scoreText = `${result.score} / ${max}`;
+        if (max === 0) scoreText = '—';
+        else if (result.score != null && max != null) scoreText = `${result.score} / ${max}`;
       }
     } else {
       const isNext = readOnlyReason === null && question === state.nextQuestion;

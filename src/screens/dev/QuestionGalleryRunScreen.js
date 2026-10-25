@@ -39,7 +39,7 @@ export default function QuestionGalleryRunScreen({ navigation, route }) {
         </View>}>
         {result && <View style={styles.actions}>
           <Text style={styles.message}>stopped_reason: {result.stopped_reason}</Text>
-          <Text style={styles.score}>{result.derived.total_correct} / {result.derived.total_attempted}</Text>
+          <Text style={styles.score}>{result.derived.total_attempted === 0 ? '—' : `${result.derived.total_correct} / ${result.derived.total_attempted}`}</Text>
           <Text style={styles.message}>duration_ms: {result.duration_ms}</Text>
         </View>}
       </BottomSheet>

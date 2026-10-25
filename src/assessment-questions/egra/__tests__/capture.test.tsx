@@ -68,15 +68,14 @@ test('real comprehension output agrees with the synthetic builder for the same f
   const onComplete = jest.fn();
   const screen = render(<Component language="en" itemSet={itemSets.reading_comprehension} onComplete={onComplete} />);
   fireEvent.press(screen.getByText('Ask the questions'));
-  const { within } = require('@testing-library/react-native');
-  fireEvent.press(within(screen.getByTestId('comprehension-0')).getByText('Correct'));
-  fireEvent.press(within(screen.getByTestId('comprehension-1')).getByText('Wrong'));
-  fireEvent.press(within(screen.getByTestId('comprehension-2')).getByText('Not asked'));
-  fireEvent.press(screen.getByText('Finish'));
-  fireEvent.press(screen.getByText('Save as Not asked'));
+  fireEvent.press(screen.getByText('Correct'));
+  fireEvent.press(screen.getByText('Incorrect'));
+  fireEvent.press(screen.getByText('Correct'));
+  fireEvent.press(screen.getByTestId('story-end'));
+  fireEvent.press(screen.getByText('End question'));
   const result = onComplete.mock.calls[0][0];
   expect(result).toEqual(buildEgraResult(itemSets.reading_comprehension, {
-    durationMs: result.duration_ms, responses: ['correct', 'incorrect', 'not_asked'],
+    reason: 'ea_ended', durationMs: result.duration_ms, responses: ['correct', 'incorrect', 'correct'], notReached: 2,
   }));
 });
 

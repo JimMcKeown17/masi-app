@@ -20,7 +20,7 @@ test.each(EGRA_FORMS)('$title starts, saves four host-resolved results and final
   for (const question of battery.questions) {
     const set = bundledItemSetFor(question.question_code, question.question_version, battery.fixedLanguage);
     const result = buildEgraResult(set, { correct: [0],
-      responses: ['correct', 'incorrect', 'not_asked', 'correct', 'not_asked'] });
+      responses: ['correct', 'incorrect', 'correct'], notReached: 2 });
     expect(validateResult(result, { stopRule: set.stop_rule }).valid).toBe(true);
     await assessments.saveQuestionResult({ assessmentId: uuid(), userId, childId, batteryRunId: runId, result });
   }
@@ -83,7 +83,7 @@ test('English FAL 2 resumes four decided Questions, finalizes offline and suppli
     buildEgraResult(itemSets.letter_sounds, { reason: 'stop_rule', attempted: form.letters.columns }),
     buildEgraResult(itemSets.word_reading, { reason: 'timer', attempted: 9, correct: [0, 1, 4] }),
     buildEgraResult(itemSets.oral_reading, { reason: 'ea_ended', attempted: 12, correct: [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11], durationMs: 30000 }),
-    buildEgraResult(itemSets.reading_comprehension, { responses: ['correct', 'incorrect', 'not_asked', 'correct', 'not_asked'] }),
+    buildEgraResult(itemSets.reading_comprehension, { responses: ['correct', 'incorrect', 'correct'], notReached: 2 }),
   ];
   const ids = [];
   for (const result of results) {

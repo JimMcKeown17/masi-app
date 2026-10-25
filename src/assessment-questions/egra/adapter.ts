@@ -5,6 +5,7 @@ import type { LetterSoundsItemSet } from '../questions/LetterSoundsQuestion/type
 import type { ReadWordsItemSet } from '../questions/ReadWordsQuestion/types';
 import type { ReadPassageItemSet } from '../questions/ReadPassageQuestion/types';
 import type { ReadingComprehensionItemSet } from '../questions/ReadingComprehensionQuestion/types';
+import { markingSentence } from '../battery/markingSentence';
 import { EGRA_LETTER_EXTENSIONS, EGRA_MIN_LETTERS } from './letterExtensions';
 
 export type EgraBattery = BatteryConfig & {
@@ -98,7 +99,7 @@ export function adaptEgraForm(form: EgraAssessment) {
       question('letter_sounds', 'Letter sounds', timedInstructions('letter sounds', form.letters), form.letters.timeLimitSeconds, letterVersion),
       question('word_reading', 'Familiar words', timedInstructions('words', form.words), form.words.timeLimitSeconds),
       question('oral_reading', 'Reading a story', 'Ask the child to read the story aloud. Tap words read incorrectly. At the timer or End, mark the last word read.', form.passage.timeLimitSeconds),
-      question('reading_comprehension', 'Story questions', 'Ask the story questions. Use the answer guide to mark each answer Correct, Wrong or Not asked.'),
+      question('reading_comprehension', 'Story questions', `Ask the story questions. Use the answer guide to decide. ${markingSentence('question')}`),
     ],
   } satisfies EgraBattery;
   return { form, battery, itemSets: { letter_sounds, word_reading, oral_reading, reading_comprehension } };

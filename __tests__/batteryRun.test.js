@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { egraBatteryFor } from '../src/assessment-questions/egra';
 import { buildRunView, formatRunStart, materialsLine, runCode } from '../src/utils/batteryRun';
 import { MANUAL_SKIP_REASONS, WELA_PLUS_FULL_2024_1 } from '../src/assessment-questions';
 
@@ -216,7 +217,8 @@ test('result mapping agrees with evaluator for duplicate and unrelated result co
 test('score formatting preserves zero and handles missing parsed derived data', () => {
   const result = { question_code: battery.questions[0].question_code, stopped_reason: 'completed', score: 0, total_items: 60, derived: null };
   expect(view({ results: [result] }).rows[0].scoreText).toBe('0 / 60');
-  expect(view({ results: [{ ...result, derived: { max: 0 } }] }).rows[0].scoreText).toBe('0 / 0');
+  expect(view({ results: [{ ...result, derived: { max: 0 } }] }).rows[0].scoreText).toBe('—');
+  expect(view({ results: [{ ...result, score: null, derived: { max: 0 } }] }).rows[0].scoreText).toBe('—');
 });
 
 test('building a view and materials lines does not mutate inputs', () => {
@@ -252,4 +254,12 @@ test.each([
   expect(state.rows[4].detail).toBe('Not started');
   expect(state.rows[5].detail).toBe('Not started · 1 min');
   expect(state.rows.some(row => row.detail.startsWith('Next'))).toBe(false);
+});
+
+
+test('EGRA: nothing asked then End shows "—" in the Battery summary', () => {
+  const egra = egraBatteryFor('egra', 'dbe-egra-en-fal-2-v1');
+  const state = buildRunView(egra, { ...run, results: [{ question_code: 'reading_comprehension',
+    stopped_reason: 'ea_ended', score: 0, total_items: 5, derived: { questions_asked: 0 } }] }, access);
+  expect(state.rows[3]).toMatchObject({ state: 'done', scoreText: '—' });
 });
