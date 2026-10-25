@@ -142,6 +142,31 @@ export function validateResult(result: unknown, opts?: { stopAt?: number; stopRu
     }
   }
 
+  if (derivedObj?.capture_mode === 'sequential' && !isSkip) {
+    if (derivedObj.tracks_progress !== true) {
+      errors.push('capture_mode sequential: tracks_progress must be true');
+    }
+    const items = (Array.isArray(r.items) ? r.items : [])
+      .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object');
+    const isReached = (item: Record<string, unknown>) => (
+      item.metadata !== null && typeof item.metadata === 'object' &&
+      (item.metadata as Record<string, unknown>).reached === true
+    );
+    const reached = items.filter(isReached)
+      .sort((a, b) => typeof a.position === 'number' && typeof b.position === 'number'
+        ? a.position - b.position : 0);
+    if (reached.some((item, position) => item.position !== position) ||
+        items.some(item => !isReached(item) && typeof item.position === 'number' && item.position < reached.length)) {
+      errors.push('capture_mode sequential: reached items must be a prefix');
+    }
+    if (derivedObj.last_attempted_position !== reached.length - 1) {
+      errors.push('capture_mode sequential: last_attempted_position must be the last reached position');
+    }
+    if (items.some(item => !isReached(item) && item.is_correct !== false)) {
+      errors.push('capture_mode sequential: an unreached item cannot be correct');
+    }
+  }
+
   const stopAt = opts?.stopRule?.kind === 'consecutive_wrong' ? opts.stopRule.stop_at : opts?.stopAt;
   if (r.stopped_reason === 'stop_rule' && stopAt !== undefined) {
     const lastPosition = derivedObj?.last_attempted_position;
