@@ -4,7 +4,7 @@ import ListGroup from '../../components/common/ListGroup';
 import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
 import { useSignedInEA } from '../../context/SignedInEAContext';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -46,6 +46,7 @@ export default function SessionHistoryScreen() {
   const history = describeHistoryState({ running, pullState });
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const loadingUserId = useRef(user?.id);
 
   /**
    * Load recent session history from local SQLite. Network sync runs through
@@ -54,6 +55,13 @@ export default function SessionHistoryScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      // Only a different EA starts a new first load; refreshes keep the list mounted.
+      if (loadingUserId.current !== user?.id) {
+        loadingUserId.current = user?.id;
+        setLoading(true);
+        setSessions([]);
+        setPullState(null);
+      }
 
       const loadSessions = async () => {
         if (!user?.id) {
@@ -64,7 +72,6 @@ export default function SessionHistoryScreen() {
         }
 
         try {
-          setLoading(true);
           const cached = await sessionsRepository.getSessions({
             userId: user.id,
             recordedByUserId: user.id,
@@ -92,7 +99,7 @@ export default function SessionHistoryScreen() {
       return () => {
         active = false;
       };
-    }, [user?.id, pageVersion, runVersion, toast])
+    }, [user?.id, pageVersion, runVersion, toast, sessionsRepository, services])
   );
 
   const renderItem = ({ item, index }) => {
@@ -151,7 +158,7 @@ export default function SessionHistoryScreen() {
     );
   };
 
-  if (loading) {
+  if (loading || loadingUserId.current !== user?.id) {
     return (
       <View style={styles.container}>
         {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}

@@ -444,7 +444,9 @@ Children list and Class detail use one FlatList each under the navigator header,
 `FAB_OVERHANG + 16` bottom clearance. The list header is an element of the module-scope
 `ChildrenListHeader`, preserving search focus. Loading replaces content only when
 `(loading || classesLoading) && classes.length === 0`; cached classes, stats, search and banner
-remain during a pull. Class detail keeps `useHeaderHairline(navigation)` above its early returns.
+remain during a pull. List screens show full-screen loading only until the first load for the
+signed-in EA settles; later refreshes keep the current rows mounted and visible. Class detail keeps
+`useHeaderHairline(navigation)` above its early returns.
 Child-row results, group, letter-tracker and edit actions are separate controls: retain the 8dp
 gap above the meta row so GroupChip's negative margins cannot overlap the results target.
 

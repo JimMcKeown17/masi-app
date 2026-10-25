@@ -5,9 +5,15 @@ beforeEach(() => useAssessableChildren.mockImplementation(() => {
   const all = state.children ?? state.allChildren ?? [];
   return { all, yourChildren: all, restOfClass: [], loading: false };
 }));
+const mockToast = { show: jest.fn() };
+jest.mock('../src/context/ToastContext', () => ({
+  ...jest.requireActual('../src/context/ToastContext'),
+  useToast: () => mockToast,
+}));
+let mockHistoryVersion = 0;
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'),
-  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
+  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: mockHistoryVersion, runVersion: 0 }),
 }));
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
@@ -33,11 +39,13 @@ import React from 'react';
 import { v4 as uuid } from 'uuid';
 import { createFamilySyncFixture } from '../test-support/assessmentFamilySyncTestUtils';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
+import { ActivityIndicator } from 'react-native-paper';
 import { FlatList, StyleSheet } from 'react-native';
-import { fireEvent, within } from '@testing-library/react-native';
+import { act, fireEvent, within } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import AssessmentRankingScreen from '../src/screens/insights/AssessmentRankingScreen';
 import { childClassMembershipsRepository, createChildClassMembershipsRepository } from '../src/db/repositories/childClassMembershipsRepository';
+import StatBar from '../src/components/dashboard/StatBar';
 import RankedBarRow from '../src/components/dashboard/RankedBarRow';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { getBarColor } from '../src/components/dashboard/RankedBarRow';
@@ -46,6 +54,7 @@ import { OKAY_YELLOW, getBandColor } from '../src/utils/scoreBands';
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'ea-1';
+  mockHistoryVersion = 0;
   mockChildren.length = 0;
   mockClasses.length = 0;
   assessmentsRepository.getQuestionResults.mockResolvedValue([]);
@@ -196,4 +205,101 @@ test('class-only children join the assessment not-assessed list', async () => {
   const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);
   expect(await screen.findByText('Cora C.')).toBeTruthy();
   expect(screen.getAllByText('Not assessed')).toHaveLength(2);
+});
+
+test('a pending reload keeps the ranking mounted until the extra result arrives', async () => {
+  mockChildren.push({ id: 'a', first_name: 'A', last_name: 'Able' });
+  const rows = [{ id: 'a-result', child_id: 'a', question_code: 'letter_sounds', language: 'en', assessment_date: '2026-05-31', score: 20, total_items: 60 }];
+  assessmentsRepository.getQuestionResults.mockResolvedValueOnce(rows);
+  const navigation = { navigate: jest.fn() };
+  const screen = renderWithProviders(<AssessmentRankingScreen navigation={navigation} />);
+  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  await screen.findByText('20 / 60');
+  const row = screen.getByText('A A.');
+  let resolve;
+  assessmentsRepository.getQuestionResults.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  mockHistoryVersion = 1;
+  screen.rerender(<AssessmentRankingScreen navigation={navigation} />);
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(screen.getByText('A A.')).toBe(row);
+  mockChildren.push({ id: 'b', first_name: 'B', last_name: 'Baker' });
+  await act(async () => resolve([...rows, { ...rows[0], id: 'b-result', child_id: 'b', score: 9 }]));
+  expect(await screen.findByText('9 / 60')).toBeTruthy();
+  expect(screen.getByText('B B.')).toBeTruthy();
+  expect(screen.getByText('A A.')).toBe(row);
+});
+
+
+test('switching EA hides old scores and settles a failed first load without restoring them', async () => {
+  mockChildren.push({ id: 'a', first_name: 'A', last_name: 'Able' });
+  assessmentsRepository.getQuestionResults.mockResolvedValueOnce([
+    { id: 'a-result', child_id: 'a', question_code: 'letter_sounds', language: 'en', assessment_date: '2026-05-31', score: 20, total_items: 60 },
+  ]);
+  const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);
+  await screen.findByText('20 / 60');
+  let reject;
+  assessmentsRepository.getQuestionResults.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+  mockUserId = 'ea-2';
+  mockChildren.splice(0, mockChildren.length, { id: 'b', first_name: 'B', last_name: 'Baker' });
+  screen.rerender(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);
+  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  expect(screen.queryByText('A A.')).toBeNull();
+  await act(async () => reject(new Error('read failed')));
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(screen.queryByText('20 / 60')).toBeNull();
+  expect(screen.queryByText('A A.')).toBeNull();
+  expect(screen.queryByText('B B.')).toBeNull();
+  expect(screen.queryByText('Not assessed')).toBeNull();
+  expect(screen.getByText("Couldn't load this ranking. Try again.")).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  expect(mockToast.show).not.toHaveBeenCalled();
+});
+
+
+test('a failed first read shows retry instead of educational conclusions, then a retry shows the ranking', async () => {
+  mockChildren.push({ id: 'a', first_name: 'A', last_name: 'Able' });
+  assessmentsRepository.getQuestionResults.mockRejectedValueOnce(new Error('read failed'));
+  const screen = renderWithProviders(<AssessmentRankingScreen navigation={{ navigate: jest.fn() }} />);
+  expect(await screen.findByText("Couldn't load this ranking. Try again.")).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  expect(screen.queryByText('A A.')).toBeNull();
+  expect(screen.queryByText('Not assessed')).toBeNull();
+  expect(screen.queryByText('No children to display')).toBeNull();
+  expect(screen.UNSAFE_queryByType(StatBar)).toBeNull();
+  expect(screen.UNSAFE_queryByType(RankedBarRow)).toBeNull();
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(mockToast.show).not.toHaveBeenCalled();
+
+  assessmentsRepository.getQuestionResults.mockResolvedValueOnce([
+    { id: 'a-result', child_id: 'a', question_code: 'letter_sounds', language: 'en', assessment_date: '2026-05-31', score: 20, total_items: 60 },
+  ]);
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  // The retry shows progress at once, so a slow read never looks like a dead button.
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeTruthy();
+  expect(screen.queryByText("Couldn't load this ranking. Try again.")).toBeNull();
+  expect(await screen.findByText('20 / 60')).toBeTruthy();
+  expect(screen.getByText('A A.')).toBeTruthy();
+  expect(screen.queryByText("Couldn't load this ranking. Try again.")).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+});
+
+test('a rejected refresh retains scores and publishes one error toast', async () => {
+  mockChildren.push({ id: 'a', first_name: 'A', last_name: 'Able' });
+  assessmentsRepository.getQuestionResults.mockResolvedValueOnce([
+    { id: 'a-result', child_id: 'a', question_code: 'letter_sounds', language: 'en', assessment_date: '2026-05-31', score: 20, total_items: 60 },
+  ]);
+  const navigation = { navigate: jest.fn() };
+  const screen = renderWithProviders(<AssessmentRankingScreen navigation={navigation} />);
+  await screen.findByText('20 / 60');
+  const row = screen.getByText('A A.');
+  childClassMembershipsRepository.getAll.mockRejectedValueOnce(new Error('read failed'));
+  mockHistoryVersion = 1;
+  screen.rerender(<AssessmentRankingScreen navigation={navigation} />);
+  await act(async () => {});
+  expect(screen.getByText('A A.')).toBe(row);
+  expect(screen.getByText('20 / 60')).toBeTruthy();
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(screen.queryByText("Couldn't load this ranking. Try again.")).toBeNull();
+  expect(mockToast.show).toHaveBeenCalledTimes(1);
+  expect(mockToast.show).toHaveBeenCalledWith({ message: "Couldn't refresh this ranking.", tone: 'error', duration: 3000 });
 });

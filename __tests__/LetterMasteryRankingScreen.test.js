@@ -1,6 +1,12 @@
+const mockToast = { show: jest.fn() };
+jest.mock('../src/context/ToastContext', () => ({
+  ...jest.requireActual('../src/context/ToastContext'),
+  useToast: () => mockToast,
+}));
+let mockHistoryVersion = 0;
 jest.mock('../src/services/assessmentHistoryStatus', () => ({
   ...jest.requireActual('../src/services/assessmentHistoryStatus'),
-  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: 0, runVersion: 0 }),
+  useAssessmentHistoryStatus: () => ({ running: false, pageVersion: mockHistoryVersion, runVersion: 0 }),
 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 
@@ -16,7 +22,8 @@ jest.mock('../src/services/supabaseClient', () => ({
 }));
 
 import React from 'react';
-import { cleanup } from '@testing-library/react-native';
+import { ActivityIndicator } from 'react-native-paper';
+import { act, cleanup, fireEvent } from '@testing-library/react-native';
 import { v4 as uuid } from 'uuid';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { createFamilySyncFixture, questionResult } from '../test-support/assessmentFamilySyncTestUtils';
@@ -27,11 +34,13 @@ import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
 import { useClasses } from '../src/context/ClassesContext';
 import LetterMasteryRankingScreen from '../src/screens/insights/LetterMasteryRankingScreen';
+import StatBar from '../src/components/dashboard/StatBar';
 import RankedBarRow from '../src/components/dashboard/RankedBarRow';
 
 let fixture;
 let repositories;
 beforeEach(async () => {
+  mockHistoryVersion = 0;
   jest.useFakeTimers();
   jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
   fixture = await createFamilySyncFixture({ withDelivery: true });
@@ -132,4 +141,127 @@ test('a confirmation recorded by another EA counts', async () => {
   const screen = renderRanking();
   expect(await screen.findByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
   expect(read).toHaveBeenCalledWith({ childIds: [fixture.childId] });
+});
+
+
+test('a pending reload keeps the ranking mounted until the new roster and evidence arrive', async () => {
+  const screen = renderRanking();
+  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  await screen.findByText('Amahle D.');
+  const row = screen.getByText('Amahle D.');
+  let resolve;
+  jest.spyOn(repositories.assessments, 'getLetterEvidenceResults')
+    .mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  const children = useChildren().children;
+  useChildren.mockReturnValue({ children: [...children, { id: 'new-child', first_name: 'New', last_name: 'Child', class_id: 'class-1' }] });
+  mockHistoryVersion = 1;
+  screen.rerender(<SignedInEAContext.Provider value={{ repositories }}>
+    <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
+  </SignedInEAContext.Provider>);
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(screen.getByText('Amahle D.')).toBe(row);
+  expect(screen.queryByText('New C.')).toBeNull();
+  await act(async () => resolve([]));
+  expect(await screen.findByText('New C.')).toBeTruthy();
+  expect(screen.getByText('Amahle D.')).toBe(row);
+});
+
+
+test('switching EA hides previous mastery and settles a failed first load without restoring it', async () => {
+  const screen = renderRanking();
+  await screen.findByText('Amahle D.');
+  let reject;
+  jest.spyOn(repositories.assessments, 'getLetterEvidenceResults')
+    .mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+  useAuth.mockReturnValue({ user: { id: 'ea-2' } });
+  useChildren.mockReturnValue({ children: [{ id: 'new-child', first_name: 'New', last_name: 'Child', class_id: 'class-1' }] });
+  screen.rerender(<SignedInEAContext.Provider value={{ repositories }}>
+    <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
+  </SignedInEAContext.Provider>);
+  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  expect(screen.queryByText('Amahle D.')).toBeNull();
+  await act(async () => reject(new Error('read failed')));
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(screen.queryByText('Amahle D.')).toBeNull();
+  expect(screen.queryByText('New C.')).toBeNull();
+  expect(screen.getByText("Couldn't load this ranking. Try again.")).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  expect(mockToast.show).not.toHaveBeenCalled();
+});
+
+test('a late older reload cannot overwrite newer mastery, and a failed reload keeps it', async () => {
+  const screen = renderRanking();
+  await screen.findByLabelText('View details for Amahle D., 0/26');
+  let resolveOld, resolveNew;
+  const read = jest.spyOn(repositories.assessments, 'getLetterEvidenceResults')
+    .mockReturnValueOnce(new Promise(done => { resolveOld = done; }))
+    .mockReturnValueOnce(new Promise(done => { resolveNew = done; }));
+  const ui = () => <SignedInEAContext.Provider value={{ repositories }}>
+    <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
+  </SignedInEAContext.Provider>;
+  mockHistoryVersion = 1;
+  screen.rerender(ui());
+  mockHistoryVersion = 2;
+  screen.rerender(ui());
+  const saved = await fixture.save(1, { result: questionResult(1, { language: 'xh' }) });
+  const results = await fixture.assessments.getQuestionResults({ userId: fixture.userId });
+  expect(results[0].id).toBe(saved.id);
+  await act(async () => resolveNew(results));
+  expect(await screen.findByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  await act(async () => resolveOld([]));
+  expect(screen.getByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  read.mockRejectedValueOnce(new Error('read failed'));
+  mockHistoryVersion = 3;
+  screen.rerender(ui());
+  await act(async () => {});
+  expect(screen.getByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+});
+
+
+test('a failed first read shows retry instead of educational conclusions, then a retry shows the ranking', async () => {
+  await repositories.mastery.setLetterMastery({
+    childId: fixture.childId, letter: 'b', language: 'xh', confirmed: true,
+  });
+  jest.spyOn(repositories.mastery, 'getLetterMastery').mockRejectedValueOnce(new Error('read failed'));
+  const screen = renderRanking();
+  expect(await screen.findByText("Couldn't load this ranking. Try again.")).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  expect(screen.queryByText('Amahle D.')).toBeNull();
+  expect(screen.queryByText('Not assessed')).toBeNull();
+  expect(screen.queryByText('No children to display')).toBeNull();
+  expect(screen.UNSAFE_queryByType(StatBar)).toBeNull();
+  expect(screen.UNSAFE_queryByType(RankedBarRow)).toBeNull();
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(mockToast.show).not.toHaveBeenCalled();
+
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  // The retry shows progress at once, so a slow read never looks like a dead button.
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeTruthy();
+  expect(screen.queryByText("Couldn't load this ranking. Try again.")).toBeNull();
+  expect(await screen.findByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  expect(screen.getByText('Amahle D.')).toBeTruthy();
+  expect(screen.queryByText("Couldn't load this ranking. Try again.")).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+});
+
+test('a rejected refresh retains mastery and publishes one error toast', async () => {
+  await repositories.mastery.setLetterMastery({
+    childId: fixture.childId, letter: 'b', language: 'xh', confirmed: true,
+  });
+  const screen = renderRanking();
+  await screen.findByLabelText('View details for Amahle D., 1/26');
+  const row = screen.getByText('Amahle D.');
+  jest.spyOn(repositories.assessments, 'getLetterEvidenceResults').mockRejectedValueOnce(new Error('read failed'));
+  mockHistoryVersion = 1;
+  screen.rerender(<SignedInEAContext.Provider value={{ repositories }}>
+    <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
+  </SignedInEAContext.Provider>);
+  await act(async () => {});
+  expect(screen.getByText('Amahle D.')).toBe(row);
+  expect(screen.getByLabelText('View details for Amahle D., 1/26')).toBeTruthy();
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(screen.queryByText("Couldn't load this ranking. Try again.")).toBeNull();
+  expect(mockToast.show).toHaveBeenCalledTimes(1);
+  expect(mockToast.show).toHaveBeenCalledWith({ message: "Couldn't refresh this ranking.", tone: 'error', duration: 3000 });
 });

@@ -1,8 +1,11 @@
+import { useToast } from '../../context/ToastContext';
+import InlineNote from '../../components/common/InlineNote';
+import BrandButton from '../../components/common/BrandButton';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -27,26 +30,66 @@ export default function SessionCountRankingScreen() {
   const [ranking, setRanking] = useState([]);
   const [totalSessions, setTotalSessions] = useState(0);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const loadingUserId = useRef(user?.id);
+  const hasSuccessfulLoad = useRef(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      // The spinner only covers the first load (initial state). Later reloads, including one per
-      // history page landed, update the figures in place instead of flashing a spinner.
+      let active = true;
+      // Only a different EA starts a new first load; refreshes keep the list mounted.
+      if (loadingUserId.current !== user?.id) {
+        loadingUserId.current = user?.id;
+        hasSuccessfulLoad.current = false;
+        setLoadError(false);
+        setLoading(true);
+        setRanking([]);
+        setTotalSessions(0);
+      }
       const load = async () => {
-        const sessions = await sessionsRepository.getSessions({ userId: user.id });
-        const ranked = getSessionCountRanking(childrenList, sessions);
-        setRanking(ranked);
-        setTotalSessions(getDistinctSessionCount(childrenList, sessions));
-        setLoading(false);
+        try {
+          if (!user?.id) return;
+          const sessions = await sessionsRepository.getSessions({ userId: user.id });
+          const ranked = getSessionCountRanking(childrenList, sessions);
+          if (active) {
+            setRanking(ranked);
+            setTotalSessions(getDistinctSessionCount(childrenList, sessions));
+            hasSuccessfulLoad.current = true;
+            setLoadError(false);
+          }
+        } catch (error) {
+          if (active) {
+            console.error('Error loading session count ranking:', error);
+            if (hasSuccessfulLoad.current) {
+              toast.show({ message: "Couldn't refresh this ranking.", tone: 'error', duration: 3000 });
+            } else {
+              setLoadError(true);
+            }
+          }
+        } finally {
+          if (active) setLoading(false);
+        }
       };
       load();
-    }, [childrenList, user.id, pageVersion, runVersion])
+      return () => { active = false; };
+    }, [sessionsRepository, childrenList, user?.id, pageVersion, runVersion, retryVersion, toast])
   );
 
-  if (loading) {
+  if (loading || loadingUserId.current !== user?.id) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.errorContainer}>
+        <InlineNote>Couldn't load this ranking. Try again.</InlineNote>
+        <BrandButton label="Try again" onPress={() => { setLoading(true); setRetryVersion(version => version + 1); }} />
       </View>
     );
   }
@@ -99,6 +142,13 @@ export default function SessionCountRankingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.md,
+    gap: spacing.md,
     backgroundColor: colors.background,
   },
   loadingContainer: {

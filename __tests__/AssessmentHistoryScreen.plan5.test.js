@@ -18,7 +18,7 @@ import ListGroup from '../src/components/common/ListGroup';
 import React from 'react';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { FlatList, RefreshControl, StyleSheet } from 'react-native';
-import { fireEvent, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import AssessmentHistoryScreen from '../src/screens/assessments/AssessmentHistoryScreen';
 import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
@@ -64,7 +64,12 @@ jest.mock('../src/services/supabaseClient', () => ({
 const mockGetChildNamesByIds = jest.fn(async () => ({}));
 const mockGetAssessmentHistoryPullStates = jest.fn(async () => ({ batteryRuns: null, assessments: null, mastery: null }));
 const mockStartAssessmentHistoryPull = jest.fn(async () => null);
-const render = ui => renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: assessmentsRepository, batteryRuns: batteryRunsRepository, children: { getChildNamesByIds: mockGetChildNamesByIds } }, services: { assessmentHistory: { start: mockStartAssessmentHistoryPull, store: { getPullStates: mockGetAssessmentHistoryPullStates } } } }}>{ui}</SignedInEAContext.Provider>);
+const mockHandle = { repositories: { assessments: assessmentsRepository, batteryRuns: batteryRunsRepository, children: { getChildNamesByIds: mockGetChildNamesByIds } }, services: { assessmentHistory: { start: mockStartAssessmentHistoryPull, store: { getPullStates: mockGetAssessmentHistoryPullStates } } } };
+const withEA = ui => <SignedInEAContext.Provider value={mockHandle}>{ui}</SignedInEAContext.Provider>;
+const render = ui => {
+  const screen = renderWithProviders(withEA(ui));
+  return { ...screen, rerender: next => screen.rerender(withEA(next)) };
+};
 
 const ZERO_INSETS = { top: 0, right: 0, bottom: 0, left: 0 };
 let mockInsets = ZERO_INSETS;
@@ -191,6 +196,81 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  test.each(['pageVersion', 'runVersion'])('%s reload keeps rows mounted until the replacement arrives', async version => {
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    await screen.findByText('Amahle Dlamini');
+    const row = screen.getByTestId('assessment-history-row');
+    const initial = assessmentsRepository.getQuestionResults.mock.results[0];
+    const rows = await initial.value;
+    let resolve;
+    assessmentsRepository.getQuestionResults.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, [version]: 1 });
+    screen.rerender(<AssessmentHistoryScreen navigation={navigation} />);
+    expect(screen.queryByText('Loading...')).toBeNull();
+    expect(screen.getByTestId('assessment-history-row')).toBe(row);
+    fireEvent.press(screen.getByText('Letter Sounds'));
+    expect(navigation.navigate).toHaveBeenCalledWith('AssessmentDetail', { assessmentId: 'assessment-1', childName: 'Amahle Dlamini' });
+    await act(async () => resolve([...rows, { ...rows[0], id: 'assessment-2', score: 9 }]));
+    expect(await screen.findByText('9 / 60')).toBeTruthy();
+    expect(screen.getAllByTestId('assessment-history-row')).toHaveLength(2);
+  });
+
+  test('switching user hides the previous rows until the new first load settles, even on error', async () => {
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
+    await screen.findByText('Amahle Dlamini');
+    let reject;
+    assessmentsRepository.getQuestionResults.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    useAuth.mockReturnValue({ user: { id: 'user-2' } });
+    screen.rerender(<AssessmentHistoryScreen navigation={navigation} />);
+    expect(screen.queryByText('Amahle Dlamini')).toBeNull();
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    await act(async () => reject(new Error('read failed')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load assessments');
+    expect(screen.queryByText('Loading...')).toBeNull();
+    expect(screen.queryByText('Amahle Dlamini')).toBeNull();
+    expect(screen.getByText('No assessments yet. Assess your first child!')).toBeTruthy();
+  });
+
+  test('a rejected reload keeps the previous rows and shows the existing error toast', async () => {
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
+    await screen.findByText('Amahle Dlamini');
+    const row = screen.getByTestId('assessment-history-row');
+    let reject;
+    assessmentsRepository.getQuestionResults.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    useAssessmentHistoryStatus.mockReturnValue({ pageVersion: 1, runVersion: 0 });
+    screen.rerender(<AssessmentHistoryScreen navigation={navigation} />);
+    expect(screen.queryByText('Loading...')).toBeNull();
+    expect(screen.getByTestId('assessment-history-row')).toBe(row);
+    await act(async () => reject(new Error('read failed')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load assessments');
+    expect(screen.getByTestId('assessment-history-row')).toBe(row);
+    expect(screen.getByText('Amahle Dlamini')).toBeTruthy();
+  });
+
+  test('an older reload cannot overwrite a newer result', async () => {
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<AssessmentHistoryScreen navigation={navigation} />);
+    await screen.findByText('Amahle Dlamini');
+    const rows = await assessmentsRepository.getQuestionResults.mock.results[0].value;
+    let resolveOld, resolveNew;
+    assessmentsRepository.getQuestionResults
+      .mockReturnValueOnce(new Promise(done => { resolveOld = done; }))
+      .mockReturnValueOnce(new Promise(done => { resolveNew = done; }));
+    useAssessmentHistoryStatus.mockReturnValue({ pageVersion: 1, runVersion: 0 });
+    screen.rerender(<AssessmentHistoryScreen navigation={navigation} />);
+    useAssessmentHistoryStatus.mockReturnValue({ pageVersion: 2, runVersion: 0 });
+    screen.rerender(<AssessmentHistoryScreen navigation={navigation} />);
+    await act(async () => resolveNew([{ ...rows[0], score: 10 }]));
+    expect(await screen.findByText('10 / 60')).toBeTruthy();
+    await act(async () => resolveOld([{ ...rows[0], score: 9 }]));
+    expect(screen.getByText('10 / 60')).toBeTruthy();
+    expect(screen.queryByText('9 / 60')).toBeNull();
   });
 
   test('pull-to-refresh calls services.assessmentHistory.start({ force: true })', async () => {
