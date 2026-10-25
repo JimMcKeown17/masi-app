@@ -17,6 +17,49 @@ import { AllProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';
+import { EGRA_BATTERIES } from '../src/assessment-questions/egra';
+
+test.each(EGRA_BATTERIES)('$title starts in the form language instead of the class language, with no language sheet', async battery => {
+  const child = { ...CHILD, home_language: battery.fixedLanguage === 'xh' ? 'en' : 'xh' };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: battery.battery_version }));
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await waitFor(() => expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'BatteryOverview']));
+  expect(screen.queryByRole('header', { name: 'Select language' })).toBeNull();
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+    id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+    batteryCode: 'egra', batteryVersion: battery.battery_version, language: battery.fixedLanguage,
+  });
+});
+
+
+test('an EGRA form names its own language in the header, not the class language', async () => {
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: 'dbe-egra-en-fal-2-v1' }));
+  expect(screen.getByText('English FAL EGRA 2 · in English')).toBeTruthy();
+  expect(screen.queryByText("English FAL EGRA 2 · in the child's class language")).toBeNull();
+});
+
+test('WelaPLUS picker still lets an Afrikaans child resume an unfinished EGRA, but not start WelaPLUS', async () => {
+  const child = { ...CHILD, home_language: 'af' };
+  mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({
+    battery_code: 'egra', battery_version: 'dbe-egra-af-hl-1-v1', language: 'af', question_count: 2,
+  })]);
+  const screen = await ready(renderSelect());
+  expect(screen.getByText('Not available in Afrikaans yet')).toBeTruthy();
+  expect(screen.getByText('Unfinished 2/4')).toBeTruthy();
+  const row = screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' });
+  expect(row).not.toBeDisabled();
+  fireEvent.press(row);
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
+  expect(screen.getByText('Afrikaans EGRA 1 · Started Tue 14:05 · 2 of 4 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(screen.getByText("WelaPLUS isn't available in Afrikaans yet, so this assessment can only be resumed.")).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Abandon it and start new' })).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Resume' }));
+  await waitFor(() => expect(screen.routes()[1]).toMatchObject({ name: 'BatteryOverview', params: { runId: ID } }));
+  expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+});
 
 configure({ asyncUtilTimeout: 5000 });
 const CHILD = { id: 'child-1', first_name: 'Lwazi', last_name: 'Mbeki', class_id: 'membership-class',
@@ -162,7 +205,7 @@ test.each(['af', null, 'xh'])(
     const child = { ...CHILD, home_language: homeLanguage };
     mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
     const screen = await ready(renderSelect({ batteryCode: fixture.battery_code, batteryVersion: fixture.battery_version }));
-    expect(screen.getByText("Fixture reading · in the child's class language")).toBeTruthy();
+    expect(screen.getByText('Fixture reading · in English')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
     await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
     expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({
@@ -185,7 +228,7 @@ test('unfinished run shows Unfinished 4/11; tapping opens the sheet with exact t
   expect(await screen.findByText('Unfinished 4/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
   await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
-  expect(screen.getByText('Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(screen.getByText('WelaPLUS · Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
   expect(screen.getByText("Starting new closes the old assessment as abandoned. Its 4 saved Questions stay in Lwazi's history.")).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Abandon it and start new' })).toBeTruthy();
@@ -353,6 +396,28 @@ test('failed abandon-and-start keeps the saved run sheet open with an accessible
   expect(repositories.batteryRuns.startRun.mock.calls.every(([input]) => input.abandonRunId === ID)).toBe(true);
 });
 
+test('an EGRA picker shows an unfinished WelaPLUS with its own name and question total', async () => {
+  const egra = EGRA_BATTERIES.find(battery => battery.battery_version === 'dbe-egra-en-fal-2-v1');
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished()]);
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: egra.battery_version }));
+  expect(await screen.findByText('Unfinished 4/11')).toBeTruthy();
+  expect(screen.queryByText('Unfinished 4/4')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
+  expect(screen.getByText('WelaPLUS · Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+});
+
+test('an unfinished assessment this app version does not know shows no total and no name', async () => {
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({
+    battery_code: 'future_battery', battery_version: '9', question_count: 2,
+  })]);
+  const screen = await ready(renderSelect());
+  expect(await screen.findByText('Unfinished')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  expect(await screen.findByText('Started Tue 14:05 · 2 Questions done · code KWY-2M4')).toBeTruthy();
+});
+
 test('another fixture battery supplies its own supported language and question total, including the unfinished sheet', async () => {
   const fixture = { ...BATTERY, title: 'Fixture reading', battery_code: 'fixture_reading', battery_version: '1',
     languages: ['af'], questions: BATTERY.questions.slice(0, 2) };
@@ -365,7 +430,7 @@ test('another fixture battery supplies its own supported language and question t
   expect(screen.getByText('Unfinished 1/2')).toBeTruthy();
   expect(screen.queryByText('Not available in Afrikaans yet')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  expect(await screen.findByText('Started Tue 14:05 · 1 of 2 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(await screen.findByText('Fixture reading · Started Tue 14:05 · 1 of 2 Questions done · code KWY-2M4')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Abandon it and start new' }));
   await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
   expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({
@@ -441,7 +506,7 @@ test('leaving the picker dismisses its unfinished sheet; refocusing reloads the 
   expect(Boolean(screen.queryByRole('header', { name: 'Lwazi has an unfinished assessment' }))).toBe(false);
   expect(screen.getByText('Unfinished 5/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  await screen.findByText('Started Tue 14:05 · 5 of 11 Questions done · code KWY-2M4');
+  await screen.findByText('WelaPLUS · Started Tue 14:05 · 5 of 11 Questions done · code KWY-2M4');
 });
 
 test('battery picker shows the latest finalized run start day for this battery only', async () => {

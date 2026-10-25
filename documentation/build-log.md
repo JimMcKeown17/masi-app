@@ -4248,6 +4248,162 @@ all items and parse JSON 3,050 times (~1.19 MB when serialized); 30 warm samples
 104 ms p95 on this host. Repository queries are unchanged; the temporary profiling test was removed.
 No device verification was performed; the A03 release-build scroll/tap retest remains open.
 
+### 2026-10-25 — Full EGRA host registration and form picker (`feat/egra-host`)
+
+Built on WelaPLUS Plan 3 at `0cc7013`, with changes left uncommitted for review. The registry now
+includes WelaPLUS and all 13 EGRA batteries and refuses duplicate code/version identities at module
+load. Bundled item sets resolve the existing table first, preserving every existing object identity,
+then use the exact EGRA code/version/language lookup. Unknowns and the four superseded DBE 40-letter
+versions remain unavailable; the four Masi extensions retain their `-masi60` identities.
+
+The Assessments tab offers **Full EGRA** directly after the programme-default card for every active
+programme, including no-default and gate-read-error fallback states. `EgraFormPickerSheet` uses the
+shared SelectSheet with 13 options in pack order, explicit HL/FAL/SMRS descriptions, no selection on
+opening or reopening, Continue and Cancel. Confirmation closes the picker and uses the existing
+focus/actor/programme/double-tap navigation guard. All original AssessmentsScreen lines, including
+the default card, are preserved. Jim's fixed 2026-10-25 decisions: Full EGRA is offered app-wide
+to active-programme EAs (CONTEXT "Full EGRA"); user-facing copy says assessment, never run (recorded
+in CONTEXT by Plan 3's copy sweep `d553501`); both offerings share the existing host lifecycle. No
+programme/server list was introduced.
+
+Host evidence: all 13 form languages override a differing class language without a language sheet;
+all 52 form/Question introductions render their real capture components through BatteryQuestionScreen,
+with no MissingItemSet. The real English HL 1 letter Question completes and saves all 60 prompts.
+The overview saves exactly one comprehension prerequisite skip after either a zero-score or skipped
+story, and never shows a Writing Sheet reminder for EGRA. The summary names the form, shows all four
+Questions, scores comprehension as 2 / 3 asked (five stored prompts), and finalizes the battery's four
+codes without a Writing Sheet checkbox. History displays form title and four-Question count;
+unfinished EGRA resumes through the shared overview with its own 2-of-4 progress denominator.
+
+Real better-sqlite3 coverage now starts, saves four host-resolved result families, reloads and
+finalizes every form, leaving one pending battery outbox row and four pending assessment-family rows
+per assessment. The original 52-family and English FAL 2 integration tests still pass.
+
+TDD / discoveries:
+
+- Registry lookup RED: 1 failed / 30 passed; minimal registration GREEN: 31 passed. Duplicate module-load
+  guard RED: 1 failed / 31 passed; GREEN: 32 passed. Exact item-set/extension lookup RED: 56 failed /
+  32 passed; GREEN with OSS boundary: 2 suites / 107 tests. These cycles used the registry command
+  below with `--runInBand`, adding the boundary file for the final lookup GREEN.
+- Card RED: 2 failed / 29 passed; GREEN: 31 passed. Picker RED: 1 failed / 31 passed; GREEN: 32 passed,
+  via the AssessmentsScreen command below with `--runInBand`. Subsequent guard/cancel/resume assertions
+  and existing regressions pass in the final 35-test screen file.
+- Test-authoring corrections: the actual SMRS id is `smrs-egra-zu-1-v1`; the open sheet hides background
+  controls from accessibility queries, so the recheck test asserts the disabled background button
+  after Continue closes the sheet. Neither required a production behavior change.
+- The exact requested integration command initially exited 1: `No tests found` / `Pattern: egraRun -
+  0 matches`. Its explicit `testMatch` allowlist omitted the existing EGRA file. Added only that file
+  to `jest.integration.config.js`; the same command then passed all 15 real-SQLite tests.
+
+All commands below used Node 20.19.4. These are literal summary lines, including both default-parallel
+full-suite invocations; no test timed out and no isolated timeout retry was needed. Existing React
+renderer/deprecation and deliberate error-path diagnostics were non-failing.
+
+| Command | Exact summary / result |
+|---|---|
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/battery/__tests__/registry.test.ts` | `Test Suites: 1 passed, 1 total`; `Tests:       88 passed, 88 total`; `Snapshots:   0 total`; `Time:        3.328 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/AssessmentsScreen.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       35 passed, 35 total`; `Snapshots:   0 total`; `Time:        3.237 s, estimated 5 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/AssessmentChildSelectScreen.battery.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       45 passed, 45 total`; `Snapshots:   0 total`; `Time:        3.706 s, estimated 5 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/BatteryQuestionScreen.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       81 passed, 81 total`; `Snapshots:   0 total`; `Time:        5.132 s, estimated 7 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/BatteryOverviewScreen.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       45 passed, 45 total`; `Snapshots:   0 total`; `Time:        4.016 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/BatteryRunSummaryScreen.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       35 passed, 35 total`; `Snapshots:   0 total`; `Time:        3.086 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/AssessmentHistoryScreen.plan5.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       21 passed, 21 total`; `Snapshots:   0 total`; `Time:        2.021 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/egraRun.integration.test.js` | `Test Suites: 1 passed, 1 total`; `Tests:       15 passed, 15 total`; `Snapshots:   0 total`; `Time:        2.118 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:types` | `tsc --noEmit -p tsconfig.assessment-questions.json`; exit 0, no errors |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content` | `# tests 5`; `# pass 5`; `# fail 0`; `# skipped 0`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration -- egraRun` | `Test Suites: 1 passed, 1 total`; `Tests:       15 passed, 15 total`; `Snapshots:   0 total`; `Time:        27.835 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/battery/__tests__/registry.test.ts src/assessment-questions/__tests__/boundary.test.ts --runInBand` | `Test Suites: 2 passed, 2 total`; `Tests:       107 passed, 107 total`; `Snapshots:   0 total`; `Time:        3.557 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` (first full pass, before final strengthened screen assertions) | `Test Suites: 421 passed, 421 total`; `Tests:       6288 passed, 6288 total`; `Snapshots:   0 total`; `Time:        88.702 s`; exit 0 |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest` (final full pass) | `Test Suites: 421 passed, 421 total`; `Tests:       6287 passed, 6287 total`; `Snapshots:   0 total`; `Time:        69.106 s, estimated 85 s`; exit 0 |
+| `git diff --check` | PASS, no whitespace errors |
+
+Scope checks: the default card is byte-for-byte unchanged and every original AssessmentsScreen line
+remains in order; the ROADMAP EGRA open-decisions block is unchanged. `documentation/build-log.md`
+receives this one append only, with no earlier entries or register rows changed. The content-pack
+plan receives a dated status note without rewriting its historical body. No synced table, repository
+write path, payload, RLS policy or ordering changed, so `documentation/rls-sync-contract-map.md` needs
+no change and is untouched. No dependencies, adapter/content edits, migration, hosted write, build,
+deploy, commit or push occurred. The pre-existing untracked `node_modules` item was left alone.
+
+Out-of-scope findings / remaining gates:
+
+- **Unfinished-list form title:** resolved in the Claude review below (rows now lead with the
+  assessment name).
+- **Existing host wording:** resolved on the parent branch by Plan 3's copy sweep `d553501`.
+- **Per-result comprehension drill-down:** summary rows remain read-only and the generic detail
+  screen refuses battery results. The generic detail grid only distinguishes letters/words and has
+  no comprehension-specific Not asked rendering. The requested summary denominator works; a richer
+  per-result presentation remains separate work.
+- **Device acceptance remains OPEN:** all 13 form options and large text; fixed-language child
+  selection; capture/save; force-quit resume between Questions; finalization; offline then sync;
+  results; first-row stop -> Undo -> timer expiry; End -> cancel; zero/skipped story -> persisted
+  comprehension skip; absence of Writing Sheet reminders; comprehension score out of asked prompts.
+  Jest and local SQLite are not native geometry, physical force-quit or hosted sync evidence.
+
+**Claude review (2026-10-25).** Read the full diff; registry, item-set fallback and the card match
+the work order, the default card is untouched, and no server/sync surface changed. Then rebased onto
+Plan 3's copy sweep `d553501` (one conflict, `AssessmentsScreen.test.js`, resolved by keeping the
+sweep's wording plus the extra card). Fixes made in review, each test-first:
+
+- **Wrong total for an unfinished assessment of the other kind.** In the EGRA child list, a child
+  with an unfinished WelaPLUS showed "Unfinished 4/4" and the sheet said "4 of 4 Questions done",
+  because both used the Battery being started, not the run's own Battery. A latent Plan 3 bug that
+  only appears with two Batteries. Badge, sheet subtitle and the Assessments-tab unfinished rows now
+  use the run's own Battery and lead with its name ("WelaPLUS · …", "English FAL EGRA 2 · …"); an
+  unknown Battery shows no name or total. New tests: EGRA picker with an unfinished WelaPLUS; unknown
+  Battery.
+- **Two identical "Start an assessment" buttons.** After the sweep both cards read the same, so a
+  screen reader announced two identical buttons. The EGRA button keeps the visible label and gets
+  the spoken name "Start a Full EGRA"; default-card tests now query by spoken name.
+- **Picker vanished instead of sliding away.** `EgraFormPickerSheet` returned `null` when closed,
+  which skipped the bottom sheet's exit animation. It now stays mounted and remounts on each opening
+  (fresh, nothing selected). Test: closed but mounted after Cancel (fails on the old picker).
+- Card counts ("13 forms", "about 6 min") now come from `EGRA_BATTERIES`; one stale
+  "Finalize run" query in a new summary test updated to the swept label; the duplicate "run" copy
+  rule dropped from CONTEXT (the sweep's entry covers it).
+
+| Gate (Node 20.19.4, after review fixes) | Result |
+|---|---|
+| `npx jest` | `Test Suites: 421 passed, 421 total`; `Tests: 6290 passed, 6290 total` |
+| `npm run test:integration` | `Test Suites: 77 passed, 77 total`; `Tests: 956 passed, 956 total` |
+| `npm run test:types` / `npm run test:content` | exit 0 / `# pass 5`, `# fail 0` |
+| `git diff --check` | PASS |
+
+**Codex adversarial review (gpt-6-astra, branch vs `d553501`): needs-attention, 1 medium finding,
+verified and fixed.** It confirmed 52 EGRA lookups, 208 wrong-language rejections, the four
+`-masi60` cards and 28 unchanged item-set identities, and found no defect in the picker,
+finalize or copy. Finding: in the WelaPLUS child list, an Afrikaans-class child with an unfinished
+EGRA was disabled ("Not available in Afrikaans yet") with no badge, so the EGRA could not be resumed
+from there. Fix: starting and resuming are now separate. The row stays tappable and shows its
+badge when the child has an unfinished assessment; the sheet offers only Resume, with "WelaPLUS
+isn't available in Afrikaans yet, so this assessment can only be resumed."; Abandon-and-start-new
+is hidden and guarded. Test: Afrikaans child, unfinished EGRA, WelaPLUS selected → resumes by run id,
+never starts.
+
+Rebased onto Plan 3 `02537f0` (non-breaking "about N min"; header "<title> · in the child's class
+language"). That header was wrong for any fixed-language battery, so an EGRA form now reads
+"English FAL EGRA 2 · in English" (the Plan 3 fixture test that pinned the old text for a
+fixed-English battery was corrected). The Full EGRA card uses the same non-breaking spaces; its
+test matches text exactly, because RNTL's default normalizer turns U+00A0 into a plain space and
+would pass either way (the WelaPLUS card test had the same blind spot; Plan 3 fixed it in `9ae36da`).
+
+**Codex adversarial review round 2 (gpt-6-astra, branch vs `02537f0`): approve, no findings.**
+It traced `pendingAbandonRunId`, `handleLanguageConfirm`, unfinished-run reloads and
+`UNFINISHED_RUN_EXISTS` recovery and found no path that starts an unsupported battery or abandons by
+mistake; all 13 fixed-language headers resolve (isiZulu included); every existing-run screen resolves
+the battery from the saved run. Its own Jest run was blocked by a sandbox cache write, so the gates
+below are the test evidence. Branch then rebased onto Plan 3 `9ae36da` (test-only).
+
+| Gate (after the review fix; rerun after rebasing onto `9ae36da`) | Result |
+|---|---|
+| `npx jest` | `Test Suites: 421 passed, 421 total`; `Tests: 6292 passed, 6292 total` |
+| `npm run test:integration` | `Test Suites: 77 passed, 77 total`; `Tests: 956 passed, 956 total` |
+| `npm run test:types` / `npm run test:content` | exit 0 / `# pass 5`, `# fail 0` |
+| `git diff --check` | PASS |
+
+- Print the four Masi 60-letter Grade 1 cards and resolve the pack source notes before field use.
+  Stronger skip rules, score bands and the other EGRA open decisions are unchanged.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

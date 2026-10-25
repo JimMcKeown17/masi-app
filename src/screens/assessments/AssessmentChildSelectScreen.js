@@ -214,7 +214,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   };
 
   const abandonAndStart = () => {
-    if (!unfinishedSelection?.visible) return;
+    if (!unfinishedSelection?.visible || startUnavailable(unfinishedSelection.child)) return;
     const { child, run } = unfinishedSelection;
     chooseBatteryLanguage(child, run.id);
     if (!classLanguage(child) && !battery.fixedLanguage) {
@@ -262,11 +262,36 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     navigateToAssessment(selectedChild, languageCode);
   };
 
+  // Whether this child can START the selected Battery. Resuming an unfinished assessment is
+  // separate: it may be another Battery (e.g. an Afrikaans EGRA while WelaPLUS is selected).
+  const startUnavailable = child => {
+    const language = classLanguage(child);
+    return Boolean(battery && !battery.fixedLanguage && language && !battery.languages.includes(language));
+  };
+  // A child's unfinished assessment can be a different Battery from the one being started
+  // (WelaPLUS vs a Full EGRA form), so its name and total come from its own Battery.
+  const unfinishedBatteryOf = run => batteryFor(run.battery_code, run.battery_version);
+  const unfinishedProgress = run => {
+    const total = unfinishedBatteryOf(run)?.questions.length;
+    return total == null ? 'Unfinished' : `Unfinished ${run.question_count}/${total}`;
+  };
+  const unfinishedSummary = run => {
+    const runBattery = unfinishedBatteryOf(run);
+    const total = runBattery?.questions.length;
+    const done = total == null
+      ? `${run.question_count} ${run.question_count === 1 ? 'Question' : 'Questions'} done`
+      : `${run.question_count} of ${total} Questions done`;
+    return [runBattery?.title, `Started ${formatRunStart(run.started_at, new Date())}`, done, `code ${runCode(run.id)}`]
+      .filter(Boolean).join(' · ');
+  };
+
   const renderChild = ({ item }) => {
     if (batteryMode) {
       const language = classLanguage(item);
       const unfinished = unfinishedRuns.find(run => run.child_id === item.id);
-      const unavailable = !battery?.fixedLanguage && language && !battery?.languages.includes(language);
+      const unavailable = startUnavailable(item);
+      // An unfinished assessment stays reachable even when this Battery can't start for the child.
+      const blocked = unavailable && !unfinished;
       const lastRun = lastRuns[item.id];
       const lastRunDate = lastRun && new Date(`${toLocalDateString(lastRun)}T12:00:00`).toLocaleDateString('en-GB', {
         day: 'numeric', month: 'short',
@@ -274,14 +299,14 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       return <ListRow title={`${item.first_name} ${item.last_name}`}
         subtitle={[gradeLabel(item.grade), language ? LANGUAGE_LABELS[language] ?? item.home_language : 'class language not set',
           lastRunDate ? `last assessed ${lastRunDate}` : null].filter(Boolean).join(' · ')}
-        titleStyle={unavailable ? styles.unavailableName : undefined}
+        titleStyle={blocked ? styles.unavailableName : undefined}
         note={unavailable ? `Not available in ${LANGUAGE_LABELS[language] ?? item.home_language} yet` : undefined}
         noteStyle={styles.unavailable}
-        lead={<Avatar muted={Boolean(unavailable)} label={`${item.first_name?.[0] ?? ''}${item.last_name?.[0] ?? ''}`.toUpperCase()} />}
-        trailing={!unavailable && unfinished && battery
-            ? <StatusBadge tone="warning" label={`Unfinished ${unfinished.question_count}/${battery.questions.length}`} />
+        lead={<Avatar muted={blocked} label={`${item.first_name?.[0] ?? ''}${item.last_name?.[0] ?? ''}`.toUpperCase()} />}
+        trailing={unfinished && battery
+            ? <StatusBadge tone="warning" label={unfinishedProgress(unfinished)} />
             : undefined}
-        disabled={!battery || Boolean(unavailable) || loading || runsLoading}
+        disabled={!battery || blocked || loading || runsLoading}
         accessibilityLabel={`Select ${item.first_name} ${item.last_name} for assessment`}
         onPress={() => handleChildPress(item)} />;
     }
@@ -312,7 +337,9 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       {battery && <Text style={styles.batterySubtitle}>
-        {battery.title} · in the child's class language
+        {battery.fixedLanguage
+          ? `${battery.title} · in ${LANGUAGE_LABELS[battery.fixedLanguage] ?? battery.fixedLanguage}`
+          : `${battery.title} · in the child's class language`}
       </Text>}
       <View style={styles.searchbar}>
       <SearchField
@@ -345,15 +372,20 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
 
       <BottomSheet visible={Boolean(unfinishedSelection?.visible)}
         title={`${unfinishedSelection?.child.first_name} has an unfinished assessment`}
-        subtitle={unfinishedSelection ? `Started ${formatRunStart(unfinishedSelection.run.started_at, new Date())} · ${unfinishedSelection.run.question_count} of ${battery.questions.length} Questions done · code ${runCode(unfinishedSelection.run.id)}` : undefined}
+        subtitle={unfinishedSelection ? unfinishedSummary(unfinishedSelection.run) : undefined}
         onDismiss={dismissUnfinished} dismissLabel="Dismiss unfinished assessment">
         <View style={styles.sheetActions}>
           {startError && <InlineNote>{startError}</InlineNote>}
           <BrandButton label="Resume" onPress={resumeRun} disabled={starting || loading || runsLoading} />
-          <InlineNote tone="warning">{`Starting new closes the old assessment as abandoned. ${unfinishedSelection?.run.question_count
-            ? `Its ${unfinishedSelection.run.question_count} saved ${unfinishedSelection.run.question_count === 1 ? 'Question stays' : 'Questions stay'} in ${unfinishedSelection.child.first_name}'s history.`
-            : 'Nothing was saved in it yet.'}`}</InlineNote>
-          <BrandButton label="Abandon it and start new" variant="warning" onPress={abandonAndStart} loading={starting} disabled={loading || runsLoading} />
+          {unfinishedSelection && startUnavailable(unfinishedSelection.child)
+            ? <InlineNote>{`${battery.title} isn't available in ${LANGUAGE_LABELS[classLanguage(unfinishedSelection.child)]
+              ?? unfinishedSelection.child.home_language} yet, so this assessment can only be resumed.`}</InlineNote>
+            : <>
+              <InlineNote tone="warning">{`Starting new closes the old assessment as abandoned. ${unfinishedSelection?.run.question_count
+                ? `Its ${unfinishedSelection.run.question_count} saved ${unfinishedSelection.run.question_count === 1 ? 'Question stays' : 'Questions stay'} in ${unfinishedSelection.child.first_name}'s history.`
+                : 'Nothing was saved in it yet.'}`}</InlineNote>
+              <BrandButton label="Abandon it and start new" variant="warning" onPress={abandonAndStart} loading={starting} disabled={loading || runsLoading} />
+            </>}
           <BrandButton label="Cancel" variant="tertiary" tone="ink" onPress={dismissUnfinished} disabled={starting} />
         </View>
       </BottomSheet>

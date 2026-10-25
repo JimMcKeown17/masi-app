@@ -10,6 +10,37 @@ import { validateResult } from '../src/assessment-questions/contractTest/validat
 import { assertSubmitShape, toSubmitArgs } from '../src/services/assessmentFamilyPayload';
 import { computeAssessmentMastery } from '../src/utils/letterMastery';
 import { buildEgraResult } from '../test-support/egraResults';
+import { batteryFor, bundledItemSetFor } from '../src/assessment-questions';
+
+test.each(EGRA_FORMS)('$title starts, saves four host-resolved results and finalizes with pending outbox families in real SQLite', async form => {
+  const battery = batteryFor('egra', form.id);
+  expect(battery).toBe(egraBatteryFor('egra', form.id));
+  const runId = uuid();
+  await runs.startRun({ id: runId, userId, childId, batteryCode: 'egra', batteryVersion: form.id, language: battery.fixedLanguage });
+  for (const question of battery.questions) {
+    const set = bundledItemSetFor(question.question_code, question.question_version, battery.fixedLanguage);
+    const result = buildEgraResult(set, { correct: [0],
+      responses: ['correct', 'incorrect', 'not_asked', 'correct', 'not_asked'] });
+    expect(validateResult(result, { stopRule: set.stop_rule }).valid).toBe(true);
+    await assessments.saveQuestionResult({ assessmentId: uuid(), userId, childId, batteryRunId: runId, result });
+  }
+  const resumed = await createBatteryRunsRepository({ database: db }).getRunWithResults(runId);
+  expect(resumed.results).toHaveLength(4);
+  expect(resumed.language).toBe(form.languageCode);
+  expect(resumed.results.find(row => row.question_code === 'reading_comprehension'))
+    .toMatchObject({ score: 2, total_items: 5, derived: { questions_asked: 3 } });
+  await runs.finalizeRun(runId, {
+    questionCodes: egraBatteryFor('egra', form.id).questions.map(question => question.question_code),
+  });
+  expect((await runs.getRunWithResults(runId)).status).toBe('completed');
+  const outbox = await db.getAllAsync('select table_name, status, payload from sync_outbox');
+  expect(outbox).toHaveLength(5);
+  expect(outbox.filter(row => row.table_name === 'battery_runs')).toHaveLength(1);
+  const families = outbox.filter(row => row.table_name === 'assessments');
+  expect(families).toHaveLength(4);
+  expect(outbox.every(row => row.status === 'pending')).toBe(true);
+  for (const row of families) expect(() => assertSubmitShape(JSON.parse(row.payload))).not.toThrow();
+});
 
 let db, userId, childId, programmeId, assessments, runs;
 beforeEach(async () => {

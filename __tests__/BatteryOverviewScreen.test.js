@@ -29,6 +29,35 @@ import InlineNote from '../src/components/common/InlineNote';
 import ListRow from '../src/components/common/ListRow';
 import StatusBadge from '../src/components/common/StatusBadge';
 import BatteryOverviewScreen from '../src/screens/assessments/battery/BatteryOverviewScreen';
+import { egraBatteryFor } from '../src/assessment-questions/egra';
+
+test.each(['completed', 'skipped_tired'])('EGRA persists comprehension auto-skip after zero/skipped story (%s), with no Writing Sheet', async stoppedReason => {
+  const battery = egraBatteryFor('egra', 'dbe-egra-en-hl-1-v1');
+  run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en',
+    results: battery.questions.slice(0, 3).map((question, index) => ({ ...resultRow(question, index),
+      ...(index === 2 ? { stopped_reason: stoppedReason, score: 0 } : {}) })) };
+  const screen = renderOverview();
+  await screen.findByText(`${battery.title} · English · 4 of 4 decided`);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledWith({
+    assessmentId: expect.any(String), userId: 'ea-1', childId: CHILD.id, batteryRunId: ID,
+    result: skippedResult(battery.questions[3], 'en', 'skipped_prerequisite_unmet'),
+  });
+  expect(screen.getByText('Skipped · Not reached')).toBeTruthy();
+  expect(screen.queryByText(/Writing Sheet/)).toBeNull();
+  screen.refresh();
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+  expect(run.results[3].stopped_reason).toBe('skipped_prerequisite_unmet');
+});
+
+test('EGRA first Question is offered without the Writing Sheet reminder', async () => {
+  const battery = egraBatteryFor('egra', 'dbe-egra-en-fal-2-v1');
+  run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en', results: [] };
+  const screen = renderOverview();
+  await screen.findByRole('button', { name: 'Start Letter sounds' });
+  expect(screen.getByText(`${battery.title} · English · 0 of 4 decided`)).toBeTruthy();
+  expect(screen.queryByText(/Writing Sheet/)).toBeNull();
+});
 
 jest.setTimeout(30000);
 configure({ asyncUtilTimeout: 5000 });

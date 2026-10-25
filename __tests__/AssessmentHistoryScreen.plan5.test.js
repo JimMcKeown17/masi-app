@@ -89,6 +89,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
 
   test.each([
     [BATTERY.battery_code, BATTERY.battery_version, 'WelaPLUS', 11, '11 of 11 decided'],
+    ['egra', 'dbe-egra-en-fal-2-v1', 'English FAL EGRA 2', 4, '4 of 4 decided'],
     ['future_battery', '99', 'future_battery', 3, '3 decided'],
   ])('same-child %s runs on different dates have distinct spoken dates and displayed decided counts', async (code, version, title, count, decided) => {
     assessmentsRepository.getQuestionResults.mockResolvedValue([]);
