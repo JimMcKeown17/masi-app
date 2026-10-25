@@ -215,7 +215,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text variant="bodyMedium" style={styles.emptyText}>
-                No assessments yet. Run your first assessment!
+                No assessments yet. Assess your first child!
               </Text>
             </View>
           }

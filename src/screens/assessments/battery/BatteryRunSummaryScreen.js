@@ -103,7 +103,7 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
   });
   const canFinalize = Boolean(view?.writable && view.eligibleToFinalize);
   useEffect(() => {
-    if (ready && run) navigation.setOptions({ title: canFinalize ? 'Review run' : 'Run summary' });
+    if (ready && run) navigation.setOptions({ title: canFinalize ? 'Review assessment' : 'Assessment summary' });
   }, [ready, run, canFinalize, navigation]);
   const checked = confirmation?.handle === handle && confirmation.runId === runId;
   const refreshing = Boolean(data.refreshing || rosterLoading);
@@ -139,7 +139,7 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
         navigation.goBack();
         return;
       }
-      showToast({ tone: 'error', message: "Couldn't finalize this run. Try again." });
+      showToast({ tone: 'error', message: "Couldn't finalize this assessment. Try again." });
       await load();
     } finally {
       if (inFlight.current === token) {
@@ -165,17 +165,17 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
   }, [ready, data.refreshing, run, handle, runId, navigation]);
 
   if (!ready) return <View style={styles.center}>
-    <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="Loading assessment run" />
+    <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="Loading assessment" />
   </View>;
   if (data.error || !run) return <View style={styles.message}>
-    <InlineNote>{data.error ? "Couldn't load this run. Try again." : 'This run is no longer available.'}</InlineNote>
+    <InlineNote>{data.error ? "Couldn't load this assessment. Try again." : 'This assessment is no longer available.'}</InlineNote>
     {data.error && <BrandButton label="Try again" onPress={load} />}
   </View>;
   if (!battery) return <View style={styles.message}>
     <Text style={styles.name}>{childName}</Text>
     <StatusBadge label={runCode(run.id)} />
     <StatusBadge {...status} />
-    <InlineNote tone="warning">This run's assessment isn't available in this version of the app.</InlineNote>
+    <InlineNote tone="warning">This assessment isn't available in this version of the app.</InlineNote>
   </View>;
 
   return <View style={styles.page}>
@@ -188,7 +188,7 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
       <StatusBadge {...status} />
       {view.readOnlyReason === 'other_phone' && <InlineNote tone="warning">Started on another phone</InlineNote>}
       {view.readOnlyReason === 'unassigned' && <InlineNote tone="warning">
-        This child is no longer assigned to you — you can abandon this run.
+        This child is no longer assigned to you — you can abandon this assessment.
       </InlineNote>}
       <ListGroup>{(expanded ? view.rows : view.rows.slice(0, 4)).map(row => (
         <ListRow key={row.question.question_code} title={row.question.title} subtitle={row.detail}
@@ -202,15 +202,15 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
       {canFinalize && view.hasWritingSheet && <>
         <Text style={styles.section}>Before you finish</Text>
         <View style={styles.checklist}>
-          <ChecklistRow label={`Write run code ${runCode(run.id)} and ${child.first_name}'s name on the Writing Sheet`}
+          <ChecklistRow label={`Write assessment code ${runCode(run.id)} and ${child.first_name}'s name on the Writing Sheet`}
             checked={checked} onToggle={busy ? undefined : toggle}>
-            Write run code <Text style={styles.runCode}>{runCode(run.id)}</Text>{` and ${child.first_name}'s name on the Writing Sheet`}
+            Write assessment code <Text style={styles.runCode}>{runCode(run.id)}</Text>{` and ${child.first_name}'s name on the Writing Sheet`}
           </ChecklistRow>
         </View>
       </>}
     </ScrollView>
     {canFinalize && <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-      <BrandButton label="Finalize run" size="lg" onPress={finalize}
+      <BrandButton label="Finalize assessment" size="lg" onPress={finalize}
         disabled={busy || (view.hasWritingSheet && !checked)} />
       {view.hasWritingSheet && !checked && <Text style={styles.caption}>Tick the box to finalize</Text>}
     </View>}

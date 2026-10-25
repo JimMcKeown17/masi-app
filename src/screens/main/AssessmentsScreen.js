@@ -89,7 +89,7 @@ export default function AssessmentsScreen({ navigation }) {
             setReferenceNames(names);
             setUnfinishedRuns(runs);
           } catch {
-            if (canPublish()) setRunsError("Couldn't load unfinished runs. Try again.");
+            if (canPublish()) setRunsError("Couldn't load unfinished assessments. Try again.");
           }
         };
         await Promise.all([loadStats(), loadRuns()]);
@@ -120,7 +120,7 @@ export default function AssessmentsScreen({ navigation }) {
   if (!programmeGate.hasActiveProgramme) {
     return (
       <View style={[styles.container, styles.noticeContainer]}>
-        <NoActiveProgrammeNotice action="run assessments" />
+        <NoActiveProgrammeNotice action="assess children" />
       </View>
     );
   }
@@ -141,14 +141,14 @@ export default function AssessmentsScreen({ navigation }) {
         ]} />
       )}
 
-      <Text style={styles.hint}>Run timed assessments and view results.</Text>
+      <Text style={styles.hint}>Assess children and view results.</Text>
 
       {battery && <SurfaceCard style={styles.card}>
         <Text accessibilityRole="header" style={styles.cardTitle}>{battery.title}</Text>
         <Text style={styles.cardDescription}>
-          {`All ${battery.questions.length} Questions in one run · ${languages} · about ${battery.aboutMinutes} min`}
+          {`All ${battery.questions.length} Questions · ${languages} · about ${battery.aboutMinutes} min`}
         </Text>
-        <BrandButton label="Start a run" variant="primary" style={styles.startButton} disabled={gateChecking}
+        <BrandButton label="Start an assessment" variant="primary" style={styles.startButton} disabled={gateChecking}
           onPress={() => navigateToRun('AssessmentChildSelect', {
             batteryCode: battery.battery_code, batteryVersion: battery.battery_version,
           })} />
@@ -159,7 +159,7 @@ export default function AssessmentsScreen({ navigation }) {
         <BrandButton label="Retry" variant="tertiary" onPress={() => setRetryCount(value => value + 1)} />
       </View>}
       {unfinishedRuns.length > 0 && <View style={styles.section}>
-        <SectionHeader title="Unfinished runs" />
+        <SectionHeader title="Unfinished assessments" />
         <ListGroup>
           {unfinishedRuns.map(run => {
             const child = assessableChildren.find(row => row.id === run.child_id);

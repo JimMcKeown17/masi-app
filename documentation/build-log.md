@@ -4179,6 +4179,22 @@ control-child check as TestB Second, iPhone.
 
 Review fixes R1–R3 decouple optional picker history from unfinished-run gating, restore dated History accessibility labels with the displayed decided count, and reset overview reveal state and geometry on ScrollView unmount (Node `v20.19.4`: failing-first regression coverage; three touched suites pass 84 tests; `npx jest --silent` passes 421 suites / 6,121 tests; `npm run test:types` passes).
 
+
+### 2026-10-25 — EA assessment terminology
+
+Jim's copy decision: EAs see “assessment” for a Battery Run and “assessment code” for its code;
+internal Run names remain unchanged. Copy only; no layout, behavior or logic changes.
+Changed `src/screens/main/AssessmentsScreen.js`, `src/screens/assessments/{AssessmentChildSelectScreen,AssessmentDetailScreen,AssessmentHistoryScreen,ChildResultsScreen}.js`, `src/screens/assessments/battery/{BatteryOverviewScreen,BatteryRunSummaryScreen,BatteryQuestionScreen}.js`, and `src/navigation/AppNavigator.js`; updated their nine existing test suites plus `CONTEXT.md`, `documentation/welaplus-printout-pack.md`, `documentation/design-system.md` and the dated amendment atop `docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md`.
+Beyond the copy table: Detail's “Battery Questions are shown in their assessment.”, History's
+“No assessments yet. Assess your first child!”, and Summary's repeated “you can abandon this
+assessment” warning. Source sweep (including assessment-question UI) found no remaining
+EA-facing run/runs copy; item-set reading content, internal values/errors and dev copy stay as supplied.
+Node `v20.19.4`: each screen slice failed against old copy before passing; combined touched
+`npx jest __tests__/AssessmentsScreen.test.js __tests__/AssessmentChildSelectScreen.battery.test.js __tests__/BatteryOverviewScreen.test.js __tests__/BatteryRunSummaryScreen.test.js __tests__/AppNavigator.headers.test.js __tests__/BatteryQuestionScreen.test.js __tests__/assessmentEntryRouting.test.js __tests__/AssessmentResultsScreen.test.js __tests__/AssessmentHistoryScreen.plan5.test.js --runInBand --silent`: **9 suites / 241 tests passed**;
+full `npx jest --silent`: **421 suites / 6,138 tests passed**; `npm run test:types`: **passed**.
+Syntax-tree comparison confirms only literal/JSX copy changed in all nine production files;
+`git diff --check` passed. No new documentation file or guard-test file; no device check in this copy task.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

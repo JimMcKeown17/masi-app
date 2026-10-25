@@ -45,7 +45,7 @@ export default function AssessmentDetailScreen({ route }) {
 
   if (loading) return <View style={styles.container}><ActivityIndicator color={colors.primary} accessibilityLabel="Loading result" /></View>;
   if (!assessment || assessment.battery_run_id) return <View style={[styles.container, styles.scrollContent]}>
-    <Text>{readError ? 'Could not load result.' : assessment?.battery_run_id ? 'Battery Questions are shown in their run.' : 'Result not found.'}</Text>
+    <Text>{readError ? 'Could not load result.' : assessment?.battery_run_id ? 'Battery Questions are shown in their assessment.' : 'Result not found.'}</Text>
   </View>;
   const attempted = assessment.derived?.total_attempted ?? assessment.items.filter(item => item.metadata?.reached !== false).length;
   const incorrect = attempted - assessment.score;

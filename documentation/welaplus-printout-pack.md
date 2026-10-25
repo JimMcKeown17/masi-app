@@ -188,10 +188,10 @@ the separate Head Office calibration strip belongs on the Writing Sheet.
 
 ## Writing Sheet — Q5, Q9, Q10 and Q11
 
-**Header:** child's name, school, grade, date, EA name and a clearly boxed **Run code** field
+**Header:** child's name, school, grade, date, EA name and a clearly boxed **Assessment code** field
 with the guide `___-___`. Leave space to handwrite all six characters and the hyphen. The EA
-copies the code from the phone; it identifies the run alongside the child's name when the
-same child has multiple runs. Do not preprint the example code as if it were a real child's.
+copies the code from the phone; internally this is the Run code. It identifies the run alongside
+the child's name when the same child has multiple runs. Do not preprint the example code as if it were a real child's.
 
 **Q5 content/layout:** 26 picture cells, each with an empty writing box. Keep the 2024 grid's
 six-column order (four full rows, then two cells). The following mapping is **designer reference
@@ -243,7 +243,7 @@ every EA marking aid/`Total: __ / N` box; keep only the Q11 Head Office strip sp
 The old EA marking booklet and instruction sheet are retired print deliverables.
 
 The app requires **one** acknowledgment before finalize when a battery has a Writing Sheet:
-`Write run code <code> and <first name>'s name on the Writing Sheet`. The same code is reminded
+`Write assessment code <code> and <first name>'s name on the Writing Sheet`. The same code is reminded
 before the first Writing Sheet Question. This does not call for a printed checkbox. There is
 no second filing acknowledgment; do not add one to the sheet or production instructions.
 
@@ -251,7 +251,7 @@ no second filing acknowledgment; do not add one to the sheet or production instr
 
 Before producing stock, Masi and the designer approve the complete physical pack: exact text
 and footers, case-sensitive Grid A, Side B row order, Side C paragraphs, Q5 artwork, numbered
-Q9 order, handwriting space and run-code field. A first-language reviewer must check the
+Q9 order, handwriting space and assessment-code field. A first-language reviewer must check the
 isiXhosa transcription; that remains a Release 1 content gate. Retain the approved editable
 masters with the versioned PDFs. A content/order change must go back to Masi's assessment
 owner so paper and app are versioned together.
@@ -262,4 +262,4 @@ Provenance for engineering/content review (the layout instructions above are sel
 - [WelaPLUS battery and material assignments](../src/assessment-questions/battery/wela_plus_full.ts).
 - [Grid A](../src/assessment-questions/itemsets/grid_a.ts), [EN Q6](../src/assessment-questions/itemsets/wela_plus_read_words.en.ts), [XH Q6](../src/assessment-questions/itemsets/wela_plus_read_words.xh.ts).
 - [EN Q7](../src/assessment-questions/itemsets/wela_plus_read_sentences.en.ts), [XH Q7](../src/assessment-questions/itemsets/wela_plus_read_sentences.xh.ts), [EN Q8](../src/assessment-questions/itemsets/wela_plus_read_passage.en.ts), [XH Q8](../src/assessment-questions/itemsets/wela_plus_read_passage.xh.ts).
-- [Footer rule (`materialsLine`)](../src/utils/batteryRun.js) and [run summary acknowledgment](../src/screens/assessments/battery/BatteryRunSummaryScreen.js).
+- [Footer rule (`materialsLine`)](../src/utils/batteryRun.js) and [assessment summary acknowledgment](../src/screens/assessments/battery/BatteryRunSummaryScreen.js).

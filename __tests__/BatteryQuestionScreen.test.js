@@ -220,18 +220,18 @@ test('save failure shows "Couldn\'t save — try again" and retry saves the same
 });
 
 test.each(['RUN_NOT_WRITABLE', 'QUESTION_ALREADY_DECIDED'])(
-  '%s shows "This run is closed" with "Back to run", no retry', async code => {
+  '%s shows "This assessment is closed" with "Back to assessment", no retry', async code => {
     repositories.assessments.saveQuestionResult.mockRejectedValueOnce(Object.assign(new Error('refused'), { code }));
     const screen = await ready(renderHost());
     const complete = mockQuestionProps.onComplete;
     fireEvent.press(screen.getByRole('button', { name: 'Finish test' }));
-    await screen.findByText('This run is closed');
-    expect(screen.getByText("This answer can't be saved because the run is no longer open.")).toBeTruthy();
+    await screen.findByText('This assessment is closed');
+    expect(screen.getByText("This answer can't be saved because the assessment is no longer open.")).toBeTruthy();
     expect(screen.queryByText("Couldn't save — try again")).toBeNull();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Start test' })).toBeNull();
     act(() => complete(result));
-    fireEvent.press(screen.getByRole('button', { name: 'Back to run' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Back to assessment' }));
     expect(screen.routeNames()).toEqual(['BatteryOverview']);
     expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
     expect(mockSync).not.toHaveBeenCalled();
@@ -241,8 +241,8 @@ test.each(['RUN_NOT_WRITABLE', 'QUESTION_ALREADY_DECIDED'])(
 test.each([4, 6])('opening a Question that is already decided or not next renders the closed state, not the component (%i decided)', async count => {
   run.results = decide(count);
   const screen = renderHost();
-  await screen.findByText('This run is closed');
-  expect(screen.getByRole('button', { name: 'Back to run' })).toBeTruthy();
+  await screen.findByText('This assessment is closed');
+  expect(screen.getByRole('button', { name: 'Back to assessment' })).toBeTruthy();
   expect(mockQuestionProps).toBeNull();
   expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
 });
@@ -262,7 +262,7 @@ test('waits for the whole-class roster and programme gate before presenting capt
   const screen = renderHost();
   expect(screen.getByLabelText('Loading assessment Question')).toBeTruthy();
   expect(mockQuestionProps).toBeNull();
-  expect(screen.queryByText('This run is closed')).toBeNull();
+  expect(screen.queryByText('This assessment is closed')).toBeNull();
   mockRoster = { yourChildren: [], restOfClass: [CHILD], all: [CHILD], loading: false };
   screen.refresh();
   expect(screen.getByLabelText('Loading assessment Question')).toBeTruthy();
@@ -279,7 +279,7 @@ test.each(['child', 'none', 'different', 'terminal', 'remote'])(
     if (kind === 'terminal') run.status = 'completed';
     if (kind === 'remote') run.started_here = 0;
     const screen = renderHost();
-    await screen.findByText('This run is closed');
+    await screen.findByText('This assessment is closed');
     expect(mockQuestionProps).toBeNull();
     expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
     if (kind === 'child') {
@@ -297,7 +297,7 @@ test.each(['battery', 'question', 'language', 'bundle'])(
     if (kind === 'language') run.language = 'zu';
     if (kind === 'bundle') bundledItemSetFor.mockReturnValue(null);
     const screen = renderHost(params);
-    await screen.findByText('This run is closed');
+    await screen.findByText('This assessment is closed');
     expect(mockQuestionProps).toBeNull();
     expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
   },
@@ -318,7 +318,7 @@ test('roster reload during capture preserves the current presentation and its hi
 test('a load failure can be retried without presenting capture early', async () => {
   repositories.batteryRuns.getRunWithResults.mockRejectedValueOnce(new Error('disk unavailable'));
   const screen = renderHost();
-  await screen.findByText("Couldn't load this run. Try again.");
+  await screen.findByText("Couldn't load this assessment. Try again.");
   expect(mockQuestionProps).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
   await ready(screen);

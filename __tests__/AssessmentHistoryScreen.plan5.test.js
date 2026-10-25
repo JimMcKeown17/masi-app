@@ -75,6 +75,13 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 describe('AssessmentHistoryScreen Plan 5 behavior', () => {
+  test('empty history invites the EA to assess a child', async () => {
+    assessmentsRepository.getQuestionResults.mockResolvedValue([]);
+    batteryRunsRepository.getRunsForUser.mockResolvedValue([]);
+    const screen = render(<AssessmentHistoryScreen navigation={{ navigate: jest.fn() }} />);
+    expect(await screen.findByText('No assessments yet. Assess your first child!')).toBeTruthy();
+  });
+
   test.each([
     [BATTERY.battery_code, BATTERY.battery_version, 'WelaPLUS', 11, '11 of 11 decided'],
     ['future_battery', '99', 'future_battery', 3, '3 decided'],
@@ -247,7 +254,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
 
     expect(getByText('Pending sync')).toBeTruthy();
     expect(getByText('English')).toBeTruthy();
-    expect(queryByText('No assessments yet. Run your first assessment!')).toBeNull();
+    expect(queryByText('No assessments yet. Assess your first child!')).toBeNull();
     expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledTimes(1);
     expect(assessmentsRepository.getQuestionResults).toHaveBeenCalledWith({
       userId: 'user-1',

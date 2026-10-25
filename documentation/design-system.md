@@ -382,7 +382,7 @@ cannot reopen Reset. Recovery and Reset's native D10 gate are tracked in
 | `dashboard/StatBar({ items })` | Bare stat columns. Items: { label, value, color?, onPress?, accessibilityLabel? }. An explicit accessibilityLabel groups a column into one accessible element; onPress gives it the button role, with the existing “View {label}: {value}” fallback when no label is supplied. displayTitle/tabular numeral, caps textLabel; actions use primary plus an 18dp chevron. color overrides the numeral for score meaning. Current compact labels retain one line, fit-to-size (floor 0.85), and 1.2 scaling caps on label/value. |
 
 The [ChecklistRow](../src/components/assessments/ChecklistRow.js) label comes from the run code
-and child's first name: “Write run code {code} and {firstName}'s name on the Writing Sheet”.
+and child's first name: “Write assessment code {code} and {firstName}'s name on the Writing Sheet”.
 The summary shows this one check for an eligible writable run when `view.hasWritingSheet`; until
 checked, Finalize stays disabled with “Tick the box to finalize”. Do not add a filing check.
 The row does not own persistence or finalization.

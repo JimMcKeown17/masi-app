@@ -69,7 +69,7 @@ const TITLES = {
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
   BatteryOverview: '',
-  BatteryRunSummary: 'Review run',
+  BatteryRunSummary: 'Review assessment',
   SessionCountRanking: 'Session count', SyncStatus: 'Sync status',
   QuestionGallery: 'Question gallery',
   ChildrenList: 'Children', ClassDetail: '', ChildResults: 'Child results',

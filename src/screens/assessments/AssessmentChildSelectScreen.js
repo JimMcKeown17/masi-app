@@ -91,7 +91,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
               setRunsLoading(false);
             }
           }).catch(() => {
-            if (active && handle.isCurrent()) setStartError("Couldn't load unfinished runs. Try again.");
+            if (active && handle.isCurrent()) setStartError("Couldn't load unfinished assessments. Try again.");
           });
         batteryRuns.getRunsForUser(user.id)
           .then(history => {
@@ -186,7 +186,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
           if (!handle.isCurrent() || !focusedRef.current) return;
         }
       }
-      setStartError("Couldn't start this run. Try again.");
+      setStartError("Couldn't start this assessment. Try again.");
       launchingRef.current = false;
     } finally {
       startPendingRef.current = false;
@@ -273,7 +273,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       });
       return <ListRow title={`${item.first_name} ${item.last_name}`}
         subtitle={[gradeLabel(item.grade), language ? LANGUAGE_LABELS[language] ?? item.home_language : 'class language not set',
-          lastRunDate ? `last run ${lastRunDate}` : null].filter(Boolean).join(' · ')}
+          lastRunDate ? `last assessed ${lastRunDate}` : null].filter(Boolean).join(' · ')}
         titleStyle={unavailable ? styles.unavailableName : undefined}
         note={unavailable ? `Not available in ${LANGUAGE_LABELS[language] ?? item.home_language} yet` : undefined}
         noteStyle={styles.unavailable}
@@ -312,7 +312,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       {battery && <Text style={styles.batterySubtitle}>
-        {battery.title} run · the language comes from the child's class
+        {battery.title} · the language comes from the child's class
       </Text>}
       <View style={styles.searchbar}>
       <SearchField
@@ -344,13 +344,13 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
       />
 
       <BottomSheet visible={Boolean(unfinishedSelection?.visible)}
-        title={`${unfinishedSelection?.child.first_name} has an unfinished run`}
-        subtitle={unfinishedSelection ? `Started ${formatRunStart(unfinishedSelection.run.started_at, new Date())} · ${unfinishedSelection.run.question_count} of ${battery.questions.length} Questions done · run ${runCode(unfinishedSelection.run.id)}` : undefined}
-        onDismiss={dismissUnfinished} dismissLabel="Dismiss unfinished run">
+        title={`${unfinishedSelection?.child.first_name} has an unfinished assessment`}
+        subtitle={unfinishedSelection ? `Started ${formatRunStart(unfinishedSelection.run.started_at, new Date())} · ${unfinishedSelection.run.question_count} of ${battery.questions.length} Questions done · code ${runCode(unfinishedSelection.run.id)}` : undefined}
+        onDismiss={dismissUnfinished} dismissLabel="Dismiss unfinished assessment">
         <View style={styles.sheetActions}>
           {startError && <InlineNote>{startError}</InlineNote>}
-          <BrandButton label="Resume run" onPress={resumeRun} disabled={starting || loading || runsLoading} />
-          <InlineNote tone="warning">{`Starting new closes the old run as abandoned. ${unfinishedSelection?.run.question_count
+          <BrandButton label="Resume" onPress={resumeRun} disabled={starting || loading || runsLoading} />
+          <InlineNote tone="warning">{`Starting new closes the old assessment as abandoned. ${unfinishedSelection?.run.question_count
             ? `Its ${unfinishedSelection.run.question_count} saved ${unfinishedSelection.run.question_count === 1 ? 'Question stays' : 'Questions stay'} in ${unfinishedSelection.child.first_name}'s history.`
             : 'Nothing was saved in it yet.'}`}</InlineNote>
           <BrandButton label="Abandon it and start new" variant="warning" onPress={abandonAndStart} loading={starting} disabled={loading || runsLoading} />

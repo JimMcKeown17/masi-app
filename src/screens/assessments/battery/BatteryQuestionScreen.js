@@ -70,7 +70,7 @@ export default function BatteryQuestionScreen({ navigation, route }) {
     <ActivityIndicator color={colors.primary} size="large" accessibilityLabel="Loading assessment Question" />
   </View>;
   if (data.error) return <View style={styles.message}>
-    <InlineNote>Couldn't load this run. Try again.</InlineNote>
+    <InlineNote>Couldn't load this assessment. Try again.</InlineNote>
     <BrandButton label="Try again" onPress={() => setData(null)} />
   </View>;
   return <QuestionHost key={`${runId}:${questionCode}`} data={data} navigation={navigation} />;
@@ -127,9 +127,9 @@ function QuestionHost({ data, navigation }) {
           childName={childName} allowSkip onStart={onStart} onComplete={onComplete} />
       </View>
     </>}
-    <BottomSheet visible={closed} title="This run is closed" dismissLabel="Dismiss closed run" onDismiss={close}
-      footer={<BrandButton label="Back to run" size="lg" onPress={close} />}>
-      <Text style={styles.body}>This answer can't be saved because the run is no longer open.</Text>
+    <BottomSheet visible={closed} title="This assessment is closed" dismissLabel="Dismiss closed assessment" onDismiss={close}
+      footer={<BrandButton label="Back to assessment" size="lg" onPress={close} />}>
+      <Text style={styles.body}>This answer can't be saved because the assessment is no longer open.</Text>
     </BottomSheet>
     <BottomSheet visible={!closed && guarded.saveError && !guarded.leaveSheet.visible}
       title="Couldn't save — try again" dismissLabel="Dismiss save error" onDismiss={guarded.dismissSaveError}

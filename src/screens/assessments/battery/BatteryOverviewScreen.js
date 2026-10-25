@@ -25,8 +25,8 @@ import { LANGUAGE_LABELS } from '../../../utils/assessmentRegistry';
 import { buildRunView, runCode } from '../../../utils/batteryRun';
 
 const SKIP_OPTIONS = MANUAL_SKIP_REASONS.map(({ reason, label }) => ({ key: reason, label }));
-const UNASSIGNED = 'This child is no longer assigned to you — you can abandon this run.';
-const UNAVAILABLE = "This run's assessment isn't available in this version of the app.";
+const UNASSIGNED = 'This child is no longer assigned to you — you can abandon this assessment.';
+const UNAVAILABLE = "This assessment isn't available in this version of the app.";
 
 function QuestionRow({ row, writable, onStart, onSkip, showDivider, onLayout }) {
   const undecided = row.state === 'next' || row.state === 'not_started';
@@ -290,16 +290,16 @@ export default function BatteryOverviewScreen({ navigation, route }) {
       navigation.goBack();
     } catch (error) {
       if (canPublish() && !isStaleActorError(error)) {
-        showToast({ tone: 'error', message: "Couldn't abandon this run. Try again." });
+        showToast({ tone: 'error', message: "Couldn't abandon this assessment. Try again." });
       }
     } finally { endMutation(token); }
   };
 
   if (!ready || (view && ['closed', 'other_phone'].includes(view.readOnlyReason))) {
-    return <View style={styles.center}><ActivityIndicator color={colors.primary} size="large" accessibilityLabel="Loading assessment run" /></View>;
+    return <View style={styles.center}><ActivityIndicator color={colors.primary} size="large" accessibilityLabel="Loading assessment" /></View>;
   }
   if (data.error || !run) return <View style={styles.message}>
-    <InlineNote>{data.error ? "Couldn't load this run. Try again." : 'This run is no longer available.'}</InlineNote>
+    <InlineNote>{data.error ? "Couldn't load this assessment. Try again." : 'This assessment is no longer available.'}</InlineNote>
     {data.error && <BrandButton label="Try again" onPress={load} />}
   </View>;
   if (!battery) return <View style={styles.message}>
@@ -317,7 +317,7 @@ export default function BatteryOverviewScreen({ navigation, route }) {
       </View>
       {view.readOnlyReason === 'unassigned' && <InlineNote tone="warning">{UNASSIGNED}</InlineNote>}
       {view.writable && view.writingSheetReminder && <InlineNote tone="warning">
-        {`Next is ${view.next.title}. Write run code `}<Text style={styles.runCode}>{view.code}</Text>{` and ${child.first_name}'s name on the Writing Sheet before you hand it over.`}
+        {`Next is ${view.next.title}. Write assessment code `}<Text style={styles.runCode}>{view.code}</Text>{` and ${child.first_name}'s name on the Writing Sheet before you hand it over.`}
       </InlineNote>}
       <View testID="battery-question-list" onLayout={event => setListLayout({
         y: event.nativeEvent.layout.y, writingSheetReminder,
@@ -336,18 +336,18 @@ export default function BatteryOverviewScreen({ navigation, route }) {
         ? <BrandButton label="Review and finalize" size="lg" onPress={review} disabled={mutating} />
         : view.next && <BrandButton label={`Start ${view.next.title}`} size="lg"
           onPress={() => launch(view.next.question_code)} disabled={mutating} />)}
-      <BrandButton label="Abandon run" variant="tertiary" tone="ink" size="lg"
+      <BrandButton label="Abandon assessment" variant="tertiary" tone="ink" size="lg"
         disabled={mutating} onPress={() => { if (!launching.current) setAbandonVisible(true); }} />
     </View>
     <SelectSheet key={skipQuestion?.question_code ?? 'closed'} visible={Boolean(skipQuestion)}
       title={`Skip ${skipQuestion?.title ?? ''}?`}
-      subtitle="It is saved as skipped with your reason. You can't undo a skip in this run."
+      subtitle="It is saved as skipped with your reason. You can't undo a skip in this assessment."
       options={SKIP_OPTIONS} selectedKey={null} onSelect={saveSkip}
       confirmLabel="Skip Question" cancelLabel="Cancel" onDismiss={() => setSkipQuestion(null)} />
-    <ConfirmSheet visible={abandonVisible} title="Abandon this run?"
-      body={view.decidedCount === 0 ? "Nothing was saved in this run yet. You can't continue it."
-        : `The ${view.decidedCount} saved ${view.decidedCount === 1 ? 'Question stays' : 'Questions stay'} in ${child?.first_name || data.childFirstName || 'this child'}'s history. You can't continue this run.`}
-      confirmLabel="Abandon" cancelLabel="Keep run" onConfirm={abandon} onCancel={() => setAbandonVisible(false)} />
+    <ConfirmSheet visible={abandonVisible} title="Abandon this assessment?"
+      body={view.decidedCount === 0 ? "Nothing was saved in this assessment yet. You can't continue it."
+        : `The ${view.decidedCount} saved ${view.decidedCount === 1 ? 'Question stays' : 'Questions stay'} in ${child?.first_name || data.childFirstName || 'this child'}'s history. You can't continue this assessment.`}
+      confirmLabel="Abandon" cancelLabel="Keep going" onConfirm={abandon} onCancel={() => setAbandonVisible(false)} />
   </View>;
 }
 

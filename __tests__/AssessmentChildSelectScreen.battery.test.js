@@ -87,9 +87,9 @@ afterEach(async () => {
   jest.useRealTimers();
 });
 
-test('header subtitle reads "WelaPLUS run · the language comes from the child\'s class"', async () => {
+test('header subtitle reads "WelaPLUS · the language comes from the child\'s class"', async () => {
   const screen = await ready(renderSelect());
-  expect(screen.getByText("WelaPLUS run · the language comes from the child's class")).toBeTruthy();
+  expect(screen.getByText("WelaPLUS · the language comes from the child's class")).toBeTruthy();
   expect(repositories.assessments.getQuestionResults).not.toHaveBeenCalled();
 });
 
@@ -162,7 +162,7 @@ test.each(['af', null, 'xh'])(
     const child = { ...CHILD, home_language: homeLanguage };
     mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
     const screen = await ready(renderSelect({ batteryCode: fixture.battery_code, batteryVersion: fixture.battery_version }));
-    expect(screen.getByText("Fixture reading run · the language comes from the child's class")).toBeTruthy();
+    expect(screen.getByText("Fixture reading · the language comes from the child's class")).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
     await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
     expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({
@@ -184,31 +184,31 @@ test('unfinished run shows Unfinished 4/11; tapping opens the sheet with exact t
   expect(repositories.batteryRuns.getUnfinishedRunsForUser).toHaveBeenCalledWith('ea-1');
   expect(await screen.findByText('Unfinished 4/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  await screen.findByRole('header', { name: 'Lwazi has an unfinished run' });
-  expect(screen.getByText('Started Tue 14:05 · 4 of 11 Questions done · run KWY-2M4')).toBeTruthy();
-  expect(screen.getByText("Starting new closes the old run as abandoned. Its 4 saved Questions stay in Lwazi's history.")).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Resume run' })).toBeTruthy();
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
+  expect(screen.getByText('Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(screen.getByText("Starting new closes the old assessment as abandoned. Its 4 saved Questions stay in Lwazi's history.")).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Abandon it and start new' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
   expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
 });
 
-test.each(['Resume run', 'Abandon it and start new', 'Cancel'])(
+test.each(['Resume', 'Abandon it and start new', 'Cancel'])(
   'unfinished sheet: %s has the required navigation/write behavior', async action => {
     repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished()]);
     const screen = await ready(renderSelect());
     fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-    await screen.findByRole('header', { name: 'Lwazi has an unfinished run' });
+    await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
     const button = screen.getByRole('button', { name: action });
     act(() => { fireEvent.press(button); fireEvent.press(button); });
     if (action === 'Cancel') {
-      await waitFor(() => expect(screen.queryByRole('header', { name: 'Lwazi has an unfinished run' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('header', { name: 'Lwazi has an unfinished assessment' })).toBeNull());
       expect(screen.routes()[1].name).toBe('ChildSelect');
       expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
       return;
     }
     await waitFor(() => expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'BatteryOverview']));
-    if (action === 'Resume run') {
+    if (action === 'Resume') {
       expect(screen.routes()[1].params).toEqual({ runId: ID });
       expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
     } else {
@@ -233,10 +233,10 @@ test('UNFINISHED_RUN_EXISTS race opens the unfinished sheet for error.runId inst
     .mockResolvedValue([unfinished({ child_id: 'another-child' }), unfinished({ id: raceId, question_count: 2 })]);
   const screen = await ready(renderSelect());
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  await screen.findByRole('header', { name: 'Lwazi has an unfinished run' });
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
   expect(screen.getByText(/2 of 11 Questions done/)).toBeTruthy();
   expect(screen.queryByRole('alert')).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Resume run' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Resume' }));
   await waitFor(() => expect(screen.routes()[1].params).toEqual({ runId: raceId }));
   expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
 });
@@ -293,7 +293,7 @@ test('blur and refocus refresh unfinished runs without releasing a pending start
 test('unfinished-run load failure offers Retry and keeps starting blocked until a successful reload', async () => {
   repositories.batteryRuns.getUnfinishedRunsForUser.mockRejectedValueOnce(new Error('disk busy'));
   const screen = renderSelect();
-  await screen.findByText("Couldn't load unfinished runs. Try again.");
+  await screen.findByText("Couldn't load unfinished assessments. Try again.");
   const row = screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' });
   expect(row).toBeDisabled();
   fireEvent.press(row);
@@ -313,14 +313,14 @@ test('last-run history failure leaves unfinished runs visible and resumable with
     repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished()]);
     const screen = await ready(renderSelect());
     expect(screen.getByText('Unfinished 4/11')).toBeTruthy();
-    expect(screen.queryByText(/last run/)).toBeNull();
-    expect(screen.queryByText("Couldn't load unfinished runs. Try again.")).toBeNull();
+    expect(screen.queryByText(/last assessed/)).toBeNull();
+    expect(screen.queryByText("Couldn't load unfinished assessments. Try again.")).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(warning).toHaveBeenCalled();
     fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-    await screen.findByRole('header', { name: 'Lwazi has an unfinished run' });
-    expect(screen.getByRole('button', { name: 'Resume run' })).not.toBeDisabled();
-    fireEvent.press(screen.getByRole('button', { name: 'Resume run' }));
+    await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
+    expect(screen.getByRole('button', { name: 'Resume' })).not.toBeDisabled();
+    fireEvent.press(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => expect(screen.routes()[1].params).toEqual({ runId: ID }));
     expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
   } finally {
@@ -331,7 +331,7 @@ test('last-run history failure leaves unfinished runs visible and resumable with
 test('last-run history that never resolves does not delay starting a run', async () => {
   repositories.batteryRuns.getRunsForUser.mockReturnValue(deferred().promise);
   const screen = await ready(renderSelect());
-  expect(screen.queryByText(/last run/)).toBeNull();
+  expect(screen.queryByText(/last assessed/)).toBeNull();
   expect(screen.queryByRole('alert')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
   await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
@@ -344,8 +344,8 @@ test('failed abandon-and-start keeps the saved run sheet open with an accessible
   const screen = await ready(renderSelect());
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
   fireEvent.press(await screen.findByRole('button', { name: 'Abandon it and start new' }));
-  await screen.findByText("Couldn't start this run. Try again.");
-  expect(screen.getByRole('header', { name: 'Lwazi has an unfinished run' })).toBeTruthy();
+  await screen.findByText("Couldn't start this assessment. Try again.");
+  expect(screen.getByRole('header', { name: 'Lwazi has an unfinished assessment' })).toBeTruthy();
   expect(screen.routes()[1].name).toBe('ChildSelect');
   fireEvent.press(screen.getByRole('button', { name: 'Abandon it and start new' }));
   await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
@@ -365,7 +365,7 @@ test('another fixture battery supplies its own supported language and question t
   expect(screen.getByText('Unfinished 1/2')).toBeTruthy();
   expect(screen.queryByText('Not available in Afrikaans yet')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  expect(await screen.findByText('Started Tue 14:05 · 1 of 2 Questions done · run KWY-2M4')).toBeTruthy();
+  expect(await screen.findByText('Started Tue 14:05 · 1 of 2 Questions done · code KWY-2M4')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Abandon it and start new' }));
   await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
   expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({
@@ -433,15 +433,15 @@ test('leaving the picker dismisses its unfinished sheet; refocusing reloads the 
     .mockResolvedValue([unfinished({ question_count: 5 })]);
   const screen = await ready(renderSelect());
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  await screen.findByRole('header', { name: 'Lwazi has an unfinished run' });
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
   act(() => screen.navigationRef.navigate('Away'));
-  await waitFor(() => expect(Boolean(screen.queryByRole('header', { name: 'Lwazi has an unfinished run' }))).toBe(false));
+  await waitFor(() => expect(Boolean(screen.queryByRole('header', { name: 'Lwazi has an unfinished assessment' }))).toBe(false));
   act(() => screen.navigationRef.goBack());
   await ready(screen);
-  expect(Boolean(screen.queryByRole('header', { name: 'Lwazi has an unfinished run' }))).toBe(false);
+  expect(Boolean(screen.queryByRole('header', { name: 'Lwazi has an unfinished assessment' }))).toBe(false);
   expect(screen.getByText('Unfinished 5/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  await screen.findByText('Started Tue 14:05 · 5 of 11 Questions done · run KWY-2M4');
+  await screen.findByText('Started Tue 14:05 · 5 of 11 Questions done · code KWY-2M4');
 });
 
 test('battery picker shows the latest finalized run start day for this battery only', async () => {
@@ -454,24 +454,24 @@ test('battery picker shows the latest finalized run start day for this battery o
     unfinished({ status: 'completed', started_at: '2026-10-19T22:30:00Z', started_here: 0 }),
   ]);
   const screen = await ready(renderSelect());
-  expect(screen.getByText('Grade 2 · isiXhosa · last run 20 Oct')).toBeTruthy();
+  expect(screen.getByText('Grade 2 · isiXhosa · last assessed 20 Oct')).toBeTruthy();
   expect(repositories.batteryRuns.getRunsForUser).toHaveBeenCalledWith('ea-1');
 });
 
-test('battery picker omits last run for unfinished and abandoned runs', async () => {
+test('battery picker omits last assessed for unfinished and abandoned runs', async () => {
   repositories.batteryRuns.getRunsForUser.mockResolvedValue([
     unfinished({ status: 'in_progress' }), unfinished({ status: 'abandoned' }),
   ]);
   const screen = await ready(renderSelect());
   expect(screen.getByText('Grade 2 · isiXhosa')).toBeTruthy();
-  expect(screen.queryByText(/last run/)).toBeNull();
+  expect(screen.queryByText(/last assessed/)).toBeNull();
 });
 
 test('quick assessment mode does not read or display last battery runs', async () => {
   const screen = renderSelect({ testCode: 'letter_sounds' });
   await waitFor(() => expect(repositories.assessments.getQuestionResults).toHaveBeenCalled());
   expect(repositories.batteryRuns.getRunsForUser).not.toHaveBeenCalled();
-  expect(screen.queryByText(/last run/)).toBeNull();
+  expect(screen.queryByText(/last assessed/)).toBeNull();
 });
 
 test.each([
@@ -482,7 +482,7 @@ test.each([
   repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({ question_count: count })]);
   const screen = await ready(renderSelect());
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  expect(await screen.findByText(`Starting new closes the old run as abandoned. ${copy}`)).toBeTruthy();
+  expect(await screen.findByText(`Starting new closes the old assessment as abandoned. ${copy}`)).toBeTruthy();
   expect(StyleSheet.flatten(screen.getByText('Cancel').props.style).color).toBe(colors.text);
   expect(StyleSheet.flatten(screen.getByRole('button', { name: 'Cancel' }).props.style).alignSelf).not.toBe('flex-start');
 });

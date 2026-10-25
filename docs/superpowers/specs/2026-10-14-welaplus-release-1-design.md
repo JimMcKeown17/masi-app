@@ -1,5 +1,7 @@
 # WelaPLUS Release 1 — Design
 
+> 2026-10-25 (Jim): UI copy never says 'run'. EAs see 'assessment' for a Run and 'Assessment code' for the run code, on screen and on the Writing Sheet; internal names are unchanged.
+
 > **Status note — 2026-10-23 (Plan 3 built; print production brief):** The host Run flow is
 > built on `feat/welaplus-plan-3`, stacked on `feat/whole-class-assessment` (PR #100). Physical
 > A03 and iPhone checks and the Plan 3 PR remain open; verification is recorded in

@@ -162,17 +162,17 @@ test('coverage uses the assessable roster when delivery contains only one of two
 });
 
 
-test('battery card: title, "All 11 Questions in one run · English or isiXhosa · about 30 min", Start a run navigates with code+version', async () => {
+test('battery card: title, "All 11 Questions · English or isiXhosa · about 30 min", Start an assessment navigates with code+version', async () => {
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: {
     id: 'programme-1', default_battery_code: BATTERY.battery_code, default_battery_version: BATTERY.battery_version,
   } });
   const navigation = { navigate: jest.fn() };
   const screen = renderTab(navigation);
   await screen.findByText(BATTERY.title);
-  expect(screen.getByText('All 11 Questions in one run · English or isiXhosa · about 30 min')).toBeTruthy();
+  expect(screen.getByText('All 11 Questions · English or isiXhosa · about 30 min')).toBeTruthy();
   expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(1);
   expect(batteryFor).toHaveBeenCalledWith(BATTERY.battery_code, BATTERY.battery_version);
-  fireEvent.press(screen.getByRole('button', { name: 'Start a run' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Start an assessment' }));
   expect(navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', {
     batteryCode: BATTERY.battery_code, batteryVersion: BATTERY.battery_version,
   });
@@ -187,7 +187,7 @@ test.each([
   const screen = renderTab();
   await screen.findByRole('header', { name: 'Quick assessments' });
   expect(screen.queryByText(BATTERY.title)).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Start a run' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Start an assessment' })).toBeNull();
   expect(screen.UNSAFE_queryAllByType(SurfaceCard)).toHaveLength(0);
   for (const test of STANDALONE_TESTS) expect(screen.getByText(test.title)).toBeTruthy();
 });
@@ -201,7 +201,7 @@ test('fixture battery card uses its own title, question count, duration and fixe
   } });
   const screen = renderTab();
   await screen.findByText(fixture.title);
-  expect(screen.getByText('All 2 Questions in one run · Afrikaans · about 7 min')).toBeTruthy();
+  expect(screen.getByText('All 2 Questions · Afrikaans · about 7 min')).toBeTruthy();
   expect(screen.queryByText(/English or isiXhosa/)).toBeNull();
 });
 
@@ -237,8 +237,8 @@ test('unfinished runs listed under the card with "4 of 11 done · Tue 14:05 · K
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
   const navigation = { navigate: jest.fn() };
   const screen = renderTab(navigation);
-  await screen.findByRole('header', { name: 'Unfinished runs' });
-  expect(screen.getAllByRole('header').map(node => node.props.children)).toEqual([BATTERY.title, 'Unfinished runs', 'Quick assessments']);
+  await screen.findByRole('header', { name: 'Unfinished assessments' });
+  expect(screen.getAllByRole('header').map(node => node.props.children)).toEqual([BATTERY.title, 'Unfinished assessments', 'Quick assessments']);
   expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
   expect(screen.getByText('4 of 11 done · Tue 14:05 · KWY-2M4')).toBeTruthy();
   expect(mockGetUnfinishedRuns).toHaveBeenCalledWith('user-1');
@@ -249,11 +249,11 @@ test('unfinished runs listed under the card with "4 of 11 done · Tue 14:05 · K
   expect(navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
 });
 
-test('no unfinished runs: the "Unfinished runs" header is absent', async () => {
+test('no unfinished runs: the "Unfinished assessments" header is absent', async () => {
   withBattery();
   const screen = renderTab();
   await screen.findByText('Avg score');
-  expect(screen.queryByRole('header', { name: 'Unfinished runs' })).toBeNull();
+  expect(screen.queryByRole('header', { name: 'Unfinished assessments' })).toBeNull();
 });
 
 test('zero decided Questions shows "Not started · Today 09:12 · R2C-8WT"', async () => {
@@ -319,15 +319,15 @@ test('refocus keeps the prior rows while the programme gate resolves, blocks cap
   act(() => screen.navigationRef.goBack());
   expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
   expect(screen.getByText(BATTERY.title)).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Start a run' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Start an assessment' })).toBeDisabled();
   const quick = screen.getByRole('button', { name: 'Letter Sounds, 60-second letter sound test' });
   expect(quick).toBeDisabled();
-  fireEvent.press(screen.getByRole('button', { name: 'Start a run' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Start an assessment' }));
   fireEvent.press(quick);
   expect(screen.navigation.navigate).not.toHaveBeenCalled();
   await act(async () => pending.resolve({ hasActiveProgramme: false, programme: null }));
   await screen.findByText(/No active programme/);
-  expect(screen.queryByRole('button', { name: 'Start a run' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Start an assessment' })).toBeNull();
   expect(screen.queryByRole('header', { name: 'Quick assessments' })).toBeNull();
 });
 
@@ -335,19 +335,19 @@ test('unfinished-run load failure keeps stats and quick assessments usable and o
   withBattery();
   mockGetUnfinishedRuns.mockRejectedValueOnce(new Error('disk busy'));
   const screen = renderTab();
-  await screen.findByText("Couldn't load unfinished runs. Try again.");
+  await screen.findByText("Couldn't load unfinished assessments. Try again.");
   expect(screen.getByText('Avg score')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Letter Sounds, 60-second letter sound test' })).not.toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Start a run' })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Start an assessment' })).not.toBeDisabled();
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
   mockGetChildNames.mockResolvedValue({ [CHILD.id]: { name: 'Lwazi Mbeki', hidden: false } });
   fireEvent.press(screen.getByRole('button', { name: 'Retry' }));
   await screen.findByText('Lwazi Mbeki');
-  expect(screen.queryByText("Couldn't load unfinished runs. Try again.")).toBeNull();
+  expect(screen.queryByText("Couldn't load unfinished assessments. Try again.")).toBeNull();
   expect(mockGetUnfinishedRuns).toHaveBeenCalledTimes(2);
 });
 
-test.each(['Start a run', 'Lwazi Mbeki, 4 of 11 done · Tue 14:05 · KWY-2M4'])(
+test.each(['Start an assessment', 'Lwazi Mbeki, 4 of 11 done · Tue 14:05 · KWY-2M4'])(
   'double tap on %s navigates once; the launch guard resets on refocus', async label => {
     withBattery();
     useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
@@ -371,7 +371,7 @@ test('initial programme resolve keeps the spinner and hides all capture entry po
   const screen = renderTab();
   expect(screen.UNSAFE_getByType(require('react-native-paper').ActivityIndicator)).toBeTruthy();
   expect(screen.queryByRole('header', { name: 'Quick assessments' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Start a run' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Start an assessment' })).toBeNull();
   await act(async () => pending.resolve({ hasActiveProgramme: false, programme: null }));
   await screen.findByText(/No active programme/);
   expect(mockGetUnfinishedRuns).not.toHaveBeenCalled();
@@ -441,7 +441,7 @@ test.each(['gate', 'runs', 'names'])('stale EA handle cannot publish a late %s r
   await act(async () => pending.resolve(stage === 'gate' ? { hasActiveProgramme: true, programme: {
     default_battery_code: BATTERY.battery_code, default_battery_version: BATTERY.battery_version,
   } } : stage === 'runs' ? [unfinished()] : { [CHILD.id]: { name: 'Lwazi Mbeki' } }));
-  expect(screen.queryByRole('header', { name: 'Unfinished runs' })).toBeNull();
+  expect(screen.queryByRole('header', { name: 'Unfinished assessments' })).toBeNull();
   if (stage === 'gate') expect(screen.queryByText(BATTERY.title)).toBeNull();
   expect(screen.navigation.navigate).not.toHaveBeenCalled();
 });
@@ -454,7 +454,7 @@ test('unfinished runs stay reachable when the programme default is unavailable, 
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
   const screen = renderTab();
   await screen.findByText('4 of 11 done · Tue 14:05 · KWY-2M4');
-  expect(screen.queryByRole('button', { name: 'Start a run' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Start an assessment' })).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Lwazi Mbeki, 4 of 11 done · Tue 14:05 · KWY-2M4' }));
   expect(screen.navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
 });
