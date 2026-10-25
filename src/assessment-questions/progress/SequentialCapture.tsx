@@ -236,7 +236,10 @@ export function SequentialCapture({
           onEnd={handleEnd}
           onSkip={allowSkip ? () => {
             if (hasFinishedRef.current || (phaseRef.current !== 'active' && phaseRef.current !== 'review') || stateRef.current.stopped) return;
+            if (finishIfExpired()) return;
             skipReturnPhaseRef.current = phaseRef.current;
+            // The picker unmounts the notice; clearing it stops Cancel replaying an old one.
+            setNotice(null);
             transition('skip-picker');
           } : undefined} />
       </View>

@@ -185,3 +185,30 @@ test('onItemMarked fires on decide and on flip with the new value, not on Back',
   expect(onItemMarked.mock.calls.map(([i]) => i.is_correct)).toEqual([true, false]);
   expect(onItemMarked.mock.calls[1][0]).toMatchObject({ position: 0, item_key: 'a', metadata: { reached: true } });
 });
+
+test('Skip resolves an overdue deadline before opening the picker', () => {
+  const r = renderCapture({ durationSec: 60 }); r.start(); r.mark(true);
+  // Elapsed time advances while the 250 ms check is delayed.
+  jest.spyOn(globalThis.performance, 'now').mockReturnValue(globalThis.performance.now() + 65000);
+  r.press('Skip question');
+  expect(r.onComplete).toHaveBeenCalledTimes(1);
+  expect(r.result()).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000,
+    derived: { total_attempted: 1, last_attempted_position: 0 } });
+  expect(r.queryByText('Child is tired')).toBeNull();
+});
+
+test.each(['active', 'review'] as const)('Skip → Cancel never replays an expired flip notice (%s)', origin => {
+  // The preset's mock is shared across tests, so start this count from zero.
+  const announce = jest.spyOn(require('react-native').AccessibilityInfo, 'announceForAccessibility');
+  announce.mockClear();
+  const r = renderCapture(); r.start();
+  r.mark(...(origin === 'review' ? [true, true, true] : [true]));
+  fireEvent.press(r.getByLabelText('a, correct. Double-tap to change to incorrect'));
+  expect(r.getByTestId('flip-notice')).toBeTruthy();
+  r.advance(4000);
+  expect(r.queryByTestId('flip-notice')).toBeNull();
+  r.press('Skip question'); r.advance(1000); r.press('Cancel');
+  expect(r.queryByTestId('flip-notice')).toBeNull();
+  expect(announce.mock.calls.filter(([text]) => text === 'Letter 1 changed to Incorrect')).toHaveLength(1);
+  announce.mockRestore();
+});
