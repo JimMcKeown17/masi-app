@@ -283,7 +283,7 @@ describe('ListenAndAnswerStoryQuestion — Skip flow', () => {
 
     expect(getByText(/Why are you skipping this question/i)).toBeTruthy();
     expect(getByText('Child refused')).toBeTruthy();
-    expect(getByText('Other')).toBeTruthy();
+    expect(getByText('Other reason')).toBeTruthy();
   });
 
   test('selecting a reason emits Result with that stopped_reason', () => {

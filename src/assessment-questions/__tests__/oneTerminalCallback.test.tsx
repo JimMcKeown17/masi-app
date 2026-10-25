@@ -29,7 +29,7 @@ describe.each(CASES)('%s — one terminal callback', (_name, Component, itemSet,
     const onComplete = jest.fn();
     const r = start(onComplete);
     fireEvent.press(r.getByText('Skip question'));
-    fireEvent.press(r.getByText('Child tired'));
+    fireEvent.press(r.getByText('Child is tired'));
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('skipped_tired');
     expect(onComplete.mock.calls[0][0].items).toEqual([]);
@@ -39,7 +39,7 @@ describe.each(CASES)('%s — one terminal callback', (_name, Component, itemSet,
     const onComplete = jest.fn();
     const r = start(onComplete);
     fireEvent.press(r.getByText('Skip question'));
-    const tired = r.getByText('Child tired');
+    const tired = r.getByText('Child is tired');
     fireEvent.press(tired);
     fireEvent.press(tired);
     expect(onComplete).toHaveBeenCalledTimes(1);

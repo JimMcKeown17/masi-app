@@ -124,7 +124,7 @@ test('direct navigation to a battery Question never opens standalone Detail', as
   const screen = renderWithProviders(<SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
     <AssessmentDetailScreen route={{ params: { assessmentId } }} />
   </SignedInEAContext.Provider>);
-  expect(await screen.findByText('Battery Questions are shown in their run.')).toBeTruthy();
+  expect(await screen.findByText('Battery Questions are shown in their assessment.')).toBeTruthy();
   expect(screen.queryAllByTestId('assessment-detail-item')).toHaveLength(0);
 });
 

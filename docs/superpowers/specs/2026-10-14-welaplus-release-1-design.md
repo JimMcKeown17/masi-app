@@ -1,5 +1,21 @@
 # WelaPLUS Release 1 — Design
 
+> 2026-10-25 (Jim): UI copy never says 'run'. EAs see 'assessment' for a Run and 'Assessment code' for the run code, on screen and on the Writing Sheet; internal names are unchanged.
+
+> **Status note — 2026-10-23 (Plan 3 built; print production brief):** The host Run flow is
+> built on `feat/welaplus-plan-3`, stacked on `feat/whole-class-assessment` (PR #100). Physical
+> A03 and iPhone checks and the Plan 3 PR remain open; verification is recorded in
+> [`documentation/build-log.md`](../../../documentation/build-log.md).
+> The [WelaPLUS 2024.1 printout pack brief](../../../documentation/welaplus-printout-pack.md)
+> is the designer's current production contract. **§9.1's Side A row is superseded by Grid A,
+> 6 × 10**, shared by the EN/XH/AF letter sets; full WelaPLUS remains EN/XH only. The brief
+> carries Andika Regular content typography, whole-card-row/paragraph boundaries with phone
+> reflow, the boxed Run code field and the exact `materialsLine` footers (Reading Card sides
+> end in `side A`, `side B` or `side C`, without an extra item name). Finalize requires only
+> the run-code/name tick, with no filing tick. This amends §9's generic footer and §9.6's
+> production-brief pointer as well as the Side A and row-mirroring claims; the historical
+> body below is preserved. Printing, Q5 artwork approval and isiXhosa proofing remain open.
+
 > **Status note — 2026-10-20:** The [Assessment Results and Letter Test design](./2026-10-19-assessment-results-and-letter-test-design.md)
 > supersedes this document's §7 storage/upload design, D4's Q1 stop-rule decision and D10's
 > ADR-0007 enforcement/transport design. Q1 is now `letter_sounds`, sharing the standalone Letter Sounds item sets
@@ -31,6 +47,34 @@
 > (`App.js:170`, `src/constants/assessmentFonts.js:3`,
 > `src/assessment-questions/ui/Text.tsx:30`). The original body remains the 2026-10-14
 > record; capture verification and remaining native gates live in `documentation/build-log.md`.
+
+> **Status note — 2026-10-23 (Plan 3 host, Jim's decisions):** Jim approved eight Bold Red
+> screens for the host Run flow (plan: `docs/superpowers/plans/2026-10-23-welaplus-plan-3-host-run-flow.md`).
+> They amend §5 and §5.4 as follows:
+> - **Tab layout:** the WelaPLUS card comes first, with its unfinished runs listed directly
+>   under it. The letter and word tests become compact "Quick assessments" rows below.
+> - **Children offered:** every child in the EA's active programme, ECD included, with no grade
+>   filter.
+> - **Afrikaans (C22):** a child whose class language is not in the battery's `languages` stays
+>   visible but greyed, with "Not available in Afrikaans yet" (or the language's own name).
+>   A child whose class has no language gets a picker listing only the battery's languages.
+>   The rule reads `battery.languages`, so adding `af` to a battery lifts the gate with no
+>   host change.
+> - **Finalize checklist:** **one** required tick, "Write run code K7Q-4MD and the child's name
+>   on the Writing Sheet". §5.4's second item, "File the sheet for Head Office with this week's
+>   sheets", is dropped. The tick is shown only when the battery has a Writing Sheet Question.
+> - **Materials line:** the host draws a dark "Hand <child>" block above the package intro,
+>   naming the item, side and footer text (`WelaPLUS 2024.1 · XH · side B`). Oral Questions
+>   show "No materials, oral". The block hides once capture starts.
+> - **Skip from the overview:** ⋯ on any undecided row opens the five manual reasons with a
+>   confirm button. Skips inside a Question are unchanged.
+> - **History:** each run row opens the run summary. A run started on another phone is
+>   read-only (AR §11.4).
+> - **Run-code reminder:** shown on the overview before the battery's first Writing Sheet
+>   Question (Q5 in 2024.1).
+>
+> Q6 and Q8 are already timed at 60 s in the battery (`battery/wela_plus_full.ts`), matching
+> Jim's 2026-10-23 answer to §4.3 item 4 (one minute each).
 
 **Date:** 2026-10-14
 **Status:** Design approved in conversation (Jim, 2026-10-14). Codex adversarial review: three rounds (9 → 4 → 1 findings, all verified and addressed; the last round still returned needs-attention before its single fix). Written spec approved by Jim 2026-10-14.

@@ -145,7 +145,7 @@ describe('assessment entry routing', () => {
     'child results launches %s once with the detected class language', async (testCode) => {
       const navigation = makeNavigation();
       const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: { child, classItem } }} />);
-      const button = screen.getAllByText('Run assessment')[testCode === 'letter_sounds' ? 0 : 1];
+      const button = screen.getAllByText('Assess now')[testCode === 'letter_sounds' ? 0 : 1];
       fireEvent.press(button);
       fireEvent.press(button);
       expect(navigation.navigate).toHaveBeenCalledTimes(1);
@@ -159,7 +159,7 @@ describe('assessment entry routing', () => {
     const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
       child, classItem: { ...classItem, home_language: 'Afrikaans' },
     } }} />);
-    fireEvent.press(screen.getAllByText('Run assessment')[testCode === 'letter_sounds' ? 0 : 1]);
+    fireEvent.press(screen.getAllByText('Assess now')[testCode === 'letter_sounds' ? 0 : 1]);
     expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', { testCode, child, languageCode: 'af' });
     await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
   });
@@ -169,7 +169,7 @@ describe('assessment entry routing', () => {
     const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
       child, classItem: { ...classItem, home_language: 'isiZulu' },
     } }} />);
-    fireEvent.press(screen.getAllByText('Run assessment')[0]);
+    fireEvent.press(screen.getAllByText('Assess now')[0]);
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', { testCode: 'letter_sounds' });
     await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
   });

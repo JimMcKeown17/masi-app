@@ -68,6 +68,8 @@ const TITLES = {
   SessionForm: 'New session', SessionHistory: 'Session history',
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
+  BatteryOverview: '',
+  BatteryRunSummary: 'Review assessment',
   SessionCountRanking: 'Session count', SyncStatus: 'Sync status',
   QuestionGallery: 'Question gallery',
   ChildrenList: 'Children', ClassDetail: '', ChildResults: 'Child results',
@@ -117,7 +119,7 @@ test('the title table covers every visible stack header', () => {
   const visible = mockScreens.filter(({ kind, name }) => kind === 'stack' && optionsFor(name).headerShown !== false).map(({ name }) => name);
   expect(visible.sort()).toEqual(Object.keys(TITLES).sort());
   expect(mockScreens.filter(({ name }) => optionsFor(name).headerShown === false).map(({ name }) => name).sort()).toEqual([
-    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'StandaloneTest', 'AssessmentResults', 'QuestionGalleryRun',
+    'Login', 'MainTabs', 'Home', 'Children', 'SessionComplete', 'StandaloneTest', 'AssessmentResults', 'QuestionGalleryRun', 'BatteryQuestion',
   ].sort());
 });
 

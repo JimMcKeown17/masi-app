@@ -136,7 +136,7 @@ export default function ChildResultsScreen({ navigation, route }) {
                   variant="primary"
                   onPress={() => handleRunAssessment(code)}
                   style={styles.runButton}
-                  label="Run assessment"
+                  label="Assess now"
                 />
               </View>
             )}

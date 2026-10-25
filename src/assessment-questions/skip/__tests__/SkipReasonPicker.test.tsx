@@ -5,10 +5,10 @@ import { BottomBar, SecondaryButton, TextLink, UiText } from '../../ui';
 
 const reasons = [
   ['Child refused', 'skipped_child_refused'],
-  ['Child tired', 'skipped_tired'],
+  ['Child is tired', 'skipped_tired'],
   ['Out of time', 'skipped_time'],
-  ['Age inappropriate', 'skipped_age'],
-  ['Other', 'skipped_other'],
+  ["Not suitable for this child's age", 'skipped_age'],
+  ['Other reason', 'skipped_other'],
 ] as const;
 
 test('SkipReasonPicker lists the five reasons as buttons and Cancel as a link', () => {

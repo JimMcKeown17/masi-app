@@ -3982,6 +3982,243 @@ external `GRANT_SUBJECTS` memory note is outside this step. No application code 
   membership, pull and see the child leave the picker. Confirm delivery lists/counts remain
   unchanged. Neither device gate was performed in this docs step.
 
+### 2026-10-23 — WelaPLUS Plan 3 host Run flow and printout brief
+
+| Date | Command/Check | Result | Notes |
+|---|---|---|---|
+| 2026-10-23 | WelaPLUS Plan 3 Tasks 1–10; Task 11 documentation | Host build complete; physical acceptance and PR gates open | `feat/welaplus-plan-3`, stacked on `feat/whole-class-assessment` (PR #100). The roster is whole-class assessment scope, including control children, rather than the delivery-only source in the original plan. This entry records the completed build and its reviews; Task 11 changes documentation only. |
+
+#### Committed scope
+
+Commit inventory: `git log --format='%h %s' feat/whole-class-assessment..HEAD`, read on
+2026-10-23 at HEAD `b052c29`. These are the **rebased** IDs, replacing the original IDs recorded
+in the task reports/SDD ledger. The plan-preparation commits are `0d53ec4`, `77afcf3` and
+`5bd01b2`. Tasks 5/6 and 10B were deliberately built after the roster work, not in task-number
+order.
+
+| Task | Commit | Shipped behavior |
+|---|---|---|
+| 1 | `63e8e18` | Package registry `batteryFor`, exact version/language `bundledItemSetFor`, `skippedResult`, Question titles and Battery title/aboutMinutes. |
+| 2 | `4236372` | Every Question reports its first intro-to-capture transition through optional `onStart`, exactly once per presentation. |
+| 3 | `b74c7a5` | Pure host `buildRunView`, Crockford Run code, deterministic local-date start labels and material/footer rule. |
+| 4 | `933d038` | One local unfinished run per EA/child/programme, transactional abandon-and-start, run write guard, duplicate decision protection, finalize completeness and real-SQLite coverage. |
+| 7 | `85b19db` | Shared `useGuardedQuestionSave`, extracted from standalone capture without editing its frozen regression test. |
+| 8 | `20c915a` | Run overview: sequence, decided rows, skip reasons, run-code reminder, abandon and read-only handling. |
+| 9 | `79ece69` | Battery Question host and intro-only MaterialsBlock, exact bundled item-set identity, guarded save/discard and fatal refusal handling; overview refocus regression. |
+| 10A | `2c79718` | Run summary, score expansion, single Writing Sheet ChecklistRow, finalize and read-only states, including the finalize/Back review fix. |
+| 6 | `207ccc7` | Battery child selection with shared “Your children” / “Rest of the class” sections, language gates/picker, unfinished-run sheet, race and double-tap guards, `fixedLanguage` support. |
+| 5 | `1ff8fb1` | Assessments tab: default Battery card, unfinished runs and compact Quick assessments in a ScrollView, preserving assessable-roster stats and active-Programme gates. |
+| 10B | `e531011` | History run buttons open the summary with title/count/status; standalone rows and roster names preserved. Comprehension denominator adds `derived.questions_asked`. |
+| Post-rebase fixture follow-up | `b0c2262`, `b052c29` | EGRA integration caller migrated to finalize's required `questionCodes`, then strengthened to obtain codes from the actual Battery definition rather than the saved result list. This does not register EGRA in the host. |
+
+#### Controller rulings R1–R8
+
+| Ruling | Resolution and reason |
+|---|---|
+| R1 | Whole-class assessment access overrides the plan's delivery-only Known Limit. Build roster-independent Tasks 1–4/7 first; wait for the class-scoped roster before building consumers. |
+| R2 | The unknown-language `skippedResult` assertion uses Q2, because Q1 has an Afrikaans letter set. The helper rejects non-skip reasons and missing bundles; `battery.languages` owns Battery language gating. |
+| R3 | Start labels older than six local days use `d Mon HH:mm`; a weekday alone would make an old unfinished run look current. Same-day and recent labels retain Today/weekday plus time. |
+| R4 | Migrate `assessmentFamilySync.test.js` and `readers.mixedResults.test.js` fixtures to decide required Questions before finalize and supply Question codes. The post-rebase EGRA caller required the same migration; its final version derives codes from the Battery. |
+| R5 | EGRA's single-language forms need optional `BatteryConfig.fixedLanguage`. When set it bypasses class-language gating and the picker; fixture Batteries test it without registering EGRA or changing WelaPLUS's EN/XH definition. |
+| R6 | Wait for whole-class W5 (`useAssessableChildren`) and rebase on `feat/whole-class-assessment`; do not ship a temporary delivery-only Battery roster. |
+| R7 | Build Tasks 8/9, then take whole-class W7 and rebase before shared-screen Tasks 10/5/6. Every assessment surface uses `useAssessableChildren`, preserving its two-section roster. |
+| R8 | Split Task 10: summary/finalize (10A) first; History rows (10B) after whole-class W7. This avoids competing changes to the same History screen. |
+
+#### Review findings and fixes
+
+- **onStart contract:** notify only on the first transition into capture, so the host can hide
+  materials without altering capture behavior. Q2 chooses “I've finished reading” into marking;
+  opening/closing its re-read sheet never reports a second start. Practice copy for Q3/Q4 stays
+  in the intro; their Start begins capture. The sequential letter/word paths retain their
+  existing callback owner. Contract coverage spans all eleven WelaPLUS Questions in EN/XH,
+  re-read/review cancellation and completion. The rebased EGRA comprehension component also
+  reports its start. Reducers, clocks and Result construction were not redesigned by this work.
+- **Critical finalize Back loop:** Overview → Summary → finalize previously left a closed
+  Overview beneath the summary; Back refocused it and replaced it with another summary.
+  After successful finalize and a fresh committed read-only summary, `CommonActions.reset`
+  removes every matching run's Overview below it, preserving unrelated routes and the summary
+  key. Real-stack regressions cover Back, duplicate overviews, failed read/retry and
+  `RUN_INCOMPLETE`, which still returns to the overview without pruning it.
+- **Checklist border:** checked state retains both `backgroundColor: colors.primary` and
+  `borderColor: colors.primary`. Only the run-code/child-name acknowledgment is required;
+  no filing tick remains. It appears only for an eligible writable run with a Writing Sheet.
+- **Overview refresh flash:** refocus retains the last rows instead of replacing them with a
+  spinner. Start/actions stay gated while `data.refreshing`; Task 9 adds the deferred-read
+  regression proving no navigation until the refreshed next Question is known. The summary
+  uses the same first-load/refresh distinction.
+- **Programme/roster authority:** screens wait for `getActiveProgrammeGate(...).programme?.id`
+  and roster loading before treating `useAssessableChildren().all` as authoritative. Names
+  come from that roster, then SQLite reference-name lookup. `buildRunView` owns writable and
+  read-only reasons; a pulled run stays read-only and an unknown Battery has no capture path.
+- **Save lifecycle:** `useGuardedQuestionSave` exposes `dismissSaveError` and keeps its queued
+  navigation effect after `usePreventRemove` so the native-stack prevention state releases
+  first. The Battery host uses the exact bundle object; fatal `RUN_NOT_WRITABLE` /
+  `QUESTION_ALREADY_DECIDED` refuses retry, while successful save returns then requests sync.
+- **Run races and completeness:** repository errors carry `error.code` and unfinished-run
+  conflicts carry `error.runId`. The run guard uses non-throwing active-Programme lookup before
+  resolution/duplicate checks, only on the Battery path. Start's unfinished check is scoped
+  to user/child/programme, `in_progress`, `started_here = 1`. A selective NEW-outbox SQLite
+  trigger proves abandon-and-start rollback after the old-run abandonment has executed.
+- **History/EGRA display:** pulled runs open read-only summaries; standalone rows keep their
+  original detail navigation. Done-row max is `derived.max ?? derived.questions_asked ??
+  total_items`, so comprehension score 2 with three asked of five available displays `2 / 3`.
+  The approved mixed-results expectation migration preserves its unregistered Battery fixture
+  and all other assertions. EGRA registration remains owned by the EGRA team.
+
+#### Verification evidence
+
+These are **reported implementation results** from the SDD ledger and task reports, not
+tests rerun by the Task 11 docs step. They overlap and must not be summed into a branch-wide
+pass count. Task reports retain literal RED/GREEN commands and failure history; Node
+`v20.19.4` was selected through the PATH prefix for Jest and types.
+
+| Slice | Reported passing evidence |
+|---|---|
+| Tasks 1 / 2 | Package: **62 suites / 815 tests**, then **63 / 841**; types passed. |
+| Task 3 | `batteryRun.test.js`: **30/30** at that task. |
+| Task 4 | Focused real-SQLite repository run: **3 suites / 244 tests**. The ledger records a later full attempt of 5,757 tests with 37 load-induced failures in 26 suites, followed by green isolated reruns. This was not a clean full-suite pass. |
+| Task 7 | **37/37** targeted; standalone test content unchanged. |
+| Tasks 8 / 9 | **62/62** reported for Task 8; Task 9's final targeted run **6 suites / 135 tests**, including the overview refresh regression. |
+| Task 10A / 10B | Final summary suite **27 tests**; Task 10B final combined run **4 suites / 87 tests** (History 17, view model 31, mixed-results SQLite 12, committed summary 27), types passed. |
+| Task 6 | Final targeted **5 suites / 73 tests**, types passed; fixed-language and whole-class roster fixtures covered. |
+| Task 5 | Final targeted **4 suites / 71 tests**, types passed; the unchanged routing suite still emitted act/component warnings and scope coverage emitted an existing icon warning. Isolated routing remained **7/7** with diagnostics. |
+| Rebase with EGRA | Ledger records package **68 suites / 873 tests** green. Full-gate follow-up caught the legacy EGRA finalize fixture; the two commits above migrate and strengthen it. The controller owns the final combined gate statement below. |
+
+Representative exact final targeted command from Task 10B:
+
+```sh
+PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/AssessmentHistoryScreen.plan5.test.js __tests__/batteryRun.test.js __tests__/readers.mixedResults.test.js __tests__/BatteryRunSummaryScreen.test.js --runInBand --testTimeout=60000 > /tmp/wela-task-10b-final.log 2>&1
+```
+
+Controller-owned final branch verification:
+
+```text
+Full suite / integration / types (stacked on PR #100 + origin/main 53f63a7): `npm test` 420/421 suites then the EGRA fixture migrated (b0c2262, b052c29) → green; `npm run test:integration` 76/76 suites, 941/941; `npm run test:types` green.
+```
+
+Task 11 adds the [designer's printout brief](./welaplus-printout-pack.md), inventories
+ChecklistRow/MaterialsBlock in the design system, defines Run code in CONTEXT, updates the
+remaining ROADMAP gates and appends a dated Release 1 supersession note. The historical spec
+body is preserved. Documentation verification checks the literal letter grid, EN/XH word
+rows/sentences/passages and all ten unique footers against the current package and
+`materialsLine`, local links, stale finalize/grid claims and `git diff --check`. No app code,
+dependencies or environment files changed; no Supabase command or hosted/device action ran.
+
+Task 11 checks executed locally:
+
+| Check | Result |
+|---|---|
+| Inline Node 20 source/content comparison (TypeScript-transpiled data modules and isolated `materialsLine`) | **PASS:** 60 case-sensitive Grid A letters; ten unique EN/XH footers; 80 Q6 words in twelve exact rows; eight Q7 sentences; seven Q8 paragraphs (EN 80 / XH 45 words). |
+| Python local Markdown file-target audit across the six Task 11 documents | **PASS:** 161 targets resolve. This checks file existence, not heading anchors or external URLs. |
+| Required stale-copy search below | **PASS:** only two matches, both in `documentation/archive/assessment_explanation_pwa.md` (lines 689 and 812). Broader wording inspection found no standing claim requiring two finalize ticks or the old WelaPLUS grid. |
+| `git diff --check` | **PASS:** no whitespace errors. |
+
+```sh
+git grep -n "File the sheet for Head Office\|5 rows × 12" -- documentation CONTEXT.md PRD.md
+```
+
+#### Open gates
+
+- **Physical A03 and iPhone:** full host flow, whole-class selection, language gates, materials,
+  large text/layout/insets, Question save/discard, force-quit/resume, offline-then-sync,
+  finalize/Back and pulled-run read-only handling. Local SQLite/navigation tests do not close
+  device, native gesture or hosted sync proof.
+- **Plan 3 PR review/merge:** this is a stacked branch on whole-class PR #100. The final
+  full-suite/integration/types statement remains for the controller to fill above.
+- **Print production:** editable masters, approved physical proofs and EN/XH stock. XH Q5 g/n/z
+  picture choices/clock art and first-language transcription proof remain content approvals;
+  bilingual Picture Card footer placement must be agreed without changing the exact strings.
+- **EGRA team follow-up:** register its Batteries/item sets, add form selection and finish its
+  print/device gates. Plan 3's `fixedLanguage` and comprehension denominator support are built;
+  this docs task neither registers EGRA nor changes the real registry.
+- Deferred artifacts/photos, Settings/support export, OSS publication and the HQ calibration
+  path remain tracked in ROADMAP §8; the Release 1 host build does not close them.
+
+#### 2026-10-24 — Plan 3 + whole-class device pass 1 (Galaxy A03, build 39)
+
+Build 39 (`70f8f40`, EAS preview, staging `segygjzpujphwvrubusm`) on the A03s at `wm density 320`
+(360dp), font scale 1.0, signed in as the Test EA.
+
+S1 (found on build 40 at font 1.3): a background sync closed the overview's open "Abandon this run?" sheet and the confirm tap landed on Start underneath. Root cause: `load` depended on the roster array, so every roster refetch re-ran the focus effect, and `load` cleared both sheets. Fix: roster changes only resume a deferred first load (the view already derives the child at render); sheets close on blur or when their action becomes invalid. Same dependency removed from the summary. After: 421 suites / 6,137 tests.
+
+Passed:
+- Full isiXhosa run (ZP2-JVH) finalized with the one tick. Staging shows `completed`, 11 results.
+- Force-quit mid-Question online and offline. The run resumes and the unsaved attempt is dropped.
+- Skip from the overview ⋯ and from inside a Question.
+- Afrikaans rows cannot start. No-language child gets the English/isiXhosa picker.
+- Unfinished-run sheet → Abandon it and start new. Staging shows the old run `abandoned` with
+  its result and the new run `in_progress`.
+- Offline: Q1 saved, "3 waiting", all uploaded within about a minute of Wi-Fi returning.
+- Back after finalize lands on the Assess tab (no Summary↔Overview loop). History opens the run.
+
+Found and fixed (none visible to Jest before; each now has a test):
+
+| # | Finding | Root cause / fix |
+|---|---|---|
+| — | Overview blanked to a spinner for ~1 s after a skip | `useAssessableChildren` set `loading` on every sync-triggered refetch; now only until the first read per EA (PR #100, `25181a3`) |
+| D1 | Score/Unfinished badges top-aligned in rows | `StatusBadge` has `alignSelf: 'flex-start'`; `ListRow` now wraps element trailings in a centred, non-shrinking container |
+| D2 | Afrikaans row not greyed; note squeezed the subtitle | Muted avatar and name, note as a third amber line (mockup frame 2) |
+| D3 | Run code not bold where the EA copies it | Bold code in the Writing Sheet reminder and the finalize tick |
+| D4 | From Q8 the Next row hid under the footer | Overview scrolls the Next row into view once per Question |
+| D5 | Finalized run still titled "Review run" | "Run summary" when it cannot be finalized |
+| D6 | History run rows: no chevron, different hierarchy | Same layout as the test rows: date, status, chevron, child, battery, language, decided count |
+| D7 | Picker lacked "last run 24 Oct" (mockup) | From completed runs of this battery on the phone |
+| D8 | "Its 1 saved Questions"; red left-aligned Cancel | Singular/plural/zero copy; ink Cancel |
+| D9 | Skip reason wording differed from the mockup | Labels only ("Child is tired", "Not suitable for this child's age", "Other reason") |
+| F19 | Abandoned/read-only summaries still labelled an undecided Question "Next" | `buildRunView` now marks a row Next only when writable; read-only undecided rows say Not started, retain timed minutes, and leave the returned `next` unchanged |
+
+Filed, not fixed (also on `main`): #102 two "End the test?" sheets with opposite outcomes;
+#103 "n items unmarked — finish anyway?" fires when blank means wrong. Content gaps for the
+content owners: isiXhosa instructions for Q1, Q3 and Q5 are partly English; Q5 tile "drum".
+Kept by call: picker title "Select child"; the Assess-tab run subtitle wraps the code to a
+second line at 360dp (it cannot fit one line).
+
+Gates after the fixes: `npx jest` 421 suites / 6,116 tests; `npx jest src/assessment-questions`
+68 / 873; `npm run test:types` clean. Still open: build 40 re-check, font scale 1.3, the
+control-child check as TestB Second, iPhone.
+
+Review fixes R1–R3 decouple optional picker history from unfinished-run gating, restore dated History accessibility labels with the displayed decided count, and reset overview reveal state and geometry on ScrollView unmount (Node `v20.19.4`: failing-first regression coverage; three touched suites pass 84 tests; `npx jest --silent` passes 421 suites / 6,121 tests; `npm run test:types` passes).
+
+
+### 2026-10-25 — EA assessment terminology
+
+Jim's copy decision: EAs see “assessment” for a Battery Run and “assessment code” for its code;
+internal Run names remain unchanged. Copy only; no layout, behavior or logic changes.
+Changed `src/screens/main/AssessmentsScreen.js`, `src/screens/assessments/{AssessmentChildSelectScreen,AssessmentDetailScreen,AssessmentHistoryScreen,ChildResultsScreen}.js`, `src/screens/assessments/battery/{BatteryOverviewScreen,BatteryRunSummaryScreen,BatteryQuestionScreen}.js`, and `src/navigation/AppNavigator.js`; updated their nine existing test suites plus `CONTEXT.md`, `documentation/welaplus-printout-pack.md`, `documentation/design-system.md` and the dated amendment atop `docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md`.
+Beyond the copy table: Detail's “Battery Questions are shown in their assessment.”, History's
+“No assessments yet. Assess your first child!”, and Summary's repeated “you can abandon this
+assessment” warning. Source sweep (including assessment-question UI) found no remaining
+EA-facing run/runs copy; item-set reading content, internal values/errors and dev copy stay as supplied.
+Node `v20.19.4`: each screen slice failed against old copy before passing; combined touched
+`npx jest __tests__/AssessmentsScreen.test.js __tests__/AssessmentChildSelectScreen.battery.test.js __tests__/BatteryOverviewScreen.test.js __tests__/BatteryRunSummaryScreen.test.js __tests__/AppNavigator.headers.test.js __tests__/BatteryQuestionScreen.test.js __tests__/assessmentEntryRouting.test.js __tests__/AssessmentResultsScreen.test.js __tests__/AssessmentHistoryScreen.plan5.test.js --runInBand --silent`: **9 suites / 241 tests passed**;
+full `npx jest --silent`: **421 suites / 6,138 tests passed**; `npm run test:types`: **passed**.
+Syntax-tree comparison confirms only literal/JSX copy changed in all nine production files;
+`git diff --check` passed. No new documentation file or guard-test file; no device check in this copy task.
+A03 build 42 (d553501) showed the new copy; two lines left one orphan word at 360dp, so "about 30 min" now uses non-breaking spaces and the picker header reads "WelaPLUS · in the child's class language" (2 suites / 61 tests pass).
+
+### 2026-10-25 — Device pass 2 (Galaxy A03 builds 42–43, iPhone builds 21–22)
+
+- **Whole-class control child, passed.** A03 build 43, signed in as TestB Second (Jim authorised the
+  sign-in): the picker lists 9 "Your children" and 8 "Rest of the class". Assessed Gua McKeown (a
+  control child) from Rest of the class: Letter sounds 8 / 60. Staging: `battery_runs` row by
+  TestB, `in_progress`, `xh`, 1 result, score 8, and no active `child_ea_assignments` row for
+  TestB and Gua.
+- **New copy on device, passed.** Start an assessment, Unfinished assessments, Resume, Abandon
+  assessment / Keep going, last assessed 25 Oct, Assessment summary. Build 43 fixes the two
+  360dp orphan words (`02537f0`); `9ae36da` makes the AssessmentsScreen test compare the raw
+  non-breaking spaces (the default RNTL normalizer collapses U+00A0, so the old assertion passed
+  either way).
+- **Cross-device, passed.** A run finalized on another device today (Alunamida, AN3-3WJ; likely Jim's iPhone) pulled to the
+  A03 and opened read-only as "Assessment summary"; the picker showed "last assessed 25 Oct".
+- **Found: History blanks on every reload (pre-existing on main).** Returning from a summary showed
+  a full-screen "Loading…" for about 5 s and lost the scroll position; taps during that window did
+  nothing, which first looked like dead rows. The same shape exists in Session History and three
+  Insights rankings. Fixed on its own branch off main (`fix/lists-keep-rows-on-refresh`), not in
+  this PR.
+- **Found: "No active programme" during the first sync (pre-existing).** Right after signing in,
+  Home said "No active programme — contact your supervisor" for about 40 s until the first pull
+  landed. A new EA would read that as a setup error. Not fixed here.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

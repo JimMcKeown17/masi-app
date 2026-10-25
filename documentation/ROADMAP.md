@@ -77,8 +77,9 @@ These horizons summarize the ordered register below. They are not a second backl
 9. **P2: settle Programme/group authority, then build group-centred sessions in contract order.**
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
-10. **P3: resume WelaPLUS deliberately.** Build the remaining Battery Run host and artifact flow
-   on the integrated Question/result foundation (§8), without importing stale identity contracts.
+10. **P3: prove WelaPLUS on devices and produce its printout pack.** The Release 1 Battery Run
+   host is built (§8); native acceptance, print production and PR review remain. Artifact/photo
+   capture is separate deferred work on the integrated Question/result foundation.
 11. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
@@ -828,8 +829,9 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   - run the device gate: selection, capture, save, force-quit resume, finalize, offline then sync,
     and results;
   - on the real screens, check first-row stop → Undo → timer expiry, and End → cancel;
-  - make the run results view show comprehension "Not asked" separately and use the asked count
-    (`derived.questions_asked`) for accuracy. Today's per-result grid assumes letters or words.
+  - finish the per-result comprehension presentation, including "Not asked" and accuracy; its
+    grid currently assumes letters or words. Plan 3's run-summary score denominator already
+    uses `derived.max ?? derived.questions_asked ?? total_items`.
 - [ ] **EGRA open decisions (Jim):**
   - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
   - **Stronger skip rules (decided in principle, Jim 2026-10-23; build later).** A child who reads
@@ -848,57 +850,55 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 
 ## 8. WelaPLUS
 
-The 11 Question components and their tests live under `src/assessment-questions/`
-(original package merged 2026-10-09). **Standalone Letter Sounds and Word Reading now use the
-package**, with one stored-result/upload path and updated readers (Assessment Results Plan 1,
-Tasks 1–12). WelaPLUS Q1 shares the letter component and current item sets. The full Battery Run
-host and artifact/photo flow remain open. `npm run test:types` type-checks the package in CI. A literal-UUID
-contract test pins current `assessmentItemDomainId` output. **No identity change is planned**
-(ADR-0007 keeps the id; Q11 HQ calibration rows use positions 5–8, so they never collide with the
-EA's 1–4). Release 1 scope and decisions:
-[`2026-10-14-welaplus-release-1-design.md`](../docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md).
+**The Release 1 Battery Run host is built, pending the device gate and PR review.** Plan 3 is
+on `feat/welaplus-plan-3`, stacked on `feat/whole-class-assessment` (PR #100). It adds the
+Assessments card and unfinished runs, whole-class child selection, create/resume/abandon,
+Question capture and skips, atomic saves, review/finalize and History-to-summary navigation.
+Both roster sections use the assessable roster, including ECD/Grade R and control children.
+WelaPLUS 2024.1 supports EN/XH; other class languages stay visible with an availability note,
+and a missing language opens a picker limited to the battery's languages. Generic
+`fixedLanguage` support is built for the EGRA team's registration follow-up (§7).
+
+The package's 11 Questions, 2024.1 bilingual content, evaluator and shared capture primitives
+are built. WelaPLUS Q1 shares `letter_sounds@2026.2` with standalone capture. Assessment Results
+Plan 1 supplies the stored-result/upload foundation, family/run-header RPCs and ADR-0007
+identity contract; the literal-UUID test pins `assessmentItemDomainId` (Q11 HQ positions 5–8
+remain distinct from the EA's 1–4). `npm run test:types` checks the package in CI. These are
+WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evidence and scope:
+[build log](./build-log.md), [Release 1 design and dated amendments](../docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md).
 
 ### Integration and contract work
 
-- [ ] WelaPLUS host (Plan 3): do not offer WelaPLUS to an Afrikaans class until the battery has
-  Afrikaans (`battery/wela_plus_full.ts:49` lists `en`, `xh`). Start shows 'Not available in Afrikaans
-  yet', and the WelaPLUS language picker lists only the battery's languages (lesson-plan spec C22).
-- [x] Package capture-chrome conformance: all eleven Questions use shared tiles, typography,
-  paging/layout, timers, action bars and sheets, with both style/font ratchets empty
-  (`src/assessment-questions/__tests__/styleGuard.test.ts:270`; design-system Assessment capture).
-  Task 17's A03/iPhone and large-text checks remain open; see the 2026-10-22 build-log entry.
-- [ ] Finish design-token, capture-chrome and BottomSheet review for the full Battery Run host
-  (Plan 3). Package conformance does not establish Run-host or native device acceptance.
-- [x] WelaPLUS Release 1's ADR-0007 upload dependency is implemented in Assessment Results Plan 1
-  (§1 above; [ADR-0009](../docs/adr/0009-assessment-results-one-write-call-complete-families.md)).
-  Hosted apply and device proof remain release gates.
-- [ ] Host-side Masi design conformance for the WelaPLUS screens (Plan 3). The package supplies
-  the shared capture primitives and single-owner bottom inset for that host to reuse
-  (`src/assessment-questions/ui/ActionBar.tsx:18`, `src/assessment-questions/ui/BottomBar.tsx:6`).
-- [ ] **WelaPLUS Plan 2 (data foundation) is done in part.** Assessment Results Plan 1 implements
-  local/server `battery_runs`, additive result/programme fields, default-battery reference data,
-  the two RPCs, payload allowlists, ordering and atomic family acknowledgement. The approved v15
-  practice clear replaces the proposed EGRA backfill. The remaining artifact/photo foundation and
-  WelaPLUS Plan 3 (host Run flow, docs, printout pack) are still open. These plan numbers are the
-  WelaPLUS release plans, not the Assessment Results plans. See the
-  [Assessment Results plan](../docs/superpowers/plans/2026-10-20-assessment-results-plan-1.md) and
-  [verification log](./build-log.md). WelaPLUS Plan 1 (Question package: 2024.1 EN/XH content,
-  battery/evaluator and component contract) is complete; Q1 is now `letter_sounds@2026.2`.
+- [ ] **A03 and iPhone device gate:** prove the complete host flow, whole-class selection,
+  language gating, materials handoff, skips, save/discard, between-Question force-quit/resume,
+  single run-code/name tick, finalize/Back, pulled-run read-only summary and offline-then-sync.
+  Check Bold Red tokens, BottomSheets, large text, wrapping and bottom insets physically.
+  Package capture Task 17's native/large-text gates remain open too; a local test pass does not
+  close them (2026-10-22 build log).
+- [ ] Review and merge the Plan 3 PR on the whole-class base (PR #100); retain the controller's
+  full-suite/integration/type evidence in the build log. Complete the upload foundation's
+  remaining hosted/device proof (§1); no new hosted application is claimed by Plan 3 docs.
+- [ ] **Produce the printout pack:** approve artwork, physical proofs and stock from the
+  [designer brief](./welaplus-printout-pack.md): Grid A 6 × 10, Andika Regular, exact language
+  footers, boxed Run code, Reading Cards, Picture Cards and consumable Writing Sheets.
 - [ ] Build `battery_run_artifacts`, the local photo queue and Storage bucket/RLS, including their
-  payload declarations and upload ordering. None is supplied by the completed family/run-header RPCs.
-- [ ] Build host integration: Run create/resume/finalize/results, Question sequencing, skip reasons,
-  prerequisite gates, per-Question atomic persistence, photo capture/upload, Settings, and support
-  export.
+  payload declarations and upload ordering. This deferred artifact/photo scope is not supplied
+  by the completed family/run-header RPCs or Release 1 host.
+- [ ] Complete deferred photo capture/upload, WelaPLUS Settings and support export integration.
 - [ ] Decide the package boundary, publish/extract the OSS package, and add README, example, setup
   guide, integration prompt, versioning, and licensing ratification.
 
 ### Pedagogy and field validation
 
-- [ ] Supply authoritative bilingual item sets, story scripts/answers, stop-rule copy, Q6/Q8
-  durations, prerequisite thresholds, Q5 assets, Q11 picture/rubric anchors, and score bands.
+- [ ] Close remaining content approvals: XH Q5 g/n/z picture choices and clock artwork, plus a
+  first-language spelling review before the pilot (Release 1 §4.3; #34). The bilingual item
+  sets/scripts and Q6/Q8 60-second durations are built; do not reopen them as missing content.
+- [ ] Settle Q11's final rubric anchors/isiXhosa labels, future prerequisite thresholds and
+  score bands. The current WelaPLUS battery declares no automatic prerequisite gates; its
+  manual skips and generic evaluator support are built.
 - [ ] Build the HQ rubric/calibration path and dashboard consumption.
-- [ ] Validate the first 50 Runs, including offline/restart, photo, RLS, sync, and low-end Android
-  gates.
+- [ ] Validate the first 50 Runs, including paper matching, offline/restart, RLS, sync and low-end
+  Android behavior. Photo validation belongs to the deferred artifact rollout.
 
 The full product contract remains
 [`wela-plus-battery-prd-2026.md`](./wela-plus-battery-prd-2026.md).

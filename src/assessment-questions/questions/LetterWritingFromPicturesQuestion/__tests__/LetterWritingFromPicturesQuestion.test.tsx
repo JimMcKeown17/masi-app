@@ -139,7 +139,7 @@ describe('LetterWritingFromPicturesQuestion — Skip flow', () => {
     );
     fireEvent.press(getByText('Start'));
     fireEvent.press(getByText('Skip question'));
-    fireEvent.press(getByText('Child tired'));
+    fireEvent.press(getByText('Child is tired'));
     const r = onComplete.mock.calls[0][0];
     expect(r.stopped_reason).toBe('skipped_tired');
     expect(r.items).toEqual([]);
