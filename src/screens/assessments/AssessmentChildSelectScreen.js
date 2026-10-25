@@ -312,7 +312,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       {battery && <Text style={styles.batterySubtitle}>
-        {battery.title} · the language comes from the child's class
+        {battery.title} · in the child's class language
       </Text>}
       <View style={styles.searchbar}>
       <SearchField

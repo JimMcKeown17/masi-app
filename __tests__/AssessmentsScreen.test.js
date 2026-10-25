@@ -169,7 +169,7 @@ test('battery card: title, "All 11 Questions · English or isiXhosa · about 30 
   const navigation = { navigate: jest.fn() };
   const screen = renderTab(navigation);
   await screen.findByText(BATTERY.title);
-  expect(screen.getByText('All 11 Questions · English or isiXhosa · about 30 min')).toBeTruthy();
+  expect(screen.getByText('All 11 Questions · English or isiXhosa · about\u00A030\u00A0min')).toBeTruthy();
   expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(1);
   expect(batteryFor).toHaveBeenCalledWith(BATTERY.battery_code, BATTERY.battery_version);
   fireEvent.press(screen.getByRole('button', { name: 'Start an assessment' }));
@@ -201,7 +201,7 @@ test('fixture battery card uses its own title, question count, duration and fixe
   } });
   const screen = renderTab();
   await screen.findByText(fixture.title);
-  expect(screen.getByText('All 2 Questions · Afrikaans · about 7 min')).toBeTruthy();
+  expect(screen.getByText('All 2 Questions · Afrikaans · about\u00A07\u00A0min')).toBeTruthy();
   expect(screen.queryByText(/English or isiXhosa/)).toBeNull();
 });
 

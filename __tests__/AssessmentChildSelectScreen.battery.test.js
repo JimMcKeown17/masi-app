@@ -89,7 +89,7 @@ afterEach(async () => {
 
 test('header subtitle reads "WelaPLUS · the language comes from the child\'s class"', async () => {
   const screen = await ready(renderSelect());
-  expect(screen.getByText("WelaPLUS · the language comes from the child's class")).toBeTruthy();
+  expect(screen.getByText("WelaPLUS · in the child's class language")).toBeTruthy();
   expect(repositories.assessments.getQuestionResults).not.toHaveBeenCalled();
 });
 
@@ -162,7 +162,7 @@ test.each(['af', null, 'xh'])(
     const child = { ...CHILD, home_language: homeLanguage };
     mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
     const screen = await ready(renderSelect({ batteryCode: fixture.battery_code, batteryVersion: fixture.battery_version }));
-    expect(screen.getByText("Fixture reading · the language comes from the child's class")).toBeTruthy();
+    expect(screen.getByText("Fixture reading · in the child's class language")).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
     await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
     expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({

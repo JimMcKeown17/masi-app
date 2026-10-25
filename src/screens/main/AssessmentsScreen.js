@@ -146,7 +146,7 @@ export default function AssessmentsScreen({ navigation }) {
       {battery && <SurfaceCard style={styles.card}>
         <Text accessibilityRole="header" style={styles.cardTitle}>{battery.title}</Text>
         <Text style={styles.cardDescription}>
-          {`All ${battery.questions.length} Questions · ${languages} · about ${battery.aboutMinutes} min`}
+          {`All ${battery.questions.length} Questions · ${languages} · about\u00A0${battery.aboutMinutes}\u00A0min`}
         </Text>
         <BrandButton label="Start an assessment" variant="primary" style={styles.startButton} disabled={gateChecking}
           onPress={() => navigateToRun('AssessmentChildSelect', {

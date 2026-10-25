@@ -4194,6 +4194,7 @@ Node `v20.19.4`: each screen slice failed against old copy before passing; combi
 full `npx jest --silent`: **421 suites / 6,138 tests passed**; `npm run test:types`: **passed**.
 Syntax-tree comparison confirms only literal/JSX copy changed in all nine production files;
 `git diff --check` passed. No new documentation file or guard-test file; no device check in this copy task.
+A03 build 42 (d553501) showed the new copy; two lines left one orphan word at 360dp, so "about 30 min" now uses non-breaking spaces and the picker header reads "WelaPLUS · in the child's class language" (2 suites / 61 tests pass).
 
 ## Decision Register
 
