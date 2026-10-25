@@ -75,9 +75,9 @@ const componentCases = [
   ['LetterWritingFromPicturesQuestion', LetterWritingFromPicturesQuestion, fixtures.FIXTURE_LETTER_WRITING_EN,
     r => { press(r, 'Start', 'Correct'); endSequential(r, 'letter-writing'); }],
   ['WriteCvcsQuestion', WriteCvcsQuestion, fixtures.FIXTURE_WRITE_CVCS_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('jam letter 1 j, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'cvc'); }],
   ['WriteSentencesFromDictationQuestion', WriteSentencesFromDictationQuestion, fixtures.FIXTURE_WRITE_SENTENCES_DICTATION_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('Mom, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'dictation'); }],
   ['StoryWritingRubricQuestion', StoryWritingRubricQuestion, fixtures.FIXTURE_STORY_WRITING_EN,
     r => {
       press(r, 'Start');

@@ -57,3 +57,8 @@ test('every question has en and xh instructions', () => {
     expect(q.instructions!.en.length).toBeGreaterThan(20);
   }
 });
+
+test.each(['en', 'xh'])('Q9 and Q10 use the exact sequential marking instructions in %s', language => {
+  expect(B.questions[8].instructions![language]).toBe("Writing Sheet, pictures 1–4. Say the name of each picture TWICE and ask the child to write the word. Mark each letter Correct or Incorrect. The black ring shows which letter you're on.");
+  expect(B.questions[9].instructions![language]).toBe("Writing Sheet, lines 1–2. Read the first sentence TWICE and let the child write it. Then do the same for the second sentence. Do NOT repeat a sentence while the child is writing. Mark each word Correct or Incorrect. The black ring shows which word you're on.");
+});
