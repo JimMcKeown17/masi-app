@@ -3,11 +3,11 @@ import { StyleSheet } from 'react-native';
 import { tokens } from '../theme/tokens';
 import { Canvas, UiText } from '../ui';
 
-export function MissingItemSet({ language }: { language: string }) {
+export function MissingItemSet({ language, reason = 'language' }: { language: string; reason?: 'language' | 'empty' }) {
   return (
     <Canvas style={styles.root} testID={`missing-item-set-${language}`}>
       <UiText accessibilityRole="alert" align="center">
-        This test has no card for this language yet.
+        {reason === 'empty' ? "This test's card has no items." : 'This test has no card for this language yet.'}
       </UiText>
     </Canvas>
   );

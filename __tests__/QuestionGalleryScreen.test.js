@@ -122,7 +122,8 @@ test.each([
   const screen = renderWithProviders(<QuestionGalleryRunScreen navigation={{ goBack: jest.fn() }}
     route={{ params: { entryKey, languageCode, contentMode } }} />);
   const props = screen.UNSAFE_getByType(questionComponentFor(code).Component).props;
-  expect(props).toMatchObject({ language: languageCode, childName: 'Gallery child' });
+  expect(props).toMatchObject({ language: languageCode, childName: 'Gallery child',
+    endNoun: entryKey.startsWith('standalone:') ? 'test' : 'question' });
   expect(props.captureMode).toBe(captureMode);
   if (contentMode === 'fixture') expect(props.itemSet).toBe(testFixtures.FIXTURE_STORY_WRITING_EN);
   else if (entryKey.startsWith('standalone:')) expect(props.itemSet).toBe(CURRENT_ITEM_SETS[code][languageCode]);

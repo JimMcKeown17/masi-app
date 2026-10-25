@@ -34,9 +34,9 @@ const resultFor = (overrides = {}) => ({
   ...overrides,
 });
 const press = (rendered, ...labels) => labels.forEach(label => fireEvent.press(rendered.getByText(label)));
-const endSequential = rendered => {
-  fireEvent.press(rendered.getByTestId('letter-end'));
-  fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End test'));
+const endSequential = (rendered, prefix = 'letter') => {
+  fireEvent.press(rendered.getByTestId(`${prefix}-end`));
+  fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End question'));
 };
 
 // Use the same real components, fixtures and verdict as the package contract tests.
@@ -150,6 +150,7 @@ describe('question result persistence through real SQLite', () => {
     const result = await emitResult(LetterSoundsQuestion, itemSet, r => {
       press(r, 'Start');
       for (let position = 0; position < 60; position += 1) press(r, 'Correct');
+      press(r, 'Finish');
     });
     expect(result).toMatchObject({ question_version: '2026.2', stopped_reason: 'completed',
       derived: { total_correct: 60, total_attempted: 60, last_attempted_position: 59 } });

@@ -7,6 +7,7 @@ export interface QuestionProps {
   durationSec?: number;
   childName?: string;
   allowSkip?: boolean;
+  endNoun?: 'question' | 'test';
   onItemMarked?: (item: ResultItem) => void;
   /** Called exactly once when the Question leaves its intro phase and capture starts. */
   onStart?: () => void;

@@ -28,6 +28,7 @@ export default function QuestionGalleryRunScreen({ navigation, route }) {
       <View style={styles.question}>
         {Question ? <Question key={run} language={languageCode} itemSet={itemSet}
           durationSec={entry.durationSec} instructions={instructions} childName="Gallery child"
+          endNoun={entry.standalone ? 'test' : 'question'}
           {...question.extraProps} onComplete={onComplete} />
           : <Text style={styles.message}>This Question is unavailable.</Text>}
       </View>

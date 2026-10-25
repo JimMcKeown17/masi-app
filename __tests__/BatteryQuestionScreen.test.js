@@ -45,6 +45,8 @@ test('English HL 1 captures all 60 letters through the real Question, including 
   for (let index = 0; index < 60; index += 1) {
     fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
   }
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
   await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
   const saved = repositories.assessments.saveQuestionResult.mock.calls[0][0].result;

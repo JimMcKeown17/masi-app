@@ -34,16 +34,18 @@ function decide(screen: Screen, correct: boolean, count = 1) {
 }
 function end(screen: Screen) {
   fireEvent.press(screen.getByTestId('word-end'));
-  fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End test'));
+  fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End question'));
 }
 
-test('50 Correct decisions auto-complete with all fifty item-set keys and sequential results', () => {
+test('50 Correct decisions open review and Finish completes with all fifty item-set keys and sequential results', () => {
   const { screen, onComplete, onItemMarked } = start();
   decide(screen, true, 49);
   expect(onComplete).not.toHaveBeenCalled();
   const correct = screen.getByRole('button', { name: 'Correct' });
   act(() => { fireEvent.press(correct); fireEvent.press(correct); });
   act(() => jest.advanceTimersByTime(60000));
+  expect(onComplete).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByText('Finish'));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onItemMarked).toHaveBeenCalledTimes(50);
   const result = onComplete.mock.calls[0][0];
@@ -121,6 +123,8 @@ test('word_reading shows card rows 1–2 as page 1 of 5 in two continuous column
   fireEvent(grid, 'layout', { nativeEvent: { layout: { width: 360 } } });
   expect(screen.getByLabelText(`${SET.words[0].word}, current`)).toHaveStyle({ width: 159 });
   expect(within(grid).queryAllByRole('button')).toHaveLength(0);
+  decide(screen, true);
+  expect(within(grid).getAllByRole('button')).toHaveLength(1);
 });
 
 test('long isiXhosa words shrink to fit their tile', () => {
@@ -157,6 +161,7 @@ test('missing row_lengths uses one row and duplicate words retain distinct item-
   fireEvent.press(screen.getByRole('button', { name: 'Back' }));
   decide(screen, false);
   decide(screen, true);
+  fireEvent.press(screen.getByText('Finish'));
   const result = onComplete.mock.calls[0][0];
   expect(result.items).toEqual([
     { position: 0, item_key: 'first', prompt: 'same', is_correct: false, metadata: { row: 0, reached: true } },
@@ -202,7 +207,7 @@ test('End confirmation freezes reading at the tap even when confirmation is dela
   expect(screen.queryByText('Last item attempted')).toBeNull();
   act(() => jest.advanceTimersByTime(90000));
   expect(onComplete).not.toHaveBeenCalled();
-  fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End test'));
+  fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End question'));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 12345, stopped_reason: 'ea_ended',
     derived: { total_correct: 3, total_attempted: 3, last_attempted_position: 2 } });
 });
@@ -213,14 +218,14 @@ test('cancelling End retains decisions and the original deadline', () => {
   act(() => jest.advanceTimersByTime(20000));
   fireEvent.press(screen.getByTestId('word-end'));
   act(() => jest.advanceTimersByTime(10000));
-  fireEvent.press(screen.getByText('Cancel'));
-  expect(screen.getByLabelText('the, correct')).toBeTruthy();
+  fireEvent.press(screen.getByText('Keep marking'));
+  expect(screen.getByLabelText('the, correct. Double-tap to change to incorrect')).toBeTruthy();
   act(() => jest.advanceTimersByTime(30000));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 60000, stopped_reason: 'timer',
     derived: { total_correct: 1, total_attempted: 1 } });
 });
 
-test.each(['Correct', 'Incorrect', 'Back', 'End test'])('%s resolves a delayed timer before changing decisions', (control) => {
+test.each(['Correct', 'Incorrect', 'Back', 'End question'])('%s resolves a delayed timer before changing decisions', (control) => {
   const { screen, onComplete, onItemMarked } = start();
   decide(screen, true);
   // Elapsed time advances while the interval callback is delayed.
@@ -242,7 +247,7 @@ test('Skip defaults to allowed and keeps the skipped result shape with one termi
   decide(screen, true);
   fireEvent.press(screen.getByText('Skip question'));
   fireEvent.press(screen.getByText('Cancel'));
-  expect(screen.getByLabelText('the, correct')).toBeTruthy();
+  expect(screen.getByLabelText('the, correct. Double-tap to change to incorrect')).toBeTruthy();
   fireEvent.press(screen.getByText('Skip question'));
   const refused = screen.getByText('Child refused');
   act(() => { fireEvent.press(refused); fireEvent.press(refused); });
@@ -253,11 +258,13 @@ test('Skip defaults to allowed and keeps the skipped result shape with one termi
   } });
 });
 
-test('an empty word override can still start and End without a page', () => {
-  const { screen, onComplete } = start({ itemSet: { ...SET, words: [], row_lengths: undefined } });
+test('an empty word override shows the no-items card without starting', () => {
+  const onStart = jest.fn(), onComplete = jest.fn();
+  const screen = render(<ReadWordsQuestion language="en" captureMode="sequential"
+    itemSet={{ ...SET, words: [], row_lengths: undefined }} onStart={onStart} onComplete={onComplete} />);
+  expect(screen.getByTestId('missing-item-set-en')).toHaveTextContent("This test's card has no items.");
+  expect(screen.queryByText('Start')).toBeNull();
   expect(screen.queryByTestId('page-indicator')).toBeNull();
-  end(screen);
-  expect(onComplete).toHaveBeenCalledTimes(1);
-  expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'ea_ended', items: [],
-    derived: { total_attempted: 0, last_attempted_position: -1 } });
+  expect(onStart).not.toHaveBeenCalled();
+  expect(onComplete).not.toHaveBeenCalled();
 });

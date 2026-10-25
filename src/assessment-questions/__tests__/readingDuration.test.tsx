@@ -63,7 +63,7 @@ describe.each([
 
   function confirmEnd(screen: ReturnType<typeof render>) {
     fireEvent.press(sequential
-      ? within(screen.getByTestId('end-confirmation')).getByText('End test')
+      ? within(screen.getByTestId('end-confirmation')).getByText('End question')
       : screen.getByText('Confirm'));
   }
 
@@ -75,7 +75,7 @@ describe.each([
         act(() => jest.advanceTimersByTime(20000));
         pressEnd(screen);
         act(() => jest.advanceTimersByTime(10000));
-        fireEvent.press(screen.getByText('Cancel'));
+        fireEvent.press(screen.getByText(sequential ? 'Keep marking' : 'Cancel'));
       }
 
       // Move monotonic time to/past the deadline without running any timer callbacks.
@@ -130,7 +130,7 @@ describe.each([
     const { screen, onComplete } = startReading(60);
     act(() => jest.advanceTimersByTime(20000));
     pressEnd(screen);
-    expect(screen.getByText(sequential ? 'End the test?' : 'Last item attempted')).toBeTruthy();
+    expect(screen.getByText(sequential ? 'End this question?' : 'Last item attempted')).toBeTruthy();
     act(() => jest.advanceTimersByTime(70000));
     expect(onComplete).not.toHaveBeenCalled();
     if (sequential) confirmEnd(screen);
@@ -146,7 +146,7 @@ describe.each([
     act(() => jest.advanceTimersByTime(20000));
     pressEnd(screen);
     act(() => jest.advanceTimersByTime(10000));
-    fireEvent.press(screen.getByText('Cancel'));
+    fireEvent.press(screen.getByText(sequential ? 'Keep marking' : 'Cancel'));
     expect(screen.queryByText('Last item attempted')).toBeNull();
     if (Component === ReadWordsQuestion) {
       expect(screen.getByLabelText('Card row 1 · page 3 of 3')).toBeTruthy();
@@ -154,7 +154,7 @@ describe.each([
       fireEvent.press(screen.getByLabelText('Previous page'));
       fireEvent.press(screen.getByLabelText('Previous page'));
     }
-    expect(screen.getByLabelText(`${labels[0]}, correct`)).toBeTruthy();
+    expect(screen.getByLabelText(`${labels[0]}, correct${sequential ? '. Double-tap to change to incorrect' : ''}`)).toBeTruthy();
 
     if (nextStop === 'timer') {
       act(() => jest.advanceTimersByTime(30000));

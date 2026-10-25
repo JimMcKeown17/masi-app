@@ -34,7 +34,7 @@ function decide(r: Screen, correct: boolean, count = 1) {
 }
 function end(r: Screen) {
   fireEvent.press(r.getByTestId('letter-end'));
-  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End test'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End question'));
 }
 
 test('renders instructions and starts the timer only on Start', () => {
@@ -210,7 +210,7 @@ test('Skip defaults to allowed; cancel retains decisions and a chosen reason emi
   fireEvent.press(r.getByText('Skip question'));
   fireEvent.press(r.getByText('Cancel'));
   expect(onComplete).not.toHaveBeenCalled();
-  expect(r.getByLabelText('l, correct')).toBeTruthy();
+  expect(r.getByLabelText('l, correct. Double-tap to change to incorrect')).toBeTruthy();
   fireEvent.press(r.getByText('Skip question'));
   const tired = r.getByText('Child is tired');
   act(() => { fireEvent.press(tired); fireEvent.press(tired); });
@@ -246,12 +246,15 @@ test('Correct and Incorrect notify exactly once per forward decision, including 
   ]);
 });
 
-test('last-item decisions auto-complete once even with same-tick extra taps', () => {
+test('last-item decisions open review and Finish completes once even with same-tick extra taps', () => {
   const { r, onComplete, onItemMarked } = startQ({ itemSet: { ...SET, rows: [['a', 'b']], stop_rule: null } });
   decide(r, true);
   const incorrect = r.getByRole('button', { name: 'Incorrect' });
   act(() => { fireEvent.press(incorrect); fireEvent.press(incorrect); });
   act(() => jest.advanceTimersByTime(120000));
+  expect(onComplete).not.toHaveBeenCalled();
+  const finish = r.getByText('Finish');
+  act(() => { fireEvent.press(finish); fireEvent.press(finish); });
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onItemMarked).toHaveBeenCalledTimes(2);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'completed',
@@ -270,27 +273,27 @@ test('End confirms in a bottom sheet, freezing subsecond duration and scores at 
   fireEvent.press(correct);
   act(() => jest.advanceTimersByTime(90000));
   expect(onComplete).not.toHaveBeenCalled();
-  const confirm = within(sheet).getByText('End test');
+  const confirm = within(sheet).getByText('End question');
   act(() => { fireEvent.press(confirm); fireEvent.press(confirm); });
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 375, stopped_reason: 'ea_ended',
     derived: { total_correct: 2, total_attempted: 3, percent: 67, last_attempted_position: 2 } });
 });
 
-test('Cancel on End retains decisions and the original deadline, including time in confirmation', () => {
+test('Keep marking on End retains decisions and the original deadline, including time in confirmation', () => {
   const { r, onComplete } = startQ();
   decide(r, true);
   act(() => jest.advanceTimersByTime(20000));
   fireEvent.press(r.getByTestId('letter-end'));
   act(() => jest.advanceTimersByTime(10000));
-  fireEvent.press(r.getByText('Cancel'));
-  expect(r.getByLabelText('l, correct')).toBeTruthy();
+  fireEvent.press(r.getByText('Keep marking'));
+  expect(r.getByLabelText('l, correct. Double-tap to change to incorrect')).toBeTruthy();
   act(() => jest.advanceTimersByTime(30000));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 60000, stopped_reason: 'timer' });
 });
 
-test.each(['Correct', 'Incorrect', 'Back', 'End test'])('%s resolves an overdue deadline before changing any decisions', (control) => {
+test.each(['Correct', 'Incorrect', 'Back', 'End question'])('%s resolves an overdue deadline before changing any decisions', (control) => {
   const { r, onComplete, onItemMarked } = startQ();
   decide(r, true);
   // Elapsed time advances while the interval callback is delayed.
@@ -320,7 +323,7 @@ test('untimed End freezes reading time and reports was_timed=false', () => {
   expect(onComplete).not.toHaveBeenCalled();
   fireEvent.press(r.getByTestId('letter-end'));
   act(() => jest.advanceTimersByTime(30000));
-  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End test'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End question'));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 120000, derived: { was_timed: false } });
 });
 
@@ -359,7 +362,7 @@ test('no progress counter; no row auto-scroll', () => {
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test('decision layout: Correct/Incorrect side by side, full-width Back, End test centred below', () => {
+test('decision layout: Correct/Incorrect side by side, full-width Back, End question centred below', () => {
   const { r } = startQ({ allowSkip: false });
   const row = r.getByTestId('letter-decisions');
   expect(row).toHaveStyle({ flexDirection: 'row' });
@@ -373,14 +376,14 @@ test('decision layout: Correct/Incorrect side by side, full-width Back, End test
   const navigation = r.getByTestId('letter-navigation');
   expect(navigation).toHaveStyle({ flexDirection: 'row', justifyContent: 'center' });
   expect(within(navigation).queryByRole('button', { name: 'Back' })).toBeNull();
-  expect(within(navigation).getByRole('button', { name: 'End test' })).toHaveStyle({ minHeight: 44 });
+  expect(within(navigation).getByRole('button', { name: 'End question' })).toHaveStyle({ minHeight: 44 });
 });
 
-test('Skip question shows beside End test only when allowSkip', () => {
+test('Skip question shows beside End question only when allowSkip', () => {
   const { r } = startQ();
   const navigation = r.getByTestId('letter-navigation');
   expect(within(navigation).getByRole('button', { name: 'Skip question' })).toBeTruthy();
-  expect(within(navigation).getByRole('button', { name: 'End test' })).toBeTruthy();
+  expect(within(navigation).getByRole('button', { name: 'End question' })).toBeTruthy();
 });
 
 test('Grid A shows card rows 1–2 as page 1 of 3, twenty letter tiles in rows of five', () => {
@@ -416,7 +419,7 @@ test('marking the twentieth letter moves to page 2; Back from its first letter r
   expect(r.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
   expect(r.getByLabelText(`${SET.rows[1][9]}, current`)).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 1 });
   expect(r.getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
-  expect(r.getAllByLabelText(/, correct$/)).toHaveLength(19);
+  expect(r.getAllByLabelText(/, correct\. Double-tap to change to incorrect$/)).toHaveLength(19);
 });
 
 test('earlier marks stay visible after Back', () => {
@@ -425,8 +428,8 @@ test('earlier marks stay visible after Back', () => {
   decide(r, false);
   decide(r, true);
   fireEvent.press(r.getByRole('button', { name: 'Back' }));
-  expect(r.getByLabelText('l, correct')).toHaveStyle({ backgroundColor: tokens.color.marked });
-  expect(r.getByLabelText('a, incorrect')).toHaveStyle({ backgroundColor: tokens.color.error });
+  expect(r.getByLabelText('l, correct. Double-tap to change to incorrect')).toHaveStyle({ backgroundColor: tokens.color.marked });
+  expect(r.getByLabelText('a, incorrect. Double-tap to change to correct')).toHaveStyle({ backgroundColor: tokens.color.error });
   expect(r.getByLabelText('m, current')).toHaveStyle({ backgroundColor: tokens.color.surface, borderWidth: 1 });
   expect(r.getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderWidth: 3, borderColor: tokens.color.ink });
 });
@@ -463,6 +466,7 @@ test('a complete override supplies the result identity and content', () => {
   const custom = { ...SET, item_set_id: 'custom@1.en', question_code: 'custom', question_version: '1', rows: [['x', 'y']], stop_rule: null };
   const { r, onComplete } = startQ({ itemSet: custom });
   decide(r, true, 2);
+  fireEvent.press(r.getByText('Finish'));
   expect(onComplete.mock.calls[0][0]).toMatchObject({ question_code: 'custom', question_version: '1', item_set_id: 'custom@1.en' });
 });
 

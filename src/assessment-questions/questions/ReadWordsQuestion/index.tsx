@@ -27,6 +27,7 @@ import {
   MarkTile, QuestionIntro, ToggleBar,
 } from '../../ui';
 import { Countdown } from '../../progress/Countdown';
+import { flatCopy } from '../../progress/captureCopy';
 import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 type Phase = 'intro' | 'active' | 'mark-last' | 'skip-picker' | 'finished';
@@ -102,7 +103,8 @@ function ReadWordsSequentialContent(props: QuestionProps & { itemSet: FullItemSe
     chunkByLengths(words, row_lengths ?? [words.length]).map((row) =>
       row.map((word) => ({ item_key: word.item_key, prompt: word.word }))),
   ), [words, row_lengths]);
-  return <SequentialCapture {...props} {...card} layout={WORD_PAGE_LAYOUT} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
+  return <SequentialCapture {...props} items={card.items} copy={flatCopy('word', card.items.length)}
+    body={{ kind: 'grid', rows: card.rows, layout: WORD_PAGE_LAYOUT, variant: 'word', testID: 'word-grid' }} stopRule={props.itemSet.stop_rule ?? null} testIDPrefix="word" />;
 }
 
 function ReadWordsQuestionContent(

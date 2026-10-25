@@ -4536,6 +4536,7 @@ the two App suites failed until the worktree got its own install.)
 | --- | --- | --- |
 | 1 Reducer `flip` | 19/19 reducer tests; full suite green | Surprise: before the change an unknown `flip` fell through to the Back/Undo tail and deleted the last mark, so two of the plan's stop examples passed by accident. They now also assert the cursor and marks. |
 | 2 UI parts | 423 suites / 6,328 tests; types, boundary, raw-hex and style guards green | `LinePart` lives in `ui/PositionLine.tsx` (re-exported from `progress/captureTypes.ts`) so `ui/` never imports from `progress/`. FlipNotice sits at `bottom: 0` of its parent; the engine places it above the bar. Device check: TalkBack may read a flip twice (live region plus explicit announcement); Task 13 checks this. |
+| 3 Engine: review, flip, End question sheet, flip notice | 425 suites / 6,359 tests; types green | Letter sounds and word reading moved to the new engine props. One test migration beyond the plan's list: `BatteryQuestionScreen.test.js` (the 60-letter English HL 1 run now presses Finish). The empty-word test is replaced by "no items, never starts". The skip picker's Cancel stays Cancel; only the End sheet's cancel became Keep marking. |
 
 ## Decision Register
 

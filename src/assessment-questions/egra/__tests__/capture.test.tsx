@@ -175,3 +175,22 @@ test('oral reading forgets an earlier last-word choice after Cancel and End agai
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'ea_ended',
     derived: { last_attempted_position: 24, total_attempted: 25, total_correct: 25 } });
 });
+
+test.each(['letter_sounds', 'word_reading'] as const)('%s reviews all marks before Finish through its registered EGRA component', code => {
+  const { Component, extraProps } = questionComponentFor(code)!;
+  const set = itemSets[code];
+  const onComplete = jest.fn();
+  const screen = render(<Component language="en" itemSet={set} durationSec={60} {...extraProps} onComplete={onComplete} />);
+  fireEvent.press(screen.getByText('Start'));
+  const total = code === 'letter_sounds' ? itemSets.letter_sounds.rows.flat().length : itemSets.word_reading.words.length;
+  for (let position = 0; position < total; position++) fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+  expect(onComplete).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByText('Finish'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  const result = onComplete.mock.calls[0][0];
+  expect(result).toMatchObject({ stopped_reason: 'completed', derived: { total_correct: total, total_attempted: total, last_attempted_position: total - 1 } });
+  expect(result.items.every((item: any) => item.metadata.reached === true)).toBe(true);
+  expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+  expect(result).toEqual(buildEgraResult(set, { reason: 'completed', attempted: total,
+    correct: Array.from({ length: total }, (_, i) => i), durationMs: result.duration_ms, timed: true }));
+});

@@ -83,6 +83,8 @@ describe('item-set resolution', () => {
       }
       expect(onComplete).not.toHaveBeenCalled();
       fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(letters.getByText('Finish'));
       expect(onComplete).toHaveBeenCalledTimes(1);
       const result = onComplete.mock.calls[0][0];
       expect(result).toMatchObject({
@@ -105,6 +107,8 @@ describe('item-set resolution', () => {
       }
       expect(onComplete).not.toHaveBeenCalled();
       fireEvent.press(words.getByRole('button', { name: 'Correct' }));
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(words.getByText('Finish'));
       expect(onComplete).toHaveBeenCalledTimes(1);
       const result = onComplete.mock.calls[0][0];
       expect(result).toMatchObject({
