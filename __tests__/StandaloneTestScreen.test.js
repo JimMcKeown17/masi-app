@@ -109,7 +109,7 @@ test.each([
     itemSet: CURRENT_ITEM_SETS[testCode][languageCode], durationSec: 60,
     language: languageCode, childName: 'Amahle Dlamini', allowSkip: false, endNoun: 'test',
   });
-  if (testCode === 'word_reading') expect(mockQuestionProps.captureMode).toBe('sequential');
+  expect(mockQuestionProps).not.toHaveProperty('captureMode');
 });
 
 test('shows the standalone header and passes the registry instructions', () => {

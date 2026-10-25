@@ -15,7 +15,7 @@ it('every battery and standalone question code maps to a component; unknown code
   WELA_PLUS_FULL_2024_1.questions.forEach((question, index) => {
     expect(questionComponentFor(question.question_code)).toEqual({ Component: expected[index], extraProps: {} });
   });
-  expect(questionComponentFor('word_reading')).toEqual({ Component: ReadWordsQuestion, extraProps: { captureMode: 'sequential' } });
+  expect(questionComponentFor('word_reading')).toEqual({ Component: ReadWordsQuestion, extraProps: {} });
   expect(questionComponentFor('null_question')).toEqual({ Component: NullQuestion, extraProps: {} });
   for (const code of ['unknown', 'toString', '__proto__', 'constructor']) expect(questionComponentFor(code)).toBeNull();
   expect(testFixtures.FIXTURE_STORY_WRITING_EN.picture).toBeDefined();

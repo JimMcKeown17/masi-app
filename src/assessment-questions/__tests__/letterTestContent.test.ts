@@ -140,7 +140,7 @@ test('the Afrikaans sets are frozen', () => {
 test('battery Q1 uses the exact new instructions in both languages', () => {
   for (const language of BATTERY_LANGUAGES) {
     expect(WELA_PLUS_FULL_2024_1.questions[0].instructions?.[language]).toBe(
-      'Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The test stops by itself after 10 wrong in a row. Otherwise STOP at 1 minute.',
+      'Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The black ring shows which letter you\'re on. The test stops by itself after 10 wrong in a row or at 1 minute.',
     );
   }
 });

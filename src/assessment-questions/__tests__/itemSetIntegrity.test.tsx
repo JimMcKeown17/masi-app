@@ -96,7 +96,8 @@ test('EN and XH Q1 rows match the 2024 handouts', () => {
 test('language="xh" without an override renders isiXhosa content', () => {
   const r = render(<ReadWordsQuestion language="xh" instructions="." onComplete={jest.fn()} />);
   fireEvent.press(r.getByText('Start'));
-  expect(r.getByLabelText('inja, idle')).toBeTruthy();
+  for (let position = 0; position < 5; position += 1) fireEvent.press(r.getByText('Correct'));
+  expect(r.getByLabelText('inja, current')).toBeTruthy();
 });
 
 test('pending content lists exactly the remaining picture, rubric, language-review, and word-list work', () => {

@@ -3,13 +3,12 @@ import type { BatteryConfig, BatteryQuestion } from '../types/BatteryConfig';
 import { markingSentence } from './markingSentence';
 
 const V = '2024.1';
-const MARK = 'If the child gets an item correct, tap it (it turns green). If they get it wrong, leave it blank.';
 const both = (text: string) => ({ en: text, xh: text });
 
 const Q: BatteryQuestion[] = [
   { title: 'Letter sounds', question_code: 'letter_sounds', question_version: '2026.2', durationSec: 60,
     materials: { item: 'reading_card', side: 'A' },
-    instructions: both('Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The test stops by itself after 10 wrong in a row. Otherwise STOP at 1 minute.') },
+    instructions: both(`Hand the child Reading Card side A. Point to each letter and ask the child for its sound. ${markingSentence('letter')} The test stops by itself after 10 wrong in a row or at 1 minute.`) },
   { title: 'Listen to a story', question_code: 'wela_plus_listen_and_answer_story', question_version: V, materials: null,
     instructions: both('Say: "I am going to read you a short story aloud ONCE and then ask you some questions. Please listen carefully and answer the questions as best you can. Do you understand what you must do? Ready, let\'s begin." Read the story slowly, about one word per second. You may only read it once.' + ` Then ask each question. ${markingSentence('question')}`) },
   { title: 'First sounds', question_code: 'wela_plus_first_sound', question_version: V, materials: null,
@@ -27,7 +26,7 @@ const Q: BatteryQuestion[] = [
     instructions: both('Give the child the Writing Sheet. Say: "Look at the apple … \'apple\' starts with /a/. Can you write /a/?" Work left to right. Say the letter SOUND, not the letter name. If the child does not know a letter, say: "Don\'t worry, just leave it blank. Let\'s try another letter." When the child has finished, mark each cell here from their sheet.') },
   { title: 'Reading words', question_code: 'wela_plus_read_words', question_version: V, durationSec: 60,
     materials: { item: 'reading_card', side: 'B' },
-    instructions: both(`Hand the child Reading Card side B. Point to each word and ask the child to read it. ${MARK} STOP immediately if the child gets 5 in a row wrong, or clearly does not know any. Otherwise STOP at 1 minute.`) },
+    instructions: both(`Hand the child Reading Card side B. Point to each word and ask the child to read it. ${markingSentence('word')} The test stops by itself at 1 minute.`) },
   { title: 'Reading sentences', question_code: 'wela_plus_read_sentences', question_version: V,
     materials: { item: 'reading_card', side: 'B' },
     instructions: both(`Reading Card side B, sentences. Ask the child to read each sentence. Tap each word they read correctly.`) },

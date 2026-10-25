@@ -61,7 +61,7 @@ const componentCases = [
   ['LetterSoundsQuestion', LetterSoundsQuestion, fixtures.FIXTURE_LETTER_SOUNDS_EN,
     r => { press(r, 'Start', 'Correct'); endSequential(r); }],
   ['ReadWordsQuestion', ReadWordsQuestion, fixtures.FIXTURE_READ_WORDS_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('cat, idle')); press(r, 'End', 'Reached the end'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'word'); }],
   ['ReadSentencesQuestion', ReadSentencesQuestion, fixtures.FIXTURE_READ_SENTENCES_EN,
     r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('The, idle')); press(r, 'Finish', 'Yes, finish'); }],
   ['ReadPassageQuestion', ReadPassageQuestion, fixtures.FIXTURE_READ_PASSAGE_EN,

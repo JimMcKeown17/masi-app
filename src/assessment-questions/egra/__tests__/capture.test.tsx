@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { adaptEgraForm, egraFormFor } from '..';
 import { questionComponentFor } from '../../battery/questionComponents';
 import { validateResult } from '../../contractTest/validateResult';
@@ -128,7 +128,7 @@ test('oral reading with an error at word 6 requires an explicit last word after 
 });
 
 
-test.each(['wela_plus_read_passage', 'wela_plus_read_words'])('%s keeps the last correct word preselected', code => {
+test.each(['wela_plus_read_passage', 'wela_plus_read_words'])('%s records the last reached word when ending after ten correct marks', code => {
   const { Component } = questionComponentFor(code)!;
   const set = code === 'wela_plus_read_passage' ? WELA_PLUS_READ_PASSAGE_EN : WELA_PLUS_READ_WORDS_EN;
   const onComplete = jest.fn();
@@ -140,15 +140,21 @@ test.each(['wela_plus_read_passage', 'wela_plus_read_words'])('%s keeps the last
         set.words.slice(0, index).filter(word => word.item_key === set.words[index].item_key).length
       ]);
     } else {
-      if (index === 7) fireEvent.press(screen.getByLabelText('Next page'));
-      fireEvent.press(screen.getByLabelText(`${set.words[index].word}, idle`));
+      fireEvent.press(screen.getByText('Correct'));
     }
   }
   act(() => jest.advanceTimersByTime(30000));
-  fireEvent.press(screen.getByText('End'));
-  expect(screen.getByLabelText(`${set.words[9].word}, item 10`).props.accessibilityState).toMatchObject({ selected: true });
-  expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
-  fireEvent.press(screen.getByText('Confirm'));
+  if (code === 'wela_plus_read_words') {
+    fireEvent.press(screen.getByTestId('word-end'));
+    expect(screen.queryByText('Last item attempted')).toBeNull();
+    expect(screen.getByText("10 marked. The 30 not marked won't count towards the score.")).toBeTruthy();
+    fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End question'));
+  } else {
+    fireEvent.press(screen.getByText('End'));
+    expect(screen.getByLabelText(`${set.words[9].word}, item 10`).props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+    fireEvent.press(screen.getByText('Confirm'));
+  }
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'ea_ended',
     derived: { last_attempted_position: 9, total_attempted: 10, total_correct: 10 } });

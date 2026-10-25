@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { ReadWordsQuestion } from '..';
+import { WELA_PLUS_READ_WORDS_EN, WELA_PLUS_READ_WORDS_XH } from '../../../itemsets';
 import { CURRENT_ITEM_SETS } from '../../../itemsets/current';
 import { validateResult } from '../../../contractTest/validateResult';
 
@@ -21,7 +22,7 @@ afterEach(() => {
 function start(props: Partial<React.ComponentProps<typeof ReadWordsQuestion>> = {}) {
   const onComplete = jest.fn();
   const onItemMarked = jest.fn();
-  const screen = render(<ReadWordsQuestion language="en" itemSet={SET} captureMode="sequential"
+  const screen = render(<ReadWordsQuestion language="en" itemSet={SET}
     durationSec={60} childName="Lwazi" onComplete={onComplete} onItemMarked={onItemMarked} {...props} />);
   fireEvent.press(screen.getByText('Start'));
   return { screen, onComplete, onItemMarked };
@@ -260,11 +261,50 @@ test('Skip defaults to allowed and keeps the skipped result shape with one termi
 
 test('an empty word override shows the no-items card without starting', () => {
   const onStart = jest.fn(), onComplete = jest.fn();
-  const screen = render(<ReadWordsQuestion language="en" captureMode="sequential"
+  const screen = render(<ReadWordsQuestion language="en"
     itemSet={{ ...SET, words: [], row_lengths: undefined }} onStart={onStart} onComplete={onComplete} />);
   expect(screen.getByTestId('missing-item-set-en')).toHaveTextContent("This test's card has no items.");
   expect(screen.queryByText('Start')).toBeNull();
   expect(screen.queryByTestId('page-indicator')).toBeNull();
   expect(onStart).not.toHaveBeenCalled();
   expect(onComplete).not.toHaveBeenCalled();
+});
+
+test.each([WELA_PLUS_READ_WORDS_EN, WELA_PLUS_READ_WORDS_XH])(
+  'Q6 steps word by word through the shipped set and never stops early ($language)', itemSet => {
+    const { screen, onComplete, onItemMarked } = start({ language: itemSet.language, itemSet });
+    decide(screen, false, 12);
+    expect(screen.queryByTestId('stop-card')).toBeNull();
+    expect(screen.getByLabelText(`${itemSet.words[12].word}, current`)).toBeTruthy();
+    expect(screen.getByText('Word 13 of 40')).toBeTruthy();
+    expect(onItemMarked).toHaveBeenCalledTimes(12);
+    expect(onComplete).not.toHaveBeenCalled();
+  },
+);
+
+test.each([WELA_PLUS_READ_WORDS_EN, WELA_PLUS_READ_WORDS_XH])(
+  'Q6 pages are one 7-word card row each and the line reads Word 1 of 40 ($language)', itemSet => {
+    const { screen } = start({ language: itemSet.language, itemSet });
+    expect(itemSet.words).toHaveLength(40);
+    expect(itemSet.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
+    expect(screen.getByText('Word 1 of 40')).toBeTruthy();
+    for (let row = 0; row < 6; row += 1) {
+      expect(screen.getByText(`Card row ${row + 1} · page ${row + 1} of 6`)).toBeTruthy();
+      const grid = within(screen.getByTestId('word-grid'));
+      const offset = row * 7;
+      for (let position = offset; position < offset + itemSet.row_lengths![row]; position += 1) {
+        expect(grid.getByTestId(`tile-${position}`)).toBeTruthy();
+      }
+      expect(grid.queryByTestId(`tile-${offset + itemSet.row_lengths![row]}`)).toBeNull();
+      if (row < 5) decide(screen, true, 7);
+    }
+  },
+);
+
+test('ReadWordsQuestion has no grid mode', () => {
+  // @ts-expect-error captureMode was removed
+  const screen = render(<ReadWordsQuestion language="en" captureMode="grid" onComplete={jest.fn()} />);
+  fireEvent.press(screen.getByText('Start'));
+  expect(screen.getByLabelText(`${WELA_PLUS_READ_WORDS_EN.words[0].word}, current`)).toBeTruthy();
+  expect(screen.getByText('Correct')).toBeTruthy();
 });

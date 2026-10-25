@@ -15,11 +15,11 @@ const wordSet = {
 describe.each([
   {
     name: 'Q6 ReadWordsQuestion', Component: ReadWordsQuestion,
-    itemSet: wordSet, labels: words.map((word) => word.word), reportsWpm: false,
+    itemSet: wordSet, labels: words.map((word) => word.word), marks: 5, prefix: 'word', reportsWpm: false,
   },
   {
     name: 'Q8 ReadPassageQuestion', Component: ReadPassageQuestion,
-    itemSet: wordSet, labels: words.map((word) => word.word), reportsWpm: true,
+    itemSet: wordSet, labels: words.map((word) => word.word), marks: 5, prefix: undefined, reportsWpm: true,
   },
   {
     name: 'Q1 LetterSoundsQuestion', Component: LetterSoundsQuestion,
@@ -28,10 +28,10 @@ describe.each([
       question_code: 'letter-duration', language: 'en',
       rows: [['a', 'b', 'c', 'd']], stop_rule: null,
     },
-    labels: ['a', 'b', 'c'], reportsWpm: false,
+    labels: ['a', 'b', 'c', 'd'], marks: 3, prefix: 'letter', reportsWpm: false,
   },
-])('$name reading duration', ({ Component, itemSet, labels, reportsWpm }) => {
-  const sequential = Component === LetterSoundsQuestion;
+])('$name reading duration', ({ Component, itemSet, labels, marks, prefix, reportsWpm }) => {
+  const sequential = prefix !== undefined;
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-10-19T12:00:00Z'));
@@ -47,18 +47,16 @@ describe.each([
       <Component language="en" itemSet={itemSet} durationSec={durationSec} onComplete={onComplete} />,
     );
     fireEvent.press(screen.getByText('Start'));
-    labels.forEach((label, index) => {
+    expect(marks).toBeLessThan(labels.length);
+    labels.slice(0, marks).forEach(label => {
       fireEvent.press(sequential
         ? screen.getByText('Correct') : screen.getByLabelText(`${label}, idle`));
-      if ((index + 1) % 10 === 0 && screen.queryByLabelText('Next page')) {
-        fireEvent.press(screen.getByLabelText('Next page'));
-      }
     });
     return { screen, onComplete };
   }
 
-  function pressEnd(screen: ReturnType<typeof render>) {
-    fireEvent.press(sequential ? screen.getByTestId('letter-end') : screen.getByText('End'));
+  function openEnd(screen: ReturnType<typeof render>, endPrefix = prefix) {
+    fireEvent.press(endPrefix ? screen.getByTestId(`${endPrefix}-end`) : screen.getByText('End'));
   }
 
   function confirmEnd(screen: ReturnType<typeof render>) {
@@ -73,7 +71,7 @@ describe.each([
       const startedAt = globalThis.performance.now();
       if (cancelEarlierEnd) {
         act(() => jest.advanceTimersByTime(20000));
-        pressEnd(screen);
+        openEnd(screen);
         act(() => jest.advanceTimersByTime(10000));
         fireEvent.press(screen.getByText(sequential ? 'Keep marking' : 'Cancel'));
       }
@@ -84,9 +82,13 @@ describe.each([
       const delayedMs = startedAt + elapsedMs - now();
       jest.spyOn(globalThis.performance, 'now').mockImplementation(() => now() + delayedMs);
       expect(screen.queryByText('Last item attempted')).toBeNull();
-      pressEnd(screen);
+      openEnd(screen);
       if (!sequential) expect(screen.getByText('Last item attempted')).toBeTruthy();
-      const canCancel = screen.queryByText('Cancel') !== null;
+      const canCancel = screen.queryByText(sequential ? 'Keep marking' : 'Cancel') !== null;
+      if (sequential) {
+        expect(screen.queryByTestId('end-confirmation')).toBeNull();
+        expect(onComplete).toHaveBeenCalledTimes(1);
+      }
       act(() => jest.advanceTimersByTime(30000));
       if (!sequential) {
         expect(onComplete).not.toHaveBeenCalled();
@@ -97,9 +99,9 @@ describe.each([
       const result = onComplete.mock.calls[0][0];
       expect(result.duration_ms).toBe(60000);
       expect(result.stopped_reason).toBe('timer');
-      expect(result.derived.total_correct).toBe(labels.length);
+      expect(result.derived.total_correct).toBe(marks);
       expect(result.derived.was_timed).toBe(true);
-      expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? labels.length : undefined);
+      expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? marks : undefined);
       expect(canCancel).toBe(false);
     });
   });
@@ -121,39 +123,34 @@ describe.each([
     const result = onComplete.mock.calls[0][0];
     expect(result.duration_ms).toBe(60000);
     expect(result.stopped_reason).toBe('timer');
-    expect(result.derived.total_correct).toBe(labels.length);
+    expect(result.derived.total_correct).toBe(marks);
     expect(result.derived.was_timed).toBe(true);
-    expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? labels.length : undefined);
+    expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? marks : undefined);
   });
 
   test('early End freezes duration before confirmation delayed past the deadline', () => {
     const { screen, onComplete } = startReading(60);
     act(() => jest.advanceTimersByTime(20000));
-    pressEnd(screen);
+    openEnd(screen);
     expect(screen.getByText(sequential ? 'End this question?' : 'Last item attempted')).toBeTruthy();
     act(() => jest.advanceTimersByTime(70000));
     expect(onComplete).not.toHaveBeenCalled();
-    if (sequential) confirmEnd(screen);
-    else fireEvent.press(screen.getByText('Reached the end'));
+    confirmEnd(screen);
     const result = onComplete.mock.calls[0][0];
     expect(result.duration_ms).toBe(20000);
     expect(result.stopped_reason).toBe('ea_ended');
-    expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? labels.length * 3 : undefined);
+    expect(result.derived.total_correct).toBe(marks);
+    expect(result.derived.total_attempted).toBe(marks);
+    expect(result.derived.correct_words_per_minute).toBe(reportsWpm ? marks * 3 : undefined);
   });
 
-  test.each(['End', 'timer', 'skip'])('Cancel resumes the original clock before the next %s', (nextStop) => {
+  test.each(['End', 'timer', 'skip'])('cancelling End resumes the original clock before the next %s', (nextStop) => {
     const { screen, onComplete } = startReading(60);
     act(() => jest.advanceTimersByTime(20000));
-    pressEnd(screen);
+    openEnd(screen);
     act(() => jest.advanceTimersByTime(10000));
     fireEvent.press(screen.getByText(sequential ? 'Keep marking' : 'Cancel'));
     expect(screen.queryByText('Last item attempted')).toBeNull();
-    if (Component === ReadWordsQuestion) {
-      expect(screen.getByLabelText('Card row 1 · page 3 of 3')).toBeTruthy();
-      expect(screen.getByLabelText('word21, correct')).toBeTruthy();
-      fireEvent.press(screen.getByLabelText('Previous page'));
-      fireEvent.press(screen.getByLabelText('Previous page'));
-    }
     expect(screen.getByLabelText(`${labels[0]}, correct${sequential ? '. Double-tap to change to incorrect' : ''}`)).toBeTruthy();
 
     if (nextStop === 'timer') {
@@ -163,7 +160,7 @@ describe.each([
       if (!sequential) fireEvent.press(screen.getByText('Confirm'));
     } else {
       act(() => jest.advanceTimersByTime(10000));
-      if (nextStop === 'End') pressEnd(screen);
+      if (nextStop === 'End') openEnd(screen);
       else fireEvent.press(screen.getByText('Skip question'));
       act(() => jest.advanceTimersByTime(30000));
       if (nextStop === 'End') confirmEnd(screen);
@@ -178,7 +175,7 @@ describe.each([
       nextStop === 'timer' ? 'timer' : nextStop === 'End' ? 'ea_ended' : 'skipped_child_refused',
     );
     expect(result.derived.correct_words_per_minute).toBe(
-      reportsWpm && nextStop !== 'skip' ? Math.round(labels.length * 60000 / elapsed) : undefined,
+      reportsWpm && nextStop !== 'skip' ? Math.round(marks * 60000 / elapsed) : undefined,
     );
   });
 
@@ -187,7 +184,7 @@ describe.each([
     act(() => jest.advanceTimersByTime(120000));
     expect(screen.queryByText('Last item attempted')).toBeNull();
     expect(onComplete).not.toHaveBeenCalled();
-    pressEnd(screen);
+    openEnd(screen);
     act(() => jest.advanceTimersByTime(30000));
     confirmEnd(screen);
     const result = onComplete.mock.calls[0][0];
@@ -196,4 +193,25 @@ describe.each([
     expect(result.derived.was_timed).toBe(false);
     expect(result.derived.correct_words_per_minute).toBeUndefined();
   });
+});
+
+test('all items marked: review freezes the reading time', () => {
+  jest.useFakeTimers();
+  try {
+    const onComplete = jest.fn();
+    const screen = render(<ReadWordsQuestion language="en" itemSet={wordSet}
+      durationSec={60} onComplete={onComplete} />);
+    fireEvent.press(screen.getByText('Start'));
+    act(() => jest.advanceTimersByTime(20000));
+    words.forEach(() => fireEvent.press(screen.getByText('Correct')));
+    expect(screen.getByText('All 30 marked · 30 correct. Tap any word to change it.')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(70000));
+    expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByText('Finish'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 20000, stopped_reason: 'completed',
+      derived: { total_correct: 30, total_attempted: 30 } });
+  } finally {
+    jest.useRealTimers();
+  }
 });

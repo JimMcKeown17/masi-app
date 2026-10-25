@@ -115,16 +115,16 @@ test.each(['StandaloneTest', 'QuestionGalleryRun'])('TestFrame owns the top inse
 });
 
 test.each([
-  ['standalone:word_reading', 'xh', 'bundled', 'word_reading', 'sequential'],
-  ['battery:wela_plus_read_words', 'xh', 'bundled', 'wela_plus_read_words', undefined],
-  ['battery:wela_plus_story_writing', 'xh', 'fixture', 'wela_plus_story_writing', undefined],
-])('run resolves %s in %s with %s content', (entryKey, languageCode, contentMode, code, captureMode) => {
+  ['standalone:word_reading', 'xh', 'bundled', 'word_reading'],
+  ['battery:wela_plus_read_words', 'xh', 'bundled', 'wela_plus_read_words'],
+  ['battery:wela_plus_story_writing', 'xh', 'fixture', 'wela_plus_story_writing'],
+])('run resolves %s in %s with %s content', (entryKey, languageCode, contentMode, code) => {
   const screen = renderWithProviders(<QuestionGalleryRunScreen navigation={{ goBack: jest.fn() }}
     route={{ params: { entryKey, languageCode, contentMode } }} />);
   const props = screen.UNSAFE_getByType(questionComponentFor(code).Component).props;
   expect(props).toMatchObject({ language: languageCode, childName: 'Gallery child',
     endNoun: entryKey.startsWith('standalone:') ? 'test' : 'question' });
-  expect(props.captureMode).toBe(captureMode);
+  expect(props).not.toHaveProperty('captureMode');
   if (contentMode === 'fixture') expect(props.itemSet).toBe(testFixtures.FIXTURE_STORY_WRITING_EN);
   else if (entryKey.startsWith('standalone:')) expect(props.itemSet).toBe(CURRENT_ITEM_SETS[code][languageCode]);
   else expect(props.itemSet).toBeUndefined();
