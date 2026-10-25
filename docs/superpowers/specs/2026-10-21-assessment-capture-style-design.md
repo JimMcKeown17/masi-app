@@ -2,6 +2,7 @@
 
 **Date:** 2026-10-21
 **Status:** Approved by Jim 2026-10-21
+**Status note (2026-10-25):** The marking parts of this spec (the §2 non-goal on marking, §3.1–3.2, the §6 toggle and last-attempted patterns, the free-toggle tile rule and the frozen `Result` output) are amended by `2026-10-25-step-by-step-capture-design.md`. Every Question except the Story Writing rubric moves to step-by-step marking. The look, paging and spacing decisions here still stand.
 **Branch:** `design/assessment-capture-style` (from `main` at f27b347, after PR #90)
 **Mockups (approved):** `design/mockups-2026-10-assessment-capture/` (see its README)
 **Amends:** `2026-10-19-assessment-results-and-letter-test-design.md` (grid rows) and
