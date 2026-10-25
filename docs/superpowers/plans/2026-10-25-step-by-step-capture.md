@@ -37,7 +37,7 @@
   - End link: **End question** inside a Battery and in the gallery; **End test** on the standalone quick tests.
   - Flip notice: `${ItemName} changed to Correct|Incorrect`, shown for 3000 ms and announced to screen readers.
   - Marked tile label: `${label}, correct. Double-tap to change to incorrect` (or the reverse). Current tile: `${label}, current`. Not reached: `${label}, not reached`.
-  - Q6 stop copy: `The test stops by itself after 10 wrong in a row`.
+  - Q6 has **no stop rule in this build** (Jim, 2026-10-25: "first row all wrong" everywhere arrives with the follow-on EGRA-content change, so Q6's 10-in-a-row rule from spec §6.3 is not built).
   - EGRA story questions use **Incorrect**, never "Wrong".
 - **Nouns and position lines** (spec §12.6, the builder's proposal; Jim sees them on the device gate):
 
@@ -95,7 +95,6 @@ These input classes are the most likely to bite an EA but are not obviously cove
 | `progress/StoryQuestionsCapture.tsx` (new) | Shared story-questions screen | 6 |
 | `battery/markingSentence.ts` (new) | `markingSentence(noun)` | 6 |
 | `questions/*/index.tsx` | Each Question becomes data + engine | 6–11 |
-| `itemsets/wela_plus_read_words@2024.2.{en,xh}.ts` (new) | Q6 stop rule | 8 |
 | `src/utils/batteryRun.js` | "—" instead of "0 / 0" | 6 |
 | `test-support/egraResults.js` | Synthetic EGRA results match the engine | 6, 10 |
 | `src/screens/assessments/StandaloneTestScreen.js` | `endNoun="test"`, drop `captureMode` prop | 3, 8 |
@@ -596,22 +595,19 @@ export type CaptureBody =
 
 ---
 
-### Task 8: Reading words (Q6) — sequential only, with the new stop rule
+### Task 8: Reading words (Q6) — sequential only
 
 **Files:**
-- Create: `itemsets/wela_plus_read_words@2024.2.en.ts`, `itemsets/wela_plus_read_words@2024.2.xh.ts`
 - Modify:
-  - `questions/ReadWordsQuestion/index.tsx`: delete the grid path (`ReadWordsQuestionContent`, `markingPolarity`, `captureMode`, `keyFor`, toggle, `ToggleBar`, `LastAttemptedSheet` use); the default bundled set becomes 2024.2
-  - `itemsets/index.ts`
-  - `battery/bundledItemSets.ts` (add `'wela_plus_read_words@2024.2'`; keep `@2024.1`)
-  - `battery/wela_plus_full.ts` (Q6 `question_version: '2024.2'`, copy)
+  - `questions/ReadWordsQuestion/index.tsx`: delete the grid path (`ReadWordsQuestionContent`, `markingPolarity`, `captureMode`, `keyFor`, toggle, `ToggleBar`, `LastAttemptedSheet` use); the item sets are unchanged
+  - `battery/wela_plus_full.ts` (Q1 and Q6 copy only)
   - `battery/questionComponents.ts:35` (`word_reading` `extraProps: {}`)
   - `src/screens/assessments/StandaloneTestScreen.js:61` (drop `captureMode="sequential"`; keep the persisted `captureMode: 'sequential'` at `:41`)
 - Test:
   - delete `ReadWordsQuestion.test.tsx` (grid); extend `ReadWordsQuestion.stepByStep.test.tsx`; rewrite `ReadWordsQuestion.contract.test.tsx`
   - `__tests__/readingDuration.test.tsx` (Q6 case moves to the sequential branch)
   - `__tests__/clockJump.test.tsx:120-151` (delete the grid describe)
-  - `__tests__/itemSetResolution.test.tsx:134-160`; `__tests__/itemSetIntegrity.test.tsx:12` (bundled-set count 28 → 30) and `:96-99` (label `inja, current`)
+  - `__tests__/itemSetResolution.test.tsx:134-160`; `__tests__/itemSetIntegrity.test.tsx:96-99` (label `inja, current`)
   - typed callers that still pass `captureMode` (TS2322 once the prop goes): `__tests__/clockJump.test.tsx:65`, `__tests__/itemSetResolution.test.tsx:48,58,101`, `ReadWordsQuestion.stepByStep.test.tsx:24`. Delete the prop at each call site.
   - `__tests__/letterTestContent.test.ts:140-145`: the exact Q1 instruction string, in both languages, becomes the new wording below
   - `battery/__tests__/wela_plus_full.test.ts:28-35`, `battery/__tests__/questionComponents.test.ts`, `battery/__tests__/registry.test.ts`
@@ -619,20 +615,13 @@ export type CaptureBody =
 
 **Interfaces:**
 - Produces:
-  - `WELA_PLUS_READ_WORDS_2024_2_EN` / `_XH` = the 2024.1 set spread with `item_set_id: 'wela_plus_read_words@2024.2.<lang>'`, `question_version: '2024.2'` and `stop_rule: { kind: 'consecutive_wrong', stop_at: 10 }`. The words and `row_lengths` are unchanged.
   - `ReadWordsQuestion(props: QuestionProps)`: there are no extra props.
-  - **Q6 copy** (plan call 3): `Hand the child Reading Card side B. Point to each word and ask the child to read it. ${markingSentence('word')} The test stops by itself after 10 wrong in a row or at 1 minute.`
+  - **Q6 copy** (plan call 3): `Hand the child Reading Card side B. Point to each word and ask the child to read it. ${markingSentence('word')} The test stops by itself at 1 minute.` The "STOP … 5 in a row" line goes, because the app never enforced it.
   - **Q1 copy** gets the same fix (`…Mark each letter Correct or Incorrect. The black ring shows which letter you're on. The test stops by itself after 10 wrong in a row or at 1 minute.`).
 
 - [ ] **Step 1: Write the failing tests:**
-  - `Q6 stops by itself after 10 wrong in a row`:
-    - Battery set 2024.2, Incorrect ×10 → StopCard `got 10 in a row wrong`;
-    - Save result → `stop_rule`;
-    - `validateResult(result, { stopRule })` is valid.
-  - `Q6: Undo after the stop re-opens marking, and the next Incorrect stops again`.
+  - `Q6 steps word by word through the shipped set and never stops early`: Incorrect ×12 shows no StopCard, and the ring is on word 13.
   - `Q6 pages are one 7-word card row each and the line reads Word 1 of 40` (shipped sets: 40 words, `row_lengths [7,7,7,7,7,5]`).
-  - `the 2024.1 and 2024.2 sets have identical words and row_lengths, and only 2024.2 carries the stop rule`.
-  - `the WelaPLUS Battery points Q6 at 2024.2 and both sets resolve` (`bundledItemSetFor('wela_plus_read_words', '2024.2', 'xh')`).
   - `the Word Reading quick test keeps word_reading@2026.1 with no stop rule`.
   - `ReadWordsQuestion has no grid mode`: rendering with a stray `captureMode="grid"` still shows the ring. Pass the prop through a `// @ts-expect-error captureMode was removed` line, so the type gate passes and also proves the prop is gone.
 - [ ] **Step 2:** Run `$JEST src/assessment-questions/questions/ReadWordsQuestion src/assessment-questions/battery`. Expected: FAIL.
@@ -645,7 +634,7 @@ export type CaptureBody =
   - a separate `all items marked: review freezes the reading time` case covers the review path.
 
   Task 11 reuses the same driver for Q8. Run the full `$JEST` and `npm run test:types`.
-- [ ] **Step 5: Commit** `feat(capture): reading words marked step by step with a 10-in-a-row stop`.
+- [ ] **Step 5: Commit** `feat(capture): reading words marked step by step`.
 
 ---
 
@@ -859,14 +848,14 @@ Not a Codex task: Claude runs it and Jim does the iPhone pass.
   - Confirm TalkBack reads a marked tile with the double-tap hint and announces the flip notice.
 - [ ] **Step 4: Staging rows.** Use the `sqlite-staging-sql` helper, read-only, and confirm `project_ref=segygjzpujphwvrubusm`.
   - Select the new runs' `assessments.capture_mode`: every Question is `sequential` except `wela_plus_story_writing` (Q11, unchanged, so null).
-  - Check the items' `metadata.reached` tails and Q6's `item_set_id` `wela_plus_read_words@2024.2.*`.
+  - Check the items' `metadata.reached` tails.
 - [ ] **Step 5: Hand Jim the iPhone checklist** (the same flows) and the build-log entry. Merging waits for Jim's go.
 
 ---
 
 ## Calls made in this plan (Jim to check)
 
-1. **The WelaPLUS Battery stays `2024.1`.** The server default points at it (`supabase/migrations/20261021120000_assessment_results_contract.sql:109`), and each result already says how it was marked (Q6's new item-set version and `capture_mode`). Moving it would need a data migration for no reporting gain.
+1. **The WelaPLUS Battery stays `2024.1`.** The server default points at it (`supabase/migrations/20261021120000_assessment_results_contract.sql:109`), and each result already says how it was marked (`capture_mode`). Moving it would need a data migration for no reporting gain.
 2. **One clock rule for every Question.** Reading time stops at the last mark, and review time never counts, untimed Questions included. So `duration_ms` on an untimed Question means "time to the last mark".
 3. **Copy no longer tells the EA to stop by hand where the app stops by itself.**
    - Q1 and Q6: "…after 10 wrong in a row or at 1 minute".
