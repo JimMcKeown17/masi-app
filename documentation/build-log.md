@@ -5441,9 +5441,10 @@ programme, including no-default and gate-read-error fallback states. `EgraFormPi
 shared SelectSheet with 13 options in pack order, explicit HL/FAL/SMRS descriptions, no selection on
 opening or reopening, Continue and Cancel. Confirmation closes the picker and uses the existing
 focus/actor/programme/double-tap navigation guard. All original AssessmentsScreen lines, including
-the default card, are preserved. Jim's fixed 2026-10-25 decisions are recorded locally in CONTEXT:
-Full EGRA is offered app-wide to active-programme EAs; new user-facing copy says assessment, never
-run; both offerings share the existing host lifecycle. No programme/server list was introduced.
+the default card, are preserved. Jim's fixed 2026-10-25 decisions: Full EGRA is offered app-wide
+to active-programme EAs (CONTEXT "Full EGRA"); user-facing copy says assessment, never run (recorded
+in CONTEXT by Plan 3's copy sweep `d553501`); both offerings share the existing host lifecycle. No
+programme/server list was introduced.
 
 Host evidence: all 13 form languages override a differing class language without a language sheet;
 all 52 form/Question introductions render their real capture components through BatteryQuestionScreen,
@@ -5506,12 +5507,9 @@ deploy, commit or push occurred. The pre-existing untracked `node_modules` item 
 
 Out-of-scope findings / remaining gates:
 
-- **Unfinished-list form title:** the existing row shows the child, progress, date and code, but no
-  battery/form title. It now has the correct EGRA four-Question denominator. Adding a title would
-  change the protected existing row lines outside section C's allowed additions; left for the
-  parent-screen follow-up rather than claiming the title requirement is satisfied there.
-- **Existing host wording:** shared screens still contain existing labels such as "Finalize run".
-  This task preserves them as instructed; the new card and picker contain no user-facing "run".
+- **Unfinished-list form title:** resolved in the Claude review below (rows now lead with the
+  assessment name).
+- **Existing host wording:** resolved on the parent branch by Plan 3's copy sweep `d553501`.
 - **Per-result comprehension drill-down:** summary rows remain read-only and the generic detail
   screen refuses battery results. The generic detail grid only distinguishes letters/words and has
   no comprehension-specific Not asked rendering. The requested summary denominator works; a richer
@@ -5521,5 +5519,35 @@ Out-of-scope findings / remaining gates:
   results; first-row stop -> Undo -> timer expiry; End -> cancel; zero/skipped story -> persisted
   comprehension skip; absence of Writing Sheet reminders; comprehension score out of asked prompts.
   Jest and local SQLite are not native geometry, physical force-quit or hosted sync evidence.
+
+**Claude review (2026-10-25).** Read the full diff; registry, item-set fallback and the card match
+the work order, the default card is untouched, and no server/sync surface changed. Then rebased onto
+Plan 3's copy sweep `d553501` (one conflict, `AssessmentsScreen.test.js`, resolved by keeping the
+sweep's wording plus the extra card). Fixes made in review, each test-first:
+
+- **Wrong total for an unfinished assessment of the other kind.** In the EGRA child list, a child
+  with an unfinished WelaPLUS showed "Unfinished 4/4" and the sheet said "4 of 4 Questions done",
+  because both used the Battery being started, not the run's own Battery. A latent Plan 3 bug that
+  only appears with two Batteries. Badge, sheet subtitle and the Assessments-tab unfinished rows now
+  use the run's own Battery and lead with its name ("WelaPLUS · …", "English FAL EGRA 2 · …"); an
+  unknown Battery shows no name or total. New tests: EGRA picker with an unfinished WelaPLUS; unknown
+  Battery.
+- **Two identical "Start an assessment" buttons.** After the sweep both cards read the same, so a
+  screen reader announced two identical buttons. The EGRA button keeps the visible label and gets
+  the spoken name "Start a Full EGRA"; default-card tests now query by spoken name.
+- **Picker vanished instead of sliding away.** `EgraFormPickerSheet` returned `null` when closed,
+  which skipped the bottom sheet's exit animation. It now stays mounted and remounts on each opening
+  (fresh, nothing selected). Test: closed but mounted after Cancel (fails on the old picker).
+- Card counts ("13 forms", "about 6 min") now come from `EGRA_BATTERIES`; one stale
+  "Finalize run" query in a new summary test updated to the swept label; the duplicate "run" copy
+  rule dropped from CONTEXT (the sweep's entry covers it).
+
+| Gate (Node 20.19.4, after review fixes) | Result |
+|---|---|
+| `npx jest` | `Test Suites: 421 passed, 421 total`; `Tests: 6290 passed, 6290 total` |
+| `npm run test:integration` | `Test Suites: 77 passed, 77 total`; `Tests: 956 passed, 956 total` |
+| `npm run test:types` / `npm run test:content` | exit 0 / `# pass 5`, `# fail 0` |
+| `git diff --check` | PASS |
+
 - Print the four Masi 60-letter Grade 1 cards and resolve the pack source notes before field use.
   Stronger skip rules, score bands and the other EGRA open decisions are unchanged.

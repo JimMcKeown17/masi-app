@@ -28,7 +28,7 @@ test('EGRA summary names the form, scores comprehension out of asked questions a
   expect(screen.getByRole('text', { name: '4. Story questions, Done, 2 / 3' })).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize run' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
   await screen.findByText('Finalized');
   expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledWith(ID, {
     questionCodes: battery.questions.map(question => question.question_code),

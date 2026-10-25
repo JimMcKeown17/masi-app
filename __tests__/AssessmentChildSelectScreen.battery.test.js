@@ -200,7 +200,7 @@ test('unfinished run shows Unfinished 4/11; tapping opens the sheet with exact t
   expect(await screen.findByText('Unfinished 4/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
   await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
-  expect(screen.getByText('Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(screen.getByText('WelaPLUS · Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
   expect(screen.getByText("Starting new closes the old assessment as abandoned. Its 4 saved Questions stay in Lwazi's history.")).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Abandon it and start new' })).toBeTruthy();
@@ -368,6 +368,28 @@ test('failed abandon-and-start keeps the saved run sheet open with an accessible
   expect(repositories.batteryRuns.startRun.mock.calls.every(([input]) => input.abandonRunId === ID)).toBe(true);
 });
 
+test('an EGRA picker shows an unfinished WelaPLUS with its own name and question total', async () => {
+  const egra = EGRA_BATTERIES.find(battery => battery.battery_version === 'dbe-egra-en-fal-2-v1');
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished()]);
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: egra.battery_version }));
+  expect(await screen.findByText('Unfinished 4/11')).toBeTruthy();
+  expect(screen.queryByText('Unfinished 4/4')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await screen.findByRole('header', { name: 'Lwazi has an unfinished assessment' });
+  expect(screen.getByText('WelaPLUS · Started Tue 14:05 · 4 of 11 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+});
+
+test('an unfinished assessment this app version does not know shows no total and no name', async () => {
+  repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({
+    battery_code: 'future_battery', battery_version: '9', question_count: 2,
+  })]);
+  const screen = await ready(renderSelect());
+  expect(await screen.findByText('Unfinished')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  expect(await screen.findByText('Started Tue 14:05 · 2 Questions done · code KWY-2M4')).toBeTruthy();
+});
+
 test('another fixture battery supplies its own supported language and question total, including the unfinished sheet', async () => {
   const fixture = { ...BATTERY, title: 'Fixture reading', battery_code: 'fixture_reading', battery_version: '1',
     languages: ['af'], questions: BATTERY.questions.slice(0, 2) };
@@ -380,7 +402,7 @@ test('another fixture battery supplies its own supported language and question t
   expect(screen.getByText('Unfinished 1/2')).toBeTruthy();
   expect(screen.queryByText('Not available in Afrikaans yet')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  expect(await screen.findByText('Started Tue 14:05 · 1 of 2 Questions done · code KWY-2M4')).toBeTruthy();
+  expect(await screen.findByText('Fixture reading · Started Tue 14:05 · 1 of 2 Questions done · code KWY-2M4')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Abandon it and start new' }));
   await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
   expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({
@@ -456,7 +478,7 @@ test('leaving the picker dismisses its unfinished sheet; refocusing reloads the 
   expect(Boolean(screen.queryByRole('header', { name: 'Lwazi has an unfinished assessment' }))).toBe(false);
   expect(screen.getByText('Unfinished 5/11')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
-  await screen.findByText('Started Tue 14:05 · 5 of 11 Questions done · code KWY-2M4');
+  await screen.findByText('WelaPLUS · Started Tue 14:05 · 5 of 11 Questions done · code KWY-2M4');
 });
 
 test('battery picker shows the latest finalized run start day for this battery only', async () => {

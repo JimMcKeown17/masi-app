@@ -824,8 +824,9 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   story-questions prerequisite skip and finalizes all four Questions. Remaining:
   - print Masi 60-letter reading cards for the four Grade 1 forms (DBE's charts show only 40; the
     extra 20 are in `src/assessment-questions/egra/letterExtensions.ts`);
-  - run the device gate: form selection (including large text and all 13 options), fixed-language
-    child selection, capture, save, force-quit resume, finalize, offline then sync, and results;
+  - run the device gate: form selection (including large text and all 13 options; the picker
+    slides away cleanly as the child list opens), an unfinished WelaPLUS shown by name and total
+    from the EGRA child list, fixed-language child selection, capture, save, force-quit resume, finalize, offline then sync, and results;
     check first-row stop → Undo → timer expiry, End → cancel, zero/skipped story → saved
     comprehension skip, no Writing Sheet reminder, and comprehension score out of questions asked;
   - resolve the pack's `sourceNotes` before field use (see the open decisions below).

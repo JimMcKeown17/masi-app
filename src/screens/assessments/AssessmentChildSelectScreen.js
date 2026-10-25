@@ -262,6 +262,23 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     navigateToAssessment(selectedChild, languageCode);
   };
 
+  // A child's unfinished assessment can be a different Battery from the one being started
+  // (WelaPLUS vs a Full EGRA form), so its name and total come from its own Battery.
+  const unfinishedBatteryOf = run => batteryFor(run.battery_code, run.battery_version);
+  const unfinishedProgress = run => {
+    const total = unfinishedBatteryOf(run)?.questions.length;
+    return total == null ? 'Unfinished' : `Unfinished ${run.question_count}/${total}`;
+  };
+  const unfinishedSummary = run => {
+    const runBattery = unfinishedBatteryOf(run);
+    const total = runBattery?.questions.length;
+    const done = total == null
+      ? `${run.question_count} ${run.question_count === 1 ? 'Question' : 'Questions'} done`
+      : `${run.question_count} of ${total} Questions done`;
+    return [runBattery?.title, `Started ${formatRunStart(run.started_at, new Date())}`, done, `code ${runCode(run.id)}`]
+      .filter(Boolean).join(' · ');
+  };
+
   const renderChild = ({ item }) => {
     if (batteryMode) {
       const language = classLanguage(item);
@@ -279,7 +296,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         noteStyle={styles.unavailable}
         lead={<Avatar muted={Boolean(unavailable)} label={`${item.first_name?.[0] ?? ''}${item.last_name?.[0] ?? ''}`.toUpperCase()} />}
         trailing={!unavailable && unfinished && battery
-            ? <StatusBadge tone="warning" label={`Unfinished ${unfinished.question_count}/${battery.questions.length}`} />
+            ? <StatusBadge tone="warning" label={unfinishedProgress(unfinished)} />
             : undefined}
         disabled={!battery || Boolean(unavailable) || loading || runsLoading}
         accessibilityLabel={`Select ${item.first_name} ${item.last_name} for assessment`}
@@ -345,7 +362,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
 
       <BottomSheet visible={Boolean(unfinishedSelection?.visible)}
         title={`${unfinishedSelection?.child.first_name} has an unfinished assessment`}
-        subtitle={unfinishedSelection ? `Started ${formatRunStart(unfinishedSelection.run.started_at, new Date())} · ${unfinishedSelection.run.question_count} of ${battery.questions.length} Questions done · code ${runCode(unfinishedSelection.run.id)}` : undefined}
+        subtitle={unfinishedSelection ? unfinishedSummary(unfinishedSelection.run) : undefined}
         onDismiss={dismissUnfinished} dismissLabel="Dismiss unfinished assessment">
         <View style={styles.sheetActions}>
           {startError && <InlineNote>{startError}</InlineNote>}

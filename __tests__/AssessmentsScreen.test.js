@@ -24,6 +24,7 @@ import ListRow from '../src/components/common/ListRow';
 import SurfaceCard from '../src/components/common/SurfaceCard';
 import { STANDALONE_TESTS } from '../src/utils/assessmentRegistry';
 import AssessmentsScreen from '../src/screens/main/AssessmentsScreen';
+import SelectSheet from '../src/components/common/SelectSheet';
 import { listEgraForms } from '../src/assessment-questions/egra';
 
 test.each([true, false])('Full EGRA is offered after the default card when present (default: %s)', async hasDefault => {
@@ -81,6 +82,8 @@ test('cancelling the EGRA form picker clears its draft on reopening', async () =
   expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
   fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
   expect(screen.navigation.navigate).not.toHaveBeenCalled();
+  // Closed but still mounted, so the bottom sheet can animate away.
+  expect(screen.UNSAFE_getByType(SelectSheet).props.visible).toBe(false);
   fireEvent.press(screen.getByRole('button', { name: 'Start a Full EGRA' }));
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'English HL EGRA 1' }).props.accessibilityState.selected).toBe(false);
@@ -308,7 +311,7 @@ function withBattery() {
   } });
 }
 
-test('unfinished runs listed under the card with "4 of 11 done · Tue 14:05 · KWY-2M4", tap opens overview', async () => {
+test('unfinished runs listed under the card with "WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4", tap opens overview', async () => {
   withBattery();
   useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
@@ -317,10 +320,10 @@ test('unfinished runs listed under the card with "4 of 11 done · Tue 14:05 · K
   await screen.findByRole('header', { name: 'Unfinished assessments' });
   expect(screen.getAllByRole('header').map(node => node.props.children)).toEqual([BATTERY.title, 'Full EGRA', 'Unfinished assessments', 'Quick assessments']);
   expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
-  expect(screen.getByText('4 of 11 done · Tue 14:05 · KWY-2M4')).toBeTruthy();
+  expect(screen.getByText('WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4')).toBeTruthy();
   expect(mockGetUnfinishedRuns).toHaveBeenCalledWith('user-1');
   expect(mockGetChildNames).not.toHaveBeenCalled();
-  const row = screen.getByRole('button', { name: 'Lwazi Mbeki, 4 of 11 done · Tue 14:05 · KWY-2M4' });
+  const row = screen.getByRole('button', { name: 'Lwazi Mbeki, WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4' });
   expect(within(row).getByText('LM', { includeHiddenElements: true })).toBeTruthy();
   fireEvent.press(row);
   expect(navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
@@ -333,13 +336,13 @@ test('no unfinished runs: the "Unfinished assessments" header is absent', async 
   expect(screen.queryByRole('header', { name: 'Unfinished assessments' })).toBeNull();
 });
 
-test('zero decided Questions shows "Not started · Today 09:12 · R2C-8WT"', async () => {
+test('zero decided Questions shows "WelaPLUS · Not started · Today 09:12 · R2C-8WT"', async () => {
   withBattery();
   useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
   mockGetUnfinishedRuns.mockResolvedValue([unfinished({ id: 'c0988e68-2222-4333-8444-555555555555', question_count: 0,
     started_at: new Date(2026, 9, 23, 9, 12).toISOString() })]);
   const screen = renderTab();
-  await screen.findByText('Not started · Today 09:12 · R2C-8WT');
+  await screen.findByText('WelaPLUS · Not started · Today 09:12 · R2C-8WT');
 });
 
 test('a child outside the assessable roster uses the SQLite name and shows "Child no longer assigned"', async () => {
@@ -351,7 +354,7 @@ test('a child outside the assessable roster uses the SQLite name and shows "Chil
   await screen.findByText('Lwazi Mbeki');
   expect(screen.getByText('Child no longer assigned')).toBeTruthy();
   expect(mockGetChildNames).toHaveBeenCalledWith([CHILD.id]);
-  const row = screen.getByRole('button', { name: 'Lwazi Mbeki, Child no longer assigned, 4 of 11 done · Tue 14:05 · KWY-2M4' });
+  const row = screen.getByRole('button', { name: 'Lwazi Mbeki, Child no longer assigned, WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4' });
   expect(within(row).getByText('LM', { includeHiddenElements: true })).toBeTruthy();
   fireEvent.press(row);
   expect(navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
@@ -368,7 +371,7 @@ test('refocus reloads unfinished runs and stats; an older blurred read cannot ov
   useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
   const screen = renderTab();
-  await screen.findByText('4 of 11 done · Tue 14:05 · KWY-2M4');
+  await screen.findByText('WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4');
   const older = deferred();
   act(() => screen.navigationRef.navigate('Away'));
   mockGetUnfinishedRuns.mockReturnValueOnce(older.promise);
@@ -377,11 +380,11 @@ test('refocus reloads unfinished runs and stats; an older blurred read cannot ov
   act(() => screen.navigationRef.navigate('Away'));
   mockGetUnfinishedRuns.mockResolvedValue([unfinished({ question_count: 6 })]);
   act(() => screen.navigationRef.goBack());
-  await screen.findByText('6 of 11 done · Tue 14:05 · KWY-2M4');
+  await screen.findByText('WelaPLUS · 6 of 11 done · Tue 14:05 · KWY-2M4');
   expect(mockGetLetterResults).toHaveBeenCalledTimes(3);
   await act(async () => older.resolve([unfinished({ question_count: 1 })]));
-  expect(screen.getByText('6 of 11 done · Tue 14:05 · KWY-2M4')).toBeTruthy();
-  expect(screen.queryByText('1 of 11 done · Tue 14:05 · KWY-2M4')).toBeNull();
+  expect(screen.getByText('WelaPLUS · 6 of 11 done · Tue 14:05 · KWY-2M4')).toBeTruthy();
+  expect(screen.queryByText('WelaPLUS · 1 of 11 done · Tue 14:05 · KWY-2M4')).toBeNull();
 });
 
 test('refocus keeps the prior rows while the programme gate resolves, blocks capture navigation, and applies a lost assignment', async () => {
@@ -389,7 +392,7 @@ test('refocus keeps the prior rows while the programme gate resolves, blocks cap
   useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
   const screen = renderTab();
-  await screen.findByText('4 of 11 done · Tue 14:05 · KWY-2M4');
+  await screen.findByText('WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4');
   const pending = deferred();
   act(() => screen.navigationRef.navigate('Away'));
   mockGate.mockReturnValueOnce(pending.promise);
@@ -424,13 +427,13 @@ test('unfinished-run load failure keeps stats and quick assessments usable and o
   expect(mockGetUnfinishedRuns).toHaveBeenCalledTimes(2);
 });
 
-test.each(['Start an assessment', 'Lwazi Mbeki, 4 of 11 done · Tue 14:05 · KWY-2M4'])(
+test.each(['Start an assessment', 'Lwazi Mbeki, WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4'])(
   'double tap on %s navigates once; the launch guard resets on refocus', async label => {
     withBattery();
     useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
     mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
     const screen = renderTab();
-    await screen.findByText('4 of 11 done · Tue 14:05 · KWY-2M4');
+    await screen.findByText('WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4');
     const button = screen.getByLabelText(label);
     act(() => { fireEvent.press(button); fireEvent.press(button); });
     expect(screen.navigation.navigate).toHaveBeenCalledTimes(1);
@@ -472,7 +475,7 @@ test('missing SQLite name falls back to "Child no longer assigned" and remains n
   const screen = renderTab();
   await screen.findByText('Child no longer assigned');
   expect(screen.queryByText('undefined')).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Child no longer assigned, 4 of 11 done · Tue 14:05 · KWY-2M4' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Child no longer assigned, WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4' }));
   expect(screen.navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
 });
 
@@ -531,9 +534,9 @@ test('unfinished runs stay reachable when the programme default is unavailable, 
   useAssessableChildren.mockReturnValue({ all: [CHILD], loading: false });
   mockGetUnfinishedRuns.mockResolvedValue([unfinished()]);
   const screen = renderTab();
-  await screen.findByText('4 of 11 done · Tue 14:05 · KWY-2M4');
+  await screen.findByText('WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4');
   expect(screen.queryByLabelText('Start an assessment')).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Lwazi Mbeki, 4 of 11 done · Tue 14:05 · KWY-2M4' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Lwazi Mbeki, WelaPLUS · 4 of 11 done · Tue 14:05 · KWY-2M4' }));
   expect(screen.navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
 });
 
@@ -544,6 +547,6 @@ test('unfinished EGRA assessment uses its own four-Question total and resumes in
     battery_code: 'egra', battery_version: 'dbe-egra-en-fal-2-v1', question_count: 2,
   })]);
   const screen = renderTab();
-  fireEvent.press(await screen.findByRole('button', { name: 'Lwazi Mbeki, 2 of 4 done · Tue 14:05 · KWY-2M4' }));
+  fireEvent.press(await screen.findByRole('button', { name: 'Lwazi Mbeki, English FAL EGRA 2 · 2 of 4 done · Tue 14:05 · KWY-2M4' }));
   expect(screen.navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
 });

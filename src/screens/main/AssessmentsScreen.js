@@ -16,7 +16,7 @@ import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
-import { batteryFor } from '../../assessment-questions';
+import { batteryFor, EGRA_BATTERIES } from '../../assessment-questions';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import SectionHeader from '../../components/common/SectionHeader';
 import ListGroup from '../../components/common/ListGroup';
@@ -25,6 +25,8 @@ import BrandButton from '../../components/common/BrandButton';
 import { typeRoles } from '../../constants/typography';
 import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 import EgraFormPickerSheet from '../../components/assessments/EgraFormPickerSheet';
+
+const EGRA_MINUTES = Math.max(...EGRA_BATTERIES.map(battery => battery.aboutMinutes));
 
 export default function AssessmentsScreen({ navigation }) {
   const paddingBottom = useScrollBottomPadding();
@@ -159,7 +161,7 @@ export default function AssessmentsScreen({ navigation }) {
       <SurfaceCard style={styles.card}>
         <Text accessibilityRole="header" style={styles.cardTitle}>Full EGRA</Text>
         <Text style={styles.cardDescription}>
-          Letter sounds, familiar words, a story and story questions · 13 forms · about 6 min
+          {`Letter sounds, familiar words, a story and story questions · ${EGRA_BATTERIES.length} forms · about ${EGRA_MINUTES} min`}
         </Text>
         <BrandButton label="Start an assessment" accessibilityLabel="Start a Full EGRA" variant="primary"
           style={styles.startButton} disabled={gateChecking} onPress={() => setEgraPickerVisible(true)} />
@@ -178,10 +180,13 @@ export default function AssessmentsScreen({ navigation }) {
               : referenceNames[run.child_id]?.name;
             const unassigned = !rosterLoading && !child;
             const name = childName || (rosterLoading ? 'Loading child…' : 'Child no longer assigned');
-            const total = batteryFor(run.battery_code, run.battery_version)?.questions.length;
+            // Name the assessment: an EA can have WelaPLUS and Full EGRA assessments open at once.
+            const runBattery = batteryFor(run.battery_code, run.battery_version);
+            const total = runBattery?.questions.length;
             const progress = run.question_count === 0 ? 'Not started'
               : total == null ? `${run.question_count} done` : `${run.question_count} of ${total} done`;
-            const subtitle = `${progress} · ${formatRunStart(run.started_at, new Date())} · ${runCode(run.id)}`;
+            const subtitle = [runBattery?.title, progress, formatRunStart(run.started_at, new Date()), runCode(run.id)]
+              .filter(Boolean).join(' · ');
             const parts = name.split(' ').filter(Boolean);
             const initials = childName ? `${parts[0]?.[0] ?? ''}${parts.length > 1 ? parts[parts.length - 1][0] : ''}`.toUpperCase() : '';
             return <ListRow key={run.id} title={name} subtitle={subtitle}
