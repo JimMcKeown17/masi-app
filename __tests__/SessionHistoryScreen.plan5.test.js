@@ -97,6 +97,50 @@ describe('SessionHistoryScreen Plan 5 behavior', () => {
     jest.clearAllMocks();
   });
 
+  test.each(['pageVersion', 'runVersion'])('%s reload keeps rows mounted until new sessions arrive', async version => {
+    const screen = render(<SessionHistoryScreen />);
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    await screen.findByText('Literacy session');
+    const row = screen.getByText('Literacy session');
+    const rows = await sessionsRepository.getSessions.mock.results[0].value;
+    let resolve;
+    sessionsRepository.getSessions.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    useSessionHistoryStatus.mockReturnValue({ pageVersion: 0, runVersion: 0, [version]: 1 });
+    screen.rerender(<SessionHistoryScreen />);
+    expect(screen.queryByText('Loading...')).toBeNull();
+    expect(screen.getByText('Literacy session')).toBe(row);
+    await act(async () => resolve([...rows, { ...rows[0], id: 'session-2', session_type: 'New session' }]));
+    expect(await screen.findByText('New session')).toBeTruthy();
+    expect(screen.getByText('Literacy session')).toBe(row);
+  });
+
+  test('switching EA clears previous sessions even when the new first load fails', async () => {
+    const screen = render(<SessionHistoryScreen />);
+    await screen.findByText('Literacy session');
+    let reject;
+    sessionsRepository.getSessions.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    useAuth.mockReturnValue({ user: { id: 'user-2' } });
+    screen.rerender(<SessionHistoryScreen />);
+    expect(screen.getByText('Loading...')).toBeTruthy();
+    expect(screen.queryByText('Literacy session')).toBeNull();
+    await act(async () => reject(new Error('read failed')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load sessions');
+    expect(screen.queryByText('Loading...')).toBeNull();
+    expect(screen.queryByText('Literacy session')).toBeNull();
+  });
+
+  test('a failed reload keeps sessions and shows the existing toast', async () => {
+    const screen = render(<SessionHistoryScreen />);
+    await screen.findByText('Literacy session');
+    const row = screen.getByText('Literacy session');
+    sessionsRepository.getSessions.mockRejectedValueOnce(new Error('read failed'));
+    useSessionHistoryStatus.mockReturnValue({ pageVersion: 1, runVersion: 0 });
+    screen.rerender(<SessionHistoryScreen />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load sessions');
+    expect(screen.getByText('Literacy session')).toBe(row);
+    expect(screen.queryByText('Loading...')).toBeNull();
+  });
+
   // The list scrolls inside the card, so the card itself must end above the
   // navigation bar; padding inside the list only adds blank card (A03s).
   test('the history card ends 16dp above the 48dp bottom safe area', async () => {

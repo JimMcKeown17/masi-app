@@ -4219,6 +4219,35 @@ A03 build 42 (d553501) showed the new copy; two lines left one orphan word at 36
   Home said "No active programme — contact your supervisor" for about 40 s until the first pull
   landed. A new EA would read that as a setup error. Not fixed here.
 
+### 2026-10-25 — Lists keep their rows while refreshing
+
+Galaxy A03 release builds blanked History for 3–5 seconds on returning from results or a sync
+counter bump, losing scroll position and row taps. AssessmentHistoryScreen, SessionHistoryScreen,
+AssessmentRankingScreen, LetterMasteryRankingScreen and SessionCountRankingScreen now share the
+same user-keyed first-load rule: later reloads retain mounted rows; switching EA clears old data
+and starts loading again. History error toasts and refresh controls remain; ranking reads settle
+errors and ignore stale responses (Letter Mastery and Session Count previously lacked cleanup).
+The focus-loader sweep found no other matching full-screen blanking loader; Time Entries keeps
+its SectionList mounted. Added the list-loading contract to the design system.
+Ranking reads now show an InlineNote with Try again before any successful load for the current EA,
+retain rows with one error toast after a failed refresh, and clear the error on successful retry;
+swapping only the five screen sources to `origin/main` made all five suites RED (21 failed / 39
+passed, including all six new error tests and 15 earlier regressions), then byte-for-byte
+restoration preserved `git diff --stat`.
+Tapping Try again shows the spinner straight away, so a slow read never looks like a dead button (a RED-first assertion in each ranking suite).
+Round-2 adversarial review (gpt-6-astra) raised two medium findings, both ruled out of scope because `main` behaves the same way:
+(1) Assessment Scores builds its ranking from the live roster plus the last read, so a newly published child shows "Not assessed" until the next read. `main` never re-reads on a roster change either, and the read is by EA rather than by roster, so that label is correct for this screen.
+(2) Rankings treat a not-yet-hydrated or failed roster (`children = []`) as an empty class. That is the same root cause as issue #80 ("No active programme" during first sync) and is recorded there for a single roster-hydration fix.
+
+TDD screen regressions failed before implementation. Node **20.19.4** verification:
+`touched suites: npx jest --runInBand --silent` **5 suites / 60 tests passed**;
+`npx jest --silent` **405 suites / 5,700 tests passed**;
+`npm run test:types` **passed**; `git diff --check` **passed**.
+Investigation only: real SQLite synthetic History reads (50 results, 10 runs, 3,000 items) hydrate
+all items and parse JSON 3,050 times (~1.19 MB when serialized); 30 warm samples measured ~46 ms median /
+104 ms p95 on this host. Repository queries are unchanged; the temporary profiling test was removed.
+No device verification was performed; the A03 release-build scroll/tap retest remains open.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

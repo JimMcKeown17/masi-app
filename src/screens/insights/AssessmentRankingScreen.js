@@ -1,10 +1,13 @@
+import { useToast } from '../../context/ToastContext';
+import InlineNote from '../../components/common/InlineNote';
+import BrandButton from '../../components/common/BrandButton';
 import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import SegmentedControl from '../../components/common/SegmentedControl';
 import { typeRoles } from '../../constants/typography';
 import { useSignedInEA } from '../../context/SignedInEAContext';
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -61,24 +64,52 @@ export default function AssessmentRankingScreen({ navigation }) {
   const [memberships, setMemberships] = useState([]);
   const [mode, setMode] = useState('letters');
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
+  const loadingUserId = useRef(user?.id);
+  const hasSuccessfulLoad = useRef(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      const load = async () => {
+      // Only a different EA starts a new first load; refreshes keep the list mounted.
+      if (loadingUserId.current !== user?.id) {
+        loadingUserId.current = user?.id;
+        hasSuccessfulLoad.current = false;
+        setLoadError(false);
         setLoading(true);
-        const [rows, membershipRows] = await Promise.all([
-          assessmentsRepository.getQuestionResults({ userId: user.id }),
-          membershipsRepository.getAll(),
-        ]);
-        if (!active) return;
-        setAssessments(rows);
-        setMemberships(membershipRows);
-        setLoading(false);
+        setAssessments([]);
+        setMemberships([]);
+      }
+      const load = async () => {
+        try {
+          if (!user?.id) return;
+          const [rows, membershipRows] = await Promise.all([
+            assessmentsRepository.getQuestionResults({ userId: user.id }),
+            membershipsRepository.getAll(),
+          ]);
+          if (!active) return;
+          setAssessments(rows);
+          setMemberships(membershipRows);
+          hasSuccessfulLoad.current = true;
+          setLoadError(false);
+        } catch (error) {
+          if (active) {
+            console.error('Error loading assessment ranking:', error);
+            if (hasSuccessfulLoad.current) {
+              toast.show({ message: "Couldn't refresh this ranking.", tone: 'error', duration: 3000 });
+            } else {
+              setLoadError(true);
+            }
+          }
+        } finally {
+          if (active) setLoading(false);
+        }
       };
       load();
       return () => { active = false; };
-    }, [assessmentsRepository, membershipsRepository, user.id, pageVersion, runVersion])
+    }, [assessmentsRepository, membershipsRepository, user?.id, pageVersion, runVersion, retryVersion, toast])
   );
 
   const modeConfig = MODES[mode];
@@ -91,10 +122,19 @@ export default function AssessmentRankingScreen({ navigation }) {
   const notAssessed = assessableChildren.filter(child => !assessedIds.has(child.id)).map(child => ({ child }));
   const ranking = [...assessed, ...notAssessed];
 
-  if (loading) {
+  if (loading || loadingUserId.current !== user?.id) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.errorContainer}>
+        <InlineNote>Couldn't load this ranking. Try again.</InlineNote>
+        <BrandButton label="Try again" onPress={() => { setLoading(true); setRetryVersion(version => version + 1); }} />
       </View>
     );
   }
@@ -192,6 +232,13 @@ export default function AssessmentRankingScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.md,
+    gap: spacing.md,
     backgroundColor: colors.background,
   },
   loadingContainer: {

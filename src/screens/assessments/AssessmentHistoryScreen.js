@@ -9,7 +9,7 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
 import { useToast } from '../../context/ToastContext';
 import { isStaleActorError } from '../../session/staleActor';
 import { useSignedInEA } from '../../context/SignedInEAContext';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Pressable, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
@@ -55,6 +55,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
   const { all: assessableChildren } = useAssessableChildren();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const loadingUserId = useRef(user?.id);
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -66,6 +67,14 @@ export default function AssessmentHistoryScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      // Only a different EA starts a new first load; refreshes keep the list mounted.
+      if (loadingUserId.current !== user?.id) {
+        loadingUserId.current = user?.id;
+        setLoading(true);
+        setAssessments([]);
+        setReferenceNames({});
+        setPullStates([null, null]);
+      }
 
       const loadAssessments = async () => {
         if (!user?.id) {
@@ -75,7 +84,6 @@ export default function AssessmentHistoryScreen({ navigation }) {
         }
 
         try {
-          setLoading(true);
           const [results, runs, states] = await Promise.all([
             assessmentsRepository.getQuestionResults({
               userId: user.id, recordedByUserId: user.id, includeSkipped: true, order: 'desc',
@@ -190,7 +198,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
     );
   };
 
-  if (loading) {
+  if (loading || loadingUserId.current !== user?.id) {
     return (
       <View style={styles.container}>
         {history.detail && <Text variant="bodySmall" style={styles.historyDetail}>{history.detail}</Text>}
