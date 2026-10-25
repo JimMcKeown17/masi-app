@@ -14,7 +14,7 @@
 
 ## Global Constraints
 
-- **Order:** start after `fix/egra-story-last-word` (the other EGRA session's last-word fix) merges to `main`, then rebase this branch onto `main`. If it is still open, Tasks 1–10 may proceed, but the branch must rebase onto it before Task 11, which rewrites the passage and retires the last-word sheet that the fix touches.
+- **Order:** start after PR #106 (`fix/egra-story-last-word`, the other EGRA session's last-word fix) merges to `main`, then rebase this branch onto `main`. If it is still open, Tasks 1–10 may proceed, but the branch must rebase onto it before Task 11, which rewrites the passage and retires the last-word sheet that the fix touches.
 - **Test commands:**
   - Jest needs Node 20: `JEST="env PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest"`.
   - Types: `npm run test:types`.
@@ -47,7 +47,7 @@
   | Story questions (Q2, EGRA) | question | Question **2 of 5** | Question 2 |
   | First sounds (Q3), Blending (Q4) | word | Word **2 of 10** | Word 2 |
   | Letter writing (Q5) | letter | Letter **3 of 26** | Letter 3 |
-  | Reading words (Q6, EGRA words, quick test) | word | Word **6 of 36** | Word 6 |
+  | Reading words (Q6, EGRA words, quick test) | word | Word **6 of 40** | Word 6 |
   | Reading sentences (Q7), Writing sentences (Q10) | word | Sentence **2** · word **2 of 3** | Word 2 of sentence 2 |
   | Passage (Q8, EGRA story) | word | Word **6 of 42** | Word 6 |
   | Writing words (Q9) | letter | Word **2** · letter **3 of 4** | Letter 3 of word 2 |
@@ -89,7 +89,7 @@ These input classes are the most likely to bite an EA but are not obviously cove
 | `progress/captureCopy.ts` (new) | `flatCopy`, `nestedCopy`, `reviewLine`, `endMessage` | 3 |
 | `progress/CaptureBody.tsx` (new) | Renders `grid` / `cards` / `groups`, using a memoised `CaptureTile` | 3 (grid), 4 (cards, groups) |
 | `progress/SequentialCapture.tsx` | Engine: phases, clock, review, flip, end sheet, notice, Result | 3 |
-| `ui/ActionBar.tsx` | `DecisionBar` review mode (Finish + Back + Skip); `ToggleBar` deleted in Task 12 | 3, 12 |
+| `ui/ActionBar.tsx` | `DecisionBar` review mode (Finish + Back + Skip); `ToggleBar` stays, because the Q11 rubric still uses it | 3 |
 | `types/QuestionProps.ts` | `endNoun?: 'question' \| 'test'` | 3 |
 | `contractTest/validateResult.ts` | Sequential invariants | 5 |
 | `progress/StoryQuestionsCapture.tsx` (new) | Shared story-questions screen | 6 |
@@ -231,6 +231,7 @@ This is the heart of the change. It keeps the suite green by moving the engine's
   - `questions/ReadWordsQuestion/index.tsx` (sequential branch only; grid mode goes in Task 8)
   - `src/screens/assessments/StandaloneTestScreen.js` (`endNoun="test"`)
   - `src/screens/dev/QuestionGalleryRunScreen.js` (`endNoun="test"` for standalone entries)
+  - `progress/MissingItemSet.tsx` (`reason?: 'language' | 'empty'`)
 - Create:
   - `progress/captureCopy.ts`
   - `progress/CaptureBody.tsx` (grid only in this task)
@@ -280,7 +281,7 @@ export type CaptureBody =
   - **Review mode:** one `PrimaryButton` **Finish** (`testID ${p}-finish`), **Back** under it, and the navigation row with **Skip question** only (no end link). This matches mockup 7.
   - **Deciding mode:** unchanged, with `endLabel` passed by the engine.
 - `progress/captureCopy.ts`:
-  - `flatCopy(noun: 'letter' | 'word' | 'question', total: number): CaptureCopy` gives position `[{text: 'Word '}, {text: '6 of 36', strong: true}]` and itemName `Word 6`.
+  - `flatCopy(noun: 'letter' | 'word' | 'question', total: number): CaptureCopy` gives position `[{text: 'Word '}, {text: '6 of 40', strong: true}]` and itemName `Word 6`.
   - `nestedCopy(outer: 'Word' | 'Sentence', inner: 'letter' | 'word', groups: ReadonlyArray<ReadonlyArray<number>>): CaptureCopy` gives position `Sentence **2** · word **2 of 3**` and itemName `Word 2 of sentence 2` / `Letter 3 of word 2`.
   - `reviewLine(total: number, correct: number, noun: string): LinePart[]`.
   - `endMessage(marked: number, total: number): string`.
@@ -318,6 +319,8 @@ export type CaptureBody =
   - The derived fields are exactly today's (`SequentialCapture.tsx:90-100`).
   - The engine emits `finalizeResult ? finalizeResult(base) : base`.
 - **Tiles render through** `const CaptureTile = React.memo(...)`, with props `{ variant, state, text, gloss, caption, accessibilityLabel, tappable, position, onTapPosition, width, height }`. `onTapPosition` is one stable callback (`useCallback` over refs), so only changed tiles re-render and Countdown ticks re-render none.
+- **Skip from review:** **Skip question** is accepted in `active` and `review`. The picker remembers the phase it came from. **Cancel** returns to that phase with the clock exactly as it was: still frozen when it came from review, so no expiry check runs. Choosing a reason saves the skip as today.
+- **Empty item sets:** when `items.length === 0`, the engine renders `<MissingItemSet language reason="empty" />` and never calls `onStart`. `MissingItemSet` gains `reason?: 'language' | 'empty'`, where `'empty'` reads `This test's card has no items.` and keeps the same testID. This replaces the test `an empty word override can still start and End without a page` (`ReadWordsQuestion.stepByStep.test.tsx:256`).
 - **Intro:** `intro.testID ?? \`${testIDPrefix}-intro\``, with `intro.startLabel` and `intro.content` as `QuestionIntro` children.
 - **`aboveBody`:** renders inside the covered view, above the body.
 - **Letter sounds** passes `copy={flatCopy('letter', items.length)}` and `body={{ kind: 'grid', rows, layout: LETTER_PAGE_LAYOUT, variant: 'letter', testID: 'letter-grid', rowTestID: r => \`letter-row-${r}\` }}`. **Word reading** passes the same with `'word'` / `WORD_PAGE_LAYOUT`.
@@ -370,6 +373,13 @@ export type CaptureBody =
     - advance to 90 000 ms;
     - `stopped_reason: 'timer'` and `duration_ms` is 60000.
   - `timer end saves at once with no review`: 60 000 ms elapse with 1 mark, and the result is `timer` with `last_attempted_position` 0.
+  - `review → Skip → Cancel returns to review with marks and the frozen time kept`:
+    - timed, mark all at 20 000 ms, Skip question, wait until 70 000 ms (past the original deadline), Cancel;
+    - no `onComplete` call;
+    - Finish is shown, and a flip still works;
+    - then Finish gives `duration_ms` 20000.
+  - `active → Skip → Cancel returns to marking as today`.
+  - `an empty item set shows the no-items card and never starts` (flat and grouped bodies): `missing-item-set-en` with `This test's card has no items.`; no `Start`; `onStart` is not called.
   - `rapid double Correct on the last item decides once and opens review`: after two marks, call `fireEvent.press` on Correct twice in one `act`; no `onComplete` call, and `getByText('Finish')` exists. (Review Focus 1.)
   - `Back from review with under 250 ms left saves timer at the deadline`:
     - mark all at 59 900 ms, Back at 70 000 ms, advance 250 ms;
@@ -380,7 +390,7 @@ export type CaptureBody =
   - `finalizeResult receives the base Result and its return is emitted`.
   - `onItemMarked fires on decide and on flip with the new value, not on Back`.
 - [ ] **Step 2:** Write the failing `captureCopy.test.ts`:
-  - `flatCopy('word', 36).position(5)` → `[{ text: 'Word ' }, { text: '6 of 36', strong: true }]`, and `itemName(5)` → `'Word 6'`;
+  - `flatCopy('word', 40).position(5)` → `[{ text: 'Word ' }, { text: '6 of 40', strong: true }]`, and `itemName(5)` → `'Word 6'`;
   - `nestedCopy('Word', 'letter', [[0,1,2,3],[4,5,6,7]]).position(6)` → `Word **2** · letter **3 of 4**`, and `itemName(6)` → `'Letter 3 of word 2'`;
   - `nestedCopy('Sentence', 'word', …).itemName` → `'Word 2 of sentence 1'`;
   - `reviewLine(18, 15, 'letter')` → `[{ text: 'All 18 marked', strong: true }, { text: ' · 15 correct. Tap any letter to change it.' }]`;
@@ -600,7 +610,7 @@ export type CaptureBody =
   - delete `ReadWordsQuestion.test.tsx` (grid); extend `ReadWordsQuestion.stepByStep.test.tsx`; rewrite `ReadWordsQuestion.contract.test.tsx`
   - `__tests__/readingDuration.test.tsx` (Q6 case moves to the sequential branch)
   - `__tests__/clockJump.test.tsx:120-151` (delete the grid describe)
-  - `__tests__/itemSetResolution.test.tsx:134-160`, `__tests__/itemSetIntegrity.test.tsx:96-99`
+  - `__tests__/itemSetResolution.test.tsx:134-160`; `__tests__/itemSetIntegrity.test.tsx:12` (bundled-set count 28 → 30) and `:96-99` (label `inja, current`)
   - `battery/__tests__/wela_plus_full.test.ts:28-35`, `battery/__tests__/questionComponents.test.ts`, `battery/__tests__/registry.test.ts`
   - host `__tests__/QuestionGalleryScreen.test.js:118-126`, `__tests__/StandaloneTestScreen.test.js:96-106`, repository row `:61-62`
 
@@ -617,13 +627,21 @@ export type CaptureBody =
     - Save result → `stop_rule`;
     - `validateResult(result, { stopRule })` is valid.
   - `Q6: Undo after the stop re-opens marking, and the next Incorrect stops again`.
-  - `Q6 pages are one 7-word card row each and the line reads Word 1 of 36`.
+  - `Q6 pages are one 7-word card row each and the line reads Word 1 of 40` (shipped sets: 40 words, `row_lengths [7,7,7,7,7,5]`).
+  - `the 2024.1 and 2024.2 sets have identical words and row_lengths, and only 2024.2 carries the stop rule`.
   - `the WelaPLUS Battery points Q6 at 2024.2 and both sets resolve` (`bundledItemSetFor('wela_plus_read_words', '2024.2', 'xh')`).
   - `the Word Reading quick test keeps word_reading@2026.1 with no stop rule`.
   - `ReadWordsQuestion has no grid mode`: rendering with a stray `captureMode="grid"` still shows the ring.
 - [ ] **Step 2:** Run `$JEST src/assessment-questions/questions/ReadWordsQuestion src/assessment-questions/battery`. Expected: FAIL.
 - [ ] **Step 3:** Implement. Delete the grid tests and the clock-correction describe they pin.
-- [ ] **Step 4:** Update the remaining drivers listed above. In `readingDuration.test.tsx`, Q6 joins the sequential branch (End question flow, no `Last item attempted`). Run the full `$JEST` and `npm run test:types`.
+- [ ] **Step 4:** Update the remaining drivers listed above. `readingDuration.test.tsx` needs a driver rewrite, not just a branch move:
+  - `startReading` marks a **proper prefix** (5 items), never every item, so early-End and timer tests stay in active marking rather than review;
+  - `pressEnd(prefix)` takes the end-button prefix (`letter-end` / `word-end`, and `passage-end` in Task 11) and confirms `End question` in `end-confirmation`;
+  - marked tiles are found by their new labels (`…, correct. Double-tap to change to incorrect`);
+  - the `:151-157` page browsing during active capture is removed, since paging is cursor-led until review;
+  - a separate `all items marked: review freezes the reading time` case covers the review path.
+
+  Task 11 reuses the same driver for Q8. Run the full `$JEST` and `npm run test:types`.
 - [ ] **Step 5: Commit** `feat(capture): reading words marked step by step with a 10-in-a-row stop`.
 
 ---
@@ -645,8 +663,9 @@ export type CaptureBody =
 - [ ] **Step 1: Write the failing tests:**
   - `Q5 steps through the sheet in order across pages`:
     - Correct ×12 → page 2;
-    - `getByLabelText(/^iroboti \(traffic light\) → r, current/)` on the shipped xh set where applicable;
-    - the line reads `Letter 13 of 26`.
+    - on the shipped xh set, `getByLabelText(/^icephe \(spoon\) → c, current/)` (position 12);
+    - the line reads `Letter 13 of 26`;
+    - Correct ×9 more reaches `iroboti (traffic light) → r, current` with `Letter 22 of 26`.
   - `Q5: shipped sets show 12 pictures per page in three columns` (keep the size and layout asserts; the label is `Page 1 of 3`; there are zero buttons before any mark).
   - `Q5: in review, Previous page browses back and a flip on page 1 is saved`.
   - `Q5: long isiXhosa picture names still wrap to two lines`.
@@ -710,9 +729,10 @@ Rebase onto `fix/egra-story-last-word` before this task if it has not been done 
   - `test-support/egraResults.js` (oral_reading branch)
 - Test:
   - both Questions' unit and contract suites (rewrite)
-  - `__tests__/readingDuration.test.tsx` (Q8 joins the sequential branch; delete the non-sequential branch)
+  - `__tests__/readingDuration.test.tsx` (Q8 joins the Task 8 driver with prefix `passage`; delete the non-sequential branch)
   - `__tests__/clockJump.test.tsx`
-  - `egra/__tests__/capture.test.tsx:44`, `egra/__tests__/defaults.test.ts:16-17`
+  - `egra/__tests__/capture.test.tsx:44`, plus the Cancel/reopen and timer tests PR #106 added there. **Replace** those with step-by-step equivalents (Keep marking keeps the marks; the timer saves at once); do not delete them.
+  - `egra/__tests__/defaults.test.ts:16-17`
   - `__tests__/egraRun.integration.test.js:85`
   - host repository rows `:63-68`
 
@@ -758,7 +778,6 @@ Rebase onto `fix/egra-story-last-word` before this task if it has not been done 
 **Files:**
 - Delete:
   - `hooks/useToggleMark.ts` and `hooks/__tests__/useToggleMark.test.ts`
-  - `ToggleBar` (and its tests in `ui/__tests__/ActionBar.test.tsx`)
   - `progress/LastAttemptedSheet.tsx` and its test
   - `progress/applyProgress.ts` and its test
   - `ui/AssessmentChoiceCard.tsx`
@@ -778,24 +797,28 @@ Rebase onto `fix/egra-story-last-word` before this task if it has not been done 
 **Interfaces:**
 - Produces:
   - **EGRA `timedInstructions(noun, section)`** becomes `` `Ask the child to read the ${noun} in order. ${markingSentence(item)} The test stops by itself if every ${item} in the first row is wrong, or when the time is up.${practice(section)}` ``, where `item` is `'letter'` or `'word'`.
-  - **`removedCopy.test.ts`** walks `src/**/*.{ts,tsx,js}`, excluding `__tests__` and this file. It fails if any file contains any of these strings:
+  - **`removedCopy.test.ts`** walks `src/assessment-questions/{questions,progress,battery,egra,ui,hooks}/**/*.{ts,tsx}`, excluding `__tests__` and `questions/StoryWritingRubricQuestion/` (Q11 is frozen and keeps its own "dimensions unscored — finish anyway?" sheet). It fails if any file contains any of these exact phrases:
     - `items unmarked`
-    - `finish anyway`
+    - `questions not marked`
     - `Not asked`
-    - `Save as Not asked`
+    - `finish anyway`
     - `Yes, finish`
-    - `leave it blank`
-    - `Tap each`
+    - `it turns green`
+    - `Tap each word`
+    - `Tap each letter`
+    - `Tap words read incorrectly`
+    - `mark the last word`
     - `Last item attempted`
     - `Reached the end`
     - `Nothing attempted`
     - `tap_wrong`
     - `markingPolarity`
     - `useToggleMark`
+  - **Positive fixtures in the same file:** the guard still allows the copy that must survive. It asserts that Q11 still contains `dimensions unscored — finish anyway?` and that Q5's child-facing paper instruction still contains `just leave it blank`.
   - **Marking-sentence guard:** a second test asserts that every WelaPLUS question except `wela_plus_story_writing`, and every EGRA question for every bundled form, has instructions that contain `markingSentence(<its noun>)`.
 
 - [ ] **Step 1: Write the failing guard tests.**
-- [ ] **Step 2:** Run `$JEST src/assessment-questions/__tests__/removedCopy.test.ts`. Expected: FAIL (`MARK`, `timedInstructions`, `ToggleBar` and the dead modules still exist).
+- [ ] **Step 2:** Run `$JEST src/assessment-questions/__tests__/removedCopy.test.ts`. Expected: FAIL (`MARK`, `timedInstructions` and the dead modules still exist).
 - [ ] **Step 3:** Delete and modify as listed. Run the full `$JEST` and `npm run test:types`. Expected: PASS.
 - [ ] **Step 4: Docs** (spec §10):
   - **`CONTEXT.md`:**
@@ -832,7 +855,7 @@ Not a Codex task: Claude runs it and Jim does the iPhone pass.
   - Capture screencaps of every Question in marking, review and the end sheet into a contact sheet. Compare them with mockups 1–8 for ring weight, the ✓/✕ marks, the faded cards, the position-line weight, the notice placement above the bar and the scrolling of the ring at font scale 1.3.
   - Confirm TalkBack reads a marked tile with the double-tap hint and announces the flip notice.
 - [ ] **Step 4: Staging rows.** Use the `sqlite-staging-sql` helper, read-only, and confirm `project_ref=segygjzpujphwvrubusm`.
-  - Select the new runs' `assessments.capture_mode` (all `sequential`).
+  - Select the new runs' `assessments.capture_mode`: every Question is `sequential` except `wela_plus_story_writing` (Q11, unchanged, so null).
   - Check the items' `metadata.reached` tails and Q6's `item_set_id` `wela_plus_read_words@2024.2.*`.
 - [ ] **Step 5: Hand Jim the iPhone checklist** (the same flows) and the build-log entry. Merging waits for Jim's go.
 
