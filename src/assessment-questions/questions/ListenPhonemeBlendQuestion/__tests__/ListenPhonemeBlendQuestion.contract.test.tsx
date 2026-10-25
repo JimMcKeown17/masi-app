@@ -14,7 +14,7 @@ describe('ListenPhonemeBlendQuestion — OSS contract', () => {
     fireEvent.press(rendered.getByText('Start'));
     ['s-u-n', 'c-a-t', 'p-i-g', 'h-a-t', 'r-u-n', 'd-o-g', 'b-i-g', 'm-a-p'].forEach(
       (s) => {
-        fireEvent.press(rendered.getByLabelText(`${s}, idle`));
+        fireEvent.press(rendered.getByText('Correct'));
       },
     );
     fireEvent.press(rendered.getByText('Finish'));
@@ -24,7 +24,7 @@ describe('ListenPhonemeBlendQuestion — OSS contract', () => {
     expect(v.errors).toEqual([]);
   });
 
-  test('Finish-with-unmarked confirmation path emits a contract-valid Result', async () => {
+  test('early End with an unreached tail emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenPhonemeBlendQuestion, {
       language: 'en',
       itemSet: FIXTURE_PHONEME_BLEND_EN,
@@ -32,9 +32,9 @@ describe('ListenPhonemeBlendQuestion — OSS contract', () => {
     });
 
     fireEvent.press(rendered.getByText('Start'));
-    fireEvent.press(rendered.getByLabelText('s-u-n, idle'));
-    fireEvent.press(rendered.getByText('Finish'));
-    fireEvent.press(rendered.getByText('Yes, finish'));
+    fireEvent.press(rendered.getByText('Correct'));
+    fireEvent.press(rendered.getByTestId('blend-end'));
+    fireEvent.press(rendered.getByText('End question'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);

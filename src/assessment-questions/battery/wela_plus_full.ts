@@ -14,13 +14,13 @@ const Q: BatteryQuestion[] = [
     instructions: both('Say: "I am going to read you a short story aloud ONCE and then ask you some questions. Please listen carefully and answer the questions as best you can. Do you understand what you must do? Ready, let\'s begin." Read the story slowly, about one word per second. You may only read it once.' + ` Then ask each question. ${markingSentence('question')}`) },
   { title: 'First sounds', question_code: 'wela_plus_first_sound', question_version: V, materials: null,
     instructions: {
-      en: `Practise first! Say: "Look, I am sitting. Listen carefully. Can you hear that 'sit' starts with the sound sss?" Then say each word and ask: "What sound does this word start with?" ${MARK}`,
-      xh: `Zama ukuqala uziqhelanise! Thetha nomntwana uthi: "Jonga, ndiyasela. Mamela, ndiyasela. Phulaphula ngenyameko. Uyeva ukuba u 'sela' uqala ngesandi u s?" Then say each word and ask which sound it starts with. ${MARK}`,
+      en: `Practise first! Say: "Look, I am sitting. Listen carefully. Can you hear that 'sit' starts with the sound sss?" Then say each word and ask: "What sound does this word start with?" ${markingSentence('word')}`,
+      xh: `Zama ukuqala uziqhelanise! Thetha nomntwana uthi: "Jonga, ndiyasela. Mamela, ndiyasela. Phulaphula ngenyameko. Uyeva ukuba u 'sela' uqala ngesandi u s?" Then say each word and ask which sound it starts with. ${markingSentence('word')}`,
     } },
   { title: 'Blending sounds', question_code: 'wela_plus_phoneme_blend', question_version: V, materials: null,
     instructions: {
-      en: `Practise first! Say: "Listen carefully to these sounds: /c/ /a/ /t/ … this says 'cat'! /sh/ /o/ /p/ … this says 'shop'!" Then say each word's sounds with a one-second pause between them, and never say the whole word. ${MARK}`,
-      xh: `Qala ngokuziqhelanisa! Thetha nomntwana uthi: "Phulaphula ezi zandi ngenyameko: /x/ /a/ … eli gama ngu 'xa'! /Nk/ /o/ … eli gama ngu 'Nko'!" Then say each word's sounds with a one-second pause between them, and never say the whole word. ${MARK}`,
+      en: `Practise first! Say: "Listen carefully to these sounds: /c/ /a/ /t/ … this says 'cat'! /sh/ /o/ /p/ … this says 'shop'!" Then say each word's sounds with a one-second pause between them, and never say the whole word. ${markingSentence('word')}`,
+      xh: `Qala ngokuziqhelanisa! Thetha nomntwana uthi: "Phulaphula ezi zandi ngenyameko: /x/ /a/ … eli gama ngu 'xa'! /Nk/ /o/ … eli gama ngu 'Nko'!" Then say each word's sounds with a one-second pause between them, and never say the whole word. ${markingSentence('word')}`,
     } },
   { title: 'Letter writing', question_code: 'wela_plus_letter_writing', question_version: V, paper_marked: true,
     materials: { item: 'writing_sheet' },
