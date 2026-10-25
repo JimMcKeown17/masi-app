@@ -1,5 +1,6 @@
 import * as sets from '../itemsets';
 import type { ItemSet } from '../types/ItemSet';
+import { egraItemSetFor } from '../egra';
 
 const BUNDLED_ITEM_SETS: Record<string, Record<string, ItemSet<object>>> = {
   'letter_sounds@2026.1': {
@@ -64,9 +65,12 @@ export function bundledItemSetFor(
   language: string,
 ): ItemSet | null {
   const key = `${questionCode}@${questionVersion}`;
-  if (!Object.prototype.hasOwnProperty.call(BUNDLED_ITEM_SETS, key)) return null;
-  const languages = BUNDLED_ITEM_SETS[key];
-  if (!Object.prototype.hasOwnProperty.call(languages, language)) return null;
-  // Question-specific interfaces have no index signature; expose their full, unchanged object.
-  return languages[language] as ItemSet;
+  if (Object.prototype.hasOwnProperty.call(BUNDLED_ITEM_SETS, key)) {
+    const languages = BUNDLED_ITEM_SETS[key];
+    if (Object.prototype.hasOwnProperty.call(languages, language)) {
+      // Question-specific interfaces have no index signature; expose their full, unchanged object.
+      return languages[language] as ItemSet;
+    }
+  }
+  return egraItemSetFor(questionCode, questionVersion, language) as ItemSet | null;
 }

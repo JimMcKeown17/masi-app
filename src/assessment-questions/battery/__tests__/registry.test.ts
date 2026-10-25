@@ -10,6 +10,51 @@ import {
 import type { ItemSetMeta, StoppedReason } from '../../index';
 import * as bundledSets from '../../itemsets';
 import { validateResult } from '../../contractTest/validateResult';
+import { EGRA_BATTERIES, EGRA_LETTER_EXTENSIONS, egraItemSetFor } from '../../egra';
+
+test.each(EGRA_BATTERIES.flatMap(battery => battery.questions.map(question => ({
+  question, language: battery.fixedLanguage,
+}))))('EGRA $question.question_code@$question.question_version resolves in $language with valid skip provenance', ({ question, language }) => {
+  const set = bundledItemSetFor(question.question_code, question.question_version, language);
+  expect(set).not.toBeNull();
+  expect(set).toBe(egraItemSetFor(question.question_code, question.question_version, language));
+  expect(set).toMatchObject({ question_code: question.question_code,
+    question_version: question.question_version, language });
+  expect(bundledItemSetFor(question.question_code, question.question_version, 'unknown')).toBeNull();
+  for (const otherLanguage of ['en', 'xh', 'af', 'zu'].filter(code => code !== language)) {
+    expect(bundledItemSetFor(question.question_code, question.question_version, otherLanguage)).toBeNull();
+  }
+  expect(validateResult(skippedResult(question, language, 'skipped_prerequisite_unmet')).valid).toBe(true);
+});
+
+test.each(Object.keys(EGRA_LETTER_EXTENSIONS))('extended %s exposes only the Masi 60-letter version', id => {
+  const battery = batteryFor('egra', id)!;
+  expect(bundledItemSetFor('letter_sounds', id, battery.fixedLanguage!)).toBeNull();
+  const set = bundledItemSetFor('letter_sounds', `${id}-masi60`, battery.fixedLanguage!) as { rows: string[][] } | null;
+  expect(set?.rows.flat()).toHaveLength(60);
+});
+
+test('every EGRA form resolves by exact battery identity alongside WelaPLUS', () => {
+  expect(EGRA_BATTERIES).toHaveLength(13);
+  for (const battery of EGRA_BATTERIES) {
+    expect(batteryFor('egra', battery.battery_version)).toBe(battery);
+  }
+  expect(batteryFor('egra', 'unknown')).toBeNull();
+  expect(batteryFor('wela_plus_full', '2024.1')).toBe(WELA_PLUS_FULL_2024_1);
+});
+
+test('duplicate battery identities fail loudly when the registry loads', () => {
+  try {
+    jest.isolateModules(() => {
+      jest.doMock('../../egra', () => ({
+        EGRA_BATTERIES: [WELA_PLUS_FULL_2024_1],
+      }));
+      expect(() => require('../registry')).toThrow('Duplicate battery: wela_plus_full@2024.1');
+    });
+  } finally {
+    jest.dontMock('../../egra');
+  }
+});
 
 test('batteryFor resolves only an exact code and version', () => {
   expect(batteryFor('wela_plus_full', '2024.1')).toBe(WELA_PLUS_FULL_2024_1);

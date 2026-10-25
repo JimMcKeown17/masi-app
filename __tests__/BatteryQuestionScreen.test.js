@@ -19,6 +19,41 @@ import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 import { bundledItemSetFor, questionComponentFor, skippedResult,
   WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import BatteryQuestionScreen from '../src/screens/assessments/battery/BatteryQuestionScreen';
+import { EGRA_BATTERIES, egraItemSetFor } from '../src/assessment-questions/egra';
+
+test.each(EGRA_BATTERIES.flatMap(battery => battery.questions.map((question, index) => ({ battery, question, index }))))(
+  '$battery.title / $question.question_code reaches capture with the exact form item set', async ({ battery, question, index }) => {
+    run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: battery.fixedLanguage,
+      results: battery.questions.slice(0, index).map((previous, i) => ({ id: `egra-${i}`,
+        question_code: previous.question_code, stopped_reason: 'completed', score: 1, total_items: 60, derived: {} })) };
+    questionComponentFor.mockImplementation(jest.requireActual('../src/assessment-questions').questionComponentFor);
+    const screen = renderHost({ runId: ID, questionCode: question.question_code });
+    await screen.findByRole('button', { name: question.question_code === 'reading_comprehension' ? 'Ask the questions' : 'Start' });
+    expect(screen.getByText(question.instructions[battery.fixedLanguage])).toBeTruthy();
+    expect(bundledItemSetFor).toHaveBeenCalledWith(question.question_code, question.question_version, battery.fixedLanguage);
+    expect(bundledItemSetFor).toHaveReturnedWith(egraItemSetFor(question.question_code, question.question_version, battery.fixedLanguage));
+    expect(screen.queryByTestId(`missing-item-set-${battery.fixedLanguage}`)).toBeNull();
+  },
+);
+
+test('English HL 1 captures all 60 letters through the real Question, including the Masi extension', async () => {
+  run = { ...run, battery_code: 'egra', battery_version: 'dbe-egra-en-hl-1-v1', language: 'en', results: [] };
+  questionComponentFor.mockImplementation(jest.requireActual('../src/assessment-questions').questionComponentFor);
+  const screen = renderHost({ runId: ID, questionCode: 'letter_sounds' });
+  fireEvent.press(await screen.findByRole('button', { name: 'Start' }));
+  expect(screen.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
+  for (let index = 0; index < 60; index += 1) {
+    fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+  }
+  await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+  const saved = repositories.assessments.saveQuestionResult.mock.calls[0][0].result;
+  expect(saved).toMatchObject({ question_code: 'letter_sounds', question_version: 'dbe-egra-en-hl-1-v1-masi60',
+    language: 'en', stopped_reason: 'completed', derived: { total_correct: 60, total_attempted: 60 } });
+  expect(saved.items).toHaveLength(60);
+  expect(saved.items.map(item => item.prompt)).toEqual(
+    egraItemSetFor('letter_sounds', 'dbe-egra-en-hl-1-v1-masi60', 'en').rows.flat());
+});
 
 jest.setTimeout(30000);
 configure({ asyncUtilTimeout: 5000 });

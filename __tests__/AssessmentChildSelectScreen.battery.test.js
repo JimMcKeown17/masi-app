@@ -17,6 +17,21 @@ import { AllProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';
+import { EGRA_BATTERIES } from '../src/assessment-questions/egra';
+
+test.each(EGRA_BATTERIES)('$title starts in the form language instead of the class language, with no language sheet', async battery => {
+  const child = { ...CHILD, home_language: battery.fixedLanguage === 'xh' ? 'en' : 'xh' };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: battery.battery_version }));
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await waitFor(() => expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'BatteryOverview']));
+  expect(screen.queryByRole('header', { name: 'Select language' })).toBeNull();
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+    id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+    batteryCode: 'egra', batteryVersion: battery.battery_version, language: battery.fixedLanguage,
+  });
+});
 
 configure({ asyncUtilTimeout: 5000 });
 const CHILD = { id: 'child-1', first_name: 'Lwazi', last_name: 'Mbeki', class_id: 'membership-class',

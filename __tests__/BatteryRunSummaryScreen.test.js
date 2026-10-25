@@ -14,6 +14,26 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
+import { egraBatteryFor } from '../src/assessment-questions/egra';
+
+test('EGRA summary names the form, scores comprehension out of asked questions and finalizes its four codes', async () => {
+  const battery = egraBatteryFor('egra', 'dbe-egra-en-fal-2-v1');
+  run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en',
+    results: battery.questions.map((question, index) => ({ id: `egra-${index}`, question_code: question.question_code,
+      stopped_reason: 'completed', score: index === 3 ? 2 : 34, total_items: index === 3 ? 5 : 60,
+      derived: index === 3 ? { questions_asked: 3 } : {} })) };
+  const screen = renderSummary();
+  await screen.findByText(`${battery.title} · English · 4 of 4 decided`);
+  expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(4);
+  expect(screen.getByRole('text', { name: '4. Story questions, Done, 2 / 3' })).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(screen.queryByText(/Writing Sheet/)).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Finalize run' }));
+  await screen.findByText('Finalized');
+  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledWith(ID, {
+    questionCodes: battery.questions.map(question => question.question_code),
+  });
+});
 import { StyleSheet, Text, View } from 'react-native';
 import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,

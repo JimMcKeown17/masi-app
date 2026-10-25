@@ -1,5 +1,7 @@
 # EGRA content pack integration (package and data side)
 
+> **Status 2026-10-25:** Host registration, item-set lookup and the Full EGRA form picker are built on `feat/egra-host`, stacked on WelaPLUS Plan 3. Local screen/repository verification is recorded in `documentation/build-log.md`; device acceptance, four 60-letter printed cards and source-note resolution remain open in ROADMAP §7. The original plan below is historical.
+
 > **Status 2026-10-23 (after build):** Jim made two changes after this plan was built. (1) The four
 > 40-letter Grade 1 letter cards are extended to 60 with fixed Masi letters, versioned
 > `<form id>-masi60` (see `src/assessment-questions/egra/letterExtensions.ts`). This replaces the

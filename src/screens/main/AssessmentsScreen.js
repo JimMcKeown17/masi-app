@@ -24,6 +24,7 @@ import ListRow from '../../components/common/ListRow';
 import BrandButton from '../../components/common/BrandButton';
 import { typeRoles } from '../../constants/typography';
 import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
+import EgraFormPickerSheet from '../../components/assessments/EgraFormPickerSheet';
 
 export default function AssessmentsScreen({ navigation }) {
   const paddingBottom = useScrollBottomPadding();
@@ -42,6 +43,7 @@ export default function AssessmentsScreen({ navigation }) {
   const [stats, setStats] = useState(null);
   const [gateChecking, setGateChecking] = useState(true);
   const [programmeGate, setProgrammeGate] = useState(null);
+  const [egraPickerVisible, setEgraPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -154,6 +156,15 @@ export default function AssessmentsScreen({ navigation }) {
           })} />
       </SurfaceCard>}
 
+      <SurfaceCard style={styles.card}>
+        <Text accessibilityRole="header" style={styles.cardTitle}>Full EGRA</Text>
+        <Text style={styles.cardDescription}>
+          Letter sounds, familiar words, a story and story questions · 13 forms · about 6 min
+        </Text>
+        <BrandButton label="Start an assessment" accessibilityLabel="Start a Full EGRA" variant="primary"
+          style={styles.startButton} disabled={gateChecking} onPress={() => setEgraPickerVisible(true)} />
+      </SurfaceCard>
+
       {runsError && <View style={styles.section}>
         <InlineNote>{runsError}</InlineNote>
         <BrandButton label="Retry" variant="tertiary" onPress={() => setRetryCount(value => value + 1)} />
@@ -198,6 +209,11 @@ export default function AssessmentsScreen({ navigation }) {
         style={styles.historyButton}
         label="View history"
       />
+      <EgraFormPickerSheet visible={egraPickerVisible} onDismiss={() => setEgraPickerVisible(false)}
+        onConfirm={formId => {
+          setEgraPickerVisible(false);
+          navigateToRun('AssessmentChildSelect', { batteryCode: 'egra', batteryVersion: formId });
+        }} />
     </ScrollView>
   );
 }

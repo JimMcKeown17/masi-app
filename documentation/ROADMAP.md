@@ -817,21 +817,18 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 - [ ] Replace placeholder EGRA word lists with authoritative English, isiXhosa and Afrikaans content
   (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
   becomes a new version).
-- [ ] **EGRA forms (13, from `content/egra/`): host wiring and device gate.** The package and data side is
-  on `feat/egra-content-pack` (plan: `docs/superpowers/plans/2026-10-23-egra-content-pack-integration.md`).
-  It is runnable today only through the dev Question gallery. After WelaPLUS Plan 3 merges:
-  - register `EGRA_BATTERIES` and `egraItemSetFor` in its battery registry;
-  - add a form picker that keeps English HL and FAL distinct, with `fixedLanguage` per form;
+- [ ] **EGRA forms (13, from `content/egra/`): device gate and field materials.** Host wiring and the
+  Full EGRA form picker are built on `feat/egra-host` (2026-10-25), stacked on WelaPLUS Plan 3.
+  Every EA with an active programme is offered Full EGRA alongside the programme default; forms
+  retain pack order, distinct English HL/FAL and fixed language. The shared host persists the
+  story-questions prerequisite skip and finalizes all four Questions. Remaining:
   - print Masi 60-letter reading cards for the four Grade 1 forms (DBE's charts show only 40; the
     extra 20 are in `src/assessment-questions/egra/letterExtensions.ts`);
-  - persist the story-questions auto-skip (`prerequisites` on each EGRA battery) as a skipped
-    result, like any other prerequisite skip;
-  - run the device gate: selection, capture, save, force-quit resume, finalize, offline then sync,
-    and results;
-  - on the real screens, check first-row stop → Undo → timer expiry, and End → cancel;
-  - finish the per-result comprehension presentation, including "Not asked" and accuracy; its
-    grid currently assumes letters or words. Plan 3's run-summary score denominator already
-    uses `derived.max ?? derived.questions_asked ?? total_items`.
+  - run the device gate: form selection (including large text and all 13 options), fixed-language
+    child selection, capture, save, force-quit resume, finalize, offline then sync, and results;
+    check first-row stop → Undo → timer expiry, End → cancel, zero/skipped story → saved
+    comprehension skip, no Writing Sheet reminder, and comprehension score out of questions asked;
+  - resolve the pack's `sourceNotes` before field use (see the open decisions below).
 - [ ] **EGRA open decisions (Jim):**
   - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
   - **Stronger skip rules (decided in principle, Jim 2026-10-23; build later).** A child who reads
