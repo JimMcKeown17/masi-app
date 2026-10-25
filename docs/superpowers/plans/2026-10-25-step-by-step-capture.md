@@ -407,6 +407,7 @@ export type CaptureBody =
   - **Host helper:** in `assessmentsRepository.questionResults.test.js:37-40`, `endSequential` becomes `endSequential(r, prefix = 'letter')`. It presses `${prefix}-end`, then `End question` inside `end-confirmation`. Tasks 6–11 reuse it.
   - **Buttons in the grid:** `ReadWordsQuestion.stepByStep.test.tsx:123` now expects zero buttons before any mark and one after the first mark.
   - **Standalone:** `StandaloneTestScreen.test.js` asserts the `End test` link.
+  - **Host Grid A test:** `assessmentsRepository.questionResults.test.js:148-153` marks all 60 letters and awaits `onComplete`. It now presses **Finish** after the 60th mark, keeping its persisted-identity and uniqueness assertions. Run this host suite before the Task 3 gate.
   - **Render count:** `SequentialCapture.renderCount.test.tsx` uses the new props, and still asserts that a Countdown tick reads no prompt.
 - [ ] **Step 6:** Run the full `$JEST` and `npm run test:types`. Expected: PASS.
 - [ ] **Step 7: Commit** `feat(capture): review step, tap-to-flip, End question sheet and flip notice in the shared engine`.
@@ -611,6 +612,8 @@ export type CaptureBody =
   - `__tests__/readingDuration.test.tsx` (Q6 case moves to the sequential branch)
   - `__tests__/clockJump.test.tsx:120-151` (delete the grid describe)
   - `__tests__/itemSetResolution.test.tsx:134-160`; `__tests__/itemSetIntegrity.test.tsx:12` (bundled-set count 28 → 30) and `:96-99` (label `inja, current`)
+  - typed callers that still pass `captureMode` (TS2322 once the prop goes): `__tests__/clockJump.test.tsx:65`, `__tests__/itemSetResolution.test.tsx:48,58,101`, `ReadWordsQuestion.stepByStep.test.tsx:24`. Delete the prop at each call site.
+  - `__tests__/letterTestContent.test.ts:140-145`: the exact Q1 instruction string, in both languages, becomes the new wording below
   - `battery/__tests__/wela_plus_full.test.ts:28-35`, `battery/__tests__/questionComponents.test.ts`, `battery/__tests__/registry.test.ts`
   - host `__tests__/QuestionGalleryScreen.test.js:118-126`, `__tests__/StandaloneTestScreen.test.js:96-106`, repository row `:61-62`
 
@@ -631,12 +634,12 @@ export type CaptureBody =
   - `the 2024.1 and 2024.2 sets have identical words and row_lengths, and only 2024.2 carries the stop rule`.
   - `the WelaPLUS Battery points Q6 at 2024.2 and both sets resolve` (`bundledItemSetFor('wela_plus_read_words', '2024.2', 'xh')`).
   - `the Word Reading quick test keeps word_reading@2026.1 with no stop rule`.
-  - `ReadWordsQuestion has no grid mode`: rendering with a stray `captureMode="grid"` still shows the ring.
+  - `ReadWordsQuestion has no grid mode`: rendering with a stray `captureMode="grid"` still shows the ring. Pass the prop through a `// @ts-expect-error captureMode was removed` line, so the type gate passes and also proves the prop is gone.
 - [ ] **Step 2:** Run `$JEST src/assessment-questions/questions/ReadWordsQuestion src/assessment-questions/battery`. Expected: FAIL.
 - [ ] **Step 3:** Implement. Delete the grid tests and the clock-correction describe they pin.
 - [ ] **Step 4:** Update the remaining drivers listed above. `readingDuration.test.tsx` needs a driver rewrite, not just a branch move:
-  - `startReading` marks a **proper prefix** (5 items), never every item, so early-End and timer tests stay in active marking rather than review;
-  - `pressEnd(prefix)` takes the end-button prefix (`letter-end` / `word-end`, and `passage-end` in Task 11) and confirms `End question` in `end-confirmation`;
+  - each case declares `marks`, a prefix strictly shorter than its fixture: **3** for the four-letter Q1 fixture (`:25-31`), 5 for Q6 and Q8. `startReading` makes exactly that many marks, so early-End and timer tests stay in active marking rather than review. Score and WPM expectations derive from `marks`;
+  - the End helper splits into `openEnd(prefix)` (presses `letter-end` / `word-end`, and `passage-end` in Task 11) and `confirmEnd()` (presses `End question` in `end-confirmation`). This keeps the delayed-confirmation (`:128-139`) and cancellation (`:144-180`) cases intact; Cancel becomes `Keep marking`. An End pressed after the deadline still saves `timer` at once, with no sheet, as today;
   - marked tiles are found by their new labels (`…, correct. Double-tap to change to incorrect`);
   - the `:151-157` page browsing during active capture is removed, since paging is cursor-led until review;
   - a separate `all items marked: review freezes the reading time` case covers the review path.
