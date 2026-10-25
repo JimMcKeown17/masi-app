@@ -1,9 +1,8 @@
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
 import { render, within } from '@testing-library/react-native';
 import { tokens } from '../../theme/tokens';
 import { MarkTile } from '../MarkTile';
-import { TileGroups } from '../TileGroups';
+import { TileGroup } from '../TileGroup';
 import { UiText } from '../Text';
 
 const groups = [
@@ -12,30 +11,14 @@ const groups = [
 ];
 const renderTile = (item: { position: number; text: string }) => <MarkTile key={item.position} variant="pill" state="idle" text={item.text} accessibilityLabel={`item ${item.position}`} />;
 
-test('TileGroups renders its optional header first inside the scroll content gutters', () => {
-  const header = <UiText>Choose the last item</UiText>;
-  const r = render(<TileGroups header={header} groups={groups} testID="groups" renderTile={renderTile} />);
-  expect(within(r.getByTestId('groups')).getByText('Choose the last item')).toBeTruthy();
-  const scroller = r.UNSAFE_getByType(ScrollView);
-  expect(scroller.props.children[0]).toBe(header);
-  expect(scroller.findAllByType(UiText).map((text: { props: { children?: React.ReactNode } }) => text.props.children))
-    .toEqual(['Choose the last item', 'Sentence 1', 'Sentence 2']);
-  expect(StyleSheet.flatten(scroller.props.contentContainerStyle)).toMatchObject({
-    paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.lg,
-  });
-});
+const renderGroups = (value: ReadonlyArray<{ key: string; testID?: string; heading?: string; items: typeof groups[number]['items'] }>, card = false) => <>
+  {value.map(group => <TileGroup key={group.key} testID={group.testID} heading={group.heading} card={card}>
+    {group.items.map(renderTile)}
+  </TileGroup>)}
+</>;
 
-test.each([false, true])('TileGroups owns 16dp horizontal and vertical content gutters with card=%s', card => {
-  const r = render(<TileGroups groups={groups} card={card} renderTile={renderTile} />);
-  expect(StyleSheet.flatten(r.UNSAFE_getByType(ScrollView).props.contentContainerStyle)).toMatchObject({
-    paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.lg, gap: tokens.space.lg,
-  });
-});
-
-test('TileGroups renders a heading per group and wraps tiles in a vertical ScrollView', () => {
-  const r = render(<TileGroups groups={groups} testID="groups" renderTile={renderTile} />);
-  expect(r.UNSAFE_getByType(ScrollView).props.horizontal ?? false).toBe(false);
-  expect(r.getByTestId('groups')).toBeTruthy();
+test('TileGroup renders each heading and wraps tiles in reading order', () => {
+  const r = render(renderGroups(groups));
   for (const group of groups) {
     const container = r.getByTestId(group.testID);
     expect(within(container).getByText(group.heading)).toHaveStyle({ fontSize: tokens.font.label, color: tokens.color.muted });
@@ -49,17 +32,18 @@ test('TileGroups renders a heading per group and wraps tiles in a vertical Scrol
 });
 
 test('card groups have a white rounded padded surface around each heading and wrapping row', () => {
-  const r = render(<TileGroups groups={groups} card renderTile={renderTile} />);
+  const r = render(renderGroups(groups, true));
   for (const group of groups) {
     expect(r.getByTestId(group.testID)).toHaveStyle({ backgroundColor: tokens.color.surface, borderRadius: tokens.radius.card, padding: tokens.space.lg });
   }
 });
 
 test('headings and cards are optional and empty groups render safely', () => {
-  const r = render(<TileGroups groups={[{ key: 'empty', items: [] }, { key: 'plain', testID: 'plain', items: groups[0].items }]} renderTile={renderTile} />);
+  const r = render(renderGroups([{ key: 'empty', items: [] }, { key: 'plain', testID: 'plain', items: groups[0].items }]));
   expect(r.UNSAFE_queryByType(UiText)).toBeNull();
   expect(r.getAllByLabelText(/^item \d+$/)).toHaveLength(2);
   expect(r.getByTestId('plain')).not.toHaveStyle({ backgroundColor: tokens.color.surface });
-  r.rerender(<TileGroups groups={[]} renderTile={renderTile} />);
+  r.rerender(<TileGroup testID="empty">{[]}</TileGroup>);
+  expect(r.getByTestId('empty')).toBeTruthy();
   expect(r.queryAllByLabelText(/^item \d+$/)).toHaveLength(0);
 });

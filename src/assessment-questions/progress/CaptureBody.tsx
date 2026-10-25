@@ -5,7 +5,7 @@ import { MarkTile, type TileState, type TileVariant } from '../ui/MarkTile';
 import { PagedGrid } from '../ui/PagedGrid';
 import type { Page } from '../ui/paginate';
 import { FollowScrollView, FollowTarget } from '../ui/FollowScrollView';
-import { TileGroup } from '../ui/TileGroups';
+import { TileGroup } from '../ui/TileGroup';
 import { tokens } from '../theme/tokens';
 
 type TileProps = {

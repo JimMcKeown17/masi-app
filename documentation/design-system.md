@@ -874,7 +874,7 @@ and font ratchets are empty and enforced (`src/assessment-questions/ui/Canvas.ts
 |---|---|---|
 | Palette | `canvas` #F8F5F4, `surface` #FFFFFF, `line` #ECE5E4, `ink` #221A1B; correct `marked` #2E7D27, incorrect `error` #B3261E, warning #B26A00; destructive `primary` #C81F3E | `src/assessment-questions/theme/tokens.ts:9` |
 | Tiles | 10dp radius; idle white with 1dp line border; current white with a decorative absolute 3dp ink ring overlay (outset 1dp to cover the tile's own 1dp border, same radius, no pointer events or accessibility); all states keep the same 1dp border and padding so focus never resizes content; correct/incorrect solid green/red with white text; not reached uses muted #B3A8A8 | `src/assessment-questions/ui/MarkTile.tsx:9`, `src/assessment-questions/ui/MarkTile.tsx:45` |
-| Selection | Page dots and selected rubric chips use ink; free-toggle tiles are idle/correct. Red identifies incorrect marks or destructive End controls | `src/assessment-questions/ui/PageIndicator.tsx:28`, `src/assessment-questions/ui/RubricRow.tsx:21`, `src/assessment-questions/questions/ReadWordsQuestion/index.tsx:310`, `src/assessment-questions/ui/ActionBar.tsx:20`, `src/assessment-questions/ui/ActionBar.tsx:26` |
+| Selection | Page dots and selected rubric chips use ink. Red identifies incorrect marks or destructive End controls | `src/assessment-questions/ui/PageIndicator.tsx:28`, `src/assessment-questions/ui/RubricRow.tsx:21`, `src/assessment-questions/ui/ActionBar.tsx:20`, `src/assessment-questions/ui/ActionBar.tsx:26` |
 | Content | Andika Regular via `ContentText`; letters 30sp, words 21sp, prompt cards 28sp, story 18sp. Scaling caps at 1.2; fitted grid text shrinks to 0.6 of its base size without ellipsis | `src/assessment-questions/theme/tokens.ts:28`, `src/assessment-questions/ui/Text.tsx:30`, `src/assessment-questions/ui/MarkTile.tsx:52` |
 | UI type | Figtree for controls, labels, timer and headings; choose weight by family name. Without registered families, only the theme supplies system-font weights | `src/constants/assessmentFonts.js:3`, `src/assessment-questions/theme/typography.ts:13`, `src/assessment-questions/theme/typography.ts:23` |
 
@@ -885,6 +885,49 @@ packages (`src/assessment-questions/__tests__/boundary.test.ts:108`). The old ch
 font-size hook/provider is removed; scaling lives in `ContentText` instead
 (`src/assessment-questions/ui/Text.tsx:30`).
 
+### Step-by-step marking
+
+Every Question in WelaPLUS and Full EGRA except the Story Writing rubric uses
+[`SequentialCapture`](../src/assessment-questions/progress/SequentialCapture.tsx), as do the
+standalone letter and word tests. Questions supply items, a grid/cards/groups body, copy and
+any derived result fields. Item identity is its position; repeated words or keys stay independent.
+The shared instruction is `Mark each ${noun} Correct or Incorrect. The black ring shows which ${noun} you're on.`,
+with `noun` set to letter, word or question by
+[`markingSentence`](../src/assessment-questions/battery/markingSentence.ts).
+
+- **Ring and states.** The current item has the existing 3dp `ink` ring without changing tile
+  geometry. Correct items fill with `marked`, incorrect items with `error`, both with white text.
+  Items not reached remain idle; prompt cards are faded to 0.55 opacity and use `notReached`
+  text. Filled prompt cards carry a ✓ or ✕ corner mark. Current and not-reached items are not
+  buttons; marked items are buttons with labels such as
+  `${label}, correct. Double-tap to change to incorrect` (or the reverse).
+- **Actions.** Correct / Incorrect mark the current item and advance the ring in reading order.
+  Back clears the previous decision and puts the ring on it. The grid turns pages with the
+  ring; cards and groups use `FollowScrollView` to keep it visible. All prompt cards remain in
+  the scroll content, with the answer guide beneath each question.
+- **Tap-to-flip.** Tapping a marked item reverses its mark without moving the ring. The package
+  `FlipNotice` appears above the bottom bar for 3000 ms and is announced to screen readers:
+  `${ItemName} changed to Correct` or `${ItemName} changed to Incorrect`. A flip never triggers
+  a stop; stops are checked only on Correct / Incorrect.
+- **Position line.** A muted `PositionLine` sits above the actions, with the current numbers
+  bold: `Letter 12 of 60`, `Question 2 of 5`, `Word 6 of 40`, `Sentence 2 · word 2 of 3`, or
+  `Word 2 · letter 3 of 4`, according to the Question's noun and grouping.
+- **Review.** After the last mark the ring disappears and Finish replaces Correct / Incorrect,
+  with Back and Skip question retained. The line reads
+  **`All ${N} marked`**` · ${C} correct. Tap any ${noun} to change it.`
+  Every marked item can still flip; grid page arrows browse all pages. Finish saves
+  `completed`; Back clears the last mark and resumes marking. Timed review freezes reading
+  time at the last mark, and Back resumes the time remaining. Timer expiry saves immediately
+  with no review; a stop card retains Save result / Undo last mark.
+- **End sheet.** End question opens a bottom confirmation sheet titled **End this question?**.
+  Its message is `${M} marked. The ${U} not marked won't count towards the score.` Confirm is
+  **End question** in danger tone; cancel is **Keep marking**. Confirm saves `ea_ended` with
+  the unmarked tail not reached and excluded from the score. In a Battery and in the gallery
+  the link and confirm say **End question**; standalone quick tests say **End test**, with
+  **End this test?** as the title. The sheet appears when the EA chooses to end early.
+
+The Story Writing rubric keeps its dimension chips and `ToggleBar`; it is the sole exception.
+
 **Paging and layout.** `paginate` packs whole card rows; only a row larger than the capacity
 spans pages. Letters use 5 columns / 20 items, start each card row on a display row and show a
 divider. Words use 2 columns / 10 items and flow continuously within a page. Grid A (6 × 10)
@@ -894,16 +937,11 @@ controls read “Previous page” / “Next page” (`src/assessment-questions/u
 `src/assessment-questions/ui/paginate.ts:21`, `src/assessment-questions/ui/PageIndicator.tsx:14`,
 `src/assessment-questions/ui/__tests__/paginate.test.ts:17`). Sequential capture follows the
 cursor, including Back; a stop or completion stays on the last marked page. Back clears the
-returned-to decision, so it gets the current outline while earlier marks keep their fills
-(`src/assessment-questions/progress/SequentialCapture.tsx:47`,
-`src/assessment-questions/progress/SequentialCapture.tsx:183`,
-`src/assessment-questions/progress/stepByStep.ts:54`). Q6 owns its page index across the
-last-attempted round trip, clamps queued Previous/Next actions to the available pages, and puts
-its page controls in the bottom `ToggleBar` header (`src/assessment-questions/questions/ReadWordsQuestion/index.tsx`).
-A stopped sequential test has no current tile; Undo restores the current tile without changing the Result contract
-(`src/assessment-questions/progress/SequentialCapture.tsx`).
+returned-to decision, so it gets the current ring while earlier marks keep their fills.
+Page arrows are enabled in review. A stopped test has no current tile; Undo restores the
+current tile without changing the Result contract.
 
-`PagedGrid`, `TileGroups` and `TimerBar` each own their full-width 16dp gutters; Questions
+`PagedGrid`, `CaptureBody` and `TimerBar` each own their full-width 16dp gutters; Questions
 must not add another gutter. `PagedGrid` receives all pages and the current page index, then
 sizes every page from one shared frame using the maximum display-row and divider counts.
 That full-page frame is vertically centred; short pages fill it from the top, keeping tile
@@ -912,7 +950,7 @@ then reduce letter/word tiles toward a 40dp floor (nominal heights 60/58dp). Pic
 use 88dp nominal / 72dp minimum. They never scroll or change capacity; below the minimum
 geometry they can overflow, so native device fit remains a gate
 (`src/assessment-questions/ui/PagedGrid.tsx:8`, `src/assessment-questions/ui/PagedGrid.tsx:43`,
-`src/assessment-questions/ui/MarkTile.tsx:17`, `src/assessment-questions/ui/TileGroups.tsx:7`,
+`src/assessment-questions/ui/MarkTile.tsx:17`, `src/assessment-questions/ui/TileGroup.tsx`,
 `src/assessment-questions/ui/TimerBar.tsx:30`). Q5 uses three columns / twelve items per page,
 requires positive-integer layout hints, and ships text-only picture prompts pending a separate
 image layout. Picture captions reserve a two-line box of 2 × the caption role's 18dp line height × the OS
@@ -923,8 +961,8 @@ leave letters aligned
 `src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:48`,
 `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119`). Sentence, passage and
 dictation items wrap in groups; Q9 uses 52dp letter tiles
-(`src/assessment-questions/ui/TileGroups.tsx:7`,
-`src/assessment-questions/questions/WriteCvcsQuestion/index.tsx:266`).
+(`src/assessment-questions/ui/TileGroup.tsx`,
+`src/assessment-questions/questions/WriteCvcsQuestion/index.tsx`).
 
 **Timer and actions.** Primary/secondary pill buttons are at least 52dp high, with SVG icons
 beside their labels (`src/assessment-questions/ui/Button.tsx:19`,
@@ -934,18 +972,15 @@ or fewer. The timer row has `flexShrink: 0`, so long passages cannot squash the 
 `Countdown` adds no layout wrapper. Q6 and Q8 show it whenever `durationSec` is supplied
 (`src/assessment-questions/progress/Countdown.tsx:9`, `src/assessment-questions/ui/TimerBar.tsx:7`,
 `src/assessment-questions/ui/TimerBar.tsx:33`,
-`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:294`,
-`src/assessment-questions/questions/ReadPassageQuestion/index.tsx:314`).
+`src/assessment-questions/questions/ReadWordsQuestion/index.tsx`,
+`src/assessment-questions/questions/ReadPassageQuestion/index.tsx`).
 
-`DecisionBar` owns one `BottomBar`: Correct/Incorrect side by side, full-width Back, then a
-wrapping row of the optional Skip question link and destructive End test link. `ToggleBar`
-owns its `BottomBar` too, with an ink primary (End on Q6/Q8, Finish elsewhere), Skip question
-as a link, and an optional header carrying Q5/Q6 page controls or Q11's total. Never wrap either bar in another
-`BottomBar` (`src/assessment-questions/ui/ActionBar.tsx:7`,
-`src/assessment-questions/ui/ActionBar.tsx:32`, `src/assessment-questions/ui/Button.tsx:63`,
-`src/assessment-questions/questions/ReadWordsQuestion/index.tsx:320`,
-`src/assessment-questions/questions/ReadPassageQuestion/index.tsx:322`,
-`src/assessment-questions/questions/StoryWritingRubricQuestion/index.tsx:337`). The white panel
+`DecisionBar` owns one `BottomBar`: Correct/Incorrect side by side (Finish in review),
+full-width Back, then a wrapping row of the optional Skip question link and destructive End
+question / End test link while marking. Q11's `ToggleBar` owns its `BottomBar` too, with an
+ink Finish primary, Skip question as a link and the rubric total in its header. Never wrap
+either bar in another `BottomBar`
+([ActionBar](../src/assessment-questions/ui/ActionBar.tsx)). The white panel
 has a 1dp top border; bottom padding is `max(insets.bottom + 11, 16)` on Android and
 `max(insets.bottom, 16)` on iOS. The host `TestFrame` owns only the top inset
 (`src/assessment-questions/ui/BottomBar.tsx:6`, `src/components/assessments/TestFrame.js:11`).
@@ -957,11 +992,10 @@ mounted, with a status-bar-translucent scrim that covers the host header. Hardwa
 pointer-event and accessibility hiding in place. The panel's bottom padding is
 `max(useBottomInset(), 24dp)` on both platforms: under Expo SDK 54 the Modal draws edge-to-edge,
 including under Android's navigation bar (device-verified on the A03s, build 30, where an
-inset-free panel put Cancel under the 3-button bar). LastAttemptedSheet scrolls its header with the cells; its footer has
-Reached the end / Nothing attempted / optional Cancel links above Confirm, leaving space for
-the list at large text (`src/assessment-questions/ui/QuestionIntro.tsx:8`,
-`src/assessment-questions/ui/ConfirmSheet.tsx:18`, `src/assessment-questions/ui/FullScreenSheet.tsx:12`,
-`src/assessment-questions/progress/LastAttemptedSheet.tsx:31`).
+inset-free panel put Cancel under the 3-button bar). The old last-word selection sheet is removed; progress comes from the marked prefix
+([QuestionIntro](../src/assessment-questions/ui/QuestionIntro.tsx),
+[ConfirmSheet](../src/assessment-questions/ui/ConfirmSheet.tsx),
+[FullScreenSheet](../src/assessment-questions/ui/FullScreenSheet.tsx)).
 
 **Guards and gallery.** The package's AST guards, theme allowlist and empty ratchets are
 specified below (`src/assessment-questions/__tests__/styleGuard.test.ts:11`,

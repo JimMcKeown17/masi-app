@@ -891,8 +891,14 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
 - [ ] **Step-by-step marking for every Question** (WelaPLUS and Full EGRA): spec and plan
   approved 2026-10-25
   ([spec](../docs/superpowers/specs/2026-10-25-step-by-step-capture-design.md),
-  [plan](../docs/superpowers/plans/2026-10-25-step-by-step-capture.md)). The build waits for
-  PR #106 only before its passage task.
+  [plan](../docs/superpowers/plans/2026-10-25-step-by-step-capture.md)). Built on
+  `feat/step-by-step-capture` (Tasks 1–12); the whole-branch review, the A03 device gate and
+  Jim's merge decision remain.
+- [ ] **EA usability check of step-by-step marking on a preview build.** Watch two or three EAs
+  mark a real child (or a colleague reading from the cards) through WelaPLUS and Full EGRA.
+  Look for: the ring followed without hunting, Back used rather than flipping, the End sheet
+  understood, the review line read before Finish, and the flip notice noticed but not
+  distracting.
 - [ ] **Follow-on spec: the EGRA content inside WelaPLUS** (Jim, 2026-10-25). Letters, words, the
   passage and reading comprehension are identical in WelaPLUS, Full EGRA and the quick tests:
   - **Letters:** the 100-letter mixed-case chart for each language, taken from Assessment 3
@@ -907,7 +913,14 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   - **Rollout:** ship as a new WelaPLUS version beside 2024.1. Head Office switches the literacy
     programme's default once the reprinted Reading Cards (10 × 10 letters, 8 words a row) are
     in the field. This supersedes the printout pack's Grid A 6 × 10.
-  - **Coordinate** with the EGRA session's Masi-60 letter extension.
+  - **English** words, story and questions use English **Home Language** Assessment 1 for now;
+    its 111-word story is accepted (Jim, 2026-10-25).
+  - **Keep Full EGRA**, still named "Full EGRA": one Battery per language (four today), with
+    content identical to the matching WelaPLUS parts. The language follows the child's class
+    language, with no form picker. Results saved from the 13 current forms keep their own
+    versions (Jim, 2026-10-25).
+  - **Owner:** the step-by-step session writes the spec; the EGRA session reviews the adapter,
+    the `letterExtensions.ts` retirement, the Full EGRA picker and the old `-masi60` results.
 - [ ] **Follow-on spec: skip rules, with a server-side switch** (Jim, 2026-10-25). Don't put a
   child who cannot read letters through the reading and writing Questions, or a child who
   cannot read words through the passage.

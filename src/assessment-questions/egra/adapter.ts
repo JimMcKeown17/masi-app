@@ -80,8 +80,10 @@ export function adaptEgraForm(form: EgraAssessment) {
   };
   const practice = (section: EgraGrid) => section.practiceItems.length
     ? ` Practice first (not scored): ${section.practiceItems.join(', ')}` : '';
-  const timedInstructions = (noun: string, section: EgraGrid) =>
-    `Ask the child to read the ${noun} in order. Mark each item Correct or Incorrect. Stop if every item in the first row is wrong. End when the child finishes.${practice(section)}`;
+  const timedInstructions = (noun: 'letter sounds' | 'words', section: EgraGrid) => {
+    const item = noun === 'letter sounds' ? 'letter' : 'word';
+    return `Ask the child to read the ${noun} in order. ${markingSentence(item)} The test stops by itself if every ${item} in the first row is wrong, or when the time is up.${practice(section)}`;
+  };
   const question = (code: string, title: string, instructions: string, durationSec?: number, version = form.id): BatteryQuestion & { title: string } => ({
     question_code: code, question_version: version, title,
     instructions: { [form.languageCode]: instructions },

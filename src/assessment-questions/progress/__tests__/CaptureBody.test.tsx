@@ -35,17 +35,23 @@ test('cards body renders prompt cards with gloss, faded not-reached cards and th
   expect(within(r.getByTestId('prompt-scroll')).queryByTestId('current-ring', { includeHiddenElements: true })).toBeNull();
 });
 
-test('groups body renders headings, card groups and letter tiles at tileWidth', () => {
+test.each([false, true])('groups body owns scroll gutters, headings and letter tileWidth with card=%s', card => {
   const r = render(<CaptureBody {...props} body={{ kind: 'groups', testID: 'prompt-scroll',
-    card: true, variant: 'letter', tileWidth: 52,
+    card, variant: 'letter', tileWidth: 52,
     groups: [{ key: 'word-0', testID: 'word-0', heading: '1. jam', positions: [0, 1, 2] }],
   }} />);
   const body = within(r.getByTestId('prompt-scroll'));
   expect(r.UNSAFE_getByType(FollowScrollView).props).toMatchObject({ focus: 1,
     contentContainerStyle: { gap: tokens.space.lg, paddingHorizontal: tokens.space.lg, paddingVertical: tokens.space.lg } });
   expect(body.getByText('1. jam')).toBeTruthy();
-  expect(body.getByTestId('word-0')).toHaveStyle({ backgroundColor: tokens.color.surface,
-    borderRadius: tokens.radius.card, padding: tokens.space.lg, gap: tokens.space.sm });
+  expect(r.UNSAFE_getByType(ScrollView).props.horizontal ?? false).toBe(false);
+  expect(body.getByTestId('word-0')).toHaveStyle({ gap: tokens.space.sm });
+  if (card) {
+    expect(body.getByTestId('word-0')).toHaveStyle({ backgroundColor: tokens.color.surface,
+      borderRadius: tokens.radius.card, padding: tokens.space.lg });
+  } else {
+    expect(body.getByTestId('word-0')).not.toHaveStyle({ backgroundColor: tokens.color.surface });
+  }
   for (const position of [0, 1, 2]) {
     expect(body.getByTestId(`tile-${position}`)).toHaveStyle({ width: 52, height: 60 });
   }

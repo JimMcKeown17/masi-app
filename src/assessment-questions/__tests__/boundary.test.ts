@@ -41,7 +41,7 @@ describe('findForbiddenImports (scanner)', () => {
     const code = `
       import React, { useState } from 'react';
       import { View, Text } from 'react-native';
-      import { useToggleMark } from '../hooks/useToggleMark';
+      import { markingSentence } from '../battery/markingSentence';
       import type { Result } from '../types/Result';
     `;
     expect(findForbiddenImports(code)).toEqual([]);
