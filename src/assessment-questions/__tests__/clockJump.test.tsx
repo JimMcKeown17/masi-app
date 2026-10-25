@@ -85,19 +85,6 @@ describe.each(sequentialCases)('$name clock corrections', ({ Component, itemSet 
     expect(validateResult(result, { stopAt: 10 })).toEqual({ valid: true, errors: [] });
   });
 
-  test('a forward clock jump at five seconds still expires at sixty monotonic seconds', () => {
-    const { screen, onComplete } = start();
-    act(() => jest.advanceTimersByTime(5000));
-    act(() => jest.setSystemTime(Date.now() + 3600000));
-    act(() => jest.advanceTimersByTime(54999));
-    expect(onComplete).not.toHaveBeenCalled();
-    expect(screen.getByText('Correct')).toBeTruthy();
-    act(() => jest.advanceTimersByTime(1));
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
-    expect(validateResult(onComplete.mock.calls[0][0])).toEqual({ valid: true, errors: [] });
-  });
-
   test.each([-3600000, 3600000])('Undo excludes the stop-card pause despite a %i ms wall-clock jump', (jump) => {
     const { screen, onComplete } = start();
     act(() => jest.advanceTimersByTime(10000));
@@ -114,5 +101,23 @@ describe.each(sequentialCases)('$name clock corrections', ({ Component, itemSet 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000,
       derived: { total_attempted: 10, total_correct: 1, correction_count: 1 } });
+  });
+});
+
+describe.each([...sequentialCases, { name: 'ReadPassageQuestion', Component: ReadPassageQuestion, itemSet: undefined }])('$name timer clock corrections', ({ Component, itemSet }) => {
+  test('a forward clock jump at five seconds still expires at sixty monotonic seconds', () => {
+    const onComplete = jest.fn();
+    const screen = render(<Component language="en" itemSet={itemSet} durationSec={60} onComplete={onComplete} />);
+    fireEvent.press(screen.getByText('Start'));
+    fireEvent.press(screen.getByText('Correct'));
+    act(() => jest.advanceTimersByTime(5000));
+    act(() => jest.setSystemTime(Date.now() + 3600000));
+    act(() => jest.advanceTimersByTime(54999));
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(screen.getByText('Correct')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(1));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
+    expect(validateResult(onComplete.mock.calls[0][0])).toEqual({ valid: true, errors: [] });
   });
 });

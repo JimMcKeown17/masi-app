@@ -28,7 +28,7 @@ export function buildEgraResult(itemSet, { reason = 'completed', attempted, corr
         questions_asked: responses.length },
     };
   }
-  const sequential = code === 'letter_sounds' || code === 'word_reading';
+  const grid = code === 'letter_sounds' || code === 'word_reading';
   const prompts = code === 'letter_sounds' ? itemSet.rows.flat() : itemSet.words.map(w => w.word);
   const count = attempted ?? prompts.length;
   const rowLengths = code === 'letter_sounds' ? itemSet.rows.map(row => row.length) : itemSet.row_lengths;
@@ -41,8 +41,7 @@ export function buildEgraResult(itemSet, { reason = 'completed', attempted, corr
   };
   const items = prompts.map((prompt, position) => {
     return { position, item_key: String(position), prompt, is_correct: position < count && correct.includes(position),
-      ...(sequential ? { metadata: { row: rowAt(position), reached: position < count } }
-        : position >= count ? { metadata: { reached: false } } : {}) };
+      metadata: { ...(grid ? { row: rowAt(position) } : {}), reached: position < count } };
   });
   const totalCorrect = items.filter(item => item.is_correct).length;
   const totalAttempted = count;
@@ -52,13 +51,12 @@ export function buildEgraResult(itemSet, { reason = 'completed', attempted, corr
     derived: { total_correct: totalCorrect, total_attempted: totalAttempted,
       percent: totalAttempted ? Math.round(totalCorrect / totalAttempted * 100) : 0,
       last_attempted_position: count - 1, was_timed: timed, tracks_progress: true,
-      ...(sequential ? {
-        capture_mode: 'sequential', correction_count: 0,
-        max_consecutive_wrong: Array.from({ length: count }, (_, i) => correct.includes(i)).reduce((state, right) => {
-          const run = right ? 0 : state.run + 1;
-          return { run, max: Math.max(state.max, run) };
-        }, { run: 0, max: 0 }).max,
-      } : timed ? { correct_words_per_minute: durationMs > 0 ? Math.round(totalCorrect / durationMs * 60000) : 0 } : {}),
+      capture_mode: 'sequential', correction_count: 0,
+      max_consecutive_wrong: Array.from({ length: count }, (_, i) => correct.includes(i)).reduce((state, right) => {
+        const run = right ? 0 : state.run + 1;
+        return { run, max: Math.max(state.max, run) };
+      }, { run: 0, max: 0 }).max,
+      ...(!grid && timed ? { correct_words_per_minute: durationMs > 0 ? Math.round(totalCorrect / durationMs * 60000) : 0 } : {}),
     },
   };
 }

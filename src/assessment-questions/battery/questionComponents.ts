@@ -20,7 +20,7 @@ export interface QuestionEntry {
 
 const components = new Map<string, QuestionEntry>([
   ['reading_comprehension', { Component: ReadingComprehensionQuestion, extraProps: {} }],
-  ['oral_reading', { Component: ReadPassageQuestion, extraProps: { markingPolarity: 'tap_wrong' } }],
+  ['oral_reading', { Component: ReadPassageQuestion, extraProps: {} }],
   ['letter_sounds', { Component: LetterSoundsQuestion, extraProps: {} }],
   ['wela_plus_listen_and_answer_story', { Component: ListenAndAnswerStoryQuestion, extraProps: {} }],
   ['wela_plus_first_sound', { Component: ListenFirstSoundQuestion, extraProps: {} }],

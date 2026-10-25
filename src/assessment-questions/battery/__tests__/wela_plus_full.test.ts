@@ -26,12 +26,13 @@ test('2024.1 battery shape', () => {
   ]);
 });
 
-test('Q6 and Q8 instructions include the one-minute stop and passage marker', () => {
+test('Q6, Q7 and Q8 use exact sequential instructions and timed reading stops at one minute', () => {
   const words = B.questions.find((q) => q.question_code === 'wela_plus_read_words')!;
   const passage = B.questions.find((q) => q.question_code === 'wela_plus_read_passage')!;
   for (const language of B.languages) {
     expect(words.instructions![language]).toBe('Hand the child Reading Card side B. Point to each word and ask the child to read it. Mark each word Correct or Incorrect. The black ring shows which word you\'re on. The test stops by itself at 1 minute.');
-    expect(passage.instructions![language]).toBe('Hand the child Reading Card side C. Ask the child to read the story. Tap each word they read correctly. STOP at 1 minute, then mark the last word they attempted.');
+    expect(passage.instructions![language]).toBe("Hand the child Reading Card side C. Ask the child to read the story. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself at 1 minute.");
+    expect(B.questions[6].instructions![language]).toBe("Reading Card side B, sentences. Ask the child to read each sentence. Mark each word Correct or Incorrect. The black ring shows which word you're on.");
   }
 });
 

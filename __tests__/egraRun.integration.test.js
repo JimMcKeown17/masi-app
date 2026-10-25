@@ -85,6 +85,9 @@ test('English FAL 2 resumes four decided Questions, finalizes offline and suppli
     buildEgraResult(itemSets.oral_reading, { reason: 'ea_ended', attempted: 12, correct: [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11], durationMs: 30000 }),
     buildEgraResult(itemSets.reading_comprehension, { responses: ['correct', 'incorrect', 'correct'], notReached: 2 }),
   ];
+  expect(results[2].derived).toMatchObject({ capture_mode: 'sequential', correction_count: 0,
+    max_consecutive_wrong: 1, last_attempted_position: 11, total_attempted: 12, total_correct: 11 });
+  expect(results[2].items.map(item => item.metadata.reached)).toEqual(itemSets.oral_reading.words.map((_, i) => i < 12));
   const ids = [];
   for (const result of results) {
     expect(validateResult(result, { stopRule: itemSets[result.question_code].stop_rule }).valid).toBe(true);
