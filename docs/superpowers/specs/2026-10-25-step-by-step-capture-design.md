@@ -191,6 +191,8 @@ questions the child didn't reach.
 
 ### 6.3 Question 6 stops by itself
 
+> **Superseded 2026-10-25 (Jim, later the same day):** one stop rule everywhere, "first row all wrong" (DBE/EGRA), for letters and words in WelaPLUS, Full EGRA and the quick tests. It arrives with the follow-on change that puts the EGRA content into WelaPLUS (see `documentation/ROADMAP.md`). This build therefore adds no Q6 stop rule; Q6 keeps its current item set and only drops the unenforced "5 in a row" instruction. The paragraph below is kept as the original decision.
+
 Q6 stops after **10 wrong in a row**, the same rule as Question 1 (Jim, 2026-10-25). Stop rules live
 in the item set (CONTEXT, "Stop rule"), so `wela_plus_read_words` en and xh get a new item-set
 version carrying `{ kind: 'consecutive_wrong', stop_at: 10 }`. The content is unchanged. The WelaPLUS

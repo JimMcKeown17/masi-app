@@ -888,6 +888,34 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
 
 ### Pedagogy and field validation
 
+- [ ] **Step-by-step marking for every Question** (WelaPLUS and Full EGRA): spec and plan
+  approved 2026-10-25
+  ([spec](../docs/superpowers/specs/2026-10-25-step-by-step-capture-design.md),
+  [plan](../docs/superpowers/plans/2026-10-25-step-by-step-capture.md)). The build waits for
+  PR #106 only before its passage task.
+- [ ] **Follow-on spec: the EGRA content inside WelaPLUS** (Jim, 2026-10-25). Letters, words, the
+  passage and reading comprehension are identical in WelaPLUS, Full EGRA and the quick tests:
+  - **Letters:** the 100-letter mixed-case chart for each language, taken from Assessment 3
+    (isiXhosa HL 3, English HL 3, Afrikaans HL 3) as printed. isiZulu keeps all 110 letters of
+    its only form, SMRS 1. This replaces the 40/60-letter and Masi-60 letter cards.
+  - **Words, passage and comprehension:** Assessment 1 for each language, English Home
+    Language, from `content/egra/egra-assessments.json`. WelaPLUS gains the comprehension
+    Question after the passage, using the shared `reading_comprehension` code and screen.
+  - **Same form at every point:** baseline, midline and endline use the same form. A per-grade
+    form may come later.
+  - **One stop rule everywhere:** "first row all wrong" for letters and words.
+  - **Rollout:** ship as a new WelaPLUS version beside 2024.1. Head Office switches the literacy
+    programme's default once the reprinted Reading Cards (10 × 10 letters, 8 words a row) are
+    in the field. This supersedes the printout pack's Grid A 6 × 10.
+  - **Coordinate** with the EGRA session's Masi-60 letter extension.
+- [ ] **Follow-on spec: skip rules, with a server-side switch** (Jim, 2026-10-25). Don't put a
+  child who cannot read letters through the reading and writing Questions, or a child who
+  cannot read words through the passage.
+  - **Candidate trigger:** the first-row stop itself (letters → reading and writing; words →
+    passage and comprehension).
+  - **The switch** is set per programme or Battery version, for when government requires every
+    Question. It is never an EA setting.
+
 - [ ] Close remaining content approvals: XH Q5 g/n/z picture choices and clock artwork, plus a
   first-language spelling review before the pilot (Release 1 §4.3; #34). The bilingual item
   sets/scripts and Q6/Q8 60-second durations are built; do not reopen them as missing content.
