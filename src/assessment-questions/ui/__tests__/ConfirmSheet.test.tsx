@@ -5,8 +5,21 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { tokens } from '../../theme/tokens';
 import { ConfirmSheet } from '../ConfirmSheet';
 import { TextLink } from '../Button';
+import { UiText } from '../Text';
 
 afterEach(() => jest.restoreAllMocks());
+
+test('ConfirmSheet shows its message under the title and above the buttons', () => {
+  const message = "2 marked. The 3 not marked won't count towards the score.";
+  const r = render(<ConfirmSheet testID="end" title="End this question?" message={message}
+    confirmLabel="End question" onConfirm={jest.fn()} cancelLabel="Keep marking" />);
+  const texts = r.UNSAFE_getAllByType(UiText);
+  expect(texts.map(text => text.props.children)).toEqual([
+    'End this question?', message, 'End question', 'Keep marking',
+  ]);
+  expect(texts[1].props.variant).toBe('body');
+  expect(r.getByText(message)).toHaveStyle({ color: tokens.color.ink });
+});
 
 test('the testID is on the scrim overlay and the title is a header', () => {
   const r = render(<ConfirmSheet testID="end-confirmation" title="End the test?" confirmLabel="Yes, finish" onConfirm={jest.fn()} />);

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from
 import { textStyle } from '../theme/typography';
 import { tokens } from '../theme/tokens';
 import { ContentText, UiText, type Tone } from './Text';
+import { Icon } from './Icon';
 
 export type TileState = 'idle' | 'current' | 'correct' | 'incorrect' | 'notReached';
 export type TileVariant = 'letter' | 'word' | 'pill' | 'promptCard' | 'picture';
@@ -28,6 +29,7 @@ const styles = StyleSheet.create({
   word: { height: GRID_TILE_HEIGHTS.word, alignSelf: 'stretch' },
   pill: { minHeight: 48, paddingHorizontal: 14 },
   promptCard: { minHeight: 72, alignSelf: 'stretch', padding: tokens.space.lg },
+  promptMark: { position: 'absolute', right: 10, top: tokens.space.sm },
   picture: { height: GRID_TILE_HEIGHTS.picture, alignSelf: 'stretch', paddingVertical: tokens.space.xs },
   // Absolute children sit inside the tile's 1dp border; outset by 1 so the ring covers it and
   // the visible outline is exactly 3dp at the tile's outer edge.
@@ -55,11 +57,16 @@ export function MarkTile({ variant, state, text, gloss, caption, accessibilityLa
   const { fontScale } = useWindowDimensions();
   const captionHeight = 2 * CAPTION_LINE_HEIGHT * Math.min(fontScale, CAPTION_MAX_SCALE);
   const filled = state === 'correct' || state === 'incorrect';
+  const opacity = variant === 'promptCard' && state === 'notReached' ? 0.55 : 1;
   const tone: Tone = filled ? 'onInk' : state === 'notReached' ? 'notReached' : 'ink';
   const style = [styles.tile, styles[variant], looks[state], width === undefined ? undefined : { width },
+    variant === 'promptCard' && state === 'notReached' ? { opacity } : undefined,
     height !== undefined && (variant === 'letter' || variant === 'word' || variant === 'picture') ? { height } : undefined];
   const accessibility = { accessible: true, accessibilityLabel, accessibilityState: { selected: state === 'current' }, testID };
   const content = <>
+    {variant === 'promptCard' && filled && <View testID="tile-mark" pointerEvents="none" accessible={false} style={styles.promptMark}>
+      <Icon name={state === 'correct' ? 'check' : 'cross'} tone="onInk" size={14} />
+    </View>}
     {state === 'current' && <View testID="current-ring" pointerEvents="none" accessible={false}
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.currentRing} />}
     {variant === 'picture' && caption !== undefined && <View testID="picture-caption" style={[styles.pictureCaption, { height: captionHeight }]}><UiText variant="caption" tone={filled ? 'onInk' : 'muted'} align="center" numberOfLines={2} ellipsizeMode="clip" maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.content}>{caption}</UiText></View>}
@@ -67,6 +74,6 @@ export function MarkTile({ variant, state, text, gloss, caption, accessibilityLa
     {variant === 'promptCard' && gloss !== undefined && <UiText variant="caption" tone={filled ? 'onInk' : 'muted'} align="center">{gloss}</UiText>}
   </>;
   return onPress
-    ? <Pressable {...accessibility} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [style, { opacity: pressed ? 0.85 : 1 }]}>{content}</Pressable>
+    ? <Pressable {...accessibility} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [style, { opacity: pressed ? opacity * 0.85 : opacity }]}>{content}</Pressable>
     : <View {...accessibility} accessibilityRole="text" style={style}>{content}</View>;
 }

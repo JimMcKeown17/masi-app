@@ -7,6 +7,15 @@ import { LETTER_PAGE_LAYOUT, paginate, rowsFromLengths } from '../paginate';
 
 const pages = () => paginate(rowsFromLengths([10,10,10,10,10,10]), LETTER_PAGE_LAYOUT);
 
+test('PageIndicator uses labelFor when given', () => {
+  const p = pages();
+  const labelFor = jest.fn(() => [{ text: 'Page 1 of 3' }]);
+  const r = render(<PageIndicator pages={p} current={0} labelFor={labelFor} />);
+  expect(r.getByTestId('page-label')).toHaveTextContent('Page 1 of 3');
+  expect(r.getByLabelText('Page 1 of 3')).toBe(r.getByTestId('page-label'));
+  expect(labelFor).toHaveBeenCalledWith(p[0], 3);
+});
+
 test('hidden for zero or a single page', () => {
   const r = render(<PageIndicator pages={[]} current={0} />);
   expect(r.toJSON()).toBeNull();

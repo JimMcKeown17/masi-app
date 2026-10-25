@@ -5,6 +5,30 @@ import { AssessmentThemeProvider } from '../../theme/AssessmentTheme';
 import { tokens } from '../../theme/tokens';
 import { MarkTile, type TileState } from '../MarkTile';
 import { ContentText, UiText, toneColor } from '../Text';
+import { Icon } from '../Icon';
+
+test('prompt cards show a check or cross mark only when filled, and fade when not reached', () => {
+  const r = render(<MarkTile variant="promptCard" state="correct" text="Prompt" accessibilityLabel="tile" />);
+  for (const [state, name] of [['correct', 'check'], ['incorrect', 'cross']] as const) {
+    r.rerender(<MarkTile variant="promptCard" state={state} text="Prompt" accessibilityLabel="tile" />);
+    const mark = r.getByTestId('tile-mark');
+    expect(mark).toHaveStyle({ position: 'absolute', right: 10, top: 8 });
+    expect(mark.findByType(Icon).props).toMatchObject({ name, tone: 'onInk', size: 14 });
+  }
+  for (const state of ['idle', 'current', 'notReached'] as const) {
+    r.rerender(<MarkTile variant="promptCard" state={state} text="Prompt" accessibilityLabel="tile" />);
+    expect(r.queryByTestId('tile-mark')).toBeNull();
+  }
+  expect(r.getByLabelText('tile')).toHaveStyle({ opacity: 0.55 });
+  r.rerender(<MarkTile variant="promptCard" state="notReached" text="Prompt" accessibilityLabel="tile" onPress={jest.fn()} />);
+  expect(r.getByLabelText('tile')).toHaveStyle({ opacity: 0.55 });
+  for (const variant of ['letter', 'word', 'pill', 'picture'] as const) {
+    r.rerender(<MarkTile variant={variant} state="notReached" text="a" accessibilityLabel="tile" />);
+    expect(StyleSheet.flatten(r.getByLabelText('tile').props.style).opacity).toBeUndefined();
+    r.rerender(<MarkTile variant={variant} state="correct" text="a" accessibilityLabel="tile" />);
+    expect(r.queryByTestId('tile-mark')).toBeNull();
+  }
+});
 
 test.each([
   ['current', { borderWidth: 1, borderColor: tokens.color.ink, backgroundColor: tokens.color.surface }, 'ink'],

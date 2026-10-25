@@ -4524,6 +4524,19 @@ Surprises:
 - Old and new results stay distinguishable without new content versions: toggle Questions save
   `capture_mode` null, and converted ones save `'sequential'`.
 
+### 2026-10-25 — Step-by-step marking build (`feat/step-by-step-capture`)
+
+Plan: `docs/superpowers/plans/2026-10-25-step-by-step-capture.md`. Codex (gpt-6.1-sol, high)
+builds each task; Claude reviews the diff, reruns the gates and commits. Baseline after
+`npm ci` in the worktree: 421 suites / 6,314 tests, `test:types` green. (The worktree had been
+resolving the main checkout's older `node_modules`, which lacked `@expo-google-fonts/andika`, so
+the two App suites failed until the worktree got its own install.)
+
+| Task | Result | Notes |
+| --- | --- | --- |
+| 1 Reducer `flip` | 19/19 reducer tests; full suite green | Surprise: before the change an unknown `flip` fell through to the Back/Undo tail and deleted the last mark, so two of the plan's stop examples passed by accident. They now also assert the cursor and marks. |
+| 2 UI parts | 423 suites / 6,328 tests; types, boundary, raw-hex and style guards green | `LinePart` lives in `ui/PositionLine.tsx` (re-exported from `progress/captureTypes.ts`) so `ui/` never imports from `progress/`. FlipNotice sits at `bottom: 0` of its parent; the engine places it above the bar. Device check: TalkBack may read a flip twice (live region plus explicit announcement); Task 13 checks this. |
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
