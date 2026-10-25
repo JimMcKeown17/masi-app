@@ -13,7 +13,7 @@ export function LastAttemptedSheet({
 }: {
   labels: string[];
   rowLengths?: number[];
-  defaultIndex: number;
+  defaultIndex: number | null;
   onConfirm: (index: number) => void;
   onCancel?: () => void;
 }) {
@@ -39,7 +39,7 @@ export function LastAttemptedSheet({
         renderTile={(i) => (
           <MarkTile
             variant="pill"
-            state={i === selected ? 'current' : selected >= 0 && i > selected ? 'notReached' : 'idle'}
+            state={i === selected ? 'current' : selected !== null && selected >= 0 && i > selected ? 'notReached' : 'idle'}
             text={labels[i]}
             accessibilityLabel={`${labels[i]}, item ${i + 1}`}
             onPress={() => setSelected(i)}
@@ -54,7 +54,11 @@ export function LastAttemptedSheet({
             <TextLink label="Cancel" onPress={onCancel} />
           ) : null}
         </View>
-        <PrimaryButton label="Confirm" onPress={() => onConfirm(selected)} />
+        <PrimaryButton
+          label="Confirm"
+          disabled={selected === null}
+          onPress={() => { if (selected !== null) onConfirm(selected); }}
+        />
       </BottomBar>
     </Canvas>
   );

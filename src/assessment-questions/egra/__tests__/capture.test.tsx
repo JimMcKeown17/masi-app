@@ -5,6 +5,8 @@ import { questionComponentFor } from '../../battery/questionComponents';
 import { validateResult } from '../../contractTest/validateResult';
 const { buildEgraResult } = require('../../../../test-support/egraResults');
 import { tokens } from '../../theme/tokens';
+import { WELA_PLUS_READ_PASSAGE_EN } from '../../itemsets/wela_plus_read_passage.en';
+import { WELA_PLUS_READ_WORDS_EN } from '../../itemsets/wela_plus_read_words.en';
 
 const { itemSets } = adaptEgraForm(egraFormFor('dbe-egra-en-fal-2-v1')!);
 beforeEach(() => jest.useFakeTimers());
@@ -76,4 +78,100 @@ test('real comprehension output agrees with the synthetic builder for the same f
   expect(result).toEqual(buildEgraResult(itemSets.reading_comprehension, {
     durationMs: result.duration_ms, responses: ['correct', 'incorrect', 'not_asked'],
   }));
+});
+
+
+test('oral reading with no errors requires an explicit last word after End at 30 s', () => {
+  const { Component, extraProps } = questionComponentFor('oral_reading')!;
+  const onComplete = jest.fn();
+  const screen = render(<Component language="en" itemSet={itemSets.oral_reading} durationSec={60} {...extraProps} onComplete={onComplete} />);
+  fireEvent.press(screen.getByText('Start'));
+  act(() => jest.advanceTimersByTime(30000));
+  fireEvent.press(screen.getByText('End'));
+  const confirm = screen.getByRole('button', { name: 'Confirm' });
+  expect(confirm).toBeDisabled();
+  fireEvent.press(confirm);
+  expect(onComplete).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByLabelText(`${itemSets.oral_reading.words[19].word}, item 20`));
+  fireEvent.press(screen.getByText('Confirm'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  const result = onComplete.mock.calls[0][0];
+  expect(result).toMatchObject({ stopped_reason: 'ea_ended', duration_ms: 30000,
+    derived: { last_attempted_position: 19, total_attempted: 20, total_correct: 20, correct_words_per_minute: 40 } });
+  expect(result.items.map((item: { is_correct: boolean }) => item.is_correct)).toEqual(
+    itemSets.oral_reading.words.map((_, index) => index < 20));
+  expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+});
+
+
+test('oral reading with an error at word 6 requires an explicit last word after the timer', () => {
+  const { Component, extraProps } = questionComponentFor('oral_reading')!;
+  const onComplete = jest.fn();
+  const screen = render(<Component language="en" itemSet={itemSets.oral_reading} durationSec={60} {...extraProps} onComplete={onComplete} />);
+  fireEvent.press(screen.getByText('Start'));
+  fireEvent.press(screen.getByTestId('pill-5'));
+  act(() => jest.advanceTimersByTime(60000));
+  expect(screen.getByText('Last item attempted')).toBeTruthy();
+  expect(screen.queryByText('Cancel')).toBeNull();
+  const confirm = screen.getByRole('button', { name: 'Confirm' });
+  expect(confirm).toBeDisabled();
+  fireEvent.press(confirm);
+  expect(onComplete).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByLabelText(`${itemSets.oral_reading.words[39].word}, item 40`));
+  fireEvent.press(screen.getByText('Confirm'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  const result = onComplete.mock.calls[0][0];
+  expect(result).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000,
+    derived: { last_attempted_position: 39, total_attempted: 40, total_correct: 39, correct_words_per_minute: 39 } });
+  expect(result.items.map((item: { is_correct: boolean }) => item.is_correct)).toEqual(
+    itemSets.oral_reading.words.map((_, index) => index < 40 && index !== 5));
+  expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+});
+
+
+test.each(['wela_plus_read_passage', 'wela_plus_read_words'])('%s keeps the last correct word preselected', code => {
+  const { Component } = questionComponentFor(code)!;
+  const set = code === 'wela_plus_read_passage' ? WELA_PLUS_READ_PASSAGE_EN : WELA_PLUS_READ_WORDS_EN;
+  const onComplete = jest.fn();
+  const screen = render(<Component language="en" itemSet={set} durationSec={60} onComplete={onComplete} />);
+  fireEvent.press(screen.getByText('Start'));
+  for (let index = 0; index < 10; index += 1) {
+    if (code === 'wela_plus_read_passage') {
+      fireEvent.press(screen.getAllByTestId(`pill-${set.words[index].item_key}`)[
+        set.words.slice(0, index).filter(word => word.item_key === set.words[index].item_key).length
+      ]);
+    } else {
+      if (index === 7) fireEvent.press(screen.getByLabelText('Next page'));
+      fireEvent.press(screen.getByLabelText(`${set.words[index].word}, idle`));
+    }
+  }
+  act(() => jest.advanceTimersByTime(30000));
+  fireEvent.press(screen.getByText('End'));
+  expect(screen.getByLabelText(`${set.words[9].word}, item 10`).props.accessibilityState).toMatchObject({ selected: true });
+  expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+  fireEvent.press(screen.getByText('Confirm'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'ea_ended',
+    derived: { last_attempted_position: 9, total_attempted: 10, total_correct: 10 } });
+});
+
+test('oral reading forgets an earlier last-word choice after Cancel and End again', () => {
+  const { Component, extraProps } = questionComponentFor('oral_reading')!;
+  const onComplete = jest.fn();
+  const screen = render(<Component language="en" itemSet={itemSets.oral_reading} durationSec={60} {...extraProps} onComplete={onComplete} />);
+  fireEvent.press(screen.getByText('Start'));
+  act(() => jest.advanceTimersByTime(10000));
+  fireEvent.press(screen.getByText('End'));
+  fireEvent.press(screen.getByLabelText(`${itemSets.oral_reading.words[9].word}, item 10`));
+  fireEvent.press(screen.getByText('Cancel'));
+  act(() => jest.advanceTimersByTime(10000));
+  fireEvent.press(screen.getByText('End'));
+  expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+  fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
+  expect(onComplete).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByLabelText(`${itemSets.oral_reading.words[24].word}, item 25`));
+  fireEvent.press(screen.getByText('Confirm'));
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'ea_ended',
+    derived: { last_attempted_position: 24, total_attempted: 25, total_correct: 25 } });
 });
