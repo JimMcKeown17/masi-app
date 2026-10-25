@@ -110,3 +110,48 @@ test.each([true, false])('the footer has one wrapping link row followed by Confi
   expect(bar.props.children[0].type).toBe(View);
   expect(bar.props.children[1].type).toBe(PrimaryButton);
 });
+
+
+test('a null default leaves every tile idle and requires a choice before Confirm', () => {
+  const onConfirm = jest.fn();
+  const r = render(<LastAttemptedSheet labels={labels} defaultIndex={null} onConfirm={onConfirm} />);
+  const confirm = r.getByRole('button', { name: 'Confirm' });
+  expect(confirm.props.accessibilityState).toMatchObject({ disabled: true });
+  expect(confirm).toBeDisabled();
+  fireEvent.press(confirm);
+  expect(onConfirm).not.toHaveBeenCalled();
+  expect(r.queryAllByTestId('current-ring', { includeHiddenElements: true })).toHaveLength(0);
+  labels.forEach((label, index) => {
+    const tile = r.getByLabelText(`${label}, item ${index + 1}`);
+    expect(tile.props.accessibilityState).toMatchObject({ selected: false });
+    expect(tile).toHaveStyle({ borderWidth: 1, borderColor: tokens.color.line });
+    expect(r.getByText(label)).toHaveStyle({ color: tokens.color.ink });
+  });
+  fireEvent.press(r.getByLabelText('i, item 3'));
+  expect(r.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+  expect(r.getByLabelText('i, item 3').props.accessibilityState).toMatchObject({ selected: true });
+  expect(within(r.getByLabelText('i, item 3')).getByTestId('current-ring', { includeHiddenElements: true })).toHaveStyle({ borderColor: tokens.color.ink, borderWidth: 3 });
+  fireEvent.press(r.getByRole('button', { name: 'Confirm' }));
+  expect(onConfirm).toHaveBeenCalledTimes(1);
+  expect(onConfirm).toHaveBeenCalledWith(2);
+});
+
+
+test.each([['Reached the end', 3], ['Nothing attempted', -1]] as const)(
+  'with a null default %s confirms in one tap', (label, index) => {
+    const onConfirm = jest.fn();
+    const r = render(<LastAttemptedSheet labels={labels} defaultIndex={null} onConfirm={onConfirm} />);
+    fireEvent.press(r.getByRole('button', { name: label }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith(index);
+  },
+);
+
+test('with a null default Cancel still acts in one tap', () => {
+  const onConfirm = jest.fn();
+  const onCancel = jest.fn();
+  const r = render(<LastAttemptedSheet labels={labels} defaultIndex={null} onConfirm={onConfirm} onCancel={onCancel} />);
+  fireEvent.press(r.getByRole('button', { name: 'Cancel' }));
+  expect(onCancel).toHaveBeenCalledTimes(1);
+  expect(onConfirm).not.toHaveBeenCalled();
+});

@@ -55,6 +55,30 @@ test('English HL 1 captures all 60 letters through the real Question, including 
     egraItemSetFor('letter_sounds', 'dbe-egra-en-hl-1-v1-masi60', 'en').rows.flat());
 });
 
+test('EGRA oral reading saves the explicitly chosen last word through the real Question', async () => {
+  const battery = EGRA_BATTERIES.find(entry => entry.battery_version === 'dbe-egra-en-fal-2-v1');
+  run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en',
+    results: battery.questions.slice(0, 2).map((question, index) => ({ id: `egra-${index}`,
+      question_code: question.question_code, stopped_reason: 'completed', score: 20, total_items: 60, derived: {} })) };
+  questionComponentFor.mockImplementation(jest.requireActual('../src/assessment-questions').questionComponentFor);
+  const screen = renderHost({ runId: ID, questionCode: 'oral_reading' });
+  fireEvent.press(await screen.findByRole('button', { name: 'Start' }));
+  act(() => jest.advanceTimersByTime(30000));
+  fireEvent.press(screen.getByRole('button', { name: 'End' }));
+  const confirm = screen.getByRole('button', { name: 'Confirm' });
+  expect(confirm).toBeDisabled();
+  fireEvent.press(confirm);
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  const set = egraItemSetFor('oral_reading', battery.battery_version, 'en');
+  fireEvent.press(screen.getByLabelText(`${set.words[19].word}, item 20`));
+  fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+  const saved = repositories.assessments.saveQuestionResult.mock.calls[0][0].result;
+  expect(saved).toMatchObject({ question_code: 'oral_reading', stopped_reason: 'ea_ended',
+    derived: { last_attempted_position: 19, total_attempted: 20, total_correct: 20 } });
+});
+
 jest.setTimeout(30000);
 configure({ asyncUtilTimeout: 5000 });
 

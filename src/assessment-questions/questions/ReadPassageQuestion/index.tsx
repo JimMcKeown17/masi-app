@@ -278,7 +278,7 @@ function ReadPassageQuestionContent(
       <LastAttemptedSheet
         labels={words.map((word) => word.word)}
         rowLengths={paragraphs.map((paragraph) => paragraph.length)}
-        defaultIndex={highestMarkedIndex()}
+        defaultIndex={markingPolarity === 'tap_wrong' ? null : highestMarkedIndex()}
         onConfirm={(idx) => finish(markReason, idx)}
         onCancel={
           markReason === 'ea_ended'

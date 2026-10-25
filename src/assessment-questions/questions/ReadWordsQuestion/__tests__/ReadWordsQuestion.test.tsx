@@ -484,3 +484,34 @@ test('page controls live in the bottom bar while the timer stays above the grid'
   expect(bar.queryByLabelText('Time left, 60 seconds')).toBeNull();
   expect(r.getByLabelText('Time left, 60 seconds')).toBeTruthy();
 });
+
+
+test.each(['End', 'timer'])('grid tap_wrong requires a last-word choice after %s', reason => {
+  jest.useFakeTimers();
+  try {
+    const onComplete = jest.fn();
+    const r = render(<ReadWordsQuestion language="en" itemSet={SET} captureMode="grid" markingPolarity="tap_wrong" durationSec={60} onComplete={onComplete} />);
+    fireEvent.press(r.getByText('Start'));
+    if (reason === 'timer') {
+      fireEvent.press(r.getByLabelText('come, idle'));
+      act(() => jest.advanceTimersByTime(60000));
+      expect(r.queryByText('Cancel')).toBeNull();
+    } else {
+      act(() => jest.advanceTimersByTime(30000));
+      fireEvent.press(r.getByText('End'));
+    }
+    expect(r.queryAllByTestId('current-ring', { includeHiddenElements: true })).toHaveLength(0);
+    const confirm = r.getByRole('button', { name: 'Confirm' });
+    expect(confirm).toBeDisabled();
+    fireEvent.press(confirm);
+    expect(onComplete).not.toHaveBeenCalled();
+    fireEvent.press(r.getByLabelText('with, item 6'));
+    expect(r.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+    fireEvent.press(r.getByText('Confirm'));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: reason === 'timer' ? 'timer' : 'ea_ended',
+      derived: { last_attempted_position: 5, total_attempted: 6, total_correct: reason === 'timer' ? 5 : 6 } });
+  } finally {
+    jest.useRealTimers();
+  }
+});

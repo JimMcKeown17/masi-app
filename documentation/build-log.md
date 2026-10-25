@@ -4404,6 +4404,83 @@ below are the test evidence. Branch then rebased onto Plan 3 `9ae36da` (test-onl
 - Print the four Masi 60-letter Grade 1 cards and resolve the pack source notes before field use.
   Stronger skip rules, score bands and the other EGRA open decisions are unchanged.
 
+### 2026-10-25 — Story score: no default last word when marking mistakes
+
+**Scope:** `fix/egra-story-last-word`, based on main `9708186`. Jim approved fixing it now, ahead of
+the step-by-step capture redesign (which will move EGRA stories off tap-the-mistakes). Built by Codex
+(`gpt-6.1-sol`, high), reviewed by Claude, then by an independent Codex adversarial review. Found by the capture-mode audit at main
+`9708186` and verified by hand: EGRA `oral_reading` registers `ReadPassageQuestion` with
+`markingPolarity: 'tap_wrong'`, but the last-item sheet defaulted to the highest tapped index
+regardless of polarity. That index is the last mistake, not the last word read. With no mistakes,
+the fallback was index 0: End → Confirm silently saved one attempted word. One mistake at word 6
+silently saved six attempted words. The grid word path accepted the same polarity and had the
+same defect, although no Battery currently combines grid capture and `tap_wrong`.
+
+**Fix:** `LastAttemptedSheet.defaultIndex` now accepts `number | null`. A null default leaves
+all tiles idle (no current ring or not-reached styling) and Confirm disabled and inert, exposing
+`accessibilityState.disabled = true`. Choosing a tile enables Confirm and submits that index.
+Both passage and grid callers pass null for `tap_wrong`; `tap_correct` retains the highest-marked
+numeric default and index-0 fallback. Numeric selection/ring styling and accessibility labels and
+state are preserved. Reached the end, Nothing attempted and Cancel retain their one-tap behavior.
+No scoring formula, SequentialCapture, stepByStep, StopCard, story-questions, instructions or
+WelaPLUS behavior changed; timer expiry still has no Cancel.
+
+**RED → GREEN evidence (Node 20.19.4):** tests were added and run before the corresponding
+production fix. The two EGRA cases and the host case each failed before changing the passage
+caller; both grid variants failed before changing the grid caller. Regression tests for unchanged
+behavior have no defect RED claim.
+
+| New test | Before the fix | After the fix |
+|---|---|---|
+| Sheet: null default, idle tiles, disabled/inert Confirm, then tile → Confirm | `Expected "disabled": true; Received "disabled": false`; sheet run: `1 failed, 10 passed, 11 total` | PASS: no ring, all labels ink and unselected, Confirm inert, choosing item 3 submits index 2 |
+| Registered EGRA: no errors, End at 30 s, choose word 20 | `expect(element).toBeDisabled()` failed: Confirm had `"disabled": false`; filtered run: `1 failed, 8 skipped, 9 total` | PASS: one completion, `ea_ended`, 30,000 ms, last index 19, 20 attempted/correct, 40 WCPM; items 0–19 correct and every later item not correct; `validateResult` valid |
+| Registered EGRA: error at word 6, timer at 60 s, choose word 40 | `expect(element).toBeDisabled()` failed: Confirm had `"disabled": false`; filtered run: `1 failed, 9 skipped, 10 total` | PASS: no Cancel, one completion, `timer`, 60,000 ms, last index 39, 40 attempted, 39 correct, 39 WCPM; word 6 wrong and every later unattempted item not correct; `validateResult` valid |
+| Host: real registered EGRA passage with letters/words already decided | `expect(element).toBeDisabled()` failed: Confirm had `"disabled": false`; filtered run: `1 failed, 81 skipped, 82 total` | PASS: Start → End → disabled Confirm saves nothing; choose word 20 → Confirm returns to overview and calls `saveQuestionResult` once with 20 attempted/correct |
+| Grid `tap_wrong`: End without marks | `Expected length: 0; Received length: 1` for current rings | PASS: no selection; Confirm disabled/inert until item 6 is chosen; 6 attempted/correct |
+| Grid `tap_wrong`: timer with one error | `Expected length: 0; Received length: 1` for current rings; combined grid RED: `2 failed, 23 skipped, 25 total` | PASS: no Cancel or selection; disabled/inert Confirm, then item 6 → 6 attempted, 5 correct |
+| Registered WelaPLUS passage, mark words 1–10, End → Confirm | Preservation regression; initial test query hit duplicate `pill-sam` IDs and was corrected to select each word occurrence by position | PASS: no extraProps, item 10 preselected, last index 9, 10 attempted/correct |
+| Registered WelaPLUS grid, mark words 1–10, End → Confirm | PASS before changing either caller (preservation regression) | PASS: no extraProps, item 10 preselected, last index 9, 10 attempted/correct |
+| Sheet null: Reached the end | Preservation regression; no defect RED claim | PASS: one tap submits last index 3 |
+| Sheet null: Nothing attempted | Preservation regression; no defect RED claim | PASS: one tap submits -1 |
+| Sheet null: Cancel | Preservation regression; no defect RED claim | PASS: one tap calls Cancel once, no confirmation |
+| Registered EGRA: choose word 10, Cancel, End again (added after review) | `1 failed, 12 skipped, 13 total` with the pre-fix passage caller | PASS: the reopened sheet starts empty with Confirm disabled; word 25 → 25 attempted/correct |
+
+The initial sheet assertion used exact equality; React Native adds undefined accessibility-state
+fields, so the final assertion matches `disabled: true` while separately checking `toBeDisabled()`.
+The registered WelaPLUS passage test uses occurrence-aware queries because its bundled item keys
+repeat. Neither test-harness adjustment required a product change.
+
+| Command (all run with `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`) | Result |
+|---|---|
+| `npx jest src/assessment-questions/progress/__tests__/LastAttemptedSheet.test.tsx --runInBand` (first slice GREEN) | `Test Suites: 1 passed, 1 total`; `Tests: 11 passed, 11 total` |
+| `npx jest src/assessment-questions/progress/__tests__/LastAttemptedSheet.test.tsx src/assessment-questions/egra/__tests__/capture.test.tsx src/assessment-questions/questions/ReadWordsQuestion/__tests__/ReadWordsQuestion.test.tsx __tests__/BatteryQuestionScreen.test.js --runInBand` | `Test Suites: 4 passed, 4 total`; `Tests: 133 passed, 133 total` |
+| `npx jest src/assessment-questions/progress src/assessment-questions/egra src/assessment-questions/questions/ReadPassageQuestion src/assessment-questions/questions/ReadWordsQuestion __tests__/BatteryQuestionScreen.test.js` | exit 0; `Test Suites: 15 passed, 15 total`; `Tests: 208 passed, 208 total`; `Snapshots: 0 total` |
+| `npx jest` | exit 0; `Test Suites: 421 passed, 421 total`; `Tests: 6325 passed, 6325 total`; `Snapshots: 0 total` |
+| `npm run test:types` | exit 0; `tsc --noEmit -p tsconfig.assessment-questions.json` |
+| `git diff --check` | exit 0, no whitespace errors |
+
+**Standing-doc check:** reviewed `CONTEXT.md`, `documentation/ROADMAP.md` §7 and
+`docs/superpowers/specs/2026-10-21-assessment-capture-style-design.md`; no statement about the
+last-item default contradicts this fix, so none required edits. No dependency changes. Jest's normal
+cache worked; no `.jest-cache` fallback was created. The pre-existing untracked `node_modules`
+entry was retained. Evidence is local Jest/RNTL host and component behavior plus TypeScript;
+no physical-device, hosted, release or field verification was performed.
+
+**Claude review:** read the full diff (3 production edits: the sheet's nullable default plus guarded,
+disabled Confirm; one polarity check in each caller). Independently re-ran RED by restoring the three
+production files from `origin/main` in place (no stash) and running the four changed test files:
+`Tests: 6 failed, 127 passed, 133 total`, exactly the six bug tests; the five preservation tests
+passed; the fix was restored and `git diff` hashed identical. GREEN gates (Node 20.19.4): `npx jest`
+421 suites / 6,325 tests ✅ · `npm run test:integration` 77 / 961 ✅ · `test:types` ✅ ·
+`git diff --check` ✅. Hand-checked edge cases: Cancel unmounts the sheet, so End again starts with no
+choice; a rerender or the deadline passing while the sheet is open keeps the choice (initial state
+only); the dev question gallery forwards the registered polarity.
+**Codex adversarial review (`gpt-6-astra`, fresh thread):** approve, no material findings. It ran six
+temporary probes (Cancel/reopen, rerender, deadline crossing with the sheet open, expiry after
+Cancel, double Confirm), all passing, and pre-fix behaviour failed the regression tests. Following
+its suggestion, the Cancel/reopen probe was kept as a permanent test (row above):
+`capture.test.tsx` 13/13 ✅, and it fails with the pre-fix caller.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
