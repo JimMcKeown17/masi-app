@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Step-by-step marking — every question</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@500;600;700;800&family=Andika&display=swap" rel="stylesheet">
+<style>
+:root{--red50:#FDECEF;--red600:#C81F3E;--red700:#A4182F;--ink:#221A1B;--muted:#76696B;--line:#ECE5E4;--canvas:#F8F5F4;--surface:#fff;
+--marked:#2E7D27;--markedSoft:#E7F3E5;--err:#B3261E;--errSoft:#FCEAE8;--rule:#221A1B1F;--control:#221A1B33;--scrim:#1C15177A;--warnBg:#FFF8E1;--warnText:#8A4B00}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#E9E4E3;font-family:Figtree,sans-serif;color:var(--ink);padding:28px 24px 60px}
+h1{font:800 26px/30px 'Bricolage Grotesque';letter-spacing:-.5px;margin-bottom:6px}
+.lead{font:500 15px/22px Figtree;color:var(--muted);max-width:1180px;margin-bottom:8px}
+.rule{font:700 15px/22px Figtree;max-width:1180px;margin:0 0 22px;background:#fff;border-radius:14px;padding:12px 16px;border:1px solid var(--rule)}
+.rule span{color:var(--muted);font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(4,360px);gap:34px 28px}
+.cap{font:800 12px/16px Figtree;letter-spacing:.96px;text-transform:uppercase;color:var(--muted);margin:0 0 8px 2px}
+.cap b{color:var(--ink)}
+.note{font:500 13px/18px Figtree;color:var(--muted);margin:8px 2px 0;max-width:360px}
+.note b{color:var(--ink)}
+.phone{width:360px;height:760px;background:var(--canvas);border-radius:28px;overflow:hidden;position:relative;box-shadow:0 10px 30px #3A242426;display:flex;flex-direction:column}
+.sb{height:28px;display:flex;justify-content:space-between;align-items:center;padding:0 18px;font:600 12px Figtree;flex:none}
+.hdr{padding:8px 20px 6px;display:flex;gap:12px;align-items:center;flex:none}
+.circ{width:44px;height:44px;border-radius:22px;background:#fff;border:1.5px solid var(--control);display:flex;align-items:center;justify-content:center;font:700 18px Figtree;flex:none}
+.qt{font:800 19px/24px 'Bricolage Grotesque';letter-spacing:-.3px}
+.qs{font:500 13px/18px Figtree;color:var(--muted)}
+.body{flex:1;overflow:hidden;padding:6px 16px 8px;display:flex;flex-direction:column;gap:10px}
+.where{font:700 13px/18px Figtree;color:var(--muted);text-align:center}
+.where b{color:var(--ink)}
+.timer{display:flex;align-items:center;gap:10px;padding:0 4px}
+.track{flex:1;height:10px;border-radius:5px;background:#E3DCDB;overflow:hidden}
+.track i{display:block;height:100%;width:62%;background:var(--marked);border-radius:5px}
+.secs{font:800 18px/22px 'Bricolage Grotesque';color:var(--marked)}
+/* prompt cards (story, first sound, blending) */
+.pcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:center;position:relative}
+.pcard .p{font:400 21px/27px Andika}
+.pcard .g{font:500 12px/16px Figtree;color:var(--muted);margin-top:2px}
+.pcard.ok{background:var(--marked);border-color:var(--marked)}
+.pcard.ok .p,.pcard.ok .g,.pcard.no .p,.pcard.no .g{color:#fff}
+.pcard.no{background:var(--err);border-color:var(--err)}
+.pcard.cur{outline:3px solid var(--ink);outline-offset:-1px}
+.pcard.dim{opacity:.55}
+.mk{position:absolute;right:10px;top:8px;font:800 14px Figtree;color:#fff}
+/* tiles */
+.wcard{background:#fff;border-radius:14px;padding:10px 12px;border:1px solid var(--line)}
+.wcard .wl{font:600 13px/18px Figtree;color:var(--muted);margin-bottom:6px}
+.tiles{display:flex;gap:7px;flex-wrap:wrap}
+.t{width:46px;height:50px;border-radius:10px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;font:400 24px Andika;position:relative}
+.t.w{width:auto;padding:0 10px;height:40px;font-size:18px}
+.t.ok{background:var(--marked);border-color:var(--marked);color:#fff}
+.t.no{background:var(--err);border-color:var(--err);color:#fff}
+.t.cur{box-shadow:0 0 0 3px var(--ink)}
+/* passage */
+.passage{background:#fff;border-radius:14px;border:1px solid var(--line);padding:14px;font:400 20px/40px Andika;display:flex;flex-wrap:wrap;gap:4px 6px}
+.pw{padding:0 6px;border-radius:8px;line-height:34px}
+.pw.ok{background:var(--marked);color:#fff}
+.pw.no{background:var(--err);color:#fff}
+.pw.cur{box-shadow:0 0 0 3px var(--ink);background:#fff}
+/* action area */
+.bar{background:#fff;border-top:1px solid var(--line);padding:12px 16px 10px;display:flex;flex-direction:column;gap:10px;flex:none}
+.two{display:flex;gap:10px}
+.btn{min-height:52px;border-radius:999px;display:flex;align-items:center;justify-content:center;font:800 17px/20px Figtree;padding:0 16px;flex:1;gap:8px}
+.btn.c{background:var(--marked);color:#fff}
+.btn.x{background:var(--err);color:#fff}
+.btn.back{background:#fff;border:1.5px solid var(--control);color:var(--ink);min-height:48px}
+.btn.back.dis{color:#B3A8A8;border-color:#E3DCDB}
+.btn.fin{background:var(--ink);color:#fff}
+.links{display:flex;justify-content:space-around;font:700 15px/20px Figtree;padding:4px 0 2px}
+.links .end{color:var(--red600)}
+/* sheet */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;padding:20px 20px 22px;display:flex;flex-direction:column;gap:12px}
+.sheet h3{font:800 20px/26px 'Bricolage Grotesque';letter-spacing:-.3px}
+.sheet p{font:500 15px/22px Figtree;color:var(--muted)}
+.btn.danger{background:var(--red600);color:#fff}
+.btn.out{background:#fff;border:1.5px solid var(--control);color:var(--ink)}
+.intro{background:#fff;border-radius:16px;border:1px solid var(--line);padding:16px;font:500 15px/22px Figtree}
+.intro .how{margin-top:12px;background:var(--canvas);border-radius:12px;padding:12px;font:600 15px/22px Figtree}
+.btn.start{background:var(--red600);color:#fff;box-shadow:0 6px 14px #C81F3E40}
+.toast{position:absolute;left:16px;right:16px;bottom:176px;background:var(--ink);color:#fff;border-radius:12px;padding:10px 14px;font:600 14px/20px Figtree}
+</style></head><body>
+<h1>One way to mark every question</h1>
+<p class="lead">Every question except the story-writing rubric, in WelaPLUS and Full EGRA. Each screen keeps today's layout. Question 1 (letter sounds) already works this way.</p>
+<p class="rule">The rule an EA learns once: <span>a black ring shows the item to mark → tap</span> Correct <span>or</span> Incorrect <span>→ the ring moves on. Made a mistake? Tap</span> Back<span>, or tap any marked item to flip it. Ended early? Anything unmarked is left out of the score.</span></p>
+
+<div class="grid">
+
+<!-- 1 intro -->
+<div>
+<p class="cap"><b>1</b> · Instructions (every question)</p>
+<div class="phone">
+ <div class="sb"><span>09:22</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">3 · First sounds</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="intro">Say each word slowly. Ask the child: "What is the first sound you hear?"
+   <div class="how">Mark each word <span style="color:var(--marked)">Correct</span> or <span style="color:var(--err)">Incorrect</span>. The black ring shows which word you're on.</div>
+  </div>
+ </div>
+ <div class="bar"><div class="btn start">Start</div></div>
+</div>
+<p class="note">The "tap green, leave blank for wrong" line is gone. Every question's instructions end with the same marking sentence.</p>
+</div>
+
+<!-- 2 story questions -->
+<div>
+<p class="cap"><b>2</b> · Story questions (WelaPLUS Q2, EGRA)</p>
+<div class="phone">
+ <div class="sb"><span>09:22</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">2 · Listen to a story</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="btn out" style="min-height:44px;flex:none;font-size:15px">Re-read story</div>
+  <div class="pcard ok"><div class="mk">✓</div><div class="p">Yayinxibe ntoni ezinyaweni intombazana?</div><div class="g">izihlangu zokubaleka</div></div>
+  <div class="pcard cur"><div class="p">Yeva ntoni?</div><div class="g">umntu okhalayo</div></div>
+  <div class="pcard dim"><div class="p">Ucinga ukuba yayiphi?</div><div class="g">ngasemithini, ehlathini, epakhini</div></div>
+  <div class="pcard dim"><div class="p">Kwakwenzeke ntoni ekugqibeleni?</div></div>
+  <p class="where">Question <b>2 of 5</b></p>
+ </div>
+ <div class="bar">
+  <div class="two"><div class="btn c">✓ Correct</div><div class="btn x">✕ Incorrect</div></div>
+  <div class="btn back">← Back</div>
+  <div class="links"><span>Skip question</span><span class="end">End question</span></div>
+ </div>
+</div>
+<p class="note">Same cards as today. The ring sits on the question being asked; questions not reached yet are faded. The answer guide stays under each question.</p>
+</div>
+
+<!-- 3 flip -->
+<div>
+<p class="cap"><b>3</b> · Fixing a mark by tapping it</p>
+<div class="phone">
+ <div class="sb"><span>09:23</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">2 · Listen to a story</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="btn out" style="min-height:44px;flex:none;font-size:15px">Re-read story</div>
+  <div class="pcard no"><div class="mk">✕</div><div class="p">Yayinxibe ntoni ezinyaweni intombazana?</div><div class="g">izihlangu zokubaleka</div></div>
+  <div class="pcard ok"><div class="mk">✓</div><div class="p">Yeva ntoni?</div><div class="g">umntu okhalayo</div></div>
+  <div class="pcard cur"><div class="p">Ucinga ukuba yayiphi?</div><div class="g">ngasemithini, ehlathini, epakhini</div></div>
+  <div class="pcard dim"><div class="p">Kwakwenzeke ntoni ekugqibeleni?</div></div>
+  <p class="where">Question <b>3 of 5</b></p>
+ </div>
+ <div class="toast">Question 1 changed to Incorrect</div>
+ <div class="bar">
+  <div class="two"><div class="btn c">✓ Correct</div><div class="btn x">✕ Incorrect</div></div>
+  <div class="btn back">← Back</div>
+  <div class="links"><span>Skip question</span><span class="end">End question</span></div>
+ </div>
+</div>
+<p class="note">The EA tapped question 1 (it was green) and it flipped to red. <b>The ring doesn't move</b>, so they carry on where they were. A short message confirms what changed. Only marked items can be tapped.</p>
+</div>
+
+<!-- 4 writing words -->
+<div>
+<p class="cap"><b>4</b> · Writing words (Q9), letter by letter</p>
+<div class="phone">
+ <div class="sb"><span>09:22</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">9 · Writing words</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="wcard"><div class="wl">1. lala</div><div class="tiles"><div class="t ok">l</div><div class="t ok">a</div><div class="t no">l</div><div class="t ok">a</div></div></div>
+  <div class="wcard"><div class="wl">2. sela</div><div class="tiles"><div class="t ok">s</div><div class="t ok">e</div><div class="t cur">l</div><div class="t">a</div></div></div>
+  <div class="wcard"><div class="wl">3. imali</div><div class="tiles"><div class="t">i</div><div class="t">m</div><div class="t">a</div><div class="t">l</div><div class="t">i</div></div></div>
+  <div class="wcard"><div class="wl">4. idolo</div><div class="tiles"><div class="t">i</div><div class="t">d</div><div class="t">o</div><div class="t">l</div><div class="t">o</div></div></div>
+  <p class="where">Word <b>2</b> · letter <b>3 of 4</b></p>
+ </div>
+ <div class="bar">
+  <div class="two"><div class="btn c">✓ Correct</div><div class="btn x">✕ Incorrect</div></div>
+  <div class="btn back">← Back</div>
+  <div class="links"><span>Skip question</span><span class="end">End question</span></div>
+ </div>
+</div>
+<p class="note">The layout from your screenshot. The ring steps left to right, top to bottom. The EA reads the child's paper and taps one button per letter.</p>
+</div>
+
+<!-- 5 dictation -->
+<div>
+<p class="cap"><b>5</b> · Writing sentences (Q10), word by word</p>
+<div class="phone">
+ <div class="sb"><span>09:24</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">10 · Writing sentences</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="wcard"><div class="wl">Sentence 1</div><div class="tiles"><div class="t w ok">Umama</div><div class="t w ok">uya</div><div class="t w no">evenkileni</div></div></div>
+  <div class="wcard"><div class="wl">Sentence 2</div><div class="tiles"><div class="t w ok">Inja</div><div class="t w cur">iyabaleka</div><div class="t w">ngokukhawuleza</div></div></div>
+  <div class="wcard"><div class="wl">Sentence 3</div><div class="tiles"><div class="t w">Abantwana</div><div class="t w">bayadlala</div><div class="t w">ebaleni</div></div></div>
+  <p class="where">Sentence <b>2</b> · word <b>2 of 3</b></p>
+ </div>
+ <div class="bar">
+  <div class="two"><div class="btn c">✓ Correct</div><div class="btn x">✕ Incorrect</div></div>
+  <div class="btn back">← Back</div>
+  <div class="links"><span>Skip question</span><span class="end">End question</span></div>
+ </div>
+</div>
+<p class="note">Same idea with words. Sentences stay grouped as they are today. (The sentences here are placeholders.)</p>
+</div>
+
+<!-- 6 passage -->
+<div>
+<p class="cap"><b>6</b> · Passage reading (Q8 and EGRA), word by word</p>
+<div class="phone">
+ <div class="sb"><span>09:25</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">8 · Read a story</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="timer"><div class="track"><i></i></div><div class="secs">37s</div></div>
+  <div class="passage"><span class="pw ok">Ndinenja</span><span class="pw ok">encinci.</span><span class="pw no">Igama</span><span class="pw ok">layo</span><span class="pw ok">nguBhobho.</span><span class="pw cur">UBhobho</span><span class="pw">uthanda</span><span class="pw">ukudlala</span><span class="pw">ebaleni.</span><span class="pw">Uyabaleka</span><span class="pw">ngokukhawuleza</span><span class="pw">xa</span><span class="pw">ebona</span><span class="pw">ikati.</span></div>
+  <p class="where">Word <b>6 of 42</b></p>
+ </div>
+ <div class="bar">
+  <div class="two"><div class="btn c">✓ Correct</div><div class="btn x">✕ Incorrect</div></div>
+  <div class="btn back">← Back</div>
+  <div class="links"><span>Skip question</span><span class="end">End question</span></div>
+ </div>
+</div>
+<p class="note">The ring follows the child word by word. When the minute is up, the last word marked counts as the last word reached. <b>No more "tap the last word" step.</b> (Placeholder passage.)</p>
+</div>
+
+<!-- 7 review -->
+<div>
+<p class="cap"><b>7</b> · After the last item: check, then Finish</p>
+<div class="phone">
+ <div class="sb"><span>09:23</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">9 · Writing words</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="wcard"><div class="wl">1. lala</div><div class="tiles"><div class="t ok">l</div><div class="t ok">a</div><div class="t no">l</div><div class="t ok">a</div></div></div>
+  <div class="wcard"><div class="wl">2. sela</div><div class="tiles"><div class="t ok">s</div><div class="t ok">e</div><div class="t ok">l</div><div class="t ok">a</div></div></div>
+  <div class="wcard"><div class="wl">3. imali</div><div class="tiles"><div class="t ok">i</div><div class="t no">m</div><div class="t ok">a</div><div class="t ok">l</div><div class="t ok">i</div></div></div>
+  <div class="wcard"><div class="wl">4. idolo</div><div class="tiles"><div class="t ok">i</div><div class="t ok">d</div><div class="t ok">o</div><div class="t no">l</div><div class="t ok">o</div></div></div>
+  <p class="where"><b>All 18 marked</b> · 15 correct. Tap any letter to change it.</p>
+ </div>
+ <div class="bar">
+  <div class="btn fin">Finish</div>
+  <div class="btn back">← Back</div>
+  <div class="links"><span>Skip question</span></div>
+ </div>
+</div>
+<p class="note">Today question 1 saves the moment the last item is marked, which would leave no time to fix the last tap. Untimed questions pause here so the EA can check, then tap Finish. Timed questions still save when time runs out.</p>
+</div>
+
+<!-- 8 end early -->
+<div>
+<p class="cap"><b>8</b> · Ending early</p>
+<div class="phone">
+ <div class="sb"><span>09:26</span><span>▮▮▮ LTE</span></div>
+ <div class="hdr"><div class="circ">✕</div><div><div class="qt">2 · Listen to a story</div><div class="qs">Aviwe McKeown · isiXhosa · 2VC-DB4</div></div></div>
+ <div class="body">
+  <div class="pcard ok"><div class="mk">✓</div><div class="p">Yayinxibe ntoni ezinyaweni intombazana?</div></div>
+  <div class="pcard no"><div class="mk">✕</div><div class="p">Yeva ntoni?</div></div>
+  <div class="pcard cur"><div class="p">Ucinga ukuba yayiphi?</div></div>
+ </div>
+ <div class="scrim"></div>
+ <div class="sheet">
+  <h3>End this question?</h3>
+  <p>2 marked. The 3 not marked won't count towards the score.</p>
+  <div class="btn danger">End question</div>
+  <div class="btn out">Keep marking</div>
+ </div>
+</div>
+<p class="note">This replaces "4 items unmarked — finish anyway?". It only appears when the EA chooses to end early, never because a child got answers wrong, and it says what will happen instead of hinting at a mistake.</p>
+</div>
+
+</div>
+</body></html>

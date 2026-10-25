@@ -4480,6 +4480,49 @@ temporary probes (Cancel/reopen, rerender, deadline crossing with the sheet open
 Cancel, double Confirm), all passing, and pre-fix behaviour failed the regression tests. Following
 its suggestion, the Cancel/reopen probe was kept as a permanent test (row above):
 `capture.test.tsx` 13/13 ✅, and it fails with the pre-fix caller.
+### 2026-10-25 — Device check of "Lists keep their rows while refreshing" (Galaxy A03 build 44)
+
+Build 44 = `main` + #105 (`c88bfd3`, tree identical to squash `4b3efd6`), installed over build 43 with TestB Second
+still signed in. The bundle contains "Couldn't load this ranking", "Couldn't refresh this ranking" and
+"Assess your first child".
+
+- **Return to History:** passed. Opening TestB's only row (Gua McKeown, ACK-KRY) then pressing Back showed the row
+  in all six burst frames, with no "Loading…" frame.
+- **Quick taps:** passed. Three round trips, each tapping the row within about 0.3 s of returning, all opened the
+  summary.
+- **Assessment scores ranking:** passed. Scrolled to rows 6–9 and the "Not assessed" children, went to Home and
+  back. Rows were at identical coordinates, and none of the six burst frames showed a spinner.
+- **Pull-to-refresh on History:** not done. The A03 dropped off USB mid-check.
+- **Not checkable as TestB:** History scrolling, because TestB has one row.
+
+### 2026-10-25 — Spec: step-by-step marking for every Question (`docs/step-by-step-capture`)
+
+Field staff found WelaPLUS unclear after Question 1. "Leave blank for wrong", plus a finish sheet that fires
+whenever a child gets anything wrong, made normal results look like EA mistakes. With Jim, designed one marking
+method for every WelaPLUS and Full EGRA Question except the Q11 rubric:
+
+- a ring on the current item;
+- Correct / Incorrect / Back;
+- tap-to-flip on marked items;
+- a review step before Finish;
+- an early end that leaves unmarked items "not reached".
+
+Jim's decisions: Q9/Q10 keep their layout and step through it; Q6 stops after 10 wrong in a row; no "Not asked"
+button; the passage goes word by word in both batteries (one method beats DBE tap-the-mistakes administration
+for today's slow readers); a future passage method arrives as a server-assigned Battery version, never a switch.
+
+Eight mockups were approved (`design/mockups-2026-10-step-by-step/`). Evidence sits beside the spec: a
+16-agent read-only code map of all 13 Question components (`2026-10-25-step-by-step-capture-code-map.md`), and the
+EGRA session's capture audit (`2026-10-25-step-by-step-capture-egra-audit.md`, 60 claims checked, 49
+confirmed, 11 refined).
+
+Surprises:
+
+- WelaPLUS Q6's "5 in a row" stop is instruction text only.
+- EGRA's passage counts untouched words as correct, and its last-word sheet pre-selects the last wrong word,
+  saving an error-free reader as 1 word. That is fixed separately on `fix/egra-story-last-word`.
+- Old and new results stay distinguishable without new content versions: toggle Questions save
+  `capture_mode` null, and converted ones save `'sequential'`.
 
 ## Decision Register
 
