@@ -23,7 +23,7 @@ const Q: BatteryQuestion[] = [
     } },
   { title: 'Letter writing', question_code: 'wela_plus_letter_writing', question_version: V, paper_marked: true,
     materials: { item: 'writing_sheet' },
-    instructions: both('Give the child the Writing Sheet. Say: "Look at the apple … \'apple\' starts with /a/. Can you write /a/?" Work left to right. Say the letter SOUND, not the letter name. If the child does not know a letter, say: "Don\'t worry, just leave it blank. Let\'s try another letter." When the child has finished, mark each cell here from their sheet.') },
+    instructions: both('Give the child the Writing Sheet. Say: "Look at the apple … \'apple\' starts with /a/. Can you write /a/?" Work left to right. Say the letter SOUND, not the letter name. If the child does not know a letter, say: "Don\'t worry, just leave it blank. Let\'s try another letter." When the child has finished, mark their sheet here, in order.' + ` ${markingSentence('letter')}`) },
   { title: 'Reading words', question_code: 'wela_plus_read_words', question_version: V, durationSec: 60,
     materials: { item: 'reading_card', side: 'B' },
     instructions: both(`Hand the child Reading Card side B. Point to each word and ask the child to read it. ${markingSentence('word')} The test stops by itself at 1 minute.`) },

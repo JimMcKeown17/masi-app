@@ -1,11 +1,21 @@
 import React from 'react';
-import { render, fireEvent, within } from '@testing-library/react-native';
+import { act, render, fireEvent, within } from '@testing-library/react-native';
 import { ScrollView } from 'react-native';
 import { WELA_PLUS_LETTER_WRITING_EN } from '../../../itemsets/wela_plus_letter_writing.en';
 import { WELA_PLUS_LETTER_WRITING_XH } from '../../../itemsets/wela_plus_letter_writing.xh';
 import { ContentText, PagedGrid } from '../../../ui';
 import { LetterWritingFromPicturesQuestion } from '..';
 import { FIXTURE_LETTER_WRITING_EN } from '../../../testFixtures';
+import { WELA_PLUS_FULL_2024_1 } from '../../../battery/wela_plus_full';
+
+const mark = (r: ReturnType<typeof render>, label = 'Correct', count = 1) => {
+  for (let i = 0; i < count; i += 1) fireEvent.press(r.getByText(label));
+};
+const end = (r: ReturnType<typeof render>) => {
+  fireEvent.press(r.getByTestId('letter-writing-end'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End question'));
+};
+const tile = (r: ReturnType<typeof render>, position: number) => within(r.getByTestId('picture-grid')).getByTestId(`tile-${position}`);
 
 describe('LetterWritingFromPicturesQuestion — intro & first page', () => {
   test('Start renders 8 cells on page 1 with picture alt + expected letter', () => {
@@ -27,7 +37,7 @@ describe('LetterWritingFromPicturesQuestion — intro & first page', () => {
 });
 
 describe('LetterWritingFromPicturesQuestion — pagination', () => {
-  test('Next advances to page 2', () => {
+  test('marking the first page advances to page 2', () => {
     const { getByText, getByLabelText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
@@ -37,13 +47,13 @@ describe('LetterWritingFromPicturesQuestion — pagination', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByLabelText('Next page'));
+    for (let i = 0; i < 8; i += 1) fireEvent.press(getByText('Correct'));
     // Page 2: ink, jug, kite, log, mug, nut, orange, pig
     expect(getByText('ink')).toBeTruthy();
     expect(getByText('pig')).toBeTruthy();
   });
 
-  test('Prev returns to page 1', () => {
+  test('Back across the page boundary returns to page 1', () => {
     const { getByText, getByLabelText, queryByText } = render(
       <LetterWritingFromPicturesQuestion
         language="en"
@@ -53,56 +63,43 @@ describe('LetterWritingFromPicturesQuestion — pagination', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByLabelText('Next page'));
-    fireEvent.press(getByLabelText('Previous page'));
+    for (let i = 0; i < 8; i += 1) fireEvent.press(getByText('Correct'));
+    fireEvent.press(getByText('Back'));
     expect(getByText('apple')).toBeTruthy();
     expect(queryByText('ink')).toBeNull();
   });
 });
 
-describe('LetterWritingFromPicturesQuestion — batch marking', () => {
-  test('Tap a cell marks it correct; tap again clears (batch marking semantic)', () => {
-    const { getByText, getByTestId } = render(
-      <LetterWritingFromPicturesQuestion
-        language="en"
-        itemSet={FIXTURE_LETTER_WRITING_EN}
-        instructions="."
-        onComplete={jest.fn()}
-      />,
-    );
-    fireEvent.press(getByText('Start'));
-    const cell = getByTestId('cell-q5.item_1');
-    expect(cell.props.accessibilityLabel).toBe('apple → a, idle');
-    fireEvent.press(cell);
-    const cellAfter = getByTestId('cell-q5.item_1');
-    expect(cellAfter.props.accessibilityLabel).toBe('apple → a, correct');
+describe('LetterWritingFromPicturesQuestion — sequential marking', () => {
+  test('a marked cell flips without moving the current ring', () => {
+    const r = render(<LetterWritingFromPicturesQuestion language="en" itemSet={FIXTURE_LETTER_WRITING_EN} onComplete={jest.fn()} />);
+    fireEvent.press(r.getByText('Start'));
+    expect(tile(r, 0).props.accessibilityLabel).toBe('apple → a, current');
+    expect(within(r.getByTestId('picture-grid')).queryAllByRole('button')).toHaveLength(0);
+    mark(r);
+    expect(tile(r, 0).props.accessibilityLabel).toBe('apple → a, correct. Double-tap to change to incorrect');
+    fireEvent.press(tile(r, 0));
+    expect(tile(r, 0).props.accessibilityLabel).toBe('apple → a, incorrect. Double-tap to change to correct');
+    expect(tile(r, 1).props.accessibilityLabel).toBe('ball → b, current');
+    expect(r.getByText('Letter 1 changed to Incorrect')).toBeTruthy();
   });
 
-  test('Finish emits Result with derived.total_correct based on tapped cells', () => {
+  test('ending early saves reached marks and excludes the unmarked tail from the score', () => {
     const onComplete = jest.fn();
-    const { getByText, getByTestId } = render(
-      <LetterWritingFromPicturesQuestion
-        language="en"
-        itemSet={FIXTURE_LETTER_WRITING_EN}
-        instructions="."
-        onComplete={onComplete}
-      />,
-    );
-    fireEvent.press(getByText('Start'));
-    // Mark 3 cells on page 1
-    fireEvent.press(getByTestId('cell-q5.item_1'));
-    fireEvent.press(getByTestId('cell-q5.item_2'));
-    fireEvent.press(getByTestId('cell-q5.item_3'));
-    fireEvent.press(getByText('Finish'));
-    // Confirmation should appear because 23 of 26 are unmarked
-    fireEvent.press(getByText('Yes, finish'));
-
-    const r = onComplete.mock.calls[0][0];
-    expect(r.question_code).toBe('wela_plus_letter_writing');
-    expect(r.stopped_reason).toBe('completed');
-    expect(r.derived.total_correct).toBe(3);
-    expect(r.derived.total_attempted).toBe(26);
-    expect(r.derived.was_timed).toBe(false);
+    const r = render(<LetterWritingFromPicturesQuestion language="en" itemSet={FIXTURE_LETTER_WRITING_EN} onComplete={onComplete} />);
+    fireEvent.press(r.getByText('Start'));
+    mark(r, 'Correct', 3);
+    mark(r, 'Incorrect');
+    expect(r.queryByText('Finish')).toBeNull();
+    end(r);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const result = onComplete.mock.calls[0][0];
+    expect(result).toMatchObject({ question_code: 'wela_plus_letter_writing', stopped_reason: 'ea_ended',
+      derived: { total_correct: 3, total_attempted: 4, percent: 75, last_attempted_position: 3,
+        was_timed: false, tracks_progress: true, capture_mode: 'sequential', correction_count: 0, max_consecutive_wrong: 1 } });
+    expect(result.items).toHaveLength(26);
+    expect(result.items.map((item: any) => item.metadata)).toEqual(Array.from({ length: 26 }, (_, position) => ({ reached: position < 4 })));
+    expect(result.items.slice(4).every((item: any) => item.is_correct === false)).toBe(true);
   });
 });
 
@@ -162,10 +159,9 @@ describe('LetterWritingFromPicturesQuestion — fixture alphabet integrity', () 
       />,
     );
     fireEvent.press(getByText('Start'));
-    // 26 items / 8 per page → 4 pages. item_24 is index 23 → page 2 (items 16-23).
-    fireEvent.press(getByLabelText('Next page')); // → page 1
-    fireEvent.press(getByLabelText('Next page')); // → page 2
-    expect(getByTestId('cell-q5.item_24').props.accessibilityLabel).toMatch(
+    // The fixture has 8 per page; ordered marks expose the third page.
+    for (let i = 0; i < 16; i += 1) fireEvent.press(getByText('Correct'));
+    expect(within(getByTestId('picture-grid')).getByTestId('tile-23').props.accessibilityLabel).toMatch(
       /^xylophone → x,/,
     );
   });
@@ -196,59 +192,101 @@ describe('LetterWritingFromPicturesQuestion — itemSet override', () => {
 
 
 describe('LetterWritingFromPicturesQuestion — picture tiles', () => {
-  test.each(['en', 'xh'])('shipped sets show 12 pictures per page in three columns (%s)', language => {
+  test('Q5 steps through the sheet in order across pages', () => {
+    const r = render(<LetterWritingFromPicturesQuestion language="xh" onComplete={jest.fn()} />);
+    fireEvent.press(r.getByText('Start'));
+    mark(r, 'Correct', 12);
+    expect(r.getByTestId('page-label').props.accessibilityLabel).toBe('Page 2 of 3');
+    expect(r.getByLabelText(/^icephe \(spoon\) → c, current/)).toBeTruthy();
+    expect(r.getByLabelText('Letter 13 of 26')).toBeTruthy();
+    mark(r, 'Correct', 9);
+    expect(r.getByLabelText(/^iroboti \(traffic light\) → r, current/)).toBeTruthy();
+    expect(r.getByLabelText('Letter 22 of 26')).toBeTruthy();
+  });
+
+  test.each(['en', 'xh'])('Q5: shipped sets show 12 pictures per page in three columns (%s)', language => {
     const r = render(<LetterWritingFromPicturesQuestion language={language} onComplete={jest.fn()} />);
     fireEvent.press(r.getByText('Start'));
     const itemSet = language === 'en' ? WELA_PLUS_LETTER_WRITING_EN : WELA_PLUS_LETTER_WRITING_XH;
     for (const [pageIndex, count] of [12, 12, 2].entries()) {
       const grid = r.getByTestId('picture-grid');
-      expect(within(grid).getAllByRole('button')).toHaveLength(count);
+      const tiles = within(grid).getAllByTestId(/^tile-\d+$/);
+      expect(tiles).toHaveLength(count);
+      expect(within(grid).queryAllByRole('button')).toHaveLength(0);
       expect(r.UNSAFE_getByType(PagedGrid).props).toMatchObject({ variant: 'picture', layout: { columns: 3, capacity: 12, breakAtCardRow: false } });
       fireEvent(grid, 'layout', { nativeEvent: { layout: { width: 360, height: 400 } } });
-      for (const tile of within(grid).getAllByRole('button')) {
-        expect(tile).toHaveStyle({ width: (328 - 2 * 10) / 3, height: 88 });
-      }
-      expect(r.getByTestId('page-label').props.accessibilityLabel).toBe(`Card row 1 · page ${pageIndex + 1} of 3`);
+      for (const cell of tiles) expect(cell).toHaveStyle({ width: (328 - 2 * 10) / 3, height: 88 });
+      expect(r.getByTestId('page-label').props.accessibilityLabel).toBe(`Page ${pageIndex + 1} of 3`);
       expect(r.UNSAFE_queryByType(ScrollView)).toBeNull();
       const expected = itemSet.prompts.slice(pageIndex * 12, pageIndex * 12 + count);
-      expect(within(grid).getAllByRole('button').map(tile => tile.props.accessibilityLabel)).toEqual(expected.map(p => `${p.picture.alt} → ${p.expected_letter}, idle`));
-      if (pageIndex < 2) fireEvent.press(r.getByLabelText('Next page'));
+      expect(tiles.map(cell => cell.props.accessibilityLabel)).toEqual(expected.map((p, i) => `${p.picture.alt} → ${p.expected_letter}, ${i === 0 ? 'current' : 'not reached'}`));
+      if (pageIndex < 2) mark(r, 'Correct', count);
     }
-    expect(r.getByLabelText('Next page')).toBeDisabled();
+    // Page browsing is available only in review.
+    expect(r.queryByLabelText('Next page')).toBeNull();
   });
 
-  test('long isiXhosa picture names wrap to two lines inside the tile', () => {
+  test('Q5: in review, Previous page browses back and a flip on page 1 is saved', () => {
+    const onComplete = jest.fn();
+    const r = render(<LetterWritingFromPicturesQuestion language="xh" onComplete={onComplete} />);
+    fireEvent.press(r.getByText('Start'));
+    mark(r, 'Correct', 26);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(r.getByLabelText('All 26 marked · 26 correct. Tap any letter to change it.')).toBeTruthy();
+    expect(r.getByTestId('page-label').props.accessibilityLabel).toBe('Page 3 of 3');
+    expect(r.getByLabelText('Next page')).toBeDisabled();
+    fireEvent.press(r.getByLabelText('Previous page'));
+    fireEvent.press(r.getByLabelText('Previous page'));
+    expect(r.getByTestId('page-label').props.accessibilityLabel).toBe('Page 1 of 3');
+    expect(r.getByLabelText('Previous page')).toBeDisabled();
+    fireEvent.press(tile(r, 0));
+    expect(r.getByLabelText('All 26 marked · 25 correct. Tap any letter to change it.')).toBeTruthy();
+    expect(r.queryByTestId('current-ring')).toBeNull();
+    // Both directions browse during review without changing any marks.
+    fireEvent.press(r.getByLabelText('Next page'));
+    expect(r.getByTestId('page-label').props.accessibilityLabel).toBe('Page 2 of 3');
+    mark(r, 'Finish');
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const result = onComplete.mock.calls[0][0];
+    expect(result).toMatchObject({ stopped_reason: 'completed', derived: {
+      total_correct: 25, total_attempted: 26, percent: 96, last_attempted_position: 25,
+      capture_mode: 'sequential', correction_count: 1, max_consecutive_wrong: 1 } });
+    expect(result.items[0]).toEqual({ position: 0, item_key: 'a', prompt: 'i-apile (apple) → a', is_correct: false, metadata: { reached: true } });
+    expect(result.items.slice(1).every((item: any) => item.is_correct && item.metadata.reached)).toBe(true);
+  });
+
+  test('Q5: long isiXhosa picture names still wrap to two lines', () => {
     const r = render(<LetterWritingFromPicturesQuestion language="xh" onComplete={jest.fn()} />);
     fireEvent.press(r.getByText('Start'));
-    fireEvent.press(r.getByLabelText('Next page'));
+    mark(r, 'Correct', 12);
     const caption = r.getByText('iroboti (traffic light)');
     expect(caption.props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.2, ellipsizeMode: 'clip' });
-    const tile = r.getByLabelText('iroboti (traffic light) → r, idle');
-    expect(within(tile).UNSAFE_getByType(ContentText).props.size).toBe('tileWord');
+    const cell = r.getByLabelText('iroboti (traffic light) → r, not reached');
+    expect(within(cell).UNSAFE_getByType(ContentText).props.size).toBe('tileWord');
   });
 
-  test('confirmation hides the active view and cancel keeps its page and marks', () => {
+  test('end confirmation hides the active view and Keep marking retains its page and marks', () => {
     const onComplete = jest.fn();
     const r = render(<LetterWritingFromPicturesQuestion language="en" onComplete={onComplete} />);
     fireEvent.press(r.getByText('Start'));
-    fireEvent.press(r.getByLabelText('Next page'));
-    fireEvent.press(r.getByLabelText('cat → c, idle'));
-    fireEvent.press(r.getByText('Finish'));
-    expect(r.getByTestId('confirm-finish').props.accessibilityViewIsModal).toBe(true);
-    expect(r.getByText('25 items unmarked — finish anyway?')).toBeTruthy();
-    expect(r.queryByLabelText('cat → c, correct')).toBeNull();
+    mark(r, 'Incorrect', 12);
+    mark(r);
+    fireEvent.press(r.getByTestId('letter-writing-end'));
+    expect(r.getByTestId('end-confirmation').props.accessibilityViewIsModal).toBe(true);
+    expect(r.getByText("13 marked. The 13 not marked won't count towards the score.")).toBeTruthy();
+    expect(r.queryByLabelText('cat → c, correct. Double-tap to change to incorrect')).toBeNull();
     const grid = r.getByTestId('picture-grid', { includeHiddenElements: true });
     let active = grid.parent;
     while (active && active.props.importantForAccessibility !== 'no-hide-descendants') active = active.parent;
     expect(active?.props).toMatchObject({ accessibilityElementsHidden: true, pointerEvents: 'none' });
-    fireEvent.press(r.getByText('Cancel'));
-    expect(r.getByLabelText('cat → c, correct')).toBeTruthy();
-    expect(r.getByTestId('page-label').props.accessibilityLabel).toContain('page 2 of 3');
+    fireEvent.press(r.getByText('Keep marking'));
+    expect(r.getByLabelText('cat → c, correct. Double-tap to change to incorrect')).toBeTruthy();
+    expect(r.getByTestId('page-label').props.accessibilityLabel).toBe('Page 2 of 3');
     expect(onComplete).not.toHaveBeenCalled();
     fireEvent.press(r.getByText('Skip question'));
     expect(r.queryByTestId('picture-grid')).toBeNull();
     fireEvent.press(r.getByText('Cancel'));
-    expect(r.getByLabelText('cat → c, correct')).toBeTruthy();
+    expect(r.getByLabelText('cat → c, correct. Double-tap to change to incorrect')).toBeTruthy();
   });
 
   test('repeated item keys keep independent positional marks and callback identities', () => {
@@ -258,31 +296,58 @@ describe('LetterWritingFromPicturesQuestion — picture tiles', () => {
     const itemSet = { ...FIXTURE_LETTER_WRITING_EN, prompts: [prompt, { ...prompt, picture: { source: null, alt: 'another apple' } }] };
     const r = render(<LetterWritingFromPicturesQuestion language="en" itemSet={itemSet} onComplete={onComplete} onItemMarked={onItemMarked} />);
     fireEvent.press(r.getByText('Start'));
-    fireEvent.press(r.getByLabelText('another apple → a, idle'));
-    expect(r.getByLabelText('apple → a, idle')).toBeTruthy();
-    expect(r.getByLabelText('another apple → a, correct')).toBeTruthy();
-    expect(onItemMarked).toHaveBeenCalledTimes(1);
-    expect(onItemMarked).toHaveBeenLastCalledWith({ position: 1, item_key: 'repeat', prompt: 'another apple → a', is_correct: true });
-    fireEvent.press(r.getByText('Finish'));
-    fireEvent.press(r.getByText('Yes, finish'));
+    mark(r);
+    mark(r, 'Incorrect');
+    fireEvent.press(tile(r, 1));
+    expect(tile(r, 0).props.accessibilityLabel).toBe('apple → a, correct. Double-tap to change to incorrect');
+    expect(tile(r, 1).props.accessibilityLabel).toBe('another apple → a, correct. Double-tap to change to incorrect');
+    mark(r, 'Back');
+    expect(tile(r, 1).props.accessibilityLabel).toBe('another apple → a, current');
+    mark(r, 'Incorrect');
+    expect(onItemMarked).toHaveBeenCalledTimes(4);
+    expect(onItemMarked).toHaveBeenLastCalledWith({ position: 1, item_key: 'repeat', prompt: 'another apple → a', is_correct: false, metadata: { reached: true } });
+    mark(r, 'Finish');
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].items).toEqual([
-      { position: 0, item_key: 'repeat', prompt: 'apple → a', is_correct: false },
-      { position: 1, item_key: 'repeat', prompt: 'another apple → a', is_correct: true },
+      { position: 0, item_key: 'repeat', prompt: 'apple → a', is_correct: true, metadata: { reached: true } },
+      { position: 1, item_key: 'repeat', prompt: 'another apple → a', is_correct: false, metadata: { reached: true } },
     ]);
+  });
+
+  test('Q5 remains untimed even when a duration is supplied', () => {
+    jest.useFakeTimers();
+    try {
+      const onComplete = jest.fn();
+      const r = render(<LetterWritingFromPicturesQuestion language="en" durationSec={60} onComplete={onComplete} />);
+      fireEvent.press(r.getByText('Start'));
+      act(() => jest.advanceTimersByTime(61000));
+      expect(onComplete).not.toHaveBeenCalled();
+      mark(r);
+      end(r);
+      expect(onComplete.mock.calls[0][0]).toMatchObject({ duration_ms: 61000, derived: { was_timed: false } });
+    } finally { jest.useRealTimers(); }
+  });
+
+  test('Q5 instructions describe marking the finished sheet in order', () => {
+    const question = WELA_PLUS_FULL_2024_1.questions.find(q => q.question_code === 'wela_plus_letter_writing')!;
+    for (const language of ['en', 'xh']) {
+      expect(question.instructions![language]).toBe('Give the child the Writing Sheet. Say: "Look at the apple … \'apple\' starts with /a/. Can you write /a/?" Work left to right. Say the letter SOUND, not the letter name. If the child does not know a letter, say: "Don\'t worry, just leave it blank. Let\'s try another letter." When the child has finished, mark their sheet here, in order. Mark each letter Correct or Incorrect. The black ring shows which letter you\'re on.');
+    }
   });
 });
 
 describe('LetterWritingFromPicturesQuestion — invalid page dimensions', () => {
-  test.each(['itemsPerPage', 'columns'] as const)('%s rejects 0, -1, 1.5 and NaN without starting or completing', field => {
+  test.each(['itemsPerPage', 'columns'] as const)('Q5: %s rejects 0, -1, 1.5 and NaN without starting', field => {
     const onComplete = jest.fn();
+    const onStart = jest.fn();
     for (const value of [0, -1, 1.5, NaN]) {
-      const r = render(<LetterWritingFromPicturesQuestion language="en" itemSet={{ ...FIXTURE_LETTER_WRITING_EN, [field]: value }} onComplete={onComplete} />);
+      const r = render(<LetterWritingFromPicturesQuestion language="en" itemSet={{ ...FIXTURE_LETTER_WRITING_EN, [field]: value }} onComplete={onComplete} onStart={onStart} />);
       expect(r.getByTestId('missing-item-set-en')).toBeTruthy();
       expect(r.queryByText('Start')).toBeNull();
       r.unmount();
     }
     expect(onComplete).not.toHaveBeenCalled();
+    expect(onStart).not.toHaveBeenCalled();
   });
 });
 
@@ -350,25 +415,26 @@ describe('LetterWritingFromPicturesQuestion — cross-page Result regression', (
     const onItemMarked = jest.fn();
     const r = render(<LetterWritingFromPicturesQuestion language={language} onComplete={onComplete} onItemMarked={onItemMarked} />);
     fireEvent.press(r.getByText('Start'));
-    fireEvent.press(r.getByTestId('cell-a'));
-    fireEvent.press(r.getByLabelText('Next page'));
-    fireEvent.press(r.getByTestId('cell-c'));
-    fireEvent.press(r.getByTestId('cell-h'));
-    fireEvent.press(r.getByTestId('cell-h'));
-    fireEvent.press(r.getByText('Finish'));
-    expect(r.getByText('24 items unmarked — finish anyway?')).toBeTruthy();
+    mark(r);
+    mark(r, 'Incorrect', 11);
+    mark(r, 'Correct', 2);
+    fireEvent.press(tile(r, 13));
     expect(onComplete).not.toHaveBeenCalled();
-    fireEvent.press(r.getByText('Yes, finish'));
+    end(r);
     expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(onItemMarked).toHaveBeenCalledTimes(4);
+    expect(onItemMarked).toHaveBeenCalledTimes(15);
     const result = onComplete.mock.calls[0][0];
-    expect(result.items).toEqual(expectedItems);
+    expect(result.items).toEqual(expectedItems.map(item => ({ ...item, metadata: { reached: item.position < 14 } })));
     expect(result.derived).toEqual({
       total_correct: 2,
-      total_attempted: 26,
-      percent: 8,
-      last_attempted_position: null,
+      total_attempted: 14,
+      percent: 14,
+      last_attempted_position: 13,
       was_timed: false,
+      tracks_progress: true,
+      capture_mode: 'sequential',
+      correction_count: 1,
+      max_consecutive_wrong: 11,
     });
   });
 });

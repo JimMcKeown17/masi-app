@@ -73,7 +73,7 @@ const componentCases = [
   ['ListenAndAnswerStoryQuestion', ListenAndAnswerStoryQuestion, fixtures.FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
     r => { press(r, "I've finished reading", 'Correct'); endSequential(r, 'story'); }],
   ['LetterWritingFromPicturesQuestion', LetterWritingFromPicturesQuestion, fixtures.FIXTURE_LETTER_WRITING_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByTestId('cell-q5.item_1')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'letter-writing'); }],
   ['WriteCvcsQuestion', WriteCvcsQuestion, fixtures.FIXTURE_WRITE_CVCS_EN,
     r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('jam letter 1 j, idle')); press(r, 'Finish', 'Yes, finish'); }],
   ['WriteSentencesFromDictationQuestion', WriteSentencesFromDictationQuestion, fixtures.FIXTURE_WRITE_SENTENCES_DICTATION_EN,
