@@ -212,7 +212,7 @@ The check allows only `2026-10-23`, although the registry also lists `legacy`. T
 `legacy` class would have no isiXhosa release pack, which breaks the handoff's acceptance that every
 edition a class can reach resolves to a release pack.
 
-- [ ] **Step 0 (Claude, before the builder starts): read-only check of the live `classes` table**
+- [x] **Step 0 (Claude, before the builder starts): read-only check of the live `classes` table**
   on `segygjzpujphwvrubusm`, through the `sqlite-staging-sql` helper, changing nothing on the
   server. Confirm three things the migration assumes:
   - there is no `letter_order_edition` column yet;
@@ -221,6 +221,13 @@ edition a class can reach resolves to a release pack.
   - no constraint conflicts with `classes_letter_order_edition_known`.
 
   If the connection fails, retry before starting this task.
+
+  Done 2026-10-26 (read-only, `project_ref=segygjzpujphwvrubusm`). All three hold:
+  - 16 columns, none named `letter_order_edition`;
+  - exactly the two `BEFORE UPDATE` triggers, none on INSERT;
+  - constraints are `classes_pkey` and five foreign keys, with no check constraints.
+
+  Re-run it only if another migration touching `classes` lands before this one.
 
 - [ ] **Step 1: Write the failing static test** `__tests__/letterOrderMigration.test.js`. It reads
   the migration file and asserts:
