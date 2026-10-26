@@ -1,6 +1,7 @@
 import * as sets from '../itemsets';
 import type { ItemSet } from '../types/ItemSet';
 import { egraItemSetFor } from '../egra';
+import { sharedItemSetFor } from '../egra/sharedReading';
 
 const BUNDLED_ITEM_SETS: Record<string, Record<string, ItemSet<object>>> = {
   'letter_sounds@2026.1': {
@@ -72,5 +73,6 @@ export function bundledItemSetFor(
       return languages[language] as ItemSet;
     }
   }
-  return egraItemSetFor(questionCode, questionVersion, language) as ItemSet | null;
+  return sharedItemSetFor(questionCode, questionVersion, language)
+    ?? egraItemSetFor(questionCode, questionVersion, language) as ItemSet | null;
 }

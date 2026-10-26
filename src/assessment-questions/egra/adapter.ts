@@ -15,6 +15,65 @@ export type EgraBattery = BatteryConfig & {
   questions: Array<BatteryQuestion & { title: string }>;
 };
 
+const meta = (form: EgraAssessment, question_code: string, question_version: string) => ({
+  question_code, question_version, language: form.languageCode,
+  item_set_id: `${question_code}@${question_version}.${form.languageCode}`,
+});
+
+export function buildLetterSet(form: EgraAssessment, version: string, extension: readonly string[] = []) {
+  const letterTexts = [...form.letters.items.map(item => item.text), ...extension];
+  const rows: string[][] = [];
+  for (let i = 0; i < letterTexts.length; i += form.letters.columns) {
+    rows.push(letterTexts.slice(i, i + form.letters.columns));
+  }
+  const letter_sounds: LetterSoundsItemSet = {
+    ...meta(form, 'letter_sounds', version), rows,
+    stop_rule: { kind: 'first_row_all_wrong', first_row_length: form.letters.columns },
+  };
+  return letter_sounds;
+}
+
+export function buildWordSet(form: EgraAssessment, version: string) {
+  const word_reading: ItemSet<ReadWordsItemSet> = {
+    ...meta(form, 'word_reading', version), words: form.words.items.map((item, i) => ({ item_key: String(i), word: item.text })),
+    row_lengths: Array(form.words.items.length / form.words.columns).fill(form.words.columns),
+    stop_rule: { kind: 'first_row_all_wrong', first_row_length: form.words.columns },
+  };
+  return word_reading;
+}
+
+export function buildPassageSet(form: EgraAssessment, version: string) {
+  const words: ReadPassageItemSet['words'] = [];
+  const paragraph_starts: number[] = [];
+  for (const paragraph of form.passage.text.split('\n\n')) {
+    paragraph_starts.push(words.length);
+    for (const token of paragraph.trim().split(/\s+/u)) {
+      if (!/[\p{L}\p{N}]/u.test(token) && words.length > 0) {
+        words[words.length - 1].word += ` ${token}`;
+      } else {
+        words.push({ item_key: String(words.length), word: token });
+      }
+    }
+  }
+  const oral_reading: ItemSet<ReadPassageItemSet> = { ...meta(form, 'oral_reading', version), words, paragraph_starts };
+  return oral_reading;
+}
+
+export function buildComprehensionSet(form: EgraAssessment, version: string) {
+  const reading_comprehension: ReadingComprehensionItemSet = {
+    ...meta(form, 'reading_comprehension', version), passage: form.passage.text,
+    questions: form.comprehension.questions.map((q, i) => ({ item_key: String(i), prompt: q.text, answer_guide: q.answerText })),
+  };
+  return reading_comprehension;
+}
+
+const practice = (section: EgraGrid) => section.practiceItems.length
+  ? ` Practice first (not scored): ${section.practiceItems.join(', ')}` : '';
+export function timedInstructions(noun: 'letter sounds' | 'words', section: EgraGrid): string {
+  const item = noun === 'letter sounds' ? 'letter' : 'word';
+  return `Ask the child to read the ${noun} in order. ${markingSentence(item)} The test stops by itself if every ${item} in the first row is wrong, or when the time is up.${practice(section)}`;
+}
+
 export function adaptEgraForm(form: EgraAssessment) {
   const fail = (message: string): never => { throw new TypeError(`${form.id}: ${message}`); };
   const text = (value: string) => { if (typeof value !== 'string' || !value.trim()) fail('empty text'); };
@@ -44,46 +103,10 @@ export function adaptEgraForm(form: EgraAssessment) {
     text(question.answerText);
     if (question.maxScore !== 1) fail('comprehension maxScore must be 1');
   });
-  const meta = (question_code: string, question_version = form.id) => ({
-    question_code, question_version, language: form.languageCode,
-    item_set_id: `${question_code}@${question_version}.${form.languageCode}`,
-  });
-  const rows: string[][] = [];
-  for (let i = 0; i < letterTexts.length; i += form.letters.columns) {
-    rows.push(letterTexts.slice(i, i + form.letters.columns));
-  }
-  const letter_sounds: LetterSoundsItemSet = {
-    ...meta('letter_sounds', letterVersion), rows,
-    stop_rule: { kind: 'first_row_all_wrong', first_row_length: form.letters.columns },
-  };
-  const word_reading: ItemSet<ReadWordsItemSet> = {
-    ...meta('word_reading'), words: form.words.items.map((item, i) => ({ item_key: String(i), word: item.text })),
-    row_lengths: Array(form.words.items.length / form.words.columns).fill(form.words.columns),
-    stop_rule: { kind: 'first_row_all_wrong', first_row_length: form.words.columns },
-  };
-  const words: ReadPassageItemSet['words'] = [];
-  const paragraph_starts: number[] = [];
-  for (const paragraph of form.passage.text.split('\n\n')) {
-    paragraph_starts.push(words.length);
-    for (const token of paragraph.trim().split(/\s+/u)) {
-      if (!/[\p{L}\p{N}]/u.test(token) && words.length > 0) {
-        words[words.length - 1].word += ` ${token}`;
-      } else {
-        words.push({ item_key: String(words.length), word: token });
-      }
-    }
-  }
-  const oral_reading: ItemSet<ReadPassageItemSet> = { ...meta('oral_reading'), words, paragraph_starts };
-  const reading_comprehension: ReadingComprehensionItemSet = {
-    ...meta('reading_comprehension'), passage: form.passage.text,
-    questions: form.comprehension.questions.map((q, i) => ({ item_key: String(i), prompt: q.text, answer_guide: q.answerText })),
-  };
-  const practice = (section: EgraGrid) => section.practiceItems.length
-    ? ` Practice first (not scored): ${section.practiceItems.join(', ')}` : '';
-  const timedInstructions = (noun: 'letter sounds' | 'words', section: EgraGrid) => {
-    const item = noun === 'letter sounds' ? 'letter' : 'word';
-    return `Ask the child to read the ${noun} in order. ${markingSentence(item)} The test stops by itself if every ${item} in the first row is wrong, or when the time is up.${practice(section)}`;
-  };
+  const letter_sounds = buildLetterSet(form, letterVersion, extension);
+  const word_reading = buildWordSet(form, form.id);
+  const oral_reading = buildPassageSet(form, form.id);
+  const reading_comprehension = buildComprehensionSet(form, form.id);
   const question = (code: string, title: string, instructions: string, durationSec?: number, version = form.id): BatteryQuestion & { title: string } => ({
     question_code: code, question_version: version, title,
     instructions: { [form.languageCode]: instructions },
