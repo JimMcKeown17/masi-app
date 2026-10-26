@@ -212,6 +212,16 @@ The check allows only `2026-10-23`, although the registry also lists `legacy`. T
 `legacy` class would have no isiXhosa release pack, which breaks the handoff's acceptance that every
 edition a class can reach resolves to a release pack.
 
+- [ ] **Step 0 (Claude, before the builder starts): read-only check of the live `classes` table**
+  on `segygjzpujphwvrubusm`, through the `sqlite-staging-sql` helper, changing nothing on the
+  server. Confirm three things the migration assumes:
+  - there is no `letter_order_edition` column yet;
+  - the only triggers are `classes_set_updated_at` and `classes_enforce_row_version`, with none on
+    INSERT;
+  - no constraint conflicts with `classes_letter_order_edition_known`.
+
+  If the connection fails, retry before starting this task.
+
 - [ ] **Step 1: Write the failing static test** `__tests__/letterOrderMigration.test.js`. It reads
   the migration file and asserts:
   - the check's quoted list equals `MASI_LETTER_ORDER_EDITIONS`;
@@ -592,7 +602,8 @@ tests that switch breaks (Step 1, last group).
 **Files:**
 - Modify: `src/utils/assessmentRegistry.js`, `src/constants/egraConstants.js`, `src/utils/masteryState.js`, `src/db/repositories/masteryRepository.js`, `src/utils/dashboardStats.js`, `src/lessonPlan/inputs/knownLetters.js`
 - Modify: `src/components/session/LetterTrackerBottomSheet.js`, `src/components/assessment/LetterMasteryPanel.js`, `src/screens/lessons/LessonWrapUpScreen.js`, `src/components/lessons/WrapUpChildRow.js`, and the panel's two screens if they stop passing `classItem`
-- Test: `__tests__/LetterTrackerBottomSheet.test.js`, `__tests__/LetterMasteryPanel.test.js`, `__tests__/LessonWrapUpScreen.test.js`, `__tests__/masteryState.test.js`, `__tests__/masteryRepository.test.js`, `__tests__/assessmentRegistry.test.js`, `__tests__/letterMastery.storedItems.test.js`, `__tests__/dashboardStats.letterMastery.test.js`
+- Modify: `src/utils/letterOrders.js` (add `sortLettersByOrder`)
+- Test: `__tests__/LetterTrackerBottomSheet.test.js`, `__tests__/LetterMasteryPanel.test.js`, `__tests__/LessonWrapUpScreen.test.js`, `__tests__/LessonWrapUp.save.test.js`, `__tests__/letterOrders.test.js`, `__tests__/masteryState.test.js`, `__tests__/masteryRepository.test.js`, `__tests__/assessmentRegistry.test.js`, `__tests__/letterMastery.storedItems.test.js`, `__tests__/dashboardStats.letterMastery.test.js`
 
 **Interfaces:**
 - Consumes: `getTeachingOrder`, `UPDATE_APP_LETTERS_MESSAGE` (Task 1); `getActiveClassForChild` (Task 3); `useLessonDraft().teachingOrder` (Task 5).
@@ -619,8 +630,28 @@ tests that switch breaks (Step 1, last group).
     - the grid uses the order's letters.
   - Wrap up passes `teachingOrder={lesson.teachingOrder}` to the sheet. `WrapUpChildRow`'s
     `languageOrder` prop becomes `trackerLetters` (`TRACKER_LETTERS[languageCode]`).
+  - `sortLettersByOrder(letters: string[], orderLetters: string[] | null) => string[]` in
+    `src/utils/letterOrders.js` sorts by position in `orderLetters`. Letters not in it go last, in
+    their given order, and `null` returns a copy in the given order. Task 7's receipt uses it too.
+  - Wrap up shows the selected letters as
+    `sortLettersByOrder(draft.ticks.letters, lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null)`:
+    in the heading, its accessibility label, and the `letters` prop of every `WrapUpChildRow`.
+    Today it shows them in tap order (`LessonWrapUpScreen.js:182-198`, `WrapUpChildRow.js:20`),
+    because `toggleTick` appends. This changes the display only: `draft.ticks.letters`,
+    `tracker_changes` and the saved record keep tap order.
 
 - [ ] **Step 1: Write the failing tests.**
+  - `sortLettersByOrder`: `['d', 's', 'n', 'a']` with the English 2026-10-23 order gives
+    `s a n d`, and `['a', 'o']` with the isiXhosa order gives `o a`. A letter not in the order goes
+    last, and `null` keeps the given order.
+  - Wrap up, in `LessonWrapUp.save.test.js` (real SQLite): an English 2026-10-23 lesson whose
+    letters were ticked in the order `d, s, n, a`:
+    - the heading reads `Who knows s a n d without help?`;
+    - every child's `wrap-up-letter-chips` lists `s, a, n, d`;
+    - the tracker sheet draws `s a n d …`;
+    - the stored draft's `ticks.letters` is still `['d', 's', 'n', 'a']`.
+
+    Task 7 adds the receipt to this test.
   - Sheet: grids for xh/en/af start `o m l a` / `s a n d` / `a e k n`. `null` shows loading.
     `none` and `update` show their copy without crashing. Replace the test that compared the grid to
     `PEDAGOGICAL_ORDERS.af`.
@@ -629,12 +660,11 @@ tests that switch breaks (Step 1, last group).
       isiXhosa class, shows the isiXhosa label and a grid starting `o m l a` (Review Focus 5);
     - a `zu` class and no active membership show `No letter set for this class language.`;
     - an unknown edition shows the update copy.
-  - Wrap up: the tracker sheet opened for a child in an English lesson draws `s a n d …`.
   - Counts: `countMastered` and `getLetterMasteryRanking` totals are unchanged for existing
     fixtures. `setLetterMastery` still rejects `zu` and a letter outside `a`–`z`.
   - Rewrite the registry tests that pinned `PEDAGOGICAL_ORDERS` to pin `TRACKER_LETTERS`.
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterMasteryPanel.test.js __tests__/LessonWrapUpScreen.test.js`. Expected: FAIL.
+- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterMasteryPanel.test.js __tests__/LessonWrapUpScreen.test.js __tests__/LessonWrapUp.save.test.js __tests__/letterOrders.test.js`. Expected: FAIL.
 
 - [ ] **Step 3: Implement.** Then grep: no `PEDAGOGICAL_ORDER` remains anywhere in `src/`.
 
@@ -646,13 +676,14 @@ tests that switch breaks (Step 1, last group).
 
 **Files:**
 - Modify: `src/utils/sessionCompleteView.js`, `src/screens/lessons/LessonWrapUpScreen.js`, `src/constants/literacyConstants.js` (delete `LETTER_ORDER`)
-- Test: `__tests__/sessionCompleteView.test.js`, `__tests__/SessionReceipt.test.js`, `__tests__/LetterToggleGrid.test.js`
+- Test: `__tests__/sessionCompleteView.test.js`, `__tests__/SessionReceipt.test.js`, `__tests__/LetterToggleGrid.test.js`, `__tests__/LessonWrapUp.save.test.js`
 
 **Interfaces:**
-- Consumes: `useLessonDraft().teachingOrder` (Task 5).
+- Consumes: `useLessonDraft().teachingOrder` (Task 5); `sortLettersByOrder` (Task 6).
 - Produces:
   - `buildSessionCompleteParams({ ..., teachingOrder })`, where `teachingOrder` is `string[] | null`,
-    sorts `letters` by position in `teachingOrder`. Letters not in it go last, in selection order.
+    sorts `letters` with `sortLettersByOrder(letters, teachingOrder)`, so the receipt and Wrap up
+    share one rule.
   - `buildReceiptRows` shows `letters` in the order given and no longer sorts.
   - Wrap up passes `teachingOrder: lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null`.
 
@@ -661,8 +692,11 @@ tests that switch breaks (Step 1, last group).
     `s a n d`; the isiXhosa order turns `['a', 'o']` into `o a`.
   - `null` keeps selection order.
   - `LetterToggleGrid.test.js` uses a local 26-letter fixture.
+  - The Wrap up test from Task 6 (letters ticked `d, s, n, a`) saves the lesson and asserts the
+    Session complete params' `letters` are `['s', 'a', 'n', 'd']`
+    (`view.navigationRef.getCurrentRoute().params`, as `LessonWrapUp.save.test.js:79` does).
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/sessionCompleteView.test.js __tests__/SessionReceipt.test.js`. Expected: FAIL.
+- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/sessionCompleteView.test.js __tests__/SessionReceipt.test.js __tests__/LessonWrapUp.save.test.js`. Expected: FAIL.
 
 - [ ] **Step 3: Implement, delete `LETTER_ORDER`, and run the tests.** Expected: PASS.
 
@@ -685,8 +719,10 @@ tests that switch breaks (Step 1, last group).
   - the lesson input's pack order (`teachingOrderFromPack(pack)`) and `alphabet` equal `order.letters`;
   - `useLessonDraft().teachingOrder.letters` (the order Wrap up gives the tracker sheet) equals `order.letters`;
   - the order the mastery panel's loader resolves through `getActiveClassForChild` equals `order.letters`;
-  - the receipt for the selected letters `[...order.letters].reverse().slice(0, 5)` lists them in
-    the order they appear in `order.letters`.
+  - for the selected letters `[...order.letters].reverse().slice(0, 5)`, ticked in that order,
+    the letters Wrap up renders (its heading and each child's `wrap-up-letter-chips`) and the
+    receipt's `letters` list them in the order they appear in `order.letters`. These are the
+    rendered letters, not only the order passed to the tracker.
 
   Add `'<rootDir>/__tests__/letterOrderAgreement.test.js'` to `testMatch` in
   `jest.integration.config.js`, and confirm with
