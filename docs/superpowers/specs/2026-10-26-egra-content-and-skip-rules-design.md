@@ -109,11 +109,17 @@ Unchanged Questions keep their `2024.1` item sets and versions; only the Battery
 
 ### 4.2 Skip rules (Jim, 2026-10-26)
 
-**Triggers.** A trigger is a Question whose **whole first row is marked wrong**:
+**Triggers.** A trigger is a Question whose **whole first row is marked wrong**: every item in the
+first row is saved as reached and incorrect. The app reads this from the saved per-item marks, not
+from how the Question ended. For Q1 and Q6 the first-row stop fires on exactly that mark, so the two
+always agree. Only Q1, Q5 and Q6 are triggers; a child who gets every sentence wrong in Q7 still
+goes on to the story.
 
 - Q1 Letter sounds: all 10 letters of the first row wrong. This is the first-row stop itself.
 - Q5 Letter writing: all 6 letters of the Writing Sheet's first printed row wrong (items 1–6:
-  a f k o s w in both languages). The EA still marks all 26 letters; the check runs once Q5 is saved.
+  a f k o s w in both languages). The EA is expected to mark all 26 letters, but nothing forces it;
+  the check runs once Q5 is saved. If any of the first 6 is left unmarked (the EA ended early), it is
+  not a trigger.
 - Q6 Reading words: all 8 words of the first row wrong. This is the first-row stop itself.
 
 **Effect.** Once any trigger fires, **every reading and writing Question after it is skipped**:
@@ -122,7 +128,11 @@ Unchanged Questions keep their `2024.1` item sets and versions; only the Battery
 - Q6 → skip Q7–Q12.
 - Q2–Q5 always run. The child always tries listen to a story, first sounds, blending sounds and
   letter writing.
-- Q9 Story questions also keeps Full EGRA's rule: skipped if the child read no words of the story.
+- Q9 Story questions also keeps Full EGRA's rule: skipped if the child read no words of the story,
+  or if the EA skipped the story by hand. (A child who never read a story can't answer questions on
+  it, so this one rule does follow a manual skip.)
+- When more than one trigger is true (Q1 fired and Q5 also has a wrong first row), the **earliest**
+  trigger owns the skips and their labels. Q5 still runs and is marked as usual.
 
 Every trigger comes before every Question it skips, so a skip never removes a Question the child
 has already started.
@@ -158,7 +168,8 @@ is **Review and finalize**. If a later trigger has nothing left to skip (Q1 alre
 second card appears.
 
 Skipped rows read `Skipped · Letters first row wrong`, `Skipped · Letter writing first row wrong`
-or `Skipped · Words first row wrong`, replacing today's "Not reached" for these rows. The label
+or `Skipped · Words first row wrong`, replacing today's "Not reached" for these rows. Q9 skipped by
+its own story rule reads `Skipped · No story words read`, in WelaPLUS and Full EGRA. The label
 comes from the trigger, which the app can work out from the saved results; nothing extra is stored.
 A run resumed later shows the same row labels; the card itself is not shown again.
 
@@ -167,12 +178,16 @@ A run resumed later shows the same row labels; the card itself is not shown agai
 - **One Full EGRA per language** (Jim), still called "Full EGRA": isiXhosa, English (Home Language),
   Afrikaans and isiZulu, with the §3 content. Questions: Letter sounds, Familiar words, Reading a
   story, Story questions, as today.
-- **No form picker.** Start → choose a child → the assessment opens in the child's class language.
-  If the class language is missing or not one of the four, the existing language sheet offers the
-  four.
-- **In code (my call):** a single Battery `egra@2026.1` with languages xh, en, af and zu. The host
-  already starts a multi-language Battery in the class language, and `battery_runs.language` keeps the
-  languages apart in reports, so the EA sees exactly one Full EGRA per language.
+- **No form picker.** The Full EGRA card's Start goes straight to choosing a child, and the assessment
+  opens in the child's class language. If the class has no language, the existing language sheet
+  offers the four. A class language that is not one of the four shows the same "Not available in
+  … yet" note WelaPLUS shows for Afrikaans. English classes, including First Additional Language
+  ones, get the English Home Language content (Jim, 2026-10-25; the pack has no FAL Form 1 to use).
+- **In code (my call):** a single Battery `egra@2026.1` with languages xh, en, af and zu, and no
+  `fixedLanguage`. The child-select screen already starts a multi-language Battery in the class
+  language (`chooseBatteryLanguage`), and `battery_runs.language` keeps the languages apart in
+  reports, so the EA sees exactly one Full EGRA per language. Host work: the card skips the picker,
+  and the bundled item-set lookup covers the shared sets.
 - **Skip behaviour is unchanged:** only the story questions are skipped after a story with no words
   read. Letters and words use the first-row stop as today.
 - **The 13 forms** stop being offered for new assessments. Unfinished ones can still be resumed and
@@ -206,8 +221,9 @@ A run resumed later shows the same row labels; the card itself is not shown agai
   Picture Cards do not change.
 - **Reporting.** WelaPLUS letters and words now feed the Letters and Words rankings alongside Full
   EGRA and the quick tests. Letter score bands stay as they are (correct letters in 60 seconds per
-  grade). Scores from old and new versions both appear in history; a child's Grid A score and their
-  100-letter chart score are not the same card, which reports should show by version.
+  grade). Rankings already combine every version of a Question (they read by Question code), and
+  they keep doing so: the measure is correct items in 60 seconds. No reporting change is in this
+  spec.
 
 ## 8. Left to the builder
 
