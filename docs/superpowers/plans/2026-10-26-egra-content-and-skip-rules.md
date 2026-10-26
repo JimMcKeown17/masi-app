@@ -66,7 +66,7 @@
   - `no Masi extension in shared letters`: no shared letters set has more letters than its source form.
   - `bundled lookup finds shared sets`: `bundledItemSetFor('word_reading', '2026.3', 'zu')` is the shared zu set; `('letter_sounds', '2026.3', 'st')` and `('letter_sounds', '2026.9', 'xh')` return `null`.
   - `old questions resolve only their own sets`: every question of `WELA_PLUS_FULL_2024_1` (en, xh) and of the 13 EGRA Batteries resolves to a set whose `question_version` equals the question's version, and whose `item_set_id` equals the one captured from `bundledItemSetFor` before the change (write the expected ids into the test). `bundledItemSetFor('letter_sounds', '2026.2', l)` and `('word_reading', '2026.1', l)` for en/xh/af return today's sets; `('letter_sounds', '2026.1', 'af')` returns what it returns today.
-  - `one instruction text per shared Question`: the exact strings above for xh `letter_sounds` and zu `word_reading`; every letters/words text ends with `` ` Practice first (not scored): ${practiceItems.join(', ')}` `` from its own form when the form has practice items; no practice item appears among a set's scored items.
+  - `one instruction text per shared Question`: the exact strings above for xh `letter_sounds` and zu `word_reading`; every letters/words text ends with `` ` Practice first (not scored): ${practiceItems.join(', ')}` `` from its own form when the form has practice items. Each set's scored items equal its source section's items exactly, in count and order, with no practice positions added. A practice prompt may also appear as a scored item when the printed grid contains it (en letters `m`, `y`; af words `pot`, `jas`; xh words `utata`), so never filter by text.
 - [ ] **Step 2:** `npx jest src/assessment-questions/egra/__tests__/sharedReading.test.ts`. It should fail because the module doesn't exist.
 - [ ] **Step 3:** Implement. Build the sets with the extracted builders and version `'2026.3'`. Attach `source_form_id`. Fail loudly (TypeError) if a configured form id is missing from the pack.
 - [ ] **Step 4:** Run `npx jest src/assessment-questions/egra --ci`, then `npx jest --silent` and `npm run test:types`. All should pass, with the baseline snapshot unchanged.
@@ -260,7 +260,9 @@
 
 **Interfaces:**
 - Consumes: Task 2 `skipCauseFor`, `autoSkips[].trigger`, `firedTrigger`.
-- Produces: `buildRunView(...)` also returns `firedTrigger` (passed through from the evaluator).
+- Produces:
+  - `buildRunView(...)` also returns `firedTrigger` (passed through from the evaluator).
+  - Each row gains `skipCause: { kind: 'first_row'; trigger: string } | { kind: 'prerequisite'; depends_on: string } | null`, from `skipCauseFor` for saved `skipped_prerequisite_unmet` rows, `null` otherwise. The label is derived from it.
 - Produces: `TRIGGER_LABELS = { letter_sounds: 'Letters first row wrong', wela_plus_letter_writing: 'Letter writing first row wrong', word_reading: 'Words first row wrong' }`.
 - Label rules for a saved `skipped_prerequisite_unmet` row:
   - **First-row cause:** `Skipped · ${TRIGGER_LABELS[trigger]}`.
@@ -291,7 +293,7 @@
 - Consumes: Task 2 `autoSkips[].trigger`; Task 6 rows.
 - Produces:
   - `skipNoticeFor({ battery, view, firstName }): { trigger, title, body, stillToDo: string[], skipped: string[] } | null`. Worked out from saved results only.
-    - `skipped` is the titles of saved `skipped_prerequisite_unmet` rows whose `skipCauseFor` is `view.firedTrigger`.
+    - `skipped` is the titles of `view.rows` with `skipCause.kind === 'first_row'` and `skipCause.trigger === view.firedTrigger` (Task 6). No other input is needed, and nothing is parsed from labels.
     - It returns `null` when `view.firedTrigger` is null or `skipped` is empty.
     - `stillToDo` is the titles of rows still `next`/`not_started`.
     - `body` is the table text, then a space, then `Carry on with the next Question.` when `stillToDo` is non-empty, otherwise `Tap Review and finalize to finish.`
@@ -315,7 +317,7 @@
   - Never shown for a read-only run, and never when the only skips are prerequisite skips.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `skipNoticeFor` returns the exact copy for each trigger; a Q1 trigger with Q2–Q5 undecided ends `Carry on with the next Question.`; a Q5 trigger with Q1–Q4 decided ends `Tap Review and finalize to finish.` and has an empty `stillToDo`; `null` when only prerequisite skips exist.
+  - `skipNoticeFor` returns the exact copy for each trigger; a Q1 trigger with Q2–Q5 undecided ends `Carry on with the next Question.`; a Q5 trigger with Q1–Q4 decided ends `Tap Review and finalize to finish.` and has an empty `stillToDo`; `null` when only prerequisite skips exist. These tests build `view` with the real `buildRunView` from saved results (never a hand-made view), including one run that mixes a manual skip, a prerequisite skip and first-row skips; only the first-row rows are listed.
   - The sheet renders both lists and calls `onDismiss` on `Got it`.
   - Overview: after Q1 saves with a wrong first row, rows 6–12 show the skip labels, the card shows once, and `Got it` closes it. Re-focusing does not show it again.
   - Overview after a Q6 trigger: the footer button is `Review and finalize`.
