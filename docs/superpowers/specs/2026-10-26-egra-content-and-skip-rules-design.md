@@ -207,12 +207,16 @@ A run resumed later shows the same row labels; the card itself is not shown agai
 
 ## 7. Rollout, printing and reporting
 
+- **EAs get the new cards and the new app at the same time** (Jim, 2026-10-26). This app build has
+  not gone to EAs yet. Once the app is finished, the cards are updated to match it exactly and
+  printed, and then both go out together. WelaPLUS, Full EGRA and the quick tests all launch on the
+  new content. No old card is ever paired with the new app, so nothing needs gating.
+- **WelaPLUS `2026.1` is the default from launch.** A migration sets the literacy programme's
+  `default_battery_version` to `2026.1` as part of this work. The server field stays the way Head
+  Office changes versions later. WelaPLUS `2024.1` cards are never printed.
 - **Versions sit side by side.** WelaPLUS `2024.1`, the 13 EGRA forms and the old quick-test sets stay
-  registered so unfinished assessments finish and history reads correctly.
-- **The WelaPLUS switch is a server change:** Head Office sets the literacy programme's
-  `default_battery_version` to `2026.1` once the reprinted Reading Cards are in the field.
-  Unfinished `2024.1` assessments finish on `2024.1`.
-- **Full EGRA and the quick tests** change when the app update ships (open question for Jim, §9).
+  registered, so assessments already saved (today only test data on the staging backend) still open
+  and read correctly. They are no longer offered for new assessments.
 - **One Reading Card per language** serves WelaPLUS, Full EGRA and the quick tests: letters (10 × 10,
   or 11 × 10 for isiZulu), words (rows of 8, or 5 for isiZulu) and the story. WelaPLUS's sentences
   also need a place on the card. `documentation/welaplus-printout-pack.md` is updated with the new
@@ -238,13 +242,16 @@ A run resumed later shows the same row labels; the card itself is not shown agai
   later letters right), resume after force-quit, both languages, and Full EGRA's story-questions rule
   in its new form.
 
-## 9. Open for Jim
+## 9. Decided while writing this spec
 
-1. **When do Full EGRA and the quick tests switch to the new cards?** WelaPLUS waits for Head
-   Office's server change, but Full EGRA and the quick tests would change the moment EAs update the
-   app. If EAs still hold the old cards then, they will read from the wrong card. My recommendation:
-   ship the app update only once the new cards are printed, or tie all three to the same programme
-   switch.
+- **Cut-over (Jim, 2026-10-26):** cards are printed after the app is finished, and EAs receive cards
+  and app together (§7). So Full EGRA and the quick tests need no switch of their own.
+- **Calls I made** (Jim to check): WelaPLUS version string `2026.1`; Story questions as Q9, moving the
+  writing Questions to 10–12; WelaPLUS adopts the shared codes `word_reading` and `oral_reading`;
+  Full EGRA as one multi-language Battery in code; a class language outside the four shows "Not
+  available … yet"; Q9 is also skipped after a story the EA skipped by hand; the earliest trigger owns
+  the labels; a Q5 first row with any letter unmarked is not a trigger; rankings keep combining
+  versions.
 
 ## 10. Documents this changes
 
