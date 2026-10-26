@@ -1,7 +1,7 @@
 # One set of reading content everywhere, and WelaPLUS skip rules
 
 **Date:** 2026-10-26
-**Status:** Draft for Jim's review
+**Status:** Approved by Jim 2026-10-26
 **Branch:** `docs/egra-content-skip-rules` (from `main` at aca2ad8, after step-by-step marking #107)
 **Mockup (approved 2026-10-26):** `design/mockups-2026-10-skip-rules/skip-card.html`, option A
 **Replaces:** the two follow-on specs in `documentation/ROADMAP.md` §8 ("the EGRA content inside
@@ -31,7 +31,7 @@ cannot do them**, and tells the EA why so the EA is not confused.
 
 - One item set per Question per language for letters, words, story and story questions, used by
   WelaPLUS, Full EGRA and the quick tests alike.
-- A new WelaPLUS version that uses that content, adds Story questions after the story, and applies
+- A new WelaPLUS version that uses that content, adds Story comprehension after the story, and applies
   the skip rules in §4.
 - Full EGRA becomes one assessment per language with no form picker.
 - The quick tests use the same content and the same stop rule.
@@ -79,7 +79,8 @@ case and repeats stay exactly as printed. Practice items are shown in the instru
 - **Stop rule:** "first row all wrong" for letters and words everywhere (the first row is 10 letters,
   8 words, or 5 words for isiZulu). No "10 wrong in a row" rule remains for new assessments.
 - **Timers:** 60 seconds for letters, words and the story, as in the pack.
-- **Story questions:** the existing `reading_comprehension` screen, marked step by step with the
+- **Story comprehension** (Jim's name, 2026-10-26; it replaces the title "Story questions" in Full
+  EGRA too): the existing `reading_comprehension` screen, marked step by step with the
   answer guide (built in #107). Questions after an early end are not reached and do not count.
 
 ## 4. The new WelaPLUS version
@@ -99,7 +100,7 @@ Afrikaans or isiZulu content.
 | 6 | Reading words | `word_reading` | Form 1 words (80, 8 per screen); first-row stop |
 | 7 | Reading sentences | `wela_plus_read_sentences` | none |
 | 8 | Reading a story | `oral_reading` | Form 1 story |
-| 9 | Story questions | `reading_comprehension` | **new** |
+| 9 | Story comprehension | `reading_comprehension` | **new** |
 | 10 | Writing words | `wela_plus_write_cvcs` | none (was Q9) |
 | 11 | Writing sentences | `wela_plus_write_sentences_dictation` | none (was Q10) |
 | 12 | Story writing | `wela_plus_story_writing` | none (was Q11) |
@@ -128,7 +129,7 @@ goes on to the story.
 - Q6 → skip Q7–Q12.
 - Q2–Q5 always run. The child always tries listen to a story, first sounds, blending sounds and
   letter writing.
-- Q9 Story questions also keeps Full EGRA's rule: skipped if the child read no words of the story,
+- Q9 Story comprehension also keeps Full EGRA's rule: skipped if the child read no words of the story,
   or if the EA skipped the story by hand. (A child who never read a story can't answer questions on
   it, so this one rule does follow a manual skip.)
 - When more than one trigger is true (Q1 fired and Q5 also has a wrong first row), the **earliest**
@@ -177,7 +178,7 @@ A run resumed later shows the same row labels; the card itself is not shown agai
 
 - **One Full EGRA per language** (Jim), still called "Full EGRA": isiXhosa, English (Home Language),
   Afrikaans and isiZulu, with the §3 content. Questions: Letter sounds, Familiar words, Reading a
-  story, Story questions, as today.
+  story, Story comprehension (renamed from Story questions).
 - **No form picker.** The Full EGRA card's Start goes straight to choosing a child, and the assessment
   opens in the child's class language. If the class has no language, the existing language sheet
   offers the four. A class language that is not one of the four shows the same "Not available in
@@ -246,7 +247,7 @@ A run resumed later shows the same row labels; the card itself is not shown agai
 
 - **Cut-over (Jim, 2026-10-26):** cards are printed after the app is finished, and EAs receive cards
   and app together (§7). So Full EGRA and the quick tests need no switch of their own.
-- **Calls I made** (Jim to check): WelaPLUS version string `2026.1`; Story questions as Q9, moving the
+- **Calls I made** (Jim to check): WelaPLUS version string `2026.1`; Story comprehension as Q9, moving the
   writing Questions to 10–12; WelaPLUS adopts the shared codes `word_reading` and `oral_reading`;
   Full EGRA as one multi-language Battery in code; a class language outside the four shows "Not
   available … yet"; Q9 is also skipped after a story the EA skipped by hand; the earliest trigger owns
