@@ -15,3 +15,13 @@ test('PositionLine renders strong parts bold and joins them for screen readers',
   </AssessmentThemeProvider>);
   expect(r.getByText('2')).toHaveStyle({ fontFamily: 'Figtree_600SemiBold', color: tokens.color.ink });
 });
+
+test('PositionLine centres inside 16dp gutters on a container sized to the text', () => {
+  const parts = [{ text: 'All 10 marked', strong: true }, { text: ' · 10 correct. Tap any word to change it.' }];
+  const r = render(<AssessmentThemeProvider fonts={{}}><PositionLine parts={parts} testID="position" /></AssessmentThemeProvider>);
+  // Android draws a stretched, centred Text with nested spans from its narrower measured layout,
+  // so the line hugged the left edge on device; the Text must not be stretched.
+  let wrapper = r.getByTestId('position').parent;
+  while (wrapper && typeof wrapper.type !== 'string') wrapper = wrapper.parent;
+  expect(wrapper).toHaveStyle({ paddingHorizontal: tokens.space.lg, alignItems: 'center' });
+});

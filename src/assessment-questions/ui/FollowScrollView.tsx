@@ -22,9 +22,11 @@ type Targets = {
 const TargetContext = createContext<Targets | null>(null);
 const styles = StyleSheet.create({ scroll: { flex: 1 } });
 
-export function FollowScrollView({ testID, focus, contentContainerStyle, children }: {
+export function FollowScrollView({ testID, focus, lastIndex, contentContainerStyle, children }: {
   testID?: string;
   focus?: number | null;
+  /** The final target's index; following it scrolls to the content's end. */
+  lastIndex?: number;
   contentContainerStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }) {
@@ -34,6 +36,8 @@ export function FollowScrollView({ testID, focus, contentContainerStyle, childre
   const viewport = useRef({ offset: 0, height: 0 });
   const currentFocus = useRef(focus);
   currentFocus.current = focus;
+  const currentLast = useRef(lastIndex);
+  currentLast.current = lastIndex;
   const measurement = useRef(0);
 
   const follow = useCallback((index?: number) => {
@@ -48,7 +52,12 @@ export function FollowScrollView({ testID, focus, contentContainerStyle, childre
       if (request !== measurement.current || currentFocus.current !== focused ||
           content.current !== container || targets.current.get(focused) !== target) return;
       const offset = scrollOffsetFor({ y, height }, viewport.current, tokens.space.lg);
-      if (offset !== null) scroll.current?.scrollTo({ y: offset, animated: true });
+      if (offset === null) return;
+      // The last item scrolls to the end, so its group card and the bottom padding show too.
+      const last = focused === currentLast.current;
+      const fits = height <= viewport.current.height - 2 * tokens.space.lg;
+      if (last && fits && offset > viewport.current.offset) scroll.current?.scrollToEnd({ animated: true });
+      else scroll.current?.scrollTo({ y: offset, animated: true });
     }, () => {});
   }, []);
   const register = useCallback((index: number, view: View | null) => {

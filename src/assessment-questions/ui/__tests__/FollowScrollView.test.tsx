@@ -20,6 +20,7 @@ test('focus measures a native target against the content and follows layout and 
     const screen = (focus?: number) => <FollowScrollView testID="scroll" focus={focus}>
       <FollowTarget index={0}><Text>First</Text></FollowTarget>
       <FollowTarget index={1}><Text>Second</Text></FollowTarget>
+      <FollowTarget index={2}><Text>Third</Text></FollowTarget>
     </FollowScrollView>;
     const r = render(screen(0));
     expect(measureLayout).not.toHaveBeenCalled();
@@ -81,5 +82,40 @@ test('late target layout follows the ring and stale native measurements cannot s
   } finally {
     measureLayout.mockRestore();
     scrollTo.mockRestore();
+  }
+});
+
+test('the last target scrolls to the end so its group card and the content padding show', () => {
+  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+  const scrollToEnd = jest.spyOn(ScrollView.prototype, 'scrollToEnd');
+  const measureLayout = jest.spyOn(View.prototype, 'measureLayout').mockImplementation((_relative, success) => {
+    success(0, 700, 100, 72);
+  });
+  try {
+    const screen = (focus: number) => <FollowScrollView testID="scroll" focus={focus} lastIndex={1}>
+      <FollowTarget index={0}><Text>First</Text></FollowTarget>
+      <FollowTarget index={1}><Text>Last</Text></FollowTarget>
+    </FollowScrollView>;
+    const r = render(screen(0));
+    fireEvent(r.getByTestId('scroll'), 'layout', { nativeEvent: { layout: { height: 600 } } });
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 188, animated: true });
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    scrollTo.mockClear();
+    r.rerender(screen(1));
+    expect(scrollToEnd).toHaveBeenLastCalledWith({ animated: true });
+    expect(scrollTo).not.toHaveBeenCalled();
+    // A last target already in view, or taller than the viewport, keeps the ordinary rule.
+    scrollToEnd.mockClear();
+    measureLayout.mockImplementation((_relative, success) => success(0, 100, 100, 72));
+    fireEvent(r.getByTestId('scroll'), 'layout', { nativeEvent: { layout: { height: 600 } } });
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    measureLayout.mockImplementation((_relative, success) => success(0, 700, 100, 900));
+    fireEvent(r.getByTestId('scroll'), 'layout', { nativeEvent: { layout: { height: 600 } } });
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 684, animated: true });
+  } finally {
+    measureLayout.mockRestore();
+    scrollTo.mockRestore();
+    scrollToEnd.mockRestore();
   }
 });

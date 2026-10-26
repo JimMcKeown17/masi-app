@@ -46,7 +46,7 @@ export function CaptureBody({ body, pages, pageIndex, itemCount, tileFor, onTapP
         width={body.kind === 'groups' && body.variant === 'letter' ? body.tileWidth : undefined}
         position={position} onTapPosition={onTapPosition} />
     </FollowTarget>;
-    return <FollowScrollView testID={body.testID} focus={focus}
+    return <FollowScrollView testID={body.testID} focus={focus} lastIndex={positions[positions.length - 1]}
       contentContainerStyle={body.kind === 'cards' ? styles.cards : styles.groups}>
       {body.kind === 'cards' ? positions.map(renderTile) : body.groups.map(group =>
         <TileGroup key={group.key} testID={group.testID} heading={group.heading} card={body.card}>

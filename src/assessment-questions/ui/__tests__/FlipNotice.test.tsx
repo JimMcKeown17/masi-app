@@ -20,7 +20,7 @@ test('FlipNotice announces its text and hides after 3000 ms', () => {
   r.rerender(<FlipNotice notice={{ id: 1, text }} />);
   expect(r.getByTestId('flip-notice').props.accessibilityLiveRegion).toBe('polite');
   expect(r.getByTestId('flip-notice')).toHaveStyle({
-    position: 'absolute', left: 16, right: 16, bottom: 0, backgroundColor: tokens.color.ink,
+    position: 'absolute', left: 16, right: 16, bottom: tokens.space.sm, backgroundColor: tokens.color.ink,
     borderRadius: tokens.radius.tile, paddingVertical: 10, paddingHorizontal: 14,
   });
   expect(r.getByText(text)).toHaveStyle({ color: tokens.color.onPrimary, fontWeight: '600' });

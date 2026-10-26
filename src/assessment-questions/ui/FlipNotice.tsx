@@ -26,7 +26,7 @@ function Notice({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   notice: {
-    position: 'absolute', left: tokens.space.lg, right: tokens.space.lg, bottom: 0,
+    position: 'absolute', left: tokens.space.lg, right: tokens.space.lg, bottom: tokens.space.sm,
     backgroundColor: tokens.color.ink, borderRadius: tokens.radius.tile,
     paddingVertical: 10, paddingHorizontal: 14,
   },

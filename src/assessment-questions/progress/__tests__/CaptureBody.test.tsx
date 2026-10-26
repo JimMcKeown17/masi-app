@@ -72,3 +72,12 @@ test('groups body without cards renders paragraphs as wrapping pills', () => {
   }
   expect(r.UNSAFE_getByType(ScrollView).props.scrollEventThrottle).toBe(16);
 });
+
+test.each([
+  ['cards', { kind: 'cards', testID: 'prompt-scroll' } as Body, 2],
+  ['groups', { kind: 'groups', testID: 'prompt-scroll', card: true, variant: 'pill',
+    groups: [{ key: 'a', positions: [0, 1] }, { key: 'b', positions: [2] }] } as Body, 2],
+])('%s body tells the scroller its last item, in reading order', (_name, body, last) => {
+  const r = render(<CaptureBody {...props} body={body} />);
+  expect(r.UNSAFE_getByType(FollowScrollView).props.lastIndex).toBe(last);
+});
