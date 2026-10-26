@@ -55,15 +55,17 @@ both with `git -C <books> show 9cd66f8:<path>`. Branch: `feat/letter-orders`, st
   installed. A phone that has run this branch (local schema 19) shows "This phone has data from a
   newer version of Masi…" on any build without schema 19, so the shared A03 and iPhone stay off this
   branch until the other session no longer needs older builds on them, or Jim accepts a data wipe.
+- Lesson flow and letter orders reach field phones in the same build, so no field phone holds a
+  lesson draft pinned to a v1 pack. Such a draft would still open, but could show the old order's
+  stored suggestions. Test phones finish or discard open lessons before installing this branch
+  (Task 9, Step 6).
 
 ## Review Focus
 
-1. **A lesson draft started before this build.** Its `pack_id` names a v1 or preview-v1 pack built
-   for another order, and its stored plan holds that order's suggestions. The Lesson screen must
-   open, show the class's order to choose from, and show none of the stored plan's suggestions or
-   review letters, whether the plan is frozen, from a previous day or from today. The stored plan
-   and `pack_id` are saved unchanged, as the record of the advice given. It must never mix two
-   orders or crash. Test in Task 5.
+1. **A lesson on a preview build** (the `preview-content` profile Jim tests with). A new lesson
+   gets the 2026-10-23 preview pack, and a resumed lesson keeps its matching preview pack. Both pack
+   lookups hide preview packs unless `allowPreview` is passed, so a missed option silently falls
+   back to the release pack. Test in Task 5.
 2. **A class created on the phone and renamed before its first upload.** The rename uploads, no
    payload carries the edition, and after the next pull the class shows the server's edition. Test
    in Task 3.
@@ -447,26 +449,26 @@ Phone rules:
 **Interfaces:**
 - Consumes: `getTeachingOrder`, `UPDATE_APP_LETTERS_MESSAGE` (Task 1); `getPackForOrder`, `getPackById`, `packLetterOrderId` (Task 4); class rows with `letter_order_edition` (Task 3).
 - Produces:
-  - `lessonOrderAndPack({ lessonClass, languageCode, packId, allowPreview }) => { teachingOrder: TeachingOrder, pack: object | null, pinnedToAnotherOrder: boolean }`
+  - `lessonOrderAndPack({ lessonClass, languageCode, packId, allowPreview }) => { teachingOrder: TeachingOrder, pack: object | null }`
     in `lessonInputs.js`:
     - the candidate pack is `getPackById(packId, { allowPreview })` when `packId` is given, else
       `getPackForOrder(teachingOrder.id, { allowPreview })`. Both lookups hide preview packs
-      unless `allowPreview` is passed, so leaving it out silently drops preview content;
+      unless `allowPreview` is passed, so leaving it out silently drops preview content (Review
+      Focus 1);
     - `pack` is that candidate only when `teachingOrder.kind === 'order'` and
-      `packLetterOrderId(candidate) === teachingOrder.id`, else `null`;
-    - `pinnedToAnotherOrder` is true when `packId` is given and the order of the bundled pack it
-      names, looked up with `{ allowPreview: true }` so the build's preview setting cannot hide it,
-      is not `teachingOrder.id`. An id that names no bundled pack counts as another order.
+      `packLetterOrderId(candidate) === teachingOrder.id`, else `null`.
 
-    Packs are chosen by order, never by language. A resumed draft whose pinned pack has another
-    order gets `pack: null` and `pinnedToAnotherOrder: true` (Review Focus 1).
+    Packs are chosen by order, never by language. A draft pinned to a pack of another order gets
+    `pack: null`, so a 2026-10-23 class is never taught from a v1 pack. Its stored plan may still
+    show that order's suggestions. Only test phones can hold such a draft, so the release step in
+    Task 9 handles it rather than code (Jim, 2026-10-26).
 
     It replaces `packFor` (`lessonInputs.js:10-11`), and `allowPreview` keeps today's sources:
     `shapePickerModel`'s `allowPreview` parameter, and `isPreviewContentEnabled()` in
     `loadPickerLetters`, `loadLessonParticipants` and `useLessonDraft`.
   - `loadLessonParticipants({ ..., classId, languageCode, packId, participantChildIds })` loads
     the class with `repositories.classes.getClassById(classId)`, and returns
-    `{ participants, lessonClass, teachingOrder, pack, pinnedToAnotherOrder, packIndex, alphabet }`.
+    `{ participants, lessonClass, teachingOrder, pack, packIndex, alphabet }`.
     `alphabet` is `teachingOrder.letters` when `kind === 'order'`, else `null`.
   - Picker rows (`shapePickerModel`, `loadPickerLetters`):
     - each group's engine input takes `pack` from `lessonOrderAndPack` with its own class and
@@ -476,23 +478,11 @@ Phone rules:
     - at open and on `chooseClass`/`chooseLanguage`, the draft's `packId` is
       `lessonOrderAndPack(...).pack?.id ?? null`;
     - it drops its separate `getClassById` and uses `loaded.lessonClass`;
-    - the returned object gains `teachingOrder: TeachingOrder | null` (null while loading) and
-      `planFromAnotherOrder: boolean` (`loaded.pinnedToAnotherOrder`; false while loading);
-    - it never rewrites the stored plan, `pack_id` or ticks because of `planFromAnotherOrder`.
-      The existing rules still decide when a plan is replaced. A frozen or previous-day plan stays as
-      the record of the advice given, and a same-day replacement, with `pack: null`, is a `no_pack`
-      plan that suggests nothing.
+    - the returned object gains `teachingOrder: TeachingOrder | null` (null while loading).
   - `lessonRowDetail(seen, letters, { needsAppUpdate } = {})`: with `needsAppUpdate`, the detail
     is `joinDetail([seen, UPDATE_APP_LETTERS_MESSAGE])`.
-  - `LessonLettersSection` gains `needsAppUpdate` and `planFromAnotherOrder` props, checked in
-    this order after the isiZulu check:
-    - `needsAppUpdate`: only `UPDATE_APP_LETTERS_MESSAGE` under the heading;
-    - `planFromAnotherOrder`: `Choose the letters you teach` and the `LetterToggleGrid` of
-      `choices.letterChoices` (the class's order, because `pack` is null), exactly as `no_pack`
-      shows today. None of the plan's suggestion tiles, reason lines or `Review:` line appear.
-
-    The section is the only place that shows a plan's letters (`LessonLettersSection.js:17-33`).
-    `LessonScreen` passes both props from the hook.
+  - `LessonLettersSection` gains a `needsAppUpdate` prop. When true, the section shows only
+    `UPDATE_APP_LETTERS_MESSAGE` under its heading, before the isiZulu check.
 
 - [ ] **Step 1: Write the failing tests.**
   - `lessonInputs.test.js`:
@@ -503,21 +493,18 @@ Phone rules:
     - a `zu` class and a class with no language return `teachingOrder.kind === 'none'`, `pack: null`, `alphabet: null`;
     - a class row with edition `2099-01-01` returns `kind: 'update'` and sets the row's `lettersNeedUpdate`;
     - `alphabet` equals the class's order for a no-pack lesson.
-    - `lessonOrderAndPack` on a 2026-10-23 isiXhosa class, as a `test.each` over the preview
-      setting:
+    - `lessonOrderAndPack` on a 2026-10-23 isiXhosa class, as a `test.each` (Review Focus 1):
 
-      | `packId` | `allowPreview` | `pack` | `pinnedToAnotherOrder` |
-      |---|---|---|---|
-      | none (new lesson) | true | `isixhosa-candidates-preview-v2` | false |
-      | none (new lesson) | false | `isixhosa-interim-letters-v2` | false |
-      | `isixhosa-candidates-preview-v2` | true | that pack | false |
-      | `isixhosa-candidates-preview-v2` | false | `null` | false |
-      | `isixhosa-candidates-preview-v1` | true and false | `null` | true |
-      | `isixhosa-interim-letters-v1` | false | `null` | true |
-      | `no-such-pack` | false | `null` | true |
+      | `packId` | `allowPreview` | `pack` |
+      |---|---|---|
+      | none (new lesson) | true | `isixhosa-candidates-preview-v2` |
+      | none (new lesson) | false | `isixhosa-interim-letters-v2` |
+      | `isixhosa-candidates-preview-v2` | true | that pack |
+      | `isixhosa-candidates-preview-v2` | false | `null` |
+      | `isixhosa-candidates-preview-v1` | true | `null` |
+      | `isixhosa-interim-letters-v1` | false | `null` |
 
-      An English 2026-10-23 class with `packId: 'english-interim-letters-v1'` also gives `pack: null`
-      and `pinnedToAnotherOrder: true`.
+      An English 2026-10-23 class with `packId: 'english-interim-letters-v1'` also gives `pack: null`.
 
     Replace the test that pinned `PEDAGOGICAL_ORDERS.af` with one for `afrikaans-order-2026-10-23`.
   - `useLessonDraft.test.js`:
@@ -525,23 +512,9 @@ Phone rules:
       `isixhosa-candidates-preview-v2` when preview is enabled;
     - the hook exposes `teachingOrder`;
     - the existing test "a frozen version-1 draft keeps its stored review letters when resumed and
-      saved" keeps every assertion (the stored plan is saved unchanged and `computeLessonPlan` is
-      never called) and adds `expect(result.current.planFromAnotherOrder).toBe(true)`.
-  - `LessonScreen.test.js`:
-    - a lesson for an unknown-edition class shows `Update the app to teach this class's letters.`
-      and no letter tiles;
-    - Review Focus 1, as a `test.each` over three stored-plan states and two pins. The states are
-      frozen (`plan_fixed_at` set), previous day (unfrozen, `lesson_date` yesterday) and same day
-      (unfrozen, today; the stored plan's `present_child_ids` match the attendance and its
-      `history_complete` and `mastery_complete` are both true, so `isPlanSuperseded` keeps it). The
-      pins are `english-interim-letters-v1` on a 2026-10-23 English class, with a stored plan
-      suggesting `a m s t` and reviewing `e`, and `isixhosa-candidates-preview-v1` with preview
-      enabled, on a 2026-10-23 isiXhosa class. Each case:
-      - shows `Choose the letters you teach`, with the grid's first four tiles in the class's order
-        (`s a n d` or `o m l a`);
-      - shows no `Review:` line and no `First lesson: start with these letters.`;
-      - after a letter is ticked, the stored draft's `plan` and `pack_id` are unchanged when read
-        back with `repositories.lessonDrafts`.
+      saved" passes unchanged.
+  - `LessonScreen.test.js`: a lesson for an unknown-edition class shows
+    `Update the app to teach this class's letters.` and no letter tiles.
   - `lessonPlanPacks.test.js`: `getPack` is no longer exported.
 
 - [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js`. Expected: FAIL.
@@ -720,6 +693,8 @@ Phone rules:
   Then remove the symlink with `rm .env.local`, which removes the link, not its target.
 - [ ] **Step 5: EAS builds after the apply.** Android and iOS, both `preview-content` and `preview`.
 - [ ] **Step 6: Device run,** on the A03 when the other session frees it, and on Jim's iPhone.
+  - Before installing, finish or discard every open lesson on the phone (Home shows them), so no
+    draft pinned to a v1 pack carries over.
   - Use one class per language, creating English and Afrikaans test classes on a test account if
     none exist. Screenshot each:
     - the picker's suggested letters (`o m l a` / `s a n d` / `a e k n`);
