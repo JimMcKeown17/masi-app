@@ -62,6 +62,8 @@ cannot do them**, and tells the EA why so the EA is not confused.
 
 All content comes from `content/egra/egra-assessments.json` and is never edited by hand. Item order,
 case and repeats stay exactly as printed. Practice items are shown in the instructions, never scored.
+Each shared Question has one instruction text per language (card side, how to mark, the first-row
+stop and the practice items), used word for word by WelaPLUS, Full EGRA and the quick tests.
 
 | Language | Letters | Words, story, story questions |
 |---|---|---|
@@ -159,20 +161,31 @@ skipped rows. The sheet waits for **Got it**. It never names a pronoun for the c
 
 | Trigger | Title | Body |
 |---|---|---|
-| Q1 | No reading or writing today | `{first name}` got every letter in the first row wrong. So `{first name}` won't be asked to read or write words, sentences or a story. This is normal. Carry on with the next Question. |
-| Q5 | No reading or writing today | `{first name}` got every letter in the first row of the Writing Sheet wrong. So `{first name}` won't be asked to read or write words, sentences or a story. This is normal. Carry on with the next Question. |
+| Q1 | No reading or writing today | `{first name}` got every letter in the first row wrong. So `{first name}` won't be asked to read or write words, sentences or a story. This is normal. |
+| Q5 | No reading or writing today | `{first name}` got every letter in the first row of the Writing Sheet wrong. So `{first name}` won't be asked to read or write words, sentences or a story. This is normal. |
 | Q6 | No more reading or writing today | `{first name}` got every word in the first row wrong. So `{first name}` won't be asked to read sentences or a story, or to write. This is normal. |
 
-Under the body, two short lists: **Still to do** (undecided Questions not skipped) and **Skipped**
-(the Questions this trigger skipped). After a Q6 trigger nothing is left, so the list's main button
-is **Review and finalize**. If a later trigger has nothing left to skip (Q1 already fired), no
-second card appears.
+The body ends with one more sentence that depends on what is left: **Carry on with the next
+Question.** when any Question is still to do, or **Tap Review and finalize to finish.** when nothing
+is (the usual case after a Q5 or Q6 trigger, since Q2–Q5 normally come first).
+
+Under the body, two short lists: **Still to do** (undecided Questions not skipped; left out when
+empty) and **Skipped** (the Questions this trigger skipped). When nothing is left, the list's main
+button is **Review and finalize**. If a later trigger has nothing left to skip (Q1 already fired),
+no second card appears.
+
+**When the card shows (amended after the plan review).** The card is worked out from the saved
+results, not from the save that created the skips: it shows when an unfinished assessment has a
+fired trigger whose skips are saved and the EA has not yet tapped **Got it** for it since the app was
+opened. So an EA whose phone died between the skips being saved and the card appearing still sees
+it on reopening. The cost is that reopening an unfinished assessment after the app was closed shows
+the card once more; nothing is stored to remember it. A finalized assessment never shows it.
 
 Skipped rows read `Skipped · Letters first row wrong`, `Skipped · Letter writing first row wrong`
 or `Skipped · Words first row wrong`, replacing today's "Not reached" for these rows. Q9 skipped by
 its own story rule reads `Skipped · No story words read`, in WelaPLUS and Full EGRA. The label
 comes from the trigger, which the app can work out from the saved results; nothing extra is stored.
-A run resumed later shows the same row labels; the card itself is not shown again.
+A run resumed later shows the same row labels.
 
 ## 5. Full EGRA
 
@@ -200,8 +213,9 @@ A run resumed later shows the same row labels; the card itself is not shown agai
 
 - **Letter Sounds** and **Word Reading** use the §3 item sets in the child's class language. isiZulu
   joins English, isiXhosa and Afrikaans because the content now exists.
-- **Stop rule:** first row all wrong. The instructions change from "After 10 wrong in a row, the test
-  stops" to the first-row wording Full EGRA uses.
+- **Stop rule:** first row all wrong. The quick tests take the shared instruction text (§3) in the
+  child's language, so they gain the card side, the first-row wording and the practice items, and
+  drop "After 10 wrong in a row, the test stops".
 - **isiZulu letter mastery** has no letter order yet. An isiZulu Letter Sounds result must save and
   show its score without breaking the mastery screens; it simply does not feed mastery until the
   order exists.
@@ -253,6 +267,10 @@ A run resumed later shows the same row labels; the card itself is not shown agai
   available … yet"; Q9 is also skipped after a story the EA skipped by hand; the earliest trigger owns
   the labels; a Q5 first row with any letter unmarked is not a trigger; rankings keep combining
   versions.
+- **Calls made after the plan review** (Jim to check): the card's last sentence depends on what is
+  left (§4.3), because after a Q5 trigger nothing usually is; the card shows again once if the app
+  was closed before **Got it** (§4.3); the quick tests use the same instruction text, practice items
+  included, as WelaPLUS and Full EGRA (§3, §6).
 
 ## 10. Documents this changes
 

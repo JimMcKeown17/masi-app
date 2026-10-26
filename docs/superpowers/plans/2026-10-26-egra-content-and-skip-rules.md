@@ -22,13 +22,16 @@
 - Saved results and old versions (`wela_plus_full@2024.1`, the 13 `egra@<form id>` Batteries, `letter_sounds@2026.1/2026.2`, `word_reading@2026.1`, `-masi60` sets) stay registered and behave exactly as today, apart from the Story comprehension title and skip-row labels.
 - npm only; no new dependencies. Bottom sheets, not dialogs. Bold Red tokens only (raw-hex guard). Copy never uses a pronoun for the child.
 - Tests run on Node 20: prefix `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`. Gates: `npx jest --silent`, `npm run test:types`, `npm run test:integration`, `npm run test:content`.
+- **Every task ends with `npx jest --silent` and `npm run test:types` green.** A task that changes a contract (a field, a title, a label, what is current) updates every existing assertion on it in that same task. Each task's "Existing tests to update" list names the ones known today; the full run catches the rest.
+- Old item sets resolve only by their own exact version. Shared sets resolve only for `question_version === '2026.3'`.
+- One instruction text per shared Question and language, from `sharedInstructionsFor` (Task 1), used word for word by WelaPLUS 2026.1, Full EGRA 2026.1 and the quick tests.
 - Docs ship in this branch (Task 9). Never run raw `supabase` from the repo root; staging work uses `scripts/sqlite-staging.cjs` and needs Jim's go to push.
 
 ## Review Focus
 
-1. **Resume between the trigger save and the skips.** The app is killed after Q1 saves with a wrong first row and before the overview saves the skips. On reopening, the skips are saved once, the card shows once, and no `QUESTION_ALREADY_DECIDED` error reaches the EA. (Task 7, test `resumed run applies first-row skips once and shows the card`.)
+1. **The app dies around the skips.** Killed after Q1 saves and before any skip saves, after some skips save, or after all skips save but before the card appears. On reopening, each missing skip saves once, the card shows, and no `QUESTION_ALREADY_DECIDED` error reaches the EA. (Task 7, the three `card survives …` tests.)
 2. **A first row finished wrong exactly as the timer ends.** Q1 saved with `stopped_reason: 'timer'` and all 10 first-row items reached and wrong is a trigger. A row with 9 reached wrong and 1 not reached is not. (Task 2, `trigger reads marks, not the stop reason`.)
-3. **Old versions get no skip rule.** A `wela_plus_full@2024.1` run whose Q1 first row is all wrong produces no automatic skips. An old EGRA form keeps only its story rule. (Task 2, `batteries without skipRule never first-row skip`.)
+3. **Old versions get no skip rule and keep their own content.** A `wela_plus_full@2024.1` run whose Q1 first row is all wrong produces no automatic skips. An old EGRA form keeps only its story rule. Every old question still resolves to exactly the item set it resolves to today, never a 2026.3 set. (Task 2, `batteries without skipRule never first-row skip`; Task 1, `old questions resolve only their own sets`.)
 4. **Letter writing with later letters right.** Q5's first 6 all wrong and letters 7–26 right is still a trigger. Q5 with one of the first 6 unmarked is not. (Task 2, `letter writing first row`.)
 5. **An isiZulu child.** WelaPLUS shows "Not available in isiZulu yet"; Full EGRA and both quick tests start in isiZulu, with 5-word rows and the 110-letter chart; letter mastery for isiZulu stays empty without throwing. (Tasks 4, 5.)
 
@@ -38,27 +41,35 @@
 
 **Files:**
 - Create: `src/assessment-questions/egra/sharedReading.ts`
-- Modify: `src/assessment-questions/egra/adapter.ts` (extract the four set builders), `src/assessment-questions/egra/index.ts` (exports), `src/assessment-questions/battery/bundledItemSets.ts` (lookup falls through to shared sets before `egraItemSetFor`)
-- Test: `src/assessment-questions/egra/__tests__/sharedReading.test.ts`
+- Modify: `src/assessment-questions/egra/adapter.ts` (extract the four set builders), `src/assessment-questions/egra/index.ts` (exports), `src/assessment-questions/battery/bundledItemSets.ts` (lookup order below)
+- Test: `src/assessment-questions/egra/__tests__/adapterBaseline.test.ts` (+ its committed snapshot), `src/assessment-questions/egra/__tests__/sharedReading.test.ts`
 
 **Interfaces:**
 - Produces:
   - `SHARED_READING_VERSION = '2026.3'`
   - `SHARED_READING_FORMS: Record<'xh' | 'en' | 'af' | 'zu', { letters: string; reading: string }>` (values from Global Constraints)
-  - `sharedItemSetFor(questionCode: string, language: string): (ItemSet & { source_form_id: string }) | null` for the four codes
+  - `sharedItemSetFor(questionCode: string, questionVersion: string, language: string): (ItemSet & { source_form_id: string }) | null` for the four codes. Returns `null` unless `questionVersion === SHARED_READING_VERSION`.
+  - `sharedInstructionsFor(questionCode: string, language: string): string | null`. The one instruction text for each shared Question:
+    - `letter_sounds`: `Hand the child Reading Card side A. ` + `timedInstructions('letter sounds', <letters form>.letters)`
+    - `word_reading`: `Hand the child Reading Card side B. ` + `timedInstructions('words', <reading form>.words)`
+    - `oral_reading`: `` `Hand the child Reading Card side C. Ask the child to read the story aloud. ${markingSentence('word')} The test stops by itself when the time is up.` ``
+    - `reading_comprehension`: `` `Ask the story questions. Use the answer guide to decide. ${markingSentence('question')}` ``
+  - `bundledItemSetFor(code, version, language)` order: exact `BUNDLED_ITEM_SETS` key, then `sharedItemSetFor` (exact version only), then `egraItemSetFor`.
   - `SHARED_READING_SETS` (frozen map `code → language → set`, built once at load)
   - From `adapter.ts`: `buildLetterSet(form, version, extension?)`, `buildWordSet(form, version)`, `buildPassageSet(form, version)`, `buildComprehensionSet(form, version)`, each returning today's shapes. `adaptEgraForm` uses them, so its output is byte-identical.
   - `timedInstructions(noun: 'letter sounds' | 'words', section: EgraGrid): string` (exported; today's text).
 
+- [ ] **Step 0: Capture the old adapter output before touching it.** Write `adapterBaseline.test.ts`: for each of the 13 forms, `expect(sha256(JSON.stringify({ itemSets, battery: { ...battery, questions: battery.questions.map(({ title, ...q }) => q) } }))).toMatchSnapshot(form.id)` (Node `crypto`). Run it on the unmodified adapter to write the snapshot. Commit test and snapshot on their own: `test(egra): baseline of the 13 adapted forms`. From here on, run it with `--ci` and never `-u`; titles are excluded because Task 4 renames Q4.
 - [ ] **Step 1: Write the failing tests.**
   - `shared sets copy the pack exactly`: for each language and code, `item_set_id === \`${code}@2026.3.${lang}\``, `question_version === '2026.3'`, and `source_form_id` matches `SHARED_READING_FORMS`. Letters `rows.flat()` equals the letters form's `letters.items.map(i => i.text)`. Words equal the reading form's words. The passage word count equals today's `adaptEgraForm(readingForm).itemSets.oral_reading.words.length`. Questions equal the reading form's `comprehension.questions` texts.
   - `shared shapes`: xh/en/af letters are 10 rows of 10 and zu 11 rows of 10; `stop_rule` is `{ kind: 'first_row_all_wrong', first_row_length: 10 }`. Words `row_lengths` are `Array(10).fill(8)` for xh/en/af and `Array(10).fill(5)` for zu; word `stop_rule.first_row_length` is 8, or 5 for zu.
   - `no Masi extension in shared letters`: no shared letters set has more letters than its source form.
-  - `adapter output unchanged`: snapshot `adaptEgraForm` for all 13 forms against the pre-refactor output, comparing JSON of `itemSets` and `battery.questions` minus titles.
-  - `bundled lookup finds shared sets`: `bundledItemSetFor('word_reading', '2026.3', 'zu')` is the shared zu set; unknown languages return `null`.
+  - `bundled lookup finds shared sets`: `bundledItemSetFor('word_reading', '2026.3', 'zu')` is the shared zu set; `('letter_sounds', '2026.3', 'st')` and `('letter_sounds', '2026.9', 'xh')` return `null`.
+  - `old questions resolve only their own sets`: every question of `WELA_PLUS_FULL_2024_1` (en, xh) and of the 13 EGRA Batteries resolves to a set whose `question_version` equals the question's version, and whose `item_set_id` equals the one captured from `bundledItemSetFor` before the change (write the expected ids into the test). `bundledItemSetFor('letter_sounds', '2026.2', l)` and `('word_reading', '2026.1', l)` for en/xh/af return today's sets; `('letter_sounds', '2026.1', 'af')` returns what it returns today.
+  - `one instruction text per shared Question`: the exact strings above for xh `letter_sounds` and zu `word_reading`; every letters/words text ends with `` ` Practice first (not scored): ${practiceItems.join(', ')}` `` from its own form when the form has practice items; no practice item appears among a set's scored items.
 - [ ] **Step 2:** `npx jest src/assessment-questions/egra/__tests__/sharedReading.test.ts`. It should fail because the module doesn't exist.
 - [ ] **Step 3:** Implement. Build the sets with the extracted builders and version `'2026.3'`. Attach `source_form_id`. Fail loudly (TypeError) if a configured form id is missing from the pack.
-- [ ] **Step 4:** Run the new test, `adapter.test.ts`, `registry.test.ts` and `npm run test:types`. All should pass.
+- [ ] **Step 4:** Run `npx jest src/assessment-questions/egra --ci`, then `npx jest --silent` and `npm run test:types`. All should pass, with the baseline snapshot unchanged.
 - [ ] **Step 5:** Commit: `feat(egra): shared 2026.3 reading item sets from the pack`.
 
 ### Task 2: First-row skip rule in the Battery evaluator
@@ -66,7 +77,8 @@
 **Files:**
 - Create: `src/assessment-questions/battery/skipRules.ts`
 - Modify: `src/assessment-questions/types/BatteryConfig.ts`, `src/assessment-questions/battery/evaluateBatteryState.ts`, `src/assessment-questions/index.ts` (exports)
-- Test: `src/assessment-questions/battery/__tests__/skipRules.test.ts`; update `evaluateBatteryState.test.ts` for the new `autoSkips` field
+- Test: `src/assessment-questions/battery/__tests__/skipRules.test.ts`
+- Existing tests to update: every exact assertion on `autoSkips` or the whole `BatteryState`, known today in `battery/__tests__/evaluateBatteryState.test.ts`, `egra/__tests__/adapter.test.ts:126` and `:144` (add `trigger: null`), `__tests__/batteryRun.test.js` and `__tests__/BatteryOverviewScreen.test.js`.
 
 **Interfaces:**
 - Produces (types in `BatteryConfig.ts`):
@@ -76,6 +88,7 @@
   - `DecidedItem { position: number; is_correct: boolean; metadata?: Record<string, unknown> }`
   - `DecidedResult.items?: DecidedItem[]`
   - `BatteryState.autoSkips: Array<{ question_code: string; reason: 'skipped_prerequisite_unmet'; trigger: string | null }>`
+  - `BatteryState.firedTrigger: string | null` (the earliest fired trigger, whether or not its skips are saved yet)
 - Produces (in `skipRules.ts`):
   - `firstRowWrong(result: DecidedResult, length: number): boolean`
   - `firedTrigger(battery: BatteryConfig, decided: DecidedResult[]): string | null`. Returns the earliest trigger in Battery order.
@@ -104,7 +117,7 @@
   - **Saved skips:** `skipCauseFor on already-saved skips re-derives the same cause after resume`.
 - [ ] **Step 2:** Run it. It should fail.
 - [ ] **Step 3:** Implement `skipRules.ts` and wire it into `evaluateBatteryState`. The evaluator stays pure, with no host imports.
-- [ ] **Step 4:** Run the battery tests and `npm run test:types`. All should pass.
+- [ ] **Step 4:** Run the battery tests, then `npx jest --silent` and `npm run test:types`. All should pass.
 - [ ] **Step 5:** Commit: `feat(battery): first-row skip rule; earliest trigger owns the skips`.
 
 ### Task 3: WelaPLUS 2026.1
@@ -119,7 +132,7 @@
 - Test: `src/assessment-questions/battery/__tests__/wela_plus_full_2026_1.test.ts`; extend `__tests__/batteryRun.test.js`
 
 **Interfaces:**
-- Consumes: Task 1 `sharedItemSetFor`, `timedInstructions`, `SHARED_READING_FORMS`; Task 2 `SkipRule`.
+- Consumes: Task 1 `sharedItemSetFor`, `sharedInstructionsFor`, `SHARED_READING_FORMS`; Task 2 `SkipRule`.
 - Produces: `WELA_PLUS_FULL_2026_1: BatteryConfig`. Its fields:
   - `battery_code: 'wela_plus_full'`, `battery_version: '2026.1'`
   - `title: 'WelaPLUS'`, `aboutMinutes: 32`
@@ -147,11 +160,8 @@
 | 12 | Story writing | 2024.1 object | — |
 
 - Instructions, `en` and `xh` (English text in both, like 2024.1):
-  - **Q1:** `Hand the child Reading Card side A. ` + `timedInstructions('letter sounds', <that language's letters form>.letters)`.
-  - **Q6:** `Hand the child Reading Card side B. ` + `timedInstructions('words', <reading form>.words)`.
+  - **Q1, Q6, Q8, Q9:** `{ en: sharedInstructionsFor(code, 'en'), xh: sharedInstructionsFor(code, 'xh') }`.
   - **Q7:** the 2024.1 text with "side B" changed to "side D".
-  - **Q8:** `Hand the child Reading Card side C. Ask the child to read the story aloud. ${markingSentence('word')} The test stops by itself when the time is up.`
-  - **Q9:** `Ask the story questions. Use the answer guide to decide. ${markingSentence('question')}`
 - `materialsLine`:
   - For a `reading_card` question in a Battery with `readingCard`, the footer is `` `${battery.readingCard} · ${LANG} · side ${side}` ``.
   - Every other case keeps today's `` `${title} ${battery_version} · …` ``.
@@ -165,7 +175,7 @@
   - `materialsLine` gives `Reading Card 2026.3 · XH · side A` for 2026.1 Q1 and still `WelaPLUS 2024.1 · XH · side A` for 2024.1 Q1.
 - [ ] **Step 2:** Run. Fail.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `registry.test.ts`, `wela_plus_full.test.ts`, the new test, `batteryRun.test.js` and types. All should pass.
+- [ ] **Step 4:** Run `registry.test.ts`, `wela_plus_full.test.ts`, the new test and `batteryRun.test.js`, then `npx jest --silent` and types. All should pass.
 - [ ] **Step 5:** Commit: `feat(wela): WelaPLUS 2026.1 on the shared reading content with skip rules`.
 
 ### Task 4: Full EGRA 2026.1 and the Assessments card
@@ -178,9 +188,10 @@
   - `src/screens/main/AssessmentsScreen.js`
 - Delete: `src/components/assessments/EgraFormPickerSheet.js`, plus its tests and the picker tests in `__tests__/AssessmentsScreen.test.js` (lines 48–110 today)
 - Test: `src/assessment-questions/egra/__tests__/fullEgra.test.ts`; update `__tests__/AssessmentsScreen.test.js` and `__tests__/AssessmentChildSelectScreen.battery.test.js`
+- Existing tests to update: `egra/__tests__/adapter.test.ts:38` and `__tests__/BatteryRunSummaryScreen.test.js:29` (`Story questions` → `Story comprehension`).
 
 **Interfaces:**
-- Consumes: Task 1 sets, `timedInstructions`, `markingSentence`.
+- Consumes: Task 1 sets and `sharedInstructionsFor`.
 - Produces: `FULL_EGRA_2026_1: BatteryConfig`. Its fields:
   - `battery_code: 'egra'`, `battery_version: '2026.1'`, `title: 'Full EGRA'`, `aboutMinutes: 6`
   - `languages: ['xh', 'en', 'af', 'zu']`, no `fixedLanguage`
@@ -192,7 +203,7 @@
   - Familiar words (side B, 60 s)
   - Reading a story (side C, 60 s)
   - Story comprehension
-- Instructions are keyed per language, because practice items differ by form. The text is today's adapter text.
+- Instructions: `{ xh, en, af, zu }`, each `sharedInstructionsFor(code, language)`.
 - Card copy: title `Full EGRA`; description `` `All 4 Questions · isiXhosa, English, Afrikaans or isiZulu · about 6 min` ``.
 - Start calls `navigateToRun('AssessmentChildSelect', { batteryCode: 'egra', batteryVersion: '2026.1' })`.
 
@@ -220,24 +231,24 @@
 ### Task 5: Quick tests on the shared content
 
 **Files:**
-- Modify: `src/assessment-questions/itemsets/current.ts`, `src/utils/assessmentRegistry.js` (`STANDALONE_TESTS` instructions)
-- Test: update `src/assessment-questions/battery/__tests__/registry.test.ts` (replace `the Word Reading quick test keeps word_reading@2026.1 with no stop rule`), `__tests__/assessmentRegistry.test.js`, `__tests__/StandaloneTestScreen.test.js`; add a zu case to the mastery-state test that covers `loadMasteryState`
+- Modify: `src/assessment-questions/itemsets/current.ts`, `src/utils/assessmentRegistry.js` (`STANDALONE_TESTS` instructions), `src/screens/assessments/StandaloneTestScreen.js` (passes `definition.instructions[languageCode]`)
+- Test: update `src/assessment-questions/battery/__tests__/registry.test.ts` (replace `the Word Reading quick test keeps word_reading@2026.1 with no stop rule`), `__tests__/assessmentRegistry.test.js`, `__tests__/StandaloneTestScreen.test.js`; add a zu case to `__tests__/masteryState.test.js`
+- Existing tests to update: `egra/__tests__/defaults.test.ts:7–13` (new identities, four languages). Every other test that reads `CURRENT_ITEM_SETS` (today: `itemSetResolution`, `clockJump`, `letterTestContent`, `itemSetIntegrity`, `wela_plus_full`, `LetterSoundsQuestion`, `ReadWordsQuestion.stepByStep`, `masteryState`, `readers.mixedResults`, `QuestionGalleryScreen`, `AssessmentDetailGrid`, `assessmentsRepository.questionResults`). Rule: a test about a component, reader or repository keeps its old fixture by reading the old set explicitly (`bundledItemSetFor('letter_sounds', '2026.2', lang)` or `('word_reading', '2026.1', lang)`), so it still tests what it tested. A test about what is current moves to 2026.3.
 
 **Interfaces:**
-- Consumes: Task 1 `SHARED_READING_SETS`.
+- Consumes: Task 1 `SHARED_READING_SETS`, `sharedInstructionsFor`.
 - Produces:
   - `CURRENT_ITEM_SETS.letter_sounds` and `.word_reading` hold `{ xh, en, af, zu }`, the shared 2026.3 sets.
-  - Letter Sounds instruction step 5 becomes `5. If every letter in the first row is wrong, the test stops.`
-  - Word Reading adds `5. If every word in the first row is wrong, the test stops.`
+  - `STANDALONE_TESTS[i].instructions` becomes `{ xh, en, af, zu }`, each `sharedInstructionsFor(code, language)`. The old numbered steps go. The Question gallery already reads per-language instructions.
 
 - [ ] **Step 1: Write the failing tests.**
   - The quick tests resolve 2026.3 sets with first-row stop rules for all four languages.
-  - The instruction copy is as above.
+  - `StandaloneTestScreen` passes the child's-language text: for `zu` Word Reading the Question receives `sharedInstructionsFor('word_reading', 'zu')`, which names side B and the zu practice words.
   - A zu-class child can start both quick tests.
   - `loadMasteryState({ languageCode: 'zu', … })` returns an empty mastered set and `pedagogicalOrder: null` without reading results.
 - [ ] **Step 2:** Run. Fail.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the touched tests. Pass.
+- [ ] **Step 4:** Run the touched tests, then `npx jest --silent` and types. Pass.
 - [ ] **Step 5:** Commit: `feat(quick-tests): Letter Sounds and Word Reading use the shared content`.
 
 ### Task 6: Skip-row labels
@@ -245,9 +256,11 @@
 **Files:**
 - Modify: `src/utils/batteryRun.js` (`buildRunView` passes `items` to the evaluator; labels)
 - Test: `__tests__/batteryRun.test.js`
+- Existing tests to update: `__tests__/BatteryOverviewScreen.test.js:46` (an old EGRA story-questions skip now reads `Skipped · No story words read`). `batteryRun.test.js:85` stays `Skipped · Not reached` (a 2024.1 row with no cause).
 
 **Interfaces:**
-- Consumes: Task 2 `skipCauseFor`, `autoSkips[].trigger`.
+- Consumes: Task 2 `skipCauseFor`, `autoSkips[].trigger`, `firedTrigger`.
+- Produces: `buildRunView(...)` also returns `firedTrigger` (passed through from the evaluator).
 - Produces: `TRIGGER_LABELS = { letter_sounds: 'Letters first row wrong', wela_plus_letter_writing: 'Letter writing first row wrong', word_reading: 'Words first row wrong' }`.
 - Label rules for a saved `skipped_prerequisite_unmet` row:
   - **First-row cause:** `Skipped · ${TRIGGER_LABELS[trigger]}`.
@@ -262,13 +275,13 @@
   - A manual skip keeps its EA reason label.
 - [ ] **Step 2:** Run. Fail.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run. Pass.
+- [ ] **Step 4:** Run, then `npx jest --silent`. Pass.
 - [ ] **Step 5:** Commit: `feat(run): skipped rows say why`.
 
 ### Task 7: The skip card
 
 **Files:**
-- Create: `src/components/assessments/SkipNoticeSheet.js`
+- Create: `src/components/assessments/SkipNoticeSheet.js`, `src/utils/skipNoticeSeen.js`
 - Modify:
   - `src/utils/batteryRun.js`: add `skipNoticeFor`.
   - `src/screens/assessments/battery/BatteryOverviewScreen.js`: show the card after an auto-skip batch.
@@ -277,10 +290,12 @@
 **Interfaces:**
 - Consumes: Task 2 `autoSkips[].trigger`; Task 6 rows.
 - Produces:
-  - `skipNoticeFor({ battery, view, savedSkips, firstName }): { title, body, stillToDo: string[], skipped: string[] } | null`.
-    - `savedSkips` are the `autoSkips` entries this batch saved.
-    - It returns `null` unless at least one entry has a non-null `trigger`.
-    - `stillToDo` is the titles of rows still `next`/`not_started`; `skipped` is the titles this trigger skipped.
+  - `skipNoticeFor({ battery, view, firstName }): { trigger, title, body, stillToDo: string[], skipped: string[] } | null`. Worked out from saved results only.
+    - `skipped` is the titles of saved `skipped_prerequisite_unmet` rows whose `skipCauseFor` is `view.firedTrigger`.
+    - It returns `null` when `view.firedTrigger` is null or `skipped` is empty.
+    - `stillToDo` is the titles of rows still `next`/`not_started`.
+    - `body` is the table text, then a space, then `Carry on with the next Question.` when `stillToDo` is non-empty, otherwise `Tap Review and finalize to finish.`
+  - `skipNoticeSeen.js`: `hasSeenSkipNotice(runId): boolean`, `markSkipNoticeSeen(runId): void`, `resetSkipNoticeSeen(): void` (tests only). A module-level `Set`, never persisted: after an app restart an unfinished run shows the card once more (spec §4.3).
   - `SkipNoticeSheet({ visible, title, body, stillToDo, skipped, onDismiss })`:
     - built on `BottomSheet` with `panelRole="alertdialog"`;
     - two short lists headed `Still to do` (omitted when empty) and `Skipped`;
@@ -289,25 +304,30 @@
 
 | Trigger | Title | Body |
 |---|---|---|
-| `letter_sounds` | `No reading or writing today` | `{name} got every letter in the first row wrong. So {name} won't be asked to read or write words, sentences or a story. This is normal. Carry on with the next Question.` |
-| `wela_plus_letter_writing` | `No reading or writing today` | `{name} got every letter in the first row of the Writing Sheet wrong. So {name} won't be asked to read or write words, sentences or a story. This is normal. Carry on with the next Question.` |
+| `letter_sounds` | `No reading or writing today` | `{name} got every letter in the first row wrong. So {name} won't be asked to read or write words, sentences or a story. This is normal.` |
+| `wela_plus_letter_writing` | `No reading or writing today` | `{name} got every letter in the first row of the Writing Sheet wrong. So {name} won't be asked to read or write words, sentences or a story. This is normal.` |
 | `word_reading` | `No more reading or writing today` | `{name} got every word in the first row wrong. So {name} won't be asked to read sentences or a story, or to write. This is normal.` |
 
 - Overview wiring:
-  - The existing auto-skip batch records the `autoSkips` entries it saved (it skips `QUESTION_ALREADY_DECIDED` ones).
-  - After the re-read, set `skipNotice` from `skipNoticeFor`.
-  - Clear it on blur.
-  - It is never shown for a read-only run, and never for a prerequisite-only batch.
+  - The auto-skip batch is unchanged.
+  - Whenever the overview publishes a view of a writable run, it sets `skipNotice` from `skipNoticeFor` unless `hasSeenSkipNotice(run.id)`. This covers a fresh trigger, a resume before the skips saved, and a resume after they saved but before the card appeared.
+  - `Got it` calls `markSkipNoticeSeen(run.id)` and hides the sheet. Blur hides it without marking it seen.
+  - Never shown for a read-only run, and never when the only skips are prerequisite skips.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `skipNoticeFor` returns the exact copy for each trigger; `null` for a prerequisite-only batch.
+  - `skipNoticeFor` returns the exact copy for each trigger; a Q1 trigger with Q2–Q5 undecided ends `Carry on with the next Question.`; a Q5 trigger with Q1–Q4 decided ends `Tap Review and finalize to finish.` and has an empty `stillToDo`; `null` when only prerequisite skips exist.
   - The sheet renders both lists and calls `onDismiss` on `Got it`.
   - Overview: after Q1 saves with a wrong first row, rows 6–12 show the skip labels, the card shows once, and `Got it` closes it. Re-focusing does not show it again.
   - Overview after a Q6 trigger: the footer button is `Review and finalize`.
-  - **Resume test:** `resumed run applies first-row skips once and shows the card`. Q1 is saved, then the overview mounts fresh with no skips saved. The skips save once and the card shows. A second mount shows no card and makes no saves.
+  - Each test calls `resetSkipNoticeSeen()` in `beforeEach`.
+  - `card survives a restart before the skips save`: Q1 is saved, then the overview mounts fresh with no skips saved. The 7 skips save once and the card shows.
+  - `card survives a restart after some skips save`: Q1 and 3 of the 7 skips are saved. On mount the other 4 save once, with no `QUESTION_ALREADY_DECIDED` shown, and the card lists all 7.
+  - `card survives a restart after all skips save`: Q1 and all 7 skips are saved. On mount nothing saves and the card shows.
+  - After `Got it`, a second mount in the same session shows no card and makes no saves. After `resetSkipNoticeSeen()` (a restart) it shows once more.
+  - The first view load fails after the skips save: the screen shows today's load error, and the next successful load shows the card.
 - [ ] **Step 2:** Run. Fail.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the overview, summary and question screen tests plus `npx jest --silent`. All should pass.
+- [ ] **Step 4:** Run the overview, summary and question screen tests, then `npx jest --silent` and types. All should pass.
 - [ ] **Step 5:** Commit: `feat(run): skip card tells the EA why reading and writing stop`.
 
 ### Task 8: Programme default and an end-to-end run
