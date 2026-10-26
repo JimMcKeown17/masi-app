@@ -1,0 +1,27 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`dbe-egra-af-hl-1-v1 adapts exactly as before the shared-content refactor 1`] = `"834c3f6fa7b1daeab1ca9837c3822ef74d99f974b85bf11b22b46135b878811c"`;
+
+exports[`dbe-egra-af-hl-2-v1 adapts exactly as before the shared-content refactor 1`] = `"7f541b26db181fa9d17e90fb28eab162209cdda68be9f86fa2e3b6c48cd92d64"`;
+
+exports[`dbe-egra-af-hl-3-v1 adapts exactly as before the shared-content refactor 1`] = `"566d8310dadd791ee76a1a8d1dbba073a7944cfe967d846558d90ce5f7aff736"`;
+
+exports[`dbe-egra-en-fal-1-v1 adapts exactly as before the shared-content refactor 1`] = `"39745d0eb527166765f871731d4bc9af94561ad43d831b9b378754fccd992900"`;
+
+exports[`dbe-egra-en-fal-2-v1 adapts exactly as before the shared-content refactor 1`] = `"aaa75ace3a8083993654dd65294232eb9c1638986d4079b1f118647f5473fb66"`;
+
+exports[`dbe-egra-en-fal-3-v1 adapts exactly as before the shared-content refactor 1`] = `"f077c513790f129aba5853086c84866c82bc3886e1fe2240b571cad4d7997a5a"`;
+
+exports[`dbe-egra-en-hl-1-v1 adapts exactly as before the shared-content refactor 1`] = `"d185bbd304377d694ded0a0cb103da8c4f8b212b693c36d05dc1d3a0aa0ddd64"`;
+
+exports[`dbe-egra-en-hl-2-v1 adapts exactly as before the shared-content refactor 1`] = `"cd00570f7a3dd7bcdca1e65da7f20a8fc28e82f0cd851abf108e406b7c407ce2"`;
+
+exports[`dbe-egra-en-hl-3-v1 adapts exactly as before the shared-content refactor 1`] = `"c554f7a3937939c91d4d64acc27d1fb0b4c7aa0291fbc0cd43976587bb60e09c"`;
+
+exports[`dbe-egra-xh-hl-1-v1 adapts exactly as before the shared-content refactor 1`] = `"891b89bb44dec343928d6c2a18148f6d2b728df3a3abfcee2013d8533bce35da"`;
+
+exports[`dbe-egra-xh-hl-2-v1 adapts exactly as before the shared-content refactor 1`] = `"9f86d2c68b8e2d6be3e00dea01e88c0661d697f17ac0a7ad8dadcd599014b99d"`;
+
+exports[`dbe-egra-xh-hl-3-v1 adapts exactly as before the shared-content refactor 1`] = `"12548e20da8b054beb25d0dc7f6ce4205e1ccceecee3334096f948f020ebb73b"`;
+
+exports[`smrs-egra-zu-1-v1 adapts exactly as before the shared-content refactor 1`] = `"73b18acd4ebbe46b5d43429b571f683a42a15abdefe88540eae14537b89d19f7"`;
