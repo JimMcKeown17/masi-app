@@ -11,7 +11,7 @@ import { bindTestActor } from '../test-support/actorTestUtils';
 import { runContractTest } from '../src/assessment-questions/contractTest/runContractTest';
 import * as fixtures from '../src/assessment-questions/testFixtures';
 import { LetterSoundsQuestion } from '../src/assessment-questions/questions/LetterSoundsQuestion';
-import { CURRENT_ITEM_SETS } from '../src/assessment-questions/itemsets/current';
+import { bundledItemSetFor } from '../src/assessment-questions';
 import { ReadWordsQuestion } from '../src/assessment-questions/questions/ReadWordsQuestion';
 import { ReadSentencesQuestion } from '../src/assessment-questions/questions/ReadSentencesQuestion';
 import { ReadPassageQuestion } from '../src/assessment-questions/questions/ReadPassageQuestion';
@@ -146,7 +146,7 @@ describe('question result persistence through real SQLite', () => {
   });
 
   test('a full mixed-case Grid A run keeps every result key and persisted id unique', async () => {
-    const itemSet = CURRENT_ITEM_SETS.letter_sounds.en;
+    const itemSet = bundledItemSetFor('letter_sounds', '2026.2', 'en');
     const result = await emitResult(LetterSoundsQuestion, itemSet, r => {
       press(r, 'Start');
       for (let position = 0; position < 60; position += 1) press(r, 'Correct');

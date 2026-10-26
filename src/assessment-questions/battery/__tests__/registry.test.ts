@@ -1,5 +1,6 @@
 import {
   questionComponentFor,
+  CURRENT_ITEM_SETS,
   ReadWordsQuestion,
   batteryFor,
   bundledItemSetFor,
@@ -148,12 +149,16 @@ test('every battery Question and skip reason produces valid bundled provenance',
 });
 
 
-test('the Word Reading quick test keeps word_reading@2026.1 with no stop rule', () => {
+test('the Word Reading quick test uses shared 2026.3 with first-row stops in four languages', () => {
   expect(questionComponentFor('word_reading')).toEqual({ Component: ReadWordsQuestion, extraProps: {} });
-  for (const language of ['en', 'xh', 'af']) {
-    const set = bundledItemSetFor('word_reading', '2026.1', language)!;
-    expect(set).toMatchObject({ question_code: 'word_reading', question_version: '2026.1',
-      item_set_id: `word_reading@2026.1.${language}` });
-    expect((set as { stop_rule?: unknown }).stop_rule ?? null).toBeNull();
+  for (const language of ['xh', 'en', 'af', 'zu'] as const) {
+    const set = CURRENT_ITEM_SETS.word_reading[language];
+    expect(set).toBe(bundledItemSetFor('word_reading', '2026.3', language));
+    expect(set).toMatchObject({ question_code: 'word_reading', question_version: '2026.3',
+      item_set_id: `word_reading@2026.3.${language}`,
+      stop_rule: { kind: 'first_row_all_wrong', first_row_length: language === 'zu' ? 5 : 8 } });
+    const old = bundledItemSetFor('word_reading', '2026.1', language);
+    if (language === 'zu') expect(old).toBeNull();
+    else expect(old).not.toHaveProperty('stop_rule');
   }
 });

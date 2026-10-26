@@ -3,10 +3,11 @@ import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { ReadWordsQuestion } from '..';
 import { WELA_PLUS_READ_WORDS_EN, WELA_PLUS_READ_WORDS_XH } from '../../../itemsets';
-import { CURRENT_ITEM_SETS } from '../../../itemsets/current';
+import { bundledItemSetFor } from '../../../battery/bundledItemSets';
+import type { ReadWordsItemSet } from '../types';
 import { validateResult } from '../../../contractTest/validateResult';
 
-const SET = CURRENT_ITEM_SETS.word_reading.en;
+const SET = bundledItemSetFor('word_reading', '2026.1', 'en')! as unknown as ReadWordsItemSet;
 const STOP_SET = { ...SET, stop_rule: { kind: 'consecutive_wrong' as const, stop_at: 10 } };
 const STOP_TITLE = 'Lwazi got 10 in a row wrong. The test has stopped.';
 
@@ -129,7 +130,7 @@ test('word_reading shows card rows 1–2 as page 1 of 5 in two continuous column
 });
 
 test('long isiXhosa words shrink to fit their tile', () => {
-  const { screen } = start({ language: 'xh', itemSet: CURRENT_ITEM_SETS.word_reading.xh });
+  const { screen } = start({ language: 'xh', itemSet: bundledItemSetFor('word_reading', '2026.1', 'xh')! });
   decide(screen, true, 30);
   expect(screen.getByText('ibhulukhwe').props).toMatchObject({
     numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6, maxFontSizeMultiplier: 1.2,

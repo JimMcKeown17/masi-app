@@ -1,5 +1,5 @@
 import * as registry from '../src/utils/assessmentRegistry';
-import { CURRENT_ITEM_SETS } from '../src/assessment-questions';
+import { CURRENT_ITEM_SETS, sharedInstructionsFor } from '../src/assessment-questions';
 import { HOME_LANGUAGES } from '../src/constants/options';
 
 describe('assessment language and standalone test registry', () => {
@@ -25,28 +25,26 @@ describe('assessment language and standalone test registry', () => {
     expect(registry.STANDALONE_TESTS).toEqual([
       {
         code: 'letter_sounds', title: 'Letter Sounds', durationSec: 60, component: 'LetterSoundsQuestion',
-        instructions: '1. Tap Start to begin the 60-second timer.\n'
-          + '2. The highlighted letter is the one the child is reading.\n'
-          + '3. Tap Correct or Incorrect. The next letter is highlighted automatically.\n'
-          + '4. Tap Back to fix a mistake.\n'
-          + '5. After 10 wrong in a row, the test stops.',
+        instructions: Object.fromEntries(['xh', 'en', 'af', 'zu'].map(language =>
+          [language, sharedInstructionsFor('letter_sounds', language)])),
       },
       {
         code: 'word_reading', title: 'Word Reading', durationSec: 60, component: 'ReadWordsQuestion',
-        instructions: '1. Tap Start to begin the 60-second timer.\n'
-          + '2. The highlighted word is the one the child is reading.\n'
-          + '3. Tap Correct or Incorrect. The next word is highlighted automatically.\n'
-          + '4. Tap Back to fix a mistake.',
+        instructions: Object.fromEntries(['xh', 'en', 'af', 'zu'].map(language =>
+          [language, sharedInstructionsFor('word_reading', language)])),
       },
     ]);
     for (const test of registry.STANDALONE_TESTS) {
-      for (const language of ['en', 'xh', 'af']) {
+      for (const language of ['xh', 'en', 'af', 'zu']) {
         expect(CURRENT_ITEM_SETS[test.code][language]).toMatchObject({
-          question_code: test.code, language,
+          question_code: test.code, language, question_version: '2026.3',
           item_set_id: `${test.code}@${CURRENT_ITEM_SETS[test.code][language].question_version}.${language}`,
         });
       }
-      expect(CURRENT_ITEM_SETS[test.code].zu).toBeUndefined();
+      for (const text of Object.values(test.instructions)) {
+        expect(typeof text).toBe('string');
+        expect(text).not.toMatch(/1\. Tap Start|10 wrong in a row/);
+      }
     }
   });
 
@@ -77,4 +75,15 @@ describe('assessment language and standalone test registry', () => {
       expect(CURRENT_ITEM_SETS.word_reading[code]).toBeDefined();
     }
   });
+});
+
+test.each(['letter_sounds', 'word_reading'])('fails at load if %s shared instructions are missing', code => {
+  jest.isolateModules(() => {
+    jest.doMock('../src/assessment-questions', () => ({
+      sharedInstructionsFor: (questionCode, language) =>
+        questionCode === code && language === 'zu' ? null : 'shared instructions',
+    }));
+    expect(() => require('../src/utils/assessmentRegistry')).toThrow(`${code}/zu`);
+  });
+  jest.dontMock('../src/assessment-questions');
 });

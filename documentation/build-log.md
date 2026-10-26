@@ -5800,3 +5800,31 @@ All Node commands below used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`:
 
 Built by Codex (gpt-6.1-sol, high; one transient "model at capacity" stop, resumed in the same
 thread); diff reviewed, re-verified and committed by the orchestrator.
+
+### 2026-10-26 — EGRA content and skip rules, Task 5: quick tests on shared content
+
+Built by Codex; will be reviewed and committed by the orchestrator. Both quick tests now use
+shared 2026.3 sets and exact shared instructions in xh/en/af/zu. Historical behavior fixtures
+are pinned by version; old sets remain registered. Real host tests render, mark and save all
+eight frozen sets (including zu's 110 letters / five-word rows) without mutation. isiZulu
+launches from both entry paths; mastery already returns empty without repository reads.
+TDD: current identities failed before the switch (1 test), registry instructions/load guards
+failed before implementation (3), and host language forwarding failed before its fix (21).
+Full-suite routing drift and fixture type errors were corrected. One unmodified story-contract
+test failed once, then passed isolated and on subsequent package/full runs; non-silent runs
+emit React act warnings. No native-device check. One package run had a single failure in the
+untouched `ListenAndAnswerStoryQuestion.contract.test.tsx` ("Finish on a fully-marked Run"); it
+passed 15/15 repeated isolated runs and every later full run, so it is recorded as a load-related
+flake to watch, not a Task 5 regression. Built by Codex; reviewed, re-verified and committed by
+the orchestrator.
+
+All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH` (v20.19.4).
+
+| Command | Result |
+|---|---|
+| `npx jest src/assessment-questions --ci` | PASS: 78 suites / 1,107 tests / 14 snapshots |
+| `npx jest __tests__/StandaloneTestScreen.test.js __tests__/assessmentRegistry.test.js __tests__/masteryState.test.js __tests__/QuestionGalleryScreen.test.js` | PASS: 4 suites / 109 tests |
+| `npx jest --silent` | PASS: 431 suites / 6,525 tests / 14 snapshots; no FAIL lines |
+| `npm run test:types` | PASS: strict tsc, no errors |
+| `npx jest __tests__/AssessmentChildSelectScreen.languagePicker.test.js __tests__/assessmentEntryRouting.test.js` | PASS: 2 suites / 22 tests |
+| `git diff --check` | PASS |

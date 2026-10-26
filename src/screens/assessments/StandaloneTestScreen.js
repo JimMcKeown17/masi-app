@@ -54,7 +54,7 @@ export default function StandaloneTestScreen({ navigation, route }) {
           <Question
             itemSet={itemSet}
             durationSec={definition.durationSec}
-            instructions={definition.instructions}
+            instructions={definition.instructions[languageCode]}
             language={languageCode}
             childName={[child.first_name, child.last_name].filter(Boolean).join(' ')}
             allowSkip={false}

@@ -9,7 +9,7 @@ import StandaloneTestScreen from '../src/screens/assessments/StandaloneTestScree
 import TestFrame from '../src/components/assessments/TestFrame';
 import { BottomBar } from '../src/assessment-questions/ui/BottomBar';
 import { AuthContext } from '../src/context/AuthContext';
-import { WELA_PLUS_FULL_2024_1, CURRENT_ITEM_SETS, testFixtures, questionComponentFor } from '../src/assessment-questions';
+import { WELA_PLUS_FULL_2024_1, SHARED_READING_SETS, sharedInstructionsFor, testFixtures, questionComponentFor } from '../src/assessment-questions';
 import { STANDALONE_TESTS } from '../src/utils/assessmentRegistry';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -115,7 +115,8 @@ test.each(['StandaloneTest', 'QuestionGalleryRun'])('TestFrame owns the top inse
 });
 
 test.each([
-  ['standalone:word_reading', 'xh', 'bundled', 'word_reading'],
+  ...['letter_sounds', 'word_reading'].flatMap(code =>
+    ['xh', 'en', 'af', 'zu'].map(language => [`standalone:${code}`, language, 'bundled', code])),
   ['battery:wela_plus_read_words', 'xh', 'bundled', 'wela_plus_read_words'],
   ['battery:wela_plus_story_writing', 'xh', 'fixture', 'wela_plus_story_writing'],
 ])('run resolves %s in %s with %s content', (entryKey, languageCode, contentMode, code) => {
@@ -126,7 +127,11 @@ test.each([
     endNoun: entryKey.startsWith('standalone:') ? 'test' : 'question' });
   expect(props).not.toHaveProperty('captureMode');
   if (contentMode === 'fixture') expect(props.itemSet).toBe(testFixtures.FIXTURE_STORY_WRITING_EN);
-  else if (entryKey.startsWith('standalone:')) expect(props.itemSet).toBe(CURRENT_ITEM_SETS[code][languageCode]);
+  else if (entryKey.startsWith('standalone:')) {
+    expect(props.itemSet).toBe(SHARED_READING_SETS[code][languageCode]);
+    expect(props.itemSet.question_version).toBe('2026.3');
+    expect(props.instructions).toBe(sharedInstructionsFor(code, languageCode));
+  }
   else expect(props.itemSet).toBeUndefined();
 });
 
