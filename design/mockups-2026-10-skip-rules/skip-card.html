@@ -1,0 +1,108 @@
+<style>
+  .phones { display:flex; gap:28px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
+  .phone { width:340px; border-radius:30px; border:10px solid #221A1B; background:#F8F5F4; overflow:hidden; position:relative;
+           font-family: Figtree, -apple-system, system-ui, sans-serif; color:#221A1B; height:690px; display:flex; flex-direction:column; }
+  .bar { background:#FFFFFF; padding:12px 14px; border-bottom:1px solid #ECE5E4; font-weight:700; font-size:17px; display:flex; gap:10px; align-items:center; }
+  .bar .back { color:#C81F3E; font-size:20px; }
+  .scroll { flex:1; overflow:hidden; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .meta { font-size:12px; color:#76696B; display:flex; justify-content:space-between; align-items:center; }
+  .badge { font-size:11px; font-weight:700; border-radius:999px; padding:3px 8px; background:#ECE5E4; color:#221A1B; }
+  .badge.ok { background:#E7F3E5; color:#2B7524; }
+  .group { background:#FFFFFF; border-radius:14px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #ECE5E4; }
+  .row:last-child { border-bottom:none; }
+  .row.next { background:#FDECEF; }
+  .num { width:26px; height:26px; border-radius:999px; background:#F8F5F4; color:#76696B; font-size:12px; font-weight:700;
+         display:flex; align-items:center; justify-content:center; flex:none; }
+  .num.done { background:#E7F3E5; color:#2B7524; }
+  .num.next { background:#C81F3E; color:#fff; }
+  .num.skip { background:#F8F5F4; color:#B9AEAF; }
+  .t { flex:1; min-width:0; }
+  .t b { display:block; font-size:14px; font-weight:600; }
+  .t span { display:block; font-size:12px; color:#76696B; }
+  .row.skipped b { color:#76696B; }
+  .footer { background:#FFFFFF; border-top:1px solid #ECE5E4; padding:10px 12px 14px; display:flex; flex-direction:column; gap:6px; }
+  .btn { border-radius:999px; text-align:center; padding:12px; font-weight:700; font-size:15px; }
+  .btn.primary { background:#C81F3E; color:#fff; }
+  .btn.tert { color:#221A1B; }
+  .scrim { position:absolute; inset:0; background:rgba(34,26,27,.45); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:#FFFFFF; border-radius:22px 22px 0 0; padding:10px 18px 18px; }
+  .grab { width:40px; height:4px; border-radius:4px; background:#ECE5E4; margin:0 auto 12px; }
+  .sheet h4 { font-family:'Bricolage Grotesque', Figtree, sans-serif; font-weight:800; font-size:21px; margin:0 0 8px; }
+  .sheet p { font-size:14px; line-height:1.45; margin:0 0 10px; }
+  .lists { display:flex; gap:10px; margin:6px 0 14px; }
+  .lists div { flex:1; background:#F8F5F4; border-radius:12px; padding:8px 10px; font-size:12.5px; line-height:1.5; }
+  .lists .h { font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#76696B; margin-bottom:2px; }
+  .note { background:#FFF8E1; color:#8A4B00; border-radius:12px; padding:10px 12px; font-size:13px; line-height:1.45; }
+  .note b { color:#8A4B00; }
+  .cap { text-align:center; max-width:340px; font-size:13px; margin-top:8px; color:var(--text-secondary, #666); }
+</style>
+
+<h2>The skip card: which feels right for an EA mid-assessment?</h2>
+<p class="subtitle">Amahle has just finished Letter sounds and got the whole first row wrong. The EA is back on the assessment's question list. Click the one you prefer. Numbering assumes the new version adds Story questions as 9, so the writing Questions become 10–12.</p>
+
+<div class="options">
+<div class="option" data-choice="sheet" onclick="toggleSelect(this)">
+  <div class="letter">A</div>
+  <div class="content"><h3>A card slides up and waits for "Got it"</h3><p>The EA can't miss it. The list underneath already shows the skipped Questions.</p></div>
+</div>
+<div class="option" data-choice="inline" onclick="toggleSelect(this)">
+  <div class="letter">B</div>
+  <div class="content"><h3>A note stays at the top of the list</h3><p>Nothing to dismiss. It stays visible for the rest of the assessment.</p></div>
+</div>
+</div>
+
+<div class="phones">
+  <div>
+  <div class="phone">
+    <div class="bar"><span class="back">‹</span> Amahle Mbeki</div>
+    <div class="scroll">
+      <div class="meta"><span>WelaPLUS · isiXhosa · 8 of 12 decided</span><span class="badge">7KQ-2MX</span></div>
+      <div class="group">
+        <div class="row"><div class="num done">1</div><div class="t"><b>Letter sounds</b><span>Done</span></div><span class="badge ok">0 / 100</span></div>
+        <div class="row next"><div class="num next">2</div><div class="t"><b>Listen to a story</b><span>Next</span></div></div>
+        <div class="row"><div class="num">3</div><div class="t"><b>First sounds</b><span>Not started</span></div></div>
+        <div class="row"><div class="num">4</div><div class="t"><b>Blending sounds</b><span>Not started</span></div></div>
+        <div class="row"><div class="num">5</div><div class="t"><b>Letter writing</b><span>Not started</span></div></div>
+        <div class="row skipped"><div class="num skip">6</div><div class="t"><b>Reading words</b><span>Skipped · Letters first row wrong</span></div><span class="badge">Skipped</span></div>
+        <div class="row skipped"><div class="num skip">7</div><div class="t"><b>Reading sentences</b><span>Skipped · Letters first row wrong</span></div><span class="badge">Skipped</span></div>
+      </div>
+    </div>
+    <div class="footer"><div class="btn primary">Start Listen to a story</div><div class="btn tert">Abandon assessment</div></div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h4>No reading or writing today</h4>
+      <p>Amahle got every letter in the first row wrong. So she won't be asked to read or write words, sentences or a story. This is normal. Carry on with the next Question.</p>
+      <div class="lists">
+        <div><div class="h">Still to do</div>Listen to a story<br>First sounds<br>Blending sounds<br>Letter writing</div>
+        <div><div class="h">Skipped</div>Reading words<br>Reading sentences<br>Reading a story<br>Story questions<br>Writing words<br>Writing sentences<br>Story writing</div>
+      </div>
+      <div class="btn primary">Got it</div>
+    </div>
+  </div>
+  <p class="cap"><b>A.</b> Shows once, right after the Question that triggered it.</p>
+  </div>
+
+  <div>
+  <div class="phone">
+    <div class="bar"><span class="back">‹</span> Amahle Mbeki</div>
+    <div class="scroll">
+      <div class="meta"><span>WelaPLUS · isiXhosa · 8 of 12 decided</span><span class="badge">7KQ-2MX</span></div>
+      <div class="note"><b>No reading or writing today.</b> Amahle got every letter in the first row wrong, so the 7 reading and writing Questions are skipped. Carry on with Questions 2–5.</div>
+      <div class="group">
+        <div class="row"><div class="num done">1</div><div class="t"><b>Letter sounds</b><span>Done</span></div><span class="badge ok">0 / 100</span></div>
+        <div class="row next"><div class="num next">2</div><div class="t"><b>Listen to a story</b><span>Next</span></div></div>
+        <div class="row"><div class="num">3</div><div class="t"><b>First sounds</b><span>Not started</span></div></div>
+        <div class="row"><div class="num">4</div><div class="t"><b>Blending sounds</b><span>Not started</span></div></div>
+        <div class="row"><div class="num">5</div><div class="t"><b>Letter writing</b><span>Not started</span></div></div>
+        <div class="row skipped"><div class="num skip">6</div><div class="t"><b>Reading words</b><span>Skipped · Letters first row wrong</span></div><span class="badge">Skipped</span></div>
+        <div class="row skipped"><div class="num skip">7</div><div class="t"><b>Reading sentences</b><span>Skipped · Letters first row wrong</span></div><span class="badge">Skipped</span></div>
+        <div class="row skipped"><div class="num skip">8</div><div class="t"><b>Reading a story</b><span>Skipped · Letters first row wrong</span></div><span class="badge">Skipped</span></div>
+      </div>
+    </div>
+    <div class="footer"><div class="btn primary">Start Listen to a story</div><div class="btn tert">Abandon assessment</div></div>
+  </div>
+  <p class="cap"><b>B.</b> Always visible, with no extra tap. Easier to scroll past without reading.</p>
+  </div>
+</div>
