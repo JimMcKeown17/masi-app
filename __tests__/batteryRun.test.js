@@ -394,6 +394,14 @@ test('skipNoticeFor is null without a trigger, before any skip is saved, or with
   }
 });
 
+test('skipNoticeFor shows no card for a trigger it has no copy for', () => {
+  const view = {
+    firedTrigger: 'future_trigger',
+    rows: [{ question: { title: 'Later' }, state: 'skipped', skipCause: { kind: 'first_row', trigger: 'future_trigger' } }],
+  };
+  expect(skipNoticeFor({ view, firstName: 'Lwazi' })).toBeNull();
+});
+
 test('skipNoticeFor lists only first-row skips in a run mixing manual, prerequisite and first-row skips', () => {
   // Production WelaPLUS has just one prerequisite, whose cause is superseded by a first-row trigger.
   // Add a prerequisite on a non-target Question to exercise all three causes together through the real evaluator.
