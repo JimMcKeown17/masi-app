@@ -2,6 +2,7 @@ import { egraCatalog, listEgraAssessments } from '../../../content/egra';
 import { adaptEgraForm } from './adapter';
 
 export { adaptEgraForm, timedInstructions } from './adapter';
+export { FULL_EGRA_2026_1 } from './fullEgra';
 export { SHARED_READING_VERSION, SHARED_READING_FORMS, SHARED_READING_SETS, sharedItemSetFor, sharedInstructionsFor } from './sharedReading';
 export { EGRA_LETTER_EXTENSIONS, EGRA_MIN_LETTERS } from './letterExtensions';
 export type { EgraBattery } from './adapter';

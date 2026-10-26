@@ -16,17 +16,14 @@ import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
-import { batteryFor, EGRA_BATTERIES } from '../../assessment-questions';
+import { batteryFor, FULL_EGRA_2026_1 } from '../../assessment-questions';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import SectionHeader from '../../components/common/SectionHeader';
 import ListGroup from '../../components/common/ListGroup';
 import ListRow from '../../components/common/ListRow';
 import BrandButton from '../../components/common/BrandButton';
 import { typeRoles } from '../../constants/typography';
-import { LANGUAGE_LABELS, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
-import EgraFormPickerSheet from '../../components/assessments/EgraFormPickerSheet';
-
-const EGRA_MINUTES = Math.max(...EGRA_BATTERIES.map(battery => battery.aboutMinutes));
+import { languageList, STANDALONE_TESTS } from '../../utils/assessmentRegistry';
 
 export default function AssessmentsScreen({ navigation }) {
   const paddingBottom = useScrollBottomPadding();
@@ -45,7 +42,6 @@ export default function AssessmentsScreen({ navigation }) {
   const [stats, setStats] = useState(null);
   const [gateChecking, setGateChecking] = useState(true);
   const [programmeGate, setProgrammeGate] = useState(null);
-  const [egraPickerVisible, setEgraPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -131,8 +127,8 @@ export default function AssessmentsScreen({ navigation }) {
 
   const programme = programmeGate.programme;
   const battery = batteryFor(programme?.default_battery_code, programme?.default_battery_version);
-  const languages = battery ? (battery.fixedLanguage ? [battery.fixedLanguage] : battery.languages)
-    .map(language => LANGUAGE_LABELS[language] ?? language).join(' or ') : '';
+  const languages = battery ? languageList(battery.fixedLanguage ? [battery.fixedLanguage] : battery.languages) : '';
+  const egra = FULL_EGRA_2026_1;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom }]}>
@@ -159,12 +155,14 @@ export default function AssessmentsScreen({ navigation }) {
       </SurfaceCard>}
 
       <SurfaceCard style={styles.card}>
-        <Text accessibilityRole="header" style={styles.cardTitle}>Full EGRA</Text>
+        <Text accessibilityRole="header" style={styles.cardTitle}>{egra.title}</Text>
         <Text style={styles.cardDescription}>
-          {`Letter sounds, familiar words, a story and story questions · ${EGRA_BATTERIES.length} forms · about\u00A0${EGRA_MINUTES}\u00A0min`}
+          {`All ${egra.questions.length} Questions · ${languageList(egra.languages)} · about\u00A0${egra.aboutMinutes}\u00A0min`}
         </Text>
         <BrandButton label="Start an assessment" accessibilityLabel="Start a Full EGRA" variant="primary"
-          style={styles.startButton} disabled={gateChecking} onPress={() => setEgraPickerVisible(true)} />
+          style={styles.startButton} disabled={gateChecking} onPress={() => navigateToRun('AssessmentChildSelect', {
+            batteryCode: egra.battery_code, batteryVersion: egra.battery_version,
+          })} />
       </SurfaceCard>
 
       {runsError && <View style={styles.section}>
@@ -214,11 +212,6 @@ export default function AssessmentsScreen({ navigation }) {
         style={styles.historyButton}
         label="View history"
       />
-      <EgraFormPickerSheet visible={egraPickerVisible} onDismiss={() => setEgraPickerVisible(false)}
-        onConfirm={formId => {
-          setEgraPickerVisible(false);
-          navigateToRun('AssessmentChildSelect', { batteryCode: 'egra', batteryVersion: formId });
-        }} />
     </ScrollView>
   );
 }

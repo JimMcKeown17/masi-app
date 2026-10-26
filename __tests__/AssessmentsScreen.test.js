@@ -14,7 +14,7 @@ jest.mock('../src/services/assessmentHistoryStatus', () => ({
 }));
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
-import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
@@ -25,7 +25,6 @@ import SurfaceCard from '../src/components/common/SurfaceCard';
 import { STANDALONE_TESTS } from '../src/utils/assessmentRegistry';
 import AssessmentsScreen from '../src/screens/main/AssessmentsScreen';
 import SelectSheet from '../src/components/common/SelectSheet';
-import { listEgraForms } from '../src/assessment-questions/egra';
 
 test.each([true, false])('Full EGRA is offered after the default card when present (default: %s)', async hasDefault => {
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: hasDefault ? {
@@ -34,7 +33,7 @@ test.each([true, false])('Full EGRA is offered after the default card when prese
   const screen = renderTab();
   await screen.findByRole('header', { name: 'Full EGRA' });
   // No normalizer: the default one turns non-breaking spaces into ordinary spaces.
-  expect(screen.getByText('Letter sounds, familiar words, a story and story questions · 13 forms · about\u00A06\u00A0min',
+  expect(screen.getByText('All 4 Questions · isiXhosa, English, Afrikaans or isiZulu · about\u00A06\u00A0min',
     { normalizer: text => text })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Start a Full EGRA' })).not.toBeDisabled();
   const card = screen.UNSAFE_getAllByType(SurfaceCard).at(-1);
@@ -45,62 +44,29 @@ test.each([true, false])('Full EGRA is offered after the default card when prese
     .toEqual([...(hasDefault ? [BATTERY.title] : []), 'Full EGRA', 'Quick assessments']);
 });
 
-test('EGRA picker keeps pack order, distinct HL/FAL, no initial selection; Continue launches once', async () => {
+test('Full EGRA Start goes directly to child selection once, without a form picker', async () => {
   const screen = renderTab();
-  fireEvent.press(await screen.findByRole('button', { name: 'Start a Full EGRA' }));
-  await screen.findByRole('header', { name: 'Choose an EGRA form' });
-  expect(within(screen.getByTestId('bottom-sheet-panel')).queryAllByText(/run/i)).toHaveLength(0);
-  const forms = listEgraForms();
-  const list = screen.UNSAFE_getByType(FlatList);
-  // Inspect the full public list data because its thirteenth row is virtualized on a phone.
-  expect(list.props.data.map(({ key, label }) => [key, label]))
-    .toEqual(forms.map(form => [form.id, form.title]));
-  expect(list.props.data).toHaveLength(13);
-  expect(list.props.data.find(row => row.key === 'dbe-egra-en-hl-2-v1'))
-    .toMatchObject({ label: 'English HL EGRA 2', description: 'English · Home Language' });
-  expect(list.props.data.find(row => row.key === 'dbe-egra-en-fal-2-v1'))
-    .toMatchObject({ label: 'English FAL EGRA 2', description: 'English · First Additional Language' });
-  expect(list.props.data.find(row => row.key === 'smrs-egra-zu-1-v1'))
-    .toMatchObject({ description: 'isiZulu · SMRS' });
-  for (const form of forms.slice(0, 12)) {
-    expect(screen.getByRole('button', { name: form.title }).props.accessibilityState.selected).toBe(false);
-  }
-  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-  expect(screen.navigation.navigate).not.toHaveBeenCalled();
-  fireEvent.press(screen.getByRole('button', { name: 'English FAL EGRA 2' }));
-  const confirm = screen.getByRole('button', { name: 'Continue' });
-  act(() => { fireEvent.press(confirm); fireEvent.press(confirm); });
+  const start = await screen.findByRole('button', { name: 'Start a Full EGRA' });
+  expect(screen.UNSAFE_queryAllByType(SelectSheet)).toHaveLength(0);
+  act(() => { fireEvent.press(start); fireEvent.press(start); });
   expect(screen.navigation.navigate).toHaveBeenCalledTimes(1);
   expect(screen.navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', {
-    batteryCode: 'egra', batteryVersion: 'dbe-egra-en-fal-2-v1',
+    batteryCode: 'egra', batteryVersion: '2026.1',
   });
-  await waitFor(() => expect(screen.queryByRole('header', { name: 'Choose an EGRA form' })).toBeNull());
+  expect(screen.queryByRole('header', { name: 'Choose an EGRA form' })).toBeNull();
+  expect(screen.queryByTestId('bottom-sheet-panel')).toBeNull();
 });
 
-test('cancelling the EGRA form picker clears its draft on reopening', async () => {
+test('Full EGRA Start during a programme recheck cannot bypass the launch guard', async () => {
   const screen = renderTab();
-  fireEvent.press(await screen.findByRole('button', { name: 'Start a Full EGRA' }));
-  fireEvent.press(await screen.findByRole('button', { name: 'English HL EGRA 1' }));
-  expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
-  fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
-  expect(screen.navigation.navigate).not.toHaveBeenCalled();
-  // Closed but still mounted, so the bottom sheet can animate away.
-  expect(screen.UNSAFE_getByType(SelectSheet).props.visible).toBe(false);
-  fireEvent.press(screen.getByRole('button', { name: 'Start a Full EGRA' }));
-  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'English HL EGRA 1' }).props.accessibilityState.selected).toBe(false);
-});
-
-test('EGRA confirmation during a programme recheck cannot bypass the launch guard', async () => {
-  const screen = renderTab();
-  fireEvent.press(await screen.findByRole('button', { name: 'Start a Full EGRA' }));
-  fireEvent.press(await screen.findByRole('button', { name: 'English HL EGRA 1' }));
+  await screen.findByRole('button', { name: 'Start a Full EGRA' });
   const pending = deferred();
   act(() => screen.navigationRef.navigate('Away'));
   mockGate.mockReturnValueOnce(pending.promise);
   act(() => screen.navigationRef.goBack());
-  fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
-  expect(screen.getByRole('button', { name: 'Start a Full EGRA' })).toBeDisabled();
+  const start = screen.getByRole('button', { name: 'Start a Full EGRA' });
+  expect(start).toBeDisabled();
+  fireEvent.press(start);
   expect(screen.navigation.navigate).not.toHaveBeenCalled();
   await act(async () => pending.resolve({ hasActiveProgramme: false }));
   await screen.findByText(/No active programme/);

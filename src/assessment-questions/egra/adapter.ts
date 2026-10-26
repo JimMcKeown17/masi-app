@@ -124,7 +124,7 @@ export function adaptEgraForm(form: EgraAssessment) {
       question('letter_sounds', 'Letter sounds', timedInstructions('letter sounds', form.letters), form.letters.timeLimitSeconds, letterVersion),
       question('word_reading', 'Familiar words', timedInstructions('words', form.words), form.words.timeLimitSeconds),
       question('oral_reading', 'Reading a story', `Ask the child to read the story aloud. ${markingSentence('word')} The test stops by itself when the time is up.`, form.passage.timeLimitSeconds),
-      question('reading_comprehension', 'Story questions', `Ask the story questions. Use the answer guide to decide. ${markingSentence('question')}`),
+      question('reading_comprehension', 'Story comprehension', `Ask the story questions. Use the answer guide to decide. ${markingSentence('question')}`),
     ],
   } satisfies EgraBattery;
   return { form, battery, itemSets: { letter_sounds, word_reading, oral_reading, reading_comprehension } };

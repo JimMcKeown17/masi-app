@@ -35,7 +35,7 @@ test('all source forms adapt without changing order, case, repeats or identity',
     const passage = adapted.itemSets.oral_reading;
     expect(passage.words.map(w => w.word).join(' ')).toBe(form.passage.text.trim().replace(/\s+/g, ' '));
     expect(passage.paragraph_starts).toHaveLength(form.passage.text.split('\n\n').length);
-    expect(adapted.battery.questions.map(q => q.title)).toEqual(['Letter sounds', 'Familiar words', 'Reading a story', 'Story questions']);
+    expect(adapted.battery.questions.map(q => q.title)).toEqual(['Letter sounds', 'Familiar words', 'Reading a story', 'Story comprehension']);
     adapted.battery.questions.forEach((q, i) => {
       expect(q.question_version).toBe(i === 0 ? letterVersion : form.id);
       expect(q.instructions?.[form.languageCode]).toBeTruthy();

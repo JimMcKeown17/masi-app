@@ -5769,3 +5769,34 @@ Verification (each command used Node 20.19.4 through the exact PATH prefix below
 No unresolved Task 2 concerns. Resume verification is pure evaluator replay, not host process-kill
 or native-device proof; persistence and the one-off card remain later tasks. Built by Codex
 (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+
+### 2026-10-26 — EGRA content and skip rules, Task 4: one Full EGRA in four languages
+
+Built by Codex; will be reviewed and committed by the orchestrator. Added `egra@2026.1` on
+shared 2026.3 content, with four-language instructions, Reading Card 2026.3 sides A/B/C and
+only the existing story prerequisite. The Full EGRA card now starts child selection directly;
+both cards use `languageList`. Deleted the form picker, kept all 13 old Batteries registered,
+and changed only their Q4 title to Story comprehension. Child-select required no production
+change: new screen tests cover isiZulu start, all four explicit language choices, Sesotho refusal
+and WelaPLUS isiZulu refusal; old-form resume remains green.
+
+TDD: new-Battery lookup failed (1 test) before registration; old-title assertions failed
+(4 tests) before the adapter change; card assertions failed (3 tests) before implementation.
+The first full run found the exact utility export-list assertion; added the approved helper name
+without relaxing it. Corrected a strict TypeScript cast in the new test. Non-silent summary-screen
+proof emits a non-blocking React act warning from navigation.setOptions; no native device check.
+
+All Node commands below used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`:
+
+| Command | Result |
+|---|---|
+| `npx jest src/assessment-questions/egra --ci` | PASS: 6 suites / 80 tests / 13 snapshots |
+| `npx jest __tests__/AssessmentsScreen.test.js __tests__/AssessmentChildSelectScreen.battery.test.js __tests__/BatteryRunSummaryScreen.test.js` | PASS: 3 suites / 126 tests |
+| `npx jest --silent` | PASS: 431 suites / 6,500 tests / 14 snapshots; no FAIL lines |
+| `npm run test:types` | PASS: strict tsc, no errors |
+| `npx jest src/assessment-questions/egra/__tests__/adapterBaseline.test.ts --ci` | PASS: 13 tests / 13 unchanged snapshots; never -u |
+| `git diff --check` | PASS |
+
+Built by Codex (gpt-6.1-sol, high; one transient "model at capacity" stop, resumed in the same
+thread); diff reviewed, re-verified and committed by the orchestrator.

@@ -4,6 +4,12 @@ export const LETTER_EVIDENCE_CODES = ['letter_sounds'];
 
 export const LANGUAGE_LABELS = { en: 'English', xh: 'isiXhosa', zu: 'isiZulu', af: 'Afrikaans' };
 
+export function languageList(codes) {
+  const labels = codes.map(code => LANGUAGE_LABELS[code] ?? code);
+  if (labels.length < 2) return labels.join('');
+  return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`;
+}
+
 export function languageCodeForHomeLanguage(text) {
   if (typeof text !== 'string') return null;
   switch (text.trim().toLowerCase()) {

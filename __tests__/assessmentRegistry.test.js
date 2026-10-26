@@ -18,7 +18,7 @@ describe('assessment language and standalone test registry', () => {
   test('keeps the exact public registry contract without copying package item sets', () => {
     expect(Object.keys(registry).sort()).toEqual([
       'LANGUAGE_LABELS', 'LETTER_EVIDENCE_CODES', 'PEDAGOGICAL_ORDERS',
-      'STANDALONE_TESTS', 'languageCodeForHomeLanguage',
+      'STANDALONE_TESTS', 'languageCodeForHomeLanguage', 'languageList',
     ].sort());
     expect(registry.LANGUAGE_LABELS).toEqual({ en: 'English', xh: 'isiXhosa', zu: 'isiZulu', af: 'Afrikaans' });
     expect(registry.LETTER_EVIDENCE_CODES).toEqual(['letter_sounds']);

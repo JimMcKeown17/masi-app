@@ -10,7 +10,7 @@ import { StyleSheet, View } from 'react-native';
 import { colors } from '../src/constants/colors';
 import { fontFamilies, typeRoles } from '../src/constants/typography';
 import ListRow from '../src/components/common/ListRow';
-import { act, configure, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
@@ -18,6 +18,62 @@ import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';
 import { EGRA_BATTERIES } from '../src/assessment-questions/egra';
+
+test('Full EGRA 2026.1 starts a zu-class child in zu with no language sheet', async () => {
+  const child = { ...CHILD, home_language: 'zu' };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: '2026.1' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await waitFor(() => expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'BatteryOverview']));
+  expect(screen.queryByRole('header', { name: 'Select language' })).toBeNull();
+  expect(screen.queryByTestId('bottom-sheet-panel')).toBeNull();
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+    id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+    batteryCode: 'egra', batteryVersion: '2026.1', language: 'zu',
+  });
+});
+
+test.each([['xh', 'isiXhosa'], ['en', 'English'], ['af', 'Afrikaans'], ['zu', 'isiZulu']])(
+  'Full EGRA without a class language offers exactly four languages and can start in %s', async (code, label) => {
+    const child = { ...CHILD, home_language: null };
+    mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+    const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: '2026.1' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+    await screen.findByRole('header', { name: 'Select language' });
+    const sheet = within(screen.getByTestId('bottom-sheet-panel'));
+    const options = sheet.getAllByRole('button').filter(button =>
+      typeof button.props.accessibilityState?.selected === 'boolean');
+    expect(options.map(button => button.props.accessibilityLabel)).toEqual(['isiXhosa', 'English', 'Afrikaans', 'isiZulu']);
+    for (const option of options) expect(option.props.accessibilityState.selected).toBe(false);
+    expect(sheet.getByRole('button', { name: 'Start' })).toBeDisabled();
+    expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+    fireEvent.press(sheet.getByRole('button', { name: label }));
+    fireEvent.press(sheet.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
+    expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+    expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+      id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+      batteryCode: 'egra', batteryVersion: '2026.1', language: code,
+    });
+  },
+);
+
+test.each([
+  ['egra', 'Sesotho', 'Sesotho'],
+  ['wela_plus_full', 'zu', 'isiZulu'],
+])('%s 2026.1 blocks an unsupported class language %s and displays %s', async (batteryCode, language, label) => {
+  const child = { ...CHILD, home_language: language };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = renderSelect({ batteryCode, batteryVersion: '2026.1' });
+  await screen.findByText(`Not available in ${label} yet`);
+  const row = screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' });
+  expect(row).toBeDisabled();
+  fireEvent.press(row);
+  expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+  expect(screen.queryByRole('header', { name: 'Select language' })).toBeNull();
+  expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'ChildSelect']);
+});
 
 test.each(EGRA_BATTERIES)('$title starts in the form language instead of the class language, with no language sheet', async battery => {
   const child = { ...CHILD, home_language: battery.fixedLanguage === 'xh' ? 'en' : 'xh' };

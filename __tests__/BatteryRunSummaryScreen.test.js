@@ -26,7 +26,7 @@ test.each([[3, 2, 'completed', '2 / 3'], [0, 0, 'ea_ended', '—']])(
   const screen = renderSummary();
   await screen.findByText(`${battery.title} · English · 4 of 4 decided`);
   expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(4);
-  expect(screen.getByRole('text', { name: `4. Story questions, Done, ${scoreText}` })).toBeTruthy();
+  expect(screen.getByRole('text', { name: `4. Story comprehension, Done, ${scoreText}` })).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
