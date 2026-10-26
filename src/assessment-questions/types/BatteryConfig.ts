@@ -1,5 +1,5 @@
 export type MaterialItem = 'reading_card' | 'picture_cards' | 'writing_sheet';
-export interface Materials { item: MaterialItem; side?: 'A' | 'B' | 'C' }
+export interface Materials { item: MaterialItem; side?: 'A' | 'B' | 'C' | 'D' }
 export interface BatteryQuestion {
   title: string;
   question_code: string;
@@ -19,6 +19,7 @@ export interface BatteryConfig {
   battery_version: string;
   languages: string[];
   fixedLanguage?: string;
+  readingCard?: string;
   questions: BatteryQuestion[];
   prerequisites: Record<string, PrerequisiteRule>;
   skipRule?: SkipRule;

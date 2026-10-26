@@ -44,6 +44,18 @@ const Q: BatteryQuestion[] = [
     instructions: both('Show the child the Picture Cards and ask: "What can you see in these pictures?" You may ask, for example, "Where are the children?" or "Why is the little girl crying?". Then say: "Can you write a story about the pictures? Don\'t worry if you can\'t spell some words, just do your best." If the child cannot write sentences, encourage a few words. When they finish say: "This is a lovely story. Can you think of anything more to write?" Then score the story here.') },
 ];
 
+// Reuse these exact Question objects across Battery versions; 2024.1 content stays intact.
+export const WELA_PLUS_2024_1_QUESTIONS = {
+  wela_plus_listen_and_answer_story: Q[1],
+  wela_plus_first_sound: Q[2],
+  wela_plus_phoneme_blend: Q[3],
+  wela_plus_letter_writing: Q[4],
+  wela_plus_read_sentences: Q[6],
+  wela_plus_write_cvcs: Q[8],
+  wela_plus_write_sentences_dictation: Q[9],
+  wela_plus_story_writing: Q[10],
+};
+
 export const WELA_PLUS_FULL_2024_1: BatteryConfig = {
   title: 'WelaPLUS',
   aboutMinutes: 30,

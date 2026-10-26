@@ -263,3 +263,17 @@ test('EGRA: nothing asked then End shows "—" in the Battery summary', () => {
     stopped_reason: 'ea_ended', score: 0, total_items: 5, derived: { questions_asked: 0 } }] }, access);
   expect(state.rows[3]).toMatchObject({ state: 'done', scoreText: '—' });
 });
+
+test('2026.1 reading cards name shared content while all other materials retain the battery footer', () => {
+  const { WELA_PLUS_FULL_2026_1: current } = require('../src/assessment-questions');
+  expect(materialsLine(current.questions[0], 'xh', current)).toEqual({
+    item: 'Reading Card', side: 'side A', footer: 'Reading Card 2026.3 · XH · side A',
+  });
+  expect(materialsLine(battery.questions[0], 'xh', battery).footer).toBe('WelaPLUS 2024.1 · XH · side A');
+  for (const [index, side] of [[5, 'B'], [6, 'D'], [7, 'C']]) {
+    expect(materialsLine(current.questions[index], 'en', current).footer).toBe(`Reading Card 2026.3 · EN · side ${side}`);
+  }
+  expect(materialsLine(current.questions[4], 'xh', current).footer).toBe('WelaPLUS 2026.1 · XH · Writing Sheet');
+  expect(materialsLine(current.questions[11], 'xh', current).footer).toBe('WelaPLUS 2026.1 · XH · Picture Cards');
+  expect(materialsLine(current.questions[8], 'xh', current)).toBeNull();
+});

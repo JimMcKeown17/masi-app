@@ -1,6 +1,10 @@
 import { WELA_PLUS_FULL_2024_1 as B } from '../wela_plus_full';
 import { CURRENT_ITEM_SETS } from '../../itemsets/current';
 
+test('2024.1 stays deep-equal to the pre-2026.1 battery, including every question title and instruction', () => {
+  expect(B).toMatchSnapshot();
+});
+
 test('2024.1 battery shape', () => {
   expect(B.battery_code).toBe('wela_plus_full');
   expect(B.battery_version).toBe('2024.1');

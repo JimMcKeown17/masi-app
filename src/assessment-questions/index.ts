@@ -21,6 +21,7 @@ export { evaluateBatteryState } from './battery/evaluateBatteryState';
 export { firstRowWrong, firedTrigger, skipCauseFor } from './battery/skipRules';
 export type { SkipCause } from './battery/skipRules';
 export { WELA_PLUS_FULL_2024_1 } from './battery/wela_plus_full';
+export { WELA_PLUS_FULL_2026_1 } from './battery/wela_plus_full_2026_1';
 export { batteryFor } from './battery/registry';
 export { bundledItemSetFor } from './battery/bundledItemSets';
 export { skippedResult } from './battery/skippedResult';

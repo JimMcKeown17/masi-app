@@ -77,10 +77,12 @@ export function materialsLine(question, language, battery) {
   if (!question.materials) return null;
   const item = MATERIAL_LABELS[question.materials.item];
   const side = question.materials.side ? `side ${question.materials.side}` : null;
+  const cardTitle = question.materials.item === 'reading_card' && battery.readingCard
+    ? battery.readingCard : `${battery.title} ${battery.battery_version}`;
   return {
     item,
     side,
-    footer: `${battery.title} ${battery.battery_version} · ${language.toUpperCase()} · ${side ?? item}`,
+    footer: `${cardTitle} · ${language.toUpperCase()} · ${side ?? item}`,
   };
 }
 
