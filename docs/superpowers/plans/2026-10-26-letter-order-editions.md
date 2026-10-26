@@ -24,7 +24,9 @@ both with `git -C <books> show 9cd66f8:<path>`. Branch: `feat/letter-orders`, st
 
 - Backend: `masi-app-sqlite` (`segygjzpujphwvrubusm`) only. Never query or change `jcqrlwetutnpuchjoyyd`.
   DDL only through `supabase/migrations/`. The hosted apply needs Jim's yes and runs through the
-  `sqlite-staging-sql` helper from the main checkout (`/Users/jimmckeown/Development/masi-app`).
+  `sqlite-staging-sql` helper from **this worktree**, the checkout that holds the reviewed
+  migration (Task 9). The helper uses the invoking checkout's `supabase/` directory
+  (`scripts/sqlite-staging.cjs:301`), and the main checkout is on another branch.
 - The edition id is exactly `2026-10-23`. Four places must agree, and Task 2 pins them with a test:
   the server check constraint, the server trigger, the phone column default and
   `MASI_LETTER_ORDER_EDITIONS`.
@@ -695,14 +697,27 @@ Phone rules:
 - [ ] **Step 2: Codex adversarial review** of `feat/lesson-flow...feat/letter-orders`
   (`--model gpt-6-astra`). Fix confirmed findings test-first, and re-review until a round finds
   nothing new above low.
-- [ ] **Step 3: Read-only preflight on staging,** from the main checkout:
-  `npm run sqlite:staging:query -- "select coalesce(home_language,'(none)') as language, count(*) filter (where archived_at is null) as active, count(*) as total from public.classes group by 1 order by 2 desc;"`.
-  Report it to Jim with `project_ref=segygjzpujphwvrubusm` confirmed.
-- [ ] **Step 4: Hosted apply, only after Jim's yes.** Run `npm run sqlite:staging:dry-run`, then
-  `npm run sqlite:staging:push`. Then verify read-only:
+- [ ] **Step 3: Prepare this worktree for the helper, then the read-only preflight.** In
+  `.claude/worktrees/letter-orders`:
+  - `ln -s /Users/jimmckeown/Development/masi-app/.env.local .env.local`. The symlink is temporary
+    and gitignored. The helper reads only the staging values from it and never passes the file
+    to the CLI.
+  - `npm run sqlite:staging:check`. Expected: `project_ref=segygjzpujphwvrubusm`.
+  - `npm run sqlite:staging:link`. This writes `supabase/.temp/`, which is gitignored.
+  - `npm run sqlite:staging:migrations`. Every remote migration appears locally, and
+    `20261026120000` is the only local one not yet applied.
+  - `npm run sqlite:staging:query -- "select coalesce(home_language,'(none)') as language, count(*) filter (where archived_at is null) as active, count(*) as total from public.classes group by 1 order by 2 desc;"`,
+    plus `select max(updated_at), sum(row_version) from public.classes;` for Step 4's comparison.
+
+  Report the results to Jim.
+- [ ] **Step 4: Hosted apply, only after Jim's yes.** Run `npm run sqlite:staging:dry-run`. It must
+  list exactly `20261026120000_class_letter_order_edition.sql`; if anything else is pending, stop
+  and report to Jim. Then run `npm run sqlite:staging:push` and verify read-only:
   - every class is `2026-10-23`;
   - `max(updated_at)` and `sum(row_version)` over `classes` are unchanged from before the apply;
   - the column has no default, and the constraint and trigger exist.
+
+  Then remove the symlink with `rm .env.local`, which removes the link, not its target.
 - [ ] **Step 5: EAS builds after the apply.** Android and iOS, both `preview-content` and `preview`.
 - [ ] **Step 6: Device run,** on the A03 when the other session frees it, and on Jim's iPhone.
   - Use one class per language, creating English and Afrikaans test classes on a test account if
