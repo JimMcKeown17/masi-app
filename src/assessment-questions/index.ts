@@ -18,12 +18,14 @@ export { tokens } from './theme/tokens';
 export { AssessmentThemeProvider } from './theme/AssessmentTheme';
 export type { AssessmentFonts } from './theme/AssessmentTheme';
 export { evaluateBatteryState } from './battery/evaluateBatteryState';
+export { firstRowWrong, firedTrigger, skipCauseFor } from './battery/skipRules';
+export type { SkipCause } from './battery/skipRules';
 export { WELA_PLUS_FULL_2024_1 } from './battery/wela_plus_full';
 export { batteryFor } from './battery/registry';
 export { bundledItemSetFor } from './battery/bundledItemSets';
 export { skippedResult } from './battery/skippedResult';
 export type { ItemSetMeta } from './types/ItemSet';
-export type { BatteryConfig, BatteryQuestion, BatteryState, DecidedResult, Materials, MaterialItem, PrerequisiteRule } from './types/BatteryConfig';
+export type { BatteryConfig, BatteryQuestion, BatteryState, DecidedResult, DecidedItem, FirstRowTrigger, SkipRule, Materials, MaterialItem, PrerequisiteRule } from './types/BatteryConfig';
 export { MANUAL_SKIP_REASONS } from './skip/skipReasons';
 export type { ManualSkipReason } from './skip/skipReasons';
 

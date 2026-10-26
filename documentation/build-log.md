@@ -5731,3 +5731,41 @@ Out of scope, noted for later: at font scale 1.3 the Home clock card wraps "Not 
 three lines. After a runtime font-scale change Android keeps stale text measurements until the app
 restarts (host-wide, not an app bug). Q11's isiXhosa rubric labels are still English
 (already listed in `CONTENT_PENDING`).
+
+### 2026-10-26 — EGRA content and skip rules, Task 2: pure Battery skip policy
+
+Implemented only Task 2 on `feat/egra-content-skip-rules`. Added pure `firstRowWrong`,
+`firedTrigger`, and `skipCauseFor` helpers, their exported types, optional Battery skip-rule
+configuration and decided-item evidence, `autoSkips[].trigger`, and `BatteryState.firedTrigger`.
+First-row causes take precedence over prerequisites and follow Battery question order; already-saved
+skips keep the same derived cause on resume. Finalization still requires every skip to be saved.
+Old Batteries without a skip rule keep their existing behavior. No real Battery definitions,
+content, snapshots, host behavior, dependencies, database schema, or server contracts changed.
+
+Confirmed from `SequentialCapture` that all non-skipped item positions are saved with explicit
+`metadata.reached = position < cursor`; unreached items are also incorrect, so both fields are
+required. Letter writing saves all 26 prompts (positions 0–25), with the first six `a f k o s w`
+in both languages. The printed six-item row is distinct from the phone's three-column layout.
+
+TDD: the new table-driven suite failed before implementation because `../skipRules` did not exist
+(1 failed suite, 0 tests). Initial verification caught an accidental extra field in prerequisite
+fixture expectations and an incorrect new-test assumption that WelaPLUS 2024.1 had EGRA's story
+prerequisite; corrected the tests to actual old behavior. Strict typing also caught the fixture
+field and inferred old-Battery union. A further regression reproduced a helper/evaluator mismatch
+for out-of-Battery dependency evidence (1 failed, 30 passed); the helper now respects the evaluator's
+existing Battery boundary. Final new-suite coverage is 31 cases, including timer and End boundaries,
+position lookup, first-six letter writing, earliest-trigger precedence, real old Batteries, and
+resume with zero, some, and all skips saved.
+
+Verification (each command used Node 20.19.4 through the exact PATH prefix below):
+
+| Command | Final result |
+|---|---|
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/battery src/assessment-questions/egra --ci` | PASS: 11 suites / 201 tests / 13 snapshots, exit 0 (4.958 s) |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent` | PASS: 428 suites / 6,460 tests / 13 snapshots, exit 0 (63.056 s); no FAIL lines |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:types` | PASS: strict `tsc --noEmit -p tsconfig.assessment-questions.json`, exit 0, no errors |
+| `git diff --check` | PASS |
+
+No unresolved Task 2 concerns. Resume verification is pure evaluator replay, not host process-kill
+or native-device proof; persistence and the one-off card remain later tasks. Built by Codex
+(gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
