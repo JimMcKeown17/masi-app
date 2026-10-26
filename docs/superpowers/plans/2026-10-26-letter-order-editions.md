@@ -426,7 +426,12 @@ Phone rules:
     - `getPackForOrder(<order>)` returns the preview pack only with `{ allowPreview: true }`.
 
     Delete the tests pinning the old language-keyed `CURRENT_PACK_IDS` and "every registry tracker
-    order except isiXhosa's". Tests of `getPack` results stay until Task 5 deletes `getPack`.
+    order except isiXhosa's". Rewrite "a new current release keeps the old release resolvable and
+    both versions frozen and unchanged" (lines 138-157): its synthetic new pack gains a matching
+    `letter_order`, the current map is keyed by that order id, and selection goes through
+    `getPackForOrder`. It keeps the old-id resolution and deep-freeze checks. Otherwise the new
+    construction check rejects it. Other tests of `getPack` results stay until Task 5 deletes
+    `getPack`.
 
 - [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lintMasiPack.test.js __tests__/lessonPlanPacks.test.js`. Expected: FAIL.
 
@@ -461,7 +466,8 @@ Phone rules:
 - Modify: `src/components/lessons/LessonLettersSection.js`, `src/screens/lessons/LessonScreen.js`, `src/components/lessons/UpNextCard.js`, `src/components/lessons/GroupLessonRow.js`, `src/utils/lessonDates.js`
 - Modify: `src/lessonPlan/engine/index.js` (the `alphabet` doc comment only; the engine and its vectors do not change)
 - Test: `__tests__/lessonInputs.test.js`, `__tests__/useLessonDraft.test.js`, `__tests__/LessonScreen.test.js`, `__tests__/lessonPlanPacks.test.js`,
-  `__tests__/lessonPlanEngine.realPacks.test.js`, `__tests__/lessonPlanPackIndex.test.js`
+  `__tests__/lessonPlanEngine.realPacks.test.js`, `__tests__/lessonPlanPackIndex.test.js`,
+  `__tests__/LessonPickerScreen.test.js`, `__tests__/lessonInputsShape.test.js`
 
 **Interfaces:**
 - Consumes: `getTeachingOrder`, `UPDATE_APP_LETTERS_MESSAGE` (Task 1); `getPackForOrder`, `getPackById`, `packLetterOrderId` (Task 4); class rows with `letter_order_edition` (Task 3).
@@ -539,14 +545,28 @@ tests that switch breaks (Step 1, last group).
     - a new preview lesson (bundled preview v2, which has no readers) shows
       `No books for isiXhosa yet.`
   - `lessonPlanPacks.test.js`: `getPack` is no longer exported.
-  - Existing tests the switch breaks. Update each so it keeps what it checks:
+  - Existing tests the switch breaks. Update each so it keeps what it checks. The rule: English and
+    Afrikaans letters that came from the v1 packs follow the legacy orders (`a m s t …`,
+    `a s m e …`) and become the 2026-10-23 orders (`s a n d …`, `a e k n …`). isiXhosa's first
+    three steps (`o m l a`, `k u`, `e n`) are the same in both orders. Plain-data class fixtures
+    that reach `getTeachingOrder` gain `letter_order_edition: '2026-10-23'`, because it throws
+    without one. Real-SQLite fixtures get it from the column default. Known instances:
     - `lessonInputs.test.js:276-283` ("lesson input uses a pinned pack…"): a new preview lesson now
       gets `isixhosa-candidates-preview-v2`, and the pinned-v1 lines move into the table above.
+    - `lessonInputsShape.test.js`: the class fixture (line 12) gains the edition, and the expected
+      `nextLetters` (line 29) becomes `['s', 'a', 'n', 'd']`.
+    - `LessonPickerScreen.test.js:95` and `:268`: `letters a m s t` becomes `letters s a n d`. Line
+      95 keeps its non-breaking-space check.
+    - `LessonScreen.test.js` "suggested letters are not pre-ticked…" (lines 113-125): drop the
+      `getPack('en')` line, and re-derive the suggested letters and tile names from
+      `english-order-2026-10-23`.
+    - `lessonPlanPacks.test.js`: the `getPack` tests (for example line 166) go with `getPack`.
     - `lessonPlanEngine.realPacks.test.js` and `lessonPlanPackIndex.test.js` call `getPack`. Their
       engine fixture becomes `getPackById('isixhosa-candidates-preview-v1', { allowPreview: true })`.
       The engine ignores orders and v1 stays bundled, so these suites keep their reader and blend
-      coverage. The release loop (`realPacks` lines 66-77) uses
-      `getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, options)`.
+      coverage. The release loop (`realPacks` lines 64-77) uses
+      `getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, options)`,
+      and its expected step-1 letters become `o m l a`, `s a n d` and `a e k n`.
     - `LessonScreen.test.js` `previewLesson()` (line 343) and the tests that use it (the blend
       tests at lines 356-477 and the two ECD tests at 493-507) run on preview v2. The children's mastered letters become the first five steps of
       `isixhosa-order-2026-10-23`, `o m l a k u e n i z s t`, in place of v1's `… i t s d`.
@@ -559,7 +579,7 @@ tests that switch breaks (Step 1, last group).
       and uses only `m o l a`, which is v2's step 1 too. Serve the pack for that test only, for
       example with `jest.spyOn` on the packs module's `getPackForOrder`. Its assertions stay.
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js`. Expected: FAIL.
+- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js __tests__/LessonPickerScreen.test.js __tests__/lessonInputsShape.test.js`. Expected: FAIL.
 
 - [ ] **Step 3: Implement as specified,** then delete the shim and every `getPack(` call.
 
