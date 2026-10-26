@@ -498,6 +498,17 @@ clocking in”, then ink tertiary “Cancel”. It keeps its existing warning co
 opts out of scrolling/keyboard avoidance. Other domain sheets compose `BottomSheet` rather than
 introducing another overlay host.
 
+**`assessments/SkipNoticeSheet`** — `visible, title, body, stillToDo, skipped, onDismiss`
+([source](../src/components/assessments/SkipNoticeSheet.js); 2026-10-26 spec §4.3, mockup option A
+in `design/mockups-2026-10-skip-rules/skip-card.html`). The one-off skip card on a Battery's question
+list after a first-row trigger. `panelRole="alertdialog"`; the body is `textParagraph` in
+`textSecondary`; two side-by-side lists on `background` with `borderRadius.md`, headed **Still to
+do** (omitted when empty) and **Skipped** in `textSectionLabel`, titles in `textSmall`; one primary
+lg **Got it** in the footer, which has no rule and 16dp top padding. Copy never uses a pronoun for
+the child. The overview shows it only while focused and settled (`skipNoticeFor` in
+`src/utils/batteryRun.js`) and remembers **Got it** for the app session only
+(`src/utils/skipNoticeSeen.js`).
+
 ### Password sheets (Bold Red Profile)
 
 [`ChangePasswordSheet`](../src/components/profile/ChangePasswordSheet.js) takes
@@ -932,8 +943,9 @@ The Story Writing rubric keeps its dimension chips and `ToggleBar`; it is the so
 
 **Paging and layout.** `paginate` packs whole card rows; only a row larger than the capacity
 spans pages. Letters use 5 columns / 20 items, start each card row on a display row and show a
-divider. Words use 2 columns / 10 items and flow continuously within a page. Grid A (6 × 10)
-has three pages; the historical 5 × 12 letter cards have five
+divider. Words use 2 columns / 10 items and flow continuously within a page. The 2026.3 letter
+charts (10 × 10) have five pages and isiZulu's (11 × 10) six; Grid A (6 × 10, saved results only)
+has three; the historical 5 × 12 letter cards have five
 (`src/assessment-questions/ui/__tests__/paginate.test.ts:24`). Page labels name card rows;
 controls read “Previous page” / “Next page” (`src/assessment-questions/ui/paginate.ts:2`,
 `src/assessment-questions/ui/paginate.ts:21`, `src/assessment-questions/ui/PageIndicator.tsx:14`,

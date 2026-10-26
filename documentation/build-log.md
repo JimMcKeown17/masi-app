@@ -5732,6 +5732,34 @@ three lines. After a runtime font-scale change Android keeps stale text measurem
 restarts (host-wide, not an app bug). Q11's isiXhosa rubric labels are still English
 (already listed in `CONTENT_PENDING`).
 
+### 2026-10-26 — EGRA content and skip rules, Task 1: shared reading item sets
+
+Spec: `docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md`; plan:
+`docs/superpowers/plans/2026-10-26-egra-content-and-skip-rules.md`; branch
+`feat/egra-content-skip-rules`. Before any refactor, `cf8bb5e` snapshotted the EGRA adapter's
+output for all 13 registered forms, so the refactor had to keep them byte-for-byte.
+
+`c857c70` builds one frozen item set per language for `letter_sounds`, `word_reading`,
+`oral_reading` and `reading_comprehension` at `question_version` `2026.3`, read from the EGRA pack
+in `src/assessment-questions/egra/sharedReading.ts`. isiXhosa, English and Afrikaans take the DBE
+Home Language Assessment 3 letters and Assessment 1 reading; isiZulu takes SMRS 1 for both. Letters
+are 100 in rows of 10 (isiZulu 110); words are 80 in rows of 8 (isiZulu 50 in rows of 5). Every set
+uses the first-row stop. The shared lookup answers only exact version `2026.3`, so older
+Questions keep resolving their own sets. Each shared Question has one instruction text naming its
+Reading Card side and its practice items. Practice items are not filtered out by text, because
+some practice prompts also appear as scored items (English letters m and y, Afrikaans words pot
+and jas, isiXhosa utata).
+
+| Check | Result |
+|---|---|
+| `npx jest src/assessment-questions/egra --ci` | PASS 62/62; 13 adapter baseline snapshots unchanged (never `-u`) |
+| `npm run test:types` | PASS |
+| `npx jest --silent` | PASS 427 suites / 6,429 tests |
+
+The shared sets are deep-frozen. Task 3's and Task 5's render tests confirmed no Question component
+mutates an item set. Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed
+by the orchestrator. All Node commands used Node 20.19.4.
+
 ### 2026-10-26 — EGRA content and skip rules, Task 2: pure Battery skip policy
 
 Implemented only Task 2 on `feat/egra-content-skip-rules`. Added pure `firstRowWrong`,
@@ -5771,9 +5799,30 @@ or native-device proof; persistence and the one-off card remain later tasks. Bui
 (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
 
 
+### 2026-10-26 — EGRA content and skip rules, Task 3: WelaPLUS 2026.1
+
+`afedfe5` registers `wela_plus_full@2026.1` (`battery/wela_plus_full_2026_1.ts`), with twelve
+Questions. Letter sounds (Q1, Reading Card side A), Reading words (Q6, side B) and the story (Q8,
+side C) use the shared 2026.3 content. A new Story comprehension Question (Q9) gets a prerequisite
+on the story. Sentences (Q7) move to side D. The 2024.1 listening, sounds, letter-writing and
+writing Questions are reused unchanged. The Battery declares `readingCard: 'Reading Card 2026.3'`
+and the skip rule. It fires when the first row is all wrong on Letter sounds (10), Letter writing
+(6) or Reading words (8), and it skips the reading and writing Questions after the trigger.
+`wela_plus_full@2024.1` stays registered and is now pinned by a snapshot.
+
+| Check | Result |
+|---|---|
+| `npx jest src/assessment-questions --ci` | PASS 77 suites / 1,089 tests / 14 snapshots (incl. the new 2024.1 pin) |
+| `npm run test:types` | PASS |
+| `npx jest --silent` | PASS 430 suites / 6,478 tests |
+
+A render test mounts the four shared-content Questions on the frozen sets. Built by Codex
+(gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator. All Node
+commands used Node 20.19.4.
+
 ### 2026-10-26 — EGRA content and skip rules, Task 4: one Full EGRA in four languages
 
-Built by Codex; will be reviewed and committed by the orchestrator. Added `egra@2026.1` on
+Added `egra@2026.1` on
 shared 2026.3 content, with four-language instructions, Reading Card 2026.3 sides A/B/C and
 only the existing story prerequisite. The Full EGRA card now starts child selection directly;
 both cards use `languageList`. Deleted the form picker, kept all 13 old Batteries registered,
@@ -5803,7 +5852,7 @@ thread); diff reviewed, re-verified and committed by the orchestrator.
 
 ### 2026-10-26 — EGRA content and skip rules, Task 5: quick tests on shared content
 
-Built by Codex; will be reviewed and committed by the orchestrator. Both quick tests now use
+Both quick tests now use
 shared 2026.3 sets and exact shared instructions in xh/en/af/zu. Historical behavior fixtures
 are pinned by version; old sets remain registered. Real host tests render, mark and save all
 eight frozen sets (including zu's 110 letters / five-word rows) without mutation. isiZulu
@@ -5832,7 +5881,7 @@ All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH` (v20.1
 
 ### 2026-10-26 — EGRA content and skip rules, Task 6: skip-row labels
 
-Built by Codex; will be reviewed and committed by the orchestrator. `buildRunView`
+`buildRunView`
 now passes hydrated item evidence to evaluation and saved-row cause derivation,
 returns `firedTrigger` and per-row `skipCause`, and exports the three exact trigger
 labels. Saved story prerequisite skips say “Skipped · No story words read”; manual
@@ -5854,4 +5903,36 @@ All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
 
 ### 2026-10-26 — EGRA content and skip rules, Task 7: skip card
 
-Built by Codex and will be reviewed and committed by the orchestrator. Added the saved-result-derived skip notice, token-styled BottomSheet, and session-only acknowledgement; focus and refresh gates hide it over Question screens and during saves. Auto-skip batching is unchanged. TDD RED: helper 3 failed/44 passed; sheet missing-module failure; overview 9 failed/49 passed. GREEN: required targeted command 4 suites/149 tests; full `npx jest --silent` 432 suites/6,560 tests/14 snapshots, no FAIL lines; `npm run test:types` passed; explicit Question-screen/design-system guards 2 suites/359 tests; diff check passed. All Node commands used Node 20.19.4. Existing summary act warning remains; no native-device check. The mixed-cause fixture adds one prerequisite to the real WelaPLUS battery because production first-row attribution supersedes its only prerequisite. Full evidence: `.superpowers/sdd/2026-10-26-egra-content-and-skip-rules/task-7-report.md`.
+Added the saved-result-derived skip notice, token-styled BottomSheet, and session-only acknowledgement; focus and refresh gates hide it over Question screens and during saves. Auto-skip batching is unchanged. TDD RED: helper 3 failed/44 passed; sheet missing-module failure; overview 9 failed/49 passed. GREEN: required targeted command 4 suites/149 tests; full `npx jest --silent` 432 suites/6,560 tests/14 snapshots, no FAIL lines; `npm run test:types` passed; explicit Question-screen/design-system guards 2 suites/359 tests; diff check passed. All Node commands used Node 20.19.4. Existing summary act warning remains; no native-device check. The mixed-cause fixture adds one prerequisite to the real WelaPLUS battery because production first-row attribution supersedes its only prerequisite. Orchestrator review added one guard: `skipNoticeFor` returns no card for a trigger it has no copy for, instead of throwing (`2a58db8`; its test landed in `6dc29e5`, "skipNoticeFor shows no card for a trigger it has no copy for"; `__tests__/batteryRun.test.js` 53/53). Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+### 2026-10-26 — EGRA content and skip rules, Task 8: default migration and real-SQLite run proof
+
+Wrote the guarded literacy-default migration from WelaPLUS 2024.1 to 2026.1, preserving Head Office choices; migration written but NOT applied (staging apply remains Task 10). Added and registered real-SQLite Q1/Q5/Q6 trigger journeys using validated capture results, restored skip labels and reached metadata, duplicate-skip rejection, successful finalization, and all 13 pending outbox families. TDD RED: migration file absent, 1 failed / 3 passed tests; focused GREEN: 1 suite / 4 tests. Initial overlapping broad runs hit existing Literacy Session Form timeouts; unchanged serial reruns passed: integration 78 suites / 966 tests, normal Jest with --silent --runInBand 433 suites / 6,565 tests / 14 snapshots, no FAIL lines; types and diff check passed. All Node commands used Node 20.19.4. No native-device or staging verification. `documentation/rls-sync-contract-map.md` needs no change: the migration is data-only (one guarded `update` of `programmes.default_battery_*`), and the map does not cover the default Battery; no table, policy, payload column or outbox order changes. Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+Orchestrator re-verification on Node 20.19.4: focused suite 4/4; `npm run test:integration` 78 suites /
+966 tests; `npm run test:types` clean. The first `npx jest --silent` had one failure: in
+`__tests__/LiteracySessionForm.submit.test.js`, under full parallel load the suite took 52 s and one
+test timed out. Alone it passes 14/14 in 6 s. A second full run passed 433 suites / 6,565 tests /
+14 snapshots (that suite 39 s). This branch does not touch the form, `masteryState.js` or the suite,
+and Codex saw the same timeout. It is recorded as a load-dependent flake, joining
+`ListenAndAnswerStoryQuestion.contract.test.tsx` (Task 5).
+
+### 2026-10-26 — EGRA content and skip rules, Task 9: documents
+
+Standing docs updated on the same branch as the code (anti-drift rule):
+
+| Doc | Change |
+|---|---|
+| `documentation/welaplus-printout-pack.md` | Rewritten as the brief for Reading Card 2026.3, WelaPLUS 2026.1 and Full EGRA. Card content for xh/en/af/zu (sides A–C, plus side D sentences for en/xh) was generated by a script straight from the EGRA pack (`content/egra/`), using the same form ids the app's shared sets read, not retyped. Footers `Reading Card 2026.3 · XX · side X`; the Writing Sheet is renumbered Q5, Q10, Q11, Q12; first rows are marked load-bearing. |
+| `CONTEXT.md` | Item set, Stop rule, EGRA form and Full EGRA entries corrected. New terms: Reading Card 2026.3 and Skip rule. Dated notes on the canonical-Battery and prerequisite-gate decisions name the migration. |
+| `documentation/ROADMAP.md` | §7: the Full EGRA 2026.1 device gate replaces the EGRA forms and placeholder word-list items; Full EGRA skip rules deferred. §8: WelaPLUS 2026.1 is built; the follow-on spec items become the device gate, the deferred skip-rule switch and "revisit early endings as triggers". |
+| `documentation/design-system.md` | `assessments/SkipNoticeSheet` entry; 2026.3 letter charts page as five pages (isiZulu six). |
+| `docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md` | Dated status note: auto-skip added, new Battery version. |
+| `documentation/egra_letter_sets.md`, `documentation/assessment-score-bands-config.md` | Shared 2026.3 sets are current; older sets stay bundled for saved results; bands read LCPM, so the 100-letter card needs no band change. |
+
+A throwaway Jest check (not committed) parsed the brief's Reading Card tables and compared them
+with the app's bundled sets. Side A letters row by row, side B words row by row and side C story
+paragraph by paragraph matched in xh/en/af/zu; the side D sentences matched WelaPLUS 2026.1 Q7 in
+en and xh, in order. Result: 14/14 passed.
+
+`documentation/rls-sync-contract-map.md` is unchanged (see Task 8). No code change in this task.

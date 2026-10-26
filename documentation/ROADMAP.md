@@ -815,40 +815,45 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   comparison draft was lost with its temporary folder and must be redone.
 - [ ] Yebo (Yeboneer) session form: deferred by Jim on 2026-09-23. Zazi iZandi sessions belong to
   the separate Zazi app, not Masi.
-- [ ] Replace placeholder EGRA word lists with authoritative English, isiXhosa and Afrikaans content
-  (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
-  becomes a new version).
-- [ ] **EGRA forms (13, from `content/egra/`): device gate and field materials.** Host wiring and the
-  Full EGRA form picker merged as PR #104 (2026-10-25). Step-by-step marking covers all four
-  Questions; the A03 saved isiXhosa EGRA 1 correctly on 2026-10-26 (build 47, build log).
-  Every EA with an active programme is offered Full EGRA alongside the programme default; forms
-  retain pack order, distinct English HL/FAL and fixed language. The shared host persists the
-  story-questions prerequisite skip and finalizes all four Questions. Remaining:
-  - print Masi 60-letter reading cards for the four Grade 1 forms (DBE's charts show only 40; the
-    extra 20 are in `src/assessment-questions/egra/letterExtensions.ts`);
-  - run the device gate: form selection (including large text and all 13 options; the picker
-    slides away cleanly as the child list opens), an unfinished WelaPLUS shown by name and total
-    from the EGRA child list, fixed-language child selection, capture, save, force-quit resume, finalize, offline then sync, and results;
-    check first-row stop → Undo → timer expiry, End → cancel, zero/skipped story → saved
-    comprehension skip, no Writing Sheet reminder, and comprehension score out of questions asked;
+- [ ] **Full EGRA 2026.1: device gate and field materials.** One Battery, `egra@2026.1`, in
+  isiXhosa, English (HL), Afrikaans and isiZulu on the shared 2026.3 content, opening in the class
+  language with no form picker (built 2026-10-26,
+  [spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md)). The 13 old
+  forms (PR #104) stay registered for saved and unfinished assessments only. The quick tests use
+  the same DBE words, so the old placeholder word lists (including Zazi's provisional Afrikaans
+  list) are no longer offered. Remaining:
+  - run the device gate in zu and af: class-language start, the language sheet for a class with
+    none, "Not available in … yet" for other languages, capture, first-row stop → Undo → timer
+    expiry, zero/skipped story → "Skipped · No story words read", finalize, offline then sync, results;
+  - print the Reading Card 2026.3 per language (task in §8);
   - resolve the pack's `sourceNotes` before field use (see the open decisions below).
 - [ ] **EGRA open decisions (Jim):**
   - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
-  - **Stronger skip rules (decided in principle, Jim 2026-10-23; build later).** A child who reads
-    no letter sounds should not be asked to read words or the story. Design the full rule set
-    (letters 0 → skip words and story; whether words 0 skips the story) before building it.
-    Today's prerequisite format allows one dependency per Question.
+  - **Skip rules for Full EGRA (deferred, 2026-10-26).** WelaPLUS 2026.1 has first-row skip rules
+    (§8); Full EGRA keeps only the story-comprehension skip. Decide whether Full EGRA gets them,
+    and whether government-funded schools that need every Question can switch them off (the
+    per-EA switch in §8).
   - **Story first-line stop rule (wanted, Jim 2026-10-23).** It needs the printed line breaks of
     each story, which the pack does not have; get them from the source charts first.
   - **Score bands.** Should `oral_reading` and `reading_comprehension` get score bands?
   - **isiZulu mastery.** isiZulu letter mastery needs an isiZulu 26-letter order.
-  - **Rankings.** Resolved 2026-10-23: no Masi letter card is shorter than 60 letters, so the
-    60-second raw score is not capped below 60. Cards of 70–110 letters remain.
+  - **Rankings.** Letter cards are now the 100-letter DBE charts (110 for isiZulu), so the
+    60-second raw score is not capped. Rankings read by Question code and keep combining
+    versions (2026-10-26 spec).
+  - **Comparable and per-grade forms (later).** Baseline, midline and endline use the same form
+    for now (Jim, 2026-10-25); experts may write comparable versions and per-grade forms later.
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
   tested synced-table configuration path exists.
 
 ## 8. WelaPLUS
+
+**WelaPLUS 2026.1 is built** (2026-10-26,
+[spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md)): 12
+Questions on the shared DBE/SMRS reading content (Story comprehension is Q9), first-row skip
+rules with a one-off skip card, one Reading Card per language, and the literacy default moved to
+2026.1 by migration. 2024.1 stays registered for saved assessments. The paragraphs below describe
+the Release 1 host it runs in.
 
 **The Release 1 Battery Run host is merged** (Plan 3, PR #101, on whole-class access, PR #100;
 2026-10-25), pending the rest of its device gate. Every Question except the Q11 rubric is marked
@@ -876,9 +881,13 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   Check Bold Red tokens, BottomSheets, large text, wrapping and bottom insets physically.
   Package capture Task 17's native/large-text gates remain open too; a local test pass does not
   close them (2026-10-22 build log).
-- [ ] **Produce the printout pack:** approve artwork, physical proofs and stock from the
-  [designer brief](./welaplus-printout-pack.md): Grid A 6 × 10, Andika Regular, exact language
-  footers, boxed Run code, Reading Cards, Picture Cards and consumable Writing Sheets.
+- [ ] **Produce the printout pack after the app is finished** (Jim, 2026-10-26: EAs receive cards
+  and app together): approve artwork, physical proofs and stock from the
+  [designer brief](./welaplus-printout-pack.md): one Reading Card 2026.3 per language (EN/XH
+  sides A–D, AF/ZU sides A–C; 100-letter charts, 110 for isiZulu; exact first rows), Andika
+  Regular, exact footers, boxed Assessment code, Picture Cards and consumable Writing Sheets.
+  WelaPLUS 2024.1 cards (Grid A 6 × 10, Side B 5 × 8) and the Masi 60-letter Grade 1 cards are
+  never printed.
 - [ ] Build `battery_run_artifacts`, the local photo queue and Storage bucket/RLS, including their
   payload declarations and upload ordering. This deferred artifact/photo scope is not supplied
   by the completed family/run-header RPCs or Release 1 host.
@@ -902,43 +911,29 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   Look for: the ring followed without hunting, Back used rather than flipping, the End sheet
   understood, the review line read before Finish, and the flip notice noticed but not
   distracting.
-- [ ] **Follow-on spec: the EGRA content inside WelaPLUS** (Jim, 2026-10-25). Letters, words, the
-  passage and reading comprehension are identical in WelaPLUS, Full EGRA and the quick tests:
-  - **Letters:** the 100-letter mixed-case chart for each language, taken from Assessment 3
-    (isiXhosa HL 3, English HL 3, Afrikaans HL 3) as printed. isiZulu keeps all 110 letters of
-    its only form, SMRS 1. This replaces the 40/60-letter and Masi-60 letter cards.
-  - **Words, passage and comprehension:** Assessment 1 for each language, English Home
-    Language, from `content/egra/egra-assessments.json`. WelaPLUS gains the comprehension
-    Question after the passage, using the shared `reading_comprehension` code and screen.
-  - **Same form at every point:** baseline, midline and endline use the same form. A per-grade
-    form may come later.
-  - **One stop rule everywhere:** "first row all wrong" for letters and words.
-  - **Rollout:** ship as a new WelaPLUS version beside 2024.1. Head Office switches the literacy
-    programme's default once the reprinted Reading Cards (10 × 10 letters, 8 words a row) are
-    in the field. WelaPLUS 2024.1 Q6 already moved to 5 rows of 8 in the step-by-step build
-    (Jim, 2026-10-26), so its Side B reprint can go first. This supersedes the printout pack's Grid A 6 × 10.
-  - **English** words, story and questions use English **Home Language** Assessment 1 for now;
-    its 111-word story is accepted (Jim, 2026-10-25).
-  - **Keep Full EGRA**, still named "Full EGRA": one Battery per language (four today), with
-    content identical to the matching WelaPLUS parts. The language follows the child's class
-    language, with no form picker. Results saved from the 13 current forms keep their own
-    versions (Jim, 2026-10-25).
-  - **Owner:** the step-by-step session writes the spec; the EGRA session reviews the adapter,
-    the `letterExtensions.ts` retirement, the Full EGRA picker and the old `-masi60` results.
-- [ ] **Follow-on spec: skip rules, with a server-side switch** (Jim, 2026-10-25). Don't put a
-  child who cannot read letters through the reading and writing Questions, or a child who
-  cannot read words through the passage.
-  - **Candidate trigger:** the first-row stop itself (letters → reading and writing; words →
-    passage and comprehension).
-  - **The switch** is set per programme or Battery version, for when government requires every
-    Question. It is never an EA setting.
+- [ ] **Shared reading content and skip rules: device gate.** Built 2026-10-26
+  ([spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md),
+  [plan](../docs/superpowers/plans/2026-10-26-egra-content-and-skip-rules.md)); the literacy
+  default migration `20261026120000_welaplus_2026_1_default.sql` is applied to staging with the
+  preview build. On the A03 (then iPhone): WelaPLUS 2026.1 isiXhosa with a Q1 trigger (card, row
+  labels, finalize), English with a Q6 trigger, a Q5 trigger, a clean 12-Question run, Full EGRA
+  in isiZulu and Afrikaans, both quick tests in isiZulu, and a resumed assessment after force-quit.
+  Have the EGRA session review the adapter refactor, the retired `letterExtensions.ts` card rule
+  and the old `-masi60` results.
+- [ ] **Skip-rule switch (deferred, Jim 2026-10-26).** Rules are always on in WelaPLUS 2026.1.
+  Government-funded schools sometimes need every Question, so build later: a per-EA setting (not
+  per school) with a Head Office default and lock, an EA Profile toggle that syncs when unlocked
+  (partners may choose for themselves), a website admin screen, and the setting recorded on each
+  assessment. Full EGRA skip rules are a separate decision (§7).
+- [ ] **Revisit early endings as triggers (deferred).** Today an End tap before the first row is
+  complete never triggers a skip (Jim, 2026-10-26: "leave it as is for now").
 
 - [ ] Close remaining content approvals: XH Q5 g/n/z picture choices and clock artwork, plus a
   first-language spelling review before the pilot (Release 1 §4.3; #34). The bilingual item
   sets/scripts and Q6/Q8 60-second durations are built; do not reopen them as missing content.
 - [ ] Settle Q11's final rubric anchors/isiXhosa labels, future prerequisite thresholds and
-  score bands. The current WelaPLUS battery declares no automatic prerequisite gates; its
-  manual skips and generic evaluator support are built.
+  score bands. WelaPLUS 2026.1 has first-row skip rules and a Story comprehension
+  prerequisite; 2024.1 has none. Manual skips and generic evaluator support are built.
 - [ ] Build the HQ rubric/calibration path and dashboard consumption.
 - [ ] Validate the first 50 Runs, including paper matching, offline/restart, RLS, sync and low-end
   Android behavior. Photo validation belongs to the deferred artifact rollout.
