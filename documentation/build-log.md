@@ -5094,6 +5094,57 @@ Amanda Manqina 1A rows cannot be told apart (same name and class).
 **Staging data.** None: four test lessons were discarded on the phone and nothing was saved.
 Screenshots and videos: session scratchpad `device/w-*.png`, `device/w*.mp4`, `device/x*.mp4`.
 
+### 2026-10-26 — Lesson flow rebased onto main; Galaxy A03s check on build 48
+
+**Rebase (Jim's go-ahead).** The branch's 37 commits now sit on `origin/main` `aca2ad8`, after
+whole-class assessment (#100), WelaPLUS Plan 3 (#101), Full EGRA (#104) and step-by-step marking
+(#107). Rebasing rewrote the commit ids: the Wrap up fix `598a325` above is now `d384f8d`, and
+builds 36 and 37 came from the pre-rebase `e06a2fc`. Conflicts: `ChildrenContext` memo
+dependencies (both sides kept); `HomeScreen` (main had dropped `useChildren()`, which the lesson
+resume card needs, so it is back); main's catch-and-skip edits to the old Record form's
+persistence went with the files this branch deletes; the contract map, `PRD.md` date and this log
+were union-resolved. Jim force-pushed the result.
+
+**Bug the rebase exposed, fixed in `ed52f8e`.** Main's whole-class assessment (ADR-0005) lets
+class or group access reach a child without the right to edit them; `updateChild` refuses with
+`NOT_DELIVERY_CHILD` unless the EA created or delivers to the child. The lesson save's up-front
+check still used the wider rule, so a reading-level change for a child reached only through a
+class or group passed the check and then failed the whole save with the raw guard error.
+`getWriteAuthority` now gives `level` only to the creator or a delivering EA, matching
+`assertDeliveryChild`; Wrap up hides the level field and Save reports `CHANGES_NOT_WRITABLE`. The
+reversed test failed first. Three tests main's changes broke were repaired: `assessmentScope`
+imported the deleted `ChildSelector` (it now checks the lesson's Add child list, built from
+`getMyChildren` like the Lesson screen), and `completionPathBudget` inserted delivery assignments
+that main's seed now adds.
+
+**Gates on `ed52f8e`.** Unit **437/437 suites, 6,675 tests**; integration **83/83 suites, 1,150
+tests**; types clean; EGRA content 5/5. `SessionCountRankingScreen` failed once in an earlier
+full run, then passed alone and in the final run (not lesson code).
+
+**Builds from `ed52f8e`, `preview-content`.** Android **48** (EAS `0a75b449`), iOS **23** (EAS
+`5459a157`) for Jim's iPhone pass.
+
+**A03 check on 48.** Installed over 47 (the EGRA session's build) with `adb install -r`, data
+kept; 360 dp (`wm density 320`) at 1.3× text, cold start. The phone was signed in as TestB. Its 9
+delivery children were in no group, so the check made one: "jancj & Jdkc" (1C, isiXhosa).
+
+| Check | Result |
+|---|---|
+| Picker after Make a group | Up next "jancj & Jdkc", "Not seen yet · letters o m l a" (the isiXhosa preview pack's step 1). Pass |
+| Wrap up, no letters taught | Name bottom y 277 px, tracker link top y 301 px: **12 dp**, one `spacing.ms` gap (24 dp before `d384f8d`). **Fix confirmed** |
+| Wrap up, o and m taught | Name, letter chips, No one new yet and tracker link each 12 dp apart. Pass |
+| Leave, resume, discard | Leave lesson → Home "Lesson in progress · jancj & Jdkc · Resume" → resumed with o and m still ticked → Discard lesson → Home with no card. Pass |
+
+**Observation outside the lesson flow, not changed.** At 1.3×, the clock-in sheet that Record
+opens when the EA is not clocked in pushes its last button, Cancel, under the system navigation
+bar (`s48-02.png`); whether the sheet scrolls there was not checked. "Not clocked in" wrapping
+onto three lines is already recorded above.
+
+**Staging data.** The test group "jancj & Jdkc" stays on TestB. The test lesson was discarded and
+no session was saved; TestB belongs to the EGRA session's testing, and a saved lesson would have
+changed its Home counts. The phone was restored: font 1.0, density reset (280), stay-awake and
+touches off, auto time on, airplane off, Wi-Fi on. Screenshots: session scratchpad `s48-*.png`.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
