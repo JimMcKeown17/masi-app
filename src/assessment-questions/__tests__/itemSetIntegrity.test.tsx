@@ -83,8 +83,8 @@ test('card layouts', () => {
   expect(S.LETTER_SOUNDS_2026_2_EN.rows.map((row) => row.length)).toEqual([10, 10, 10, 10, 10, 10]);
   expect(S.LETTER_SOUNDS_2026_2_XH.rows).toBe(S.LETTER_SOUNDS_2026_2_EN.rows);
   expect(S.LETTER_SOUNDS_2026_2_AF.rows).toBe(S.LETTER_SOUNDS_2026_2_EN.rows);
-  expect(S.WELA_PLUS_READ_WORDS_EN.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
-  expect(S.WELA_PLUS_READ_WORDS_XH.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
+  expect(S.WELA_PLUS_READ_WORDS_EN.row_lengths).toEqual([8, 8, 8, 8, 8]);
+  expect(S.WELA_PLUS_READ_WORDS_XH.row_lengths).toEqual([8, 8, 8, 8, 8]);
   expect(S.WELA_PLUS_READ_PASSAGE_EN.paragraph_starts).toEqual([0, 24, 40, 66]);
 });
 

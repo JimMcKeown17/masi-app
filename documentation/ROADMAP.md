@@ -912,7 +912,8 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   - **One stop rule everywhere:** "first row all wrong" for letters and words.
   - **Rollout:** ship as a new WelaPLUS version beside 2024.1. Head Office switches the literacy
     programme's default once the reprinted Reading Cards (10 × 10 letters, 8 words a row) are
-    in the field. This supersedes the printout pack's Grid A 6 × 10.
+    in the field. WelaPLUS 2024.1 Q6 already moved to 5 rows of 8 in the step-by-step build
+    (Jim, 2026-10-26), so its Side B reprint can go first. This supersedes the printout pack's Grid A 6 × 10.
   - **English** words, story and questions use English **Home Language** Assessment 1 for now;
     its 111-word story is accepted (Jim, 2026-10-25).
   - **Keep Full EGRA**, still named "Full EGRA": one Battery per language (four today), with

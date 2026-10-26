@@ -283,20 +283,20 @@ test.each([WELA_PLUS_READ_WORDS_EN, WELA_PLUS_READ_WORDS_XH])(
 );
 
 test.each([WELA_PLUS_READ_WORDS_EN, WELA_PLUS_READ_WORDS_XH])(
-  'Q6 pages are one 7-word card row each and the line reads Word 1 of 40 ($language)', itemSet => {
+  'Q6 pages are one 8-word card row each and the line reads Word 1 of 40 ($language)', itemSet => {
     const { screen } = start({ language: itemSet.language, itemSet });
     expect(itemSet.words).toHaveLength(40);
-    expect(itemSet.row_lengths).toEqual([7, 7, 7, 7, 7, 5]);
+    expect(itemSet.row_lengths).toEqual([8, 8, 8, 8, 8]);
     expect(screen.getByText('Word 1 of 40')).toBeTruthy();
-    for (let row = 0; row < 6; row += 1) {
-      expect(screen.getByText(`Card row ${row + 1} · page ${row + 1} of 6`)).toBeTruthy();
+    for (let row = 0; row < 5; row += 1) {
+      expect(screen.getByText(`Card row ${row + 1} · page ${row + 1} of 5`)).toBeTruthy();
       const grid = within(screen.getByTestId('word-grid'));
-      const offset = row * 7;
+      const offset = row * 8;
       for (let position = offset; position < offset + itemSet.row_lengths![row]; position += 1) {
         expect(grid.getByTestId(`tile-${position}`)).toBeTruthy();
       }
       expect(grid.queryByTestId(`tile-${offset + itemSet.row_lengths![row]}`)).toBeNull();
-      if (row < 5) decide(screen, true, 7);
+      if (row < 4) decide(screen, true, 8);
     }
   },
 );

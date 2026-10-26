@@ -9,7 +9,7 @@ const shapes = [
   { name: 'isiZulu', lengths: Array(11).fill(10), layout: LETTER_PAGE_LAYOUT },
   { name: 'fixture letters', lengths: [12,12,1], layout: LETTER_PAGE_LAYOUT },
   { name: 'word_reading', lengths: Array(10).fill(5), layout: WORD_PAGE_LAYOUT },
-  { name: 'wela_plus_read_words', lengths: [7,7,7,7,7,5], layout: WORD_PAGE_LAYOUT },
+  { name: 'wela_plus_read_words', lengths: [8,8,8,8,8], layout: WORD_PAGE_LAYOUT },
   { name: 'oversized card row', lengths: [30], layout: WORD_PAGE_LAYOUT },
 ];
 
@@ -53,10 +53,10 @@ test('word_reading 10×5 → 5 pages of 2 card rows, continuous display rows of 
   expect(pages[0].displayRows[2].positions).toEqual([4,5]);
 });
 
-test('wela_plus_read_words 7,7,7,7,7,5 → 6 pages of one card row', () => {
-  const pages = paginate(rowsFromLengths([7,7,7,7,7,5]), WORD_PAGE_LAYOUT);
-  expect(pages.map(p => [p.firstCardRow, p.lastCardRow])).toEqual([[0,0],[1,1],[2,2],[3,3],[4,4],[5,5]]);
-  expect(lengths(pages[0].displayRows)).toEqual([2,2,2,1]);
+test('wela_plus_read_words 8,8,8,8,8 → 5 pages of one card row, four full display rows each', () => {
+  const pages = paginate(rowsFromLengths([8,8,8,8,8]), WORD_PAGE_LAYOUT);
+  expect(pages.map(p => [p.firstCardRow, p.lastCardRow])).toEqual([[0,0],[1,1],[2,2],[3,3],[4,4]]);
+  for (const page of pages) expect(lengths(page.displayRows)).toEqual([2,2,2,2]);
 });
 
 test('one 30-item card row → 3 pages each labelled Card row 1', () => {
