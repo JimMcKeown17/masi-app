@@ -57,8 +57,11 @@ both with `git -C <books> show 9cd66f8:<path>`. Branch: `feat/letter-orders`, st
 ## Review Focus
 
 1. **A lesson draft started before this build.** Its `pack_id` names a v1 or preview-v1 pack built
-   for another order. The Lesson screen must open, list the class's order to choose from, and
-   suggest nothing. It must never mix two orders or crash. Test in Task 5.
+   for another order, and its stored plan holds that order's suggestions. The Lesson screen must
+   open, show the class's order to choose from, and show none of the stored plan's suggestions or
+   review letters, whether the plan is frozen, from a previous day or from today. The stored plan
+   and `pack_id` are saved unchanged, as the record of the advice given. It must never mix two
+   orders or crash. Test in Task 5.
 2. **A class created on the phone and renamed before its first upload.** The rename uploads, no
    payload carries the edition, and after the next pull the class shows the server's edition. Test
    in Task 3.
@@ -250,6 +253,7 @@ edition a class can reach resolves to a release pack.
 
 **Files:**
 - Modify: `src/db/migrations.js` (version 19, `classes_letter_order_edition`)
+- Modify: `jest.integration.config.js` (add `classLetterOrderMigration.test.js` to `testMatch`, an explicit list)
 - Modify: `src/db/repositories/classesRepository.js` (`CLASS_COLUMNS`, `saveClass`, `updateClass`, new `getActiveClassForChild`)
 - Modify: `src/services/offlineSync.js` (`INTENTIONALLY_UNSYNCED.classes`)
 - Modify: `src/session/handleDataClient.js` (the header in `fencedFetch`)
@@ -310,9 +314,13 @@ Phone rules:
     "a class insert through the outbox carries it": the outbox uploads with this same
     `dataClient`. Existing outbox tests mock the client and so would skip `fencedFetch`.
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/classesRepository.test.js __tests__/handleDataClient.test.js`
+- [ ] **Step 2: Register the migration test and run them to verify they fail.** Add
+  `'<rootDir>/__tests__/classLetterOrderMigration.test.js'` to `testMatch` in
+  `jest.integration.config.js`; a file missing from that list never runs in the integration gate.
+  Confirm with `npm run test:integration -- --listTests | grep classLetterOrderMigration` (one line).
+  Then run `npm test -- __tests__/classesRepository.test.js __tests__/handleDataClient.test.js`
   and `npm run test:integration -- __tests__/classLetterOrderMigration.test.js`. Expected: FAIL on the
-  missing column, the missing method and the missing header.
+  missing column, the missing method and the missing header, never "No tests found".
 
 - [ ] **Step 3: Implement the rules above.**
 
@@ -437,18 +445,27 @@ Phone rules:
 **Interfaces:**
 - Consumes: `getTeachingOrder`, `UPDATE_APP_LETTERS_MESSAGE` (Task 1); `getPackForOrder`, `getPackById`, `packLetterOrderId` (Task 4); class rows with `letter_order_edition` (Task 3).
 - Produces:
-  - `lessonOrderAndPack({ lessonClass, languageCode, packId, allowPreview }) => { teachingOrder: TeachingOrder, pack: object | null }`
+  - `lessonOrderAndPack({ lessonClass, languageCode, packId, allowPreview }) => { teachingOrder: TeachingOrder, pack: object | null, pinnedToAnotherOrder: boolean }`
     in `lessonInputs.js`:
-    - the candidate pack is `getPackById(packId)` when `packId` is given, else `getPackForOrder(teachingOrder.id)`;
+    - the candidate pack is `getPackById(packId, { allowPreview })` when `packId` is given, else
+      `getPackForOrder(teachingOrder.id, { allowPreview })`. Both lookups hide preview packs
+      unless `allowPreview` is passed, so leaving it out silently drops preview content;
     - `pack` is that candidate only when `teachingOrder.kind === 'order'` and
-      `packLetterOrderId(candidate) === teachingOrder.id`, else `null`.
+      `packLetterOrderId(candidate) === teachingOrder.id`, else `null`;
+    - `pinnedToAnotherOrder` is true when `packId` is given and the order of the bundled pack it
+      names, looked up with `{ allowPreview: true }` so the build's preview setting cannot hide it,
+      is not `teachingOrder.id`. An id that names no bundled pack counts as another order.
 
     Packs are chosen by order, never by language. A resumed draft whose pinned pack has another
-    order gets `pack: null`, so it suggests nothing (Review Focus 1).
+    order gets `pack: null` and `pinnedToAnotherOrder: true` (Review Focus 1).
+
+    It replaces `packFor` (`lessonInputs.js:10-11`), and `allowPreview` keeps today's sources:
+    `shapePickerModel`'s `allowPreview` parameter, and `isPreviewContentEnabled()` in
+    `loadPickerLetters`, `loadLessonParticipants` and `useLessonDraft`.
   - `loadLessonParticipants({ ..., classId, languageCode, packId, participantChildIds })` loads
     the class with `repositories.classes.getClassById(classId)`, and returns
-    `{ participants, lessonClass, teachingOrder, pack, packIndex, alphabet }`. `alphabet` is
-    `teachingOrder.letters` when `kind === 'order'`, else `null`.
+    `{ participants, lessonClass, teachingOrder, pack, pinnedToAnotherOrder, packIndex, alphabet }`.
+    `alphabet` is `teachingOrder.letters` when `kind === 'order'`, else `null`.
   - Picker rows (`shapePickerModel`, `loadPickerLetters`):
     - each group's engine input takes `pack` from `lessonOrderAndPack` with its own class and
       language, not one pack per language;
@@ -457,11 +474,23 @@ Phone rules:
     - at open and on `chooseClass`/`chooseLanguage`, the draft's `packId` is
       `lessonOrderAndPack(...).pack?.id ?? null`;
     - it drops its separate `getClassById` and uses `loaded.lessonClass`;
-    - the returned object gains `teachingOrder: TeachingOrder | null` (null while loading).
+    - the returned object gains `teachingOrder: TeachingOrder | null` (null while loading) and
+      `planFromAnotherOrder: boolean` (`loaded.pinnedToAnotherOrder`; false while loading);
+    - it never rewrites the stored plan, `pack_id` or ticks because of `planFromAnotherOrder`.
+      The existing rules still decide when a plan is replaced. A frozen or previous-day plan stays as
+      the record of the advice given, and a same-day replacement, with `pack: null`, is a `no_pack`
+      plan that suggests nothing.
   - `lessonRowDetail(seen, letters, { needsAppUpdate } = {})`: with `needsAppUpdate`, the detail
     is `joinDetail([seen, UPDATE_APP_LETTERS_MESSAGE])`.
-  - `LessonLettersSection` gains a `needsAppUpdate` prop. When true, the section shows only
-    `UPDATE_APP_LETTERS_MESSAGE` under its heading, before the isiZulu check.
+  - `LessonLettersSection` gains `needsAppUpdate` and `planFromAnotherOrder` props, checked in
+    this order after the isiZulu check:
+    - `needsAppUpdate`: only `UPDATE_APP_LETTERS_MESSAGE` under the heading;
+    - `planFromAnotherOrder`: `Choose the letters you teach` and the `LetterToggleGrid` of
+      `choices.letterChoices` (the class's order, because `pack` is null), exactly as `no_pack`
+      shows today. None of the plan's suggestion tiles, reason lines or `Review:` line appear.
+
+    The section is the only place that shows a plan's letters (`LessonLettersSection.js:17-33`).
+    `LessonScreen` passes both props from the hook.
 
 - [ ] **Step 1: Write the failing tests.**
   - `lessonInputs.test.js`:
@@ -471,17 +500,46 @@ Phone rules:
     - a class with no `home_language` where the EA picked `en` resolves `english-order-2026-10-23`;
     - a `zu` class and a class with no language return `teachingOrder.kind === 'none'`, `pack: null`, `alphabet: null`;
     - a class row with edition `2099-01-01` returns `kind: 'update'` and sets the row's `lettersNeedUpdate`;
-    - `lessonOrderAndPack` with `packId: 'isixhosa-interim-letters-v1'` on a 2026-10-23 class returns `pack: null` and the class's order;
     - `alphabet` equals the class's order for a no-pack lesson.
+    - `lessonOrderAndPack` on a 2026-10-23 isiXhosa class, as a `test.each` over the preview
+      setting:
+
+      | `packId` | `allowPreview` | `pack` | `pinnedToAnotherOrder` |
+      |---|---|---|---|
+      | none (new lesson) | true | `isixhosa-candidates-preview-v2` | false |
+      | none (new lesson) | false | `isixhosa-interim-letters-v2` | false |
+      | `isixhosa-candidates-preview-v2` | true | that pack | false |
+      | `isixhosa-candidates-preview-v2` | false | `null` | false |
+      | `isixhosa-candidates-preview-v1` | true and false | `null` | true |
+      | `isixhosa-interim-letters-v1` | false | `null` | true |
+      | `no-such-pack` | false | `null` | true |
+
+      An English 2026-10-23 class with `packId: 'english-interim-letters-v1'` also gives `pack: null`
+      and `pinnedToAnotherOrder: true`.
 
     Replace the test that pinned `PEDAGOGICAL_ORDERS.af` with one for `afrikaans-order-2026-10-23`.
-  - `useLessonDraft.test.js`: a new draft's `pack_id` is `isixhosa-interim-letters-v2` (release),
-    or `isixhosa-candidates-preview-v2` when preview is enabled. The hook exposes `teachingOrder`.
+  - `useLessonDraft.test.js`:
+    - a new draft's `pack_id` is `isixhosa-interim-letters-v2` (release), or
+      `isixhosa-candidates-preview-v2` when preview is enabled;
+    - the hook exposes `teachingOrder`;
+    - the existing test "a frozen version-1 draft keeps its stored review letters when resumed and
+      saved" keeps every assertion (the stored plan is saved unchanged and `computeLessonPlan` is
+      never called) and adds `expect(result.current.planFromAnotherOrder).toBe(true)`.
   - `LessonScreen.test.js`:
     - a lesson for an unknown-edition class shows `Update the app to teach this class's letters.`
       and no letter tiles;
-    - a resumed pre-upgrade draft (Review Focus 1) renders the class's 26 letters under "Choose the
-      letters you teach" and no suggestion.
+    - Review Focus 1, as a `test.each` over three stored-plan states and two pins. The states are
+      frozen (`plan_fixed_at` set), previous day (unfrozen, `lesson_date` yesterday) and same day
+      (unfrozen, today; the stored plan's `present_child_ids` match the attendance and its
+      `history_complete` and `mastery_complete` are both true, so `isPlanSuperseded` keeps it). The
+      pins are `english-interim-letters-v1` on a 2026-10-23 English class, with a stored plan
+      suggesting `a m s t` and reviewing `e`, and `isixhosa-candidates-preview-v1` with preview
+      enabled, on a 2026-10-23 isiXhosa class. Each case:
+      - shows `Choose the letters you teach`, with the grid's first four tiles in the class's order
+        (`s a n d` or `o m l a`);
+      - shows no `Review:` line and no `First lesson: start with these letters.`;
+      - after a letter is ticked, the stored draft's `plan` and `pack_id` are unchanged when read
+        back with `repositories.lessonDrafts`.
   - `lessonPlanPacks.test.js`: `getPack` is no longer exported.
 
 - [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js`. Expected: FAIL.
@@ -578,15 +636,24 @@ Phone rules:
 **Files:**
 - Create: `__tests__/letterOrderAgreement.test.js` (integration, real SQLite), `__tests__/letterOrderLeftovers.test.js`
 - Create: `docs/adr/0011-letter-order-edition-per-class-set-by-server.md`
+- Modify: `jest.integration.config.js` (add `letterOrderAgreement.test.js` to `testMatch`)
 - Modify: `CONTEXT.md`, `docs/superpowers/specs/2026-10-20-lesson-plan-design.md` (§4.2), `documentation/ROADMAP.md`, `documentation/build-log.md`
 
 - [ ] **Step 1: Write the agreement test.** For one 2026-10-23 class per language, each with two
-  children in a group, these must all equal `resolveTeachingOrder('2026-10-23', code).letters`:
-  - the picker row's first-lesson letters (step 1);
-  - the lesson input's pack order and `alphabet`;
-  - the order `useLessonDraft` gives Wrap up;
-  - the order the mastery panel's loader resolves through `getActiveClassForChild`;
-  - the receipt sort.
+  children in a group, whose history is complete and empty (so the engine's first-lesson rule,
+  `letters.js:86-94`, applies), let `order = resolveTeachingOrder('2026-10-23', code)` and
+  `stepOne = getLetterOrder(order.id).letter_steps[0]`. Each surface is compared with the part of
+  the order it shows:
+  - the picker row's first-lesson suggestion equals `stepOne` (`o m l a`, `s a n d`, `a e k n`);
+  - the lesson input's pack order (`teachingOrderFromPack(pack)`) and `alphabet` equal `order.letters`;
+  - `useLessonDraft().teachingOrder.letters` (the order Wrap up gives the tracker sheet) equals `order.letters`;
+  - the order the mastery panel's loader resolves through `getActiveClassForChild` equals `order.letters`;
+  - the receipt for the selected letters `[...order.letters].reverse().slice(0, 5)` lists them in
+    the order they appear in `order.letters`.
+
+  Add `'<rootDir>/__tests__/letterOrderAgreement.test.js'` to `testMatch` in
+  `jest.integration.config.js`, and confirm with
+  `npm run test:integration -- --listTests | grep letterOrderAgreement` (one line).
 
 - [ ] **Step 2: Write the leftovers test.** It scans `src/` and fails on:
   - `PEDAGOGICAL_ORDER`;
@@ -594,8 +661,9 @@ Phone rules:
   - `getPack(`;
   - any `CURRENT_PACK_IDS` key that isn't an order id in the registry.
 
-- [ ] **Step 3: Run both.** Expected: PASS (they pass at once, because Tasks 1–7 built the
-  behaviour; they guard against regressions).
+- [ ] **Step 3: Run both.** Run `npm test -- __tests__/letterOrderLeftovers.test.js` and
+  `npm run test:integration -- __tests__/letterOrderAgreement.test.js`. Expected: PASS (they pass at
+  once, because Tasks 1–7 built the behaviour; they guard against regressions).
 
 - [ ] **Step 4: Documents.**
   - **`CONTEXT.md`:** add **Letter order** (a language's teaching sequence in steps, from the
