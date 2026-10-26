@@ -5851,3 +5851,7 @@ All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
 | `npx jest --silent` | PASS: 431 suites / 6,532 tests / 14 snapshots; no FAIL lines |
 | `npm run test:types` | PASS: strict tsc, no errors |
 | `git diff --check` | PASS |
+
+### 2026-10-26 — EGRA content and skip rules, Task 7: skip card
+
+Built by Codex and will be reviewed and committed by the orchestrator. Added the saved-result-derived skip notice, token-styled BottomSheet, and session-only acknowledgement; focus and refresh gates hide it over Question screens and during saves. Auto-skip batching is unchanged. TDD RED: helper 3 failed/44 passed; sheet missing-module failure; overview 9 failed/49 passed. GREEN: required targeted command 4 suites/149 tests; full `npx jest --silent` 432 suites/6,560 tests/14 snapshots, no FAIL lines; `npm run test:types` passed; explicit Question-screen/design-system guards 2 suites/359 tests; diff check passed. All Node commands used Node 20.19.4. Existing summary act warning remains; no native-device check. The mixed-cause fixture adds one prerequisite to the real WelaPLUS battery because production first-row attribution supersedes its only prerequisite. Full evidence: `.superpowers/sdd/2026-10-26-egra-content-and-skip-rules/task-7-report.md`.

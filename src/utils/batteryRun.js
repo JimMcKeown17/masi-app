@@ -6,6 +6,39 @@ export const TRIGGER_LABELS = {
   word_reading: 'Words first row wrong',
 };
 
+export function skipNoticeFor({ view, firstName }) {
+  const trigger = view.firedTrigger;
+  if (!trigger) return null;
+  const skipped = view.rows.filter(row => row.skipCause?.kind === 'first_row'
+    && row.skipCause.trigger === trigger).map(row => row.question.title);
+  if (!skipped.length) return null;
+  const stillToDo = view.rows.filter(row => ['next', 'not_started'].includes(row.state))
+    .map(row => row.question.title);
+  const name = firstName || 'This child';
+  const midSentenceName = firstName || 'this child';
+  const copy = {
+    letter_sounds: {
+      title: 'No reading or writing today',
+      body: `${name} got every letter in the first row wrong. So ${midSentenceName} won't be asked to read or write words, sentences or a story. This is normal.`,
+    },
+    wela_plus_letter_writing: {
+      title: 'No reading or writing today',
+      body: `${name} got every letter in the first row of the Writing Sheet wrong. So ${midSentenceName} won't be asked to read or write words, sentences or a story. This is normal.`,
+    },
+    word_reading: {
+      title: 'No more reading or writing today',
+      body: `${name} got every word in the first row wrong. So ${midSentenceName} won't be asked to read sentences or a story, or to write. This is normal.`,
+    },
+  }[trigger];
+  // A trigger with no copy here (a future Battery) shows no card rather than breaking the list.
+  if (!copy) return null;
+  return {
+    trigger, title: copy.title,
+    body: `${copy.body} ${stillToDo.length ? 'Carry on with the next Question.' : 'Tap Review and finalize to finish.'}`,
+    stillToDo, skipped,
+  };
+}
+
 const RUN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const MATERIAL_LABELS = {
   reading_card: 'Reading Card',
