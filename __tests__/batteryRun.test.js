@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { egraBatteryFor } from '../src/assessment-questions/egra';
-import { buildRunView, formatRunStart, materialsLine, runCode } from '../src/utils/batteryRun';
-import { MANUAL_SKIP_REASONS, WELA_PLUS_FULL_2024_1 } from '../src/assessment-questions';
+import { buildRunView, formatRunStart, materialsLine, runCode, TRIGGER_LABELS } from '../src/utils/batteryRun';
+import { MANUAL_SKIP_REASONS, WELA_PLUS_FULL_2024_1, WELA_PLUS_FULL_2026_1 } from '../src/assessment-questions';
 
 const battery = WELA_PLUS_FULL_2024_1;
 const run = {
@@ -76,13 +76,99 @@ test('skipped row uses the package label', () => {
       question_code: battery.questions[0].question_code,
       stopped_reason: reason, score: 0, total_items: 60, derived: {},
     }] });
-    expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`, scoreText: null });
+    expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`, scoreText: null, skipCause: null });
     expect(state.decidedCount).toBe(1);
   }
   expect(view({ results: [{
     question_code: battery.questions[0].question_code,
     stopped_reason: 'skipped_prerequisite_unmet', score: null, total_items: 0, derived: {},
-  }] }).rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Not reached', scoreText: null });
+  }] }).rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Not reached', scoreText: null, skipCause: null });
+});
+
+const firstRowSkips = [
+  'word_reading', 'wela_plus_read_sentences', 'oral_reading', 'reading_comprehension',
+  'wela_plus_write_cvcs', 'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
+];
+const markedResult = (question_code, length, correct = false) => ({
+  question_code, stopped_reason: 'completed', score: correct ? length : 0,
+  total_items: length, derived: {},
+  items: Array.from({ length }, (_, position) => ({
+    position, is_correct: correct, metadata: { reached: true },
+  })),
+});
+const savedSkip = question_code => ({
+  question_code, stopped_reason: 'skipped_prerequisite_unmet', score: null,
+  total_items: 0, derived: {}, items: [],
+});
+const currentView = results => buildRunView(WELA_PLUS_FULL_2026_1, { ...run, results }, access);
+
+test('trigger labels export the approved EA wording', () => {
+  expect(TRIGGER_LABELS).toEqual({
+    letter_sounds: 'Letters first row wrong',
+    wela_plus_letter_writing: 'Letter writing first row wrong',
+    word_reading: 'Words first row wrong',
+  });
+});
+
+test.each([
+  ['letter_sounds', 0, 10, firstRowSkips, 'Letters first row wrong'],
+  ['wela_plus_letter_writing', 4, 6, firstRowSkips, 'Letter writing first row wrong'],
+  ['word_reading', 5, 8, firstRowSkips.slice(1), 'Words first row wrong'],
+])('2026.1 resumed run labels every saved skip from %s', (trigger, index, length, skippedCodes, label) => {
+  const results = [
+    ...WELA_PLUS_FULL_2026_1.questions.slice(0, index).map(question => markedResult(question.question_code, 10, true)),
+    markedResult(trigger, length),
+    ...skippedCodes.map(savedSkip),
+  ];
+  const state = currentView(results);
+  expect(state.firedTrigger).toBe(trigger);
+  expect(state.autoSkips).toEqual([]);
+  expect(state.rows.filter(row => row.state === 'skipped').map(row => row.question.question_code)).toEqual(skippedCodes);
+  state.rows.forEach(row => {
+    if (skippedCodes.includes(row.question.question_code)) {
+      expect(row).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`,
+        skipCause: { kind: 'first_row', trigger }, scoreText: null });
+    } else {
+      expect(row.skipCause).toBeNull();
+    }
+  });
+});
+
+test('2026.1 Q1 item evidence proposes Q6–Q12 auto-skips before they are saved', () => {
+  const state = currentView([markedResult('letter_sounds', 10)]);
+  expect(state.firedTrigger).toBe('letter_sounds');
+  expect(state.autoSkips).toEqual(firstRowSkips.map(question_code => ({
+    question_code, reason: 'skipped_prerequisite_unmet', trigger: 'letter_sounds',
+  })));
+  expect(state.decidedCount).toBe(1);
+  expect(state.next).toBe(WELA_PLUS_FULL_2026_1.questions[1]);
+  expect(state.rows.filter(row => firstRowSkips.includes(row.question.question_code))
+    .every(row => row.state === 'not_started' && row.skipCause === null)).toBe(true);
+});
+
+test('an old EGRA saved comprehension skip explains that no story words were read', () => {
+  const egra = egraBatteryFor('egra', 'dbe-egra-en-hl-1-v1');
+  const state = buildRunView(egra, { ...run, results: [
+    markedResult('oral_reading', 10), savedSkip('reading_comprehension'),
+  ] }, access);
+  expect(state.firedTrigger).toBeNull();
+  expect(state.rows[3]).toMatchObject({ state: 'skipped', detail: 'Skipped · No story words read',
+    skipCause: { kind: 'prerequisite', depends_on: 'oral_reading' } });
+});
+
+test('a manual Q2 skip keeps its EA reason beside Q1-triggered saved skips', () => {
+  const state = currentView([
+    markedResult('letter_sounds', 10),
+    { ...savedSkip('wela_plus_listen_and_answer_story'), stopped_reason: 'skipped_tired' },
+    ...firstRowSkips.map(savedSkip),
+  ]);
+  expect(state.firedTrigger).toBe('letter_sounds');
+  expect(state.rows[1]).toMatchObject({ state: 'skipped', detail: 'Skipped · Child is tired', skipCause: null });
+  expect(state.rows.filter(row => row.skipCause !== null).map(row => row.question.question_code)).toEqual(firstRowSkips);
+  for (const row of state.rows.filter(row => firstRowSkips.includes(row.question.question_code))) {
+    expect(row).toMatchObject({ detail: 'Skipped · Letters first row wrong',
+      skipCause: { kind: 'first_row', trigger: 'letter_sounds' } });
+  }
 });
 
 test('writing-sheet reminder only before the first writing-sheet Question', () => {

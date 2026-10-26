@@ -5828,3 +5828,26 @@ All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH` (v20.1
 | `npm run test:types` | PASS: strict tsc, no errors |
 | `npx jest __tests__/AssessmentChildSelectScreen.languagePicker.test.js __tests__/assessmentEntryRouting.test.js` | PASS: 2 suites / 22 tests |
 | `git diff --check` | PASS |
+
+
+### 2026-10-26 — EGRA content and skip rules, Task 6: skip-row labels
+
+Built by Codex; will be reviewed and committed by the orchestrator. `buildRunView`
+now passes hydrated item evidence to evaluation and saved-row cause derivation,
+returns `firedTrigger` and per-row `skipCause`, and exports the three exact trigger
+labels. Saved story prerequisite skips say “Skipped · No story words read”; manual
+EA reasons and the 2024.1 no-cause fallback remain covered. Tests use the real
+2026.1 Battery for all three triggers, unsaved Q6–Q12 auto-skips, and mixed manual
+and automatic skips. No screen implementation change or Task 7 work.
+TDD: targeted RED was 2 failed / 1 passed suites, 10 failed / 115 passed tests;
+the same command passed after implementation. Existing summary navigation emits
+an act warning in the non-silent run; no native-device check. Built by Codex; reviewed,
+re-verified and committed by the orchestrator.
+All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command | Result |
+|---|---|
+| `npx jest __tests__/batteryRun.test.js __tests__/BatteryOverviewScreen.test.js __tests__/BatteryRunSummaryScreen.test.js` | PASS: 3 suites / 125 tests |
+| `npx jest --silent` | PASS: 431 suites / 6,532 tests / 14 snapshots; no FAIL lines |
+| `npm run test:types` | PASS: strict tsc, no errors |
+| `git diff --check` | PASS |

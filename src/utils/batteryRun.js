@@ -1,4 +1,10 @@
-import { evaluateBatteryState, MANUAL_SKIP_REASONS } from '../assessment-questions';
+import { evaluateBatteryState, MANUAL_SKIP_REASONS, skipCauseFor } from '../assessment-questions';
+
+export const TRIGGER_LABELS = {
+  letter_sounds: 'Letters first row wrong',
+  wela_plus_letter_writing: 'Letter writing first row wrong',
+  word_reading: 'Words first row wrong',
+};
 
 const RUN_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const MATERIAL_LABELS = {
@@ -22,9 +28,11 @@ export function runCode(uuid) {
 
 export function buildRunView(battery, run, { activeProgrammeId, childAssigned }) {
   const results = run.results ?? [];
-  const state = evaluateBatteryState(battery, results.map(({ question_code, stopped_reason, score }) => ({
+  const decidedResults = results.map(({ question_code, stopped_reason, score, items }) => ({
     question_code, stopped_reason, score,
-  })));
+    items: items?.map(({ position, is_correct, metadata }) => ({ position, is_correct, metadata })),
+  }));
+  const state = evaluateBatteryState(battery, decidedResults);
   const byCode = new Map(results.map(result => [result.question_code, result]));
   const firstWritingSheet = battery.questions.find(question => question.materials?.item === 'writing_sheet');
   let readOnlyReason = null;
@@ -37,10 +45,19 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
     let rowState;
     let detail;
     let scoreText = null;
+    let skipCause = null;
     if (result) {
       if (result.stopped_reason.startsWith('skipped_')) {
         rowState = 'skipped';
-        detail = `Skipped · ${SKIP_LABELS.get(result.stopped_reason)}`;
+        let label = SKIP_LABELS.get(result.stopped_reason);
+        if (result.stopped_reason === 'skipped_prerequisite_unmet') {
+          skipCause = skipCauseFor(battery, decidedResults, question.question_code);
+          if (skipCause?.kind === 'first_row') label = TRIGGER_LABELS[skipCause.trigger];
+          else if (skipCause?.kind === 'prerequisite' && skipCause.depends_on === 'oral_reading') {
+            label = 'No story words read';
+          }
+        }
+        detail = `Skipped · ${label}`;
       } else {
         rowState = 'done';
         detail = 'Done';
@@ -55,7 +72,7 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
       if (isNext && question.materials) detail += ` · ${MATERIAL_LABELS[question.materials.item]}`;
       else if (question.durationSec) detail += ` · ${Math.ceil(question.durationSec / 60)} min`;
     }
-    return { number: index + 1, question, state: rowState, detail, scoreText };
+    return { number: index + 1, question, state: rowState, detail, scoreText, skipCause };
   });
 
   return {
@@ -65,6 +82,7 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
     eligibleToFinalize: state.eligibleToFinalize,
     next: state.nextQuestion,
     autoSkips: state.autoSkips,
+    firedTrigger: state.firedTrigger,
     writable: readOnlyReason === null,
     readOnlyReason,
     writingSheetReminder: Boolean(state.nextQuestion && state.nextQuestion === firstWritingSheet),

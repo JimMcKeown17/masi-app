@@ -43,7 +43,7 @@ test.each(['completed', 'skipped_tired'])('EGRA persists comprehension auto-skip
     assessmentId: expect.any(String), userId: 'ea-1', childId: CHILD.id, batteryRunId: ID,
     result: skippedResult(battery.questions[3], 'en', 'skipped_prerequisite_unmet'),
   });
-  expect(screen.getByText('Skipped · Not reached')).toBeTruthy();
+  expect(screen.getByText('Skipped · No story words read')).toBeTruthy();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
   screen.refresh();
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
