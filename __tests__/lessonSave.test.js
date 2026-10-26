@@ -193,10 +193,9 @@ test('a present child with no direct, class or group access: CHILD_NOT_WRITABLE,
   await endDirect('c1');
   expect((await rejectSave('CHILD_NOT_WRITABLE')).childIds).toEqual(['c1']);
 });
-test('direct assignment ended but class access remains: attendance saves; marks for them give CHANGES_NOT_WRITABLE', async () => {
+test('direct assignment ended but class access remains: marks for them give CHANGES_NOT_WRITABLE', async () => {
   await endDirect('c1'); await classGrant();
-  expect((await rejectSave('CHANGES_NOT_WRITABLE')).childIds).toEqual(['c1']);
-  expect(await save({ draft: { ...draft, tracker_changes: {} } })).toEqual({ sessionId: draft.session_id });
+  expect((await rejectSave('CHANGES_NOT_WRITABLE', { draft: { ...draft, reading_level_changes: {} } })).childIds).toEqual(['c1']);
 });
 test('the same child with marks and level change cleared: the lesson saves with them as an attendee', async () => {
   await endDirect('c1'); await classGrant(); await save({ draft: noChanges() });
@@ -253,7 +252,7 @@ test('T0 accepted, T1 draft mark, T2 refused, a pull restores T0: saving the dra
   expect(JSON.parse(outbox.payload)).toMatchObject({ correction_id: correction.correction_id, changed_at: T2 });
 });
 
-test('getWriteAuthority matches the server rules for each of the three grant kinds and ended rows', async () => {
+test('getWriteAuthority: class or group access lets a child attend; only delivery or creator changes them (ADR-0005)', async () => {
   await endDirect('c2'); await classGrant('c2');
   await write(async txn => {
     for (const id of ['c3', 'creator', 'ended', 'other']) await txn.runAsync(
@@ -261,7 +260,7 @@ test('getWriteAuthority matches the server rules for each of the three grant kin
     await txn.runAsync("insert into child_group_memberships (id, child_id, group_id, joined_at) values ('m3', 'c3', 'group-1', '2026-01-15')");
     await txn.runAsync("insert into child_ea_assignments (id, child_id, user_id, assigned_at, unassigned_at) values ('ended-ea', 'ended', ?, '2026-01-15', ?), ('other-ea', 'other', 'another-ea', '2026-01-15', null)", USER, MON);
   });
-  const yes = { attend: true, deliver: true, level: true }, indirect = { attend: true, deliver: false, level: true }, no = { attend: false, deliver: false, level: false };
+  const yes = { attend: true, deliver: true, level: true }, indirect = { attend: true, deliver: false, level: false }, no = { attend: false, deliver: false, level: false };
   expect(await repositories.children.getWriteAuthority({ userId: USER, childIds: ['c1', 'c2', 'c3', 'creator', 'ended', 'other', 'missing'] }))
     .toEqual({ c1: yes, c2: indirect, c3: indirect, creator: { ...no, level: true }, ended: no, other: no, missing: no });
   await write(async txn => {
@@ -277,11 +276,20 @@ test('getWriteAuthority matches the server rules for each of the three grant kin
   });
   expect(await repositories.children.getWriteAuthority({ userId: USER, childIds: ['c2', 'c3'] })).toEqual({ c2: no, c3: no });
 });
-test('direct assignment ended, class or group access remains: a reading-level change still saves', async () => {
+test('direct assignment ended, class or group access remains: a reading-level change gives CHANGES_NOT_WRITABLE', async () => {
+  // Class or group access is not child-edit authority (ADR-0005); the child guard would refuse mid-save.
   await endDirect('c1'); await endDirect('c2'); await classGrant('c1');
   await write(txn => txn.runAsync("insert into child_group_memberships (id, child_id, group_id, joined_at) values ('m2', 'c2', 'group-1', '2026-01-15')"));
-  await save({ draft: { ...draft, tracker_changes: {}, reading_level_changes: { c1: 'Word Reading', c2: '3 Letter Blends' } } });
-  expect(await read('select id, reading_level from children order by id')).toEqual([{ id: 'c1', reading_level: 'Word Reading' }, { id: 'c2', reading_level: '3 Letter Blends' }]);
+  const levels = { ...draft, tracker_changes: {}, reading_level_changes: { c1: 'Word Reading', c2: '3 Letter Blends' } };
+  expect((await rejectSave('CHANGES_NOT_WRITABLE', { draft: levels })).childIds).toEqual(['c1', 'c2']);
+  await save({ draft: noChanges() });
+  expect(await read('select child_id from session_attendees order by child_id')).toEqual([{ child_id: 'c1' }, { child_id: 'c2' }]);
+});
+test('the creator of a child they no longer deliver to may still change its reading level', async () => {
+  await endDirect('c1'); await classGrant('c1');
+  await write(txn => txn.runAsync('update children set created_by = ? where id = ?', USER, 'c1'));
+  await save({ draft: { ...draft, tracker_changes: {}, reading_level_changes: { c1: 'Word Reading' } } });
+  expect((await read("select reading_level from children where id = 'c1'"))[0].reading_level).toBe('Word Reading');
 });
 test('an old-programme draft whose staff assignment ended: PROGRAMME_NOT_ACTIVE, nothing written, draft kept', async () => {
   await write(async txn => {

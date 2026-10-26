@@ -383,10 +383,12 @@ export const createChildrenRepository = ({ database } = {}) => {
       from json_each(?) requested
       left join children child on child.id = requested.value
     `, userId, userId, userId, userId, JSON.stringify([...new Set(childIds)]));
+    // Class or group access lets a child attend but is not child-edit authority (ADR-0005);
+    // `level` mirrors assertDeliveryChild, the guard updateChild applies.
     return Object.fromEntries(rows.map(row => {
       const deliver = Boolean(row.deliver);
       const attend = deliver || Boolean(row.indirect);
-      return [row.id, { attend, deliver, level: Boolean(row.creator) || attend }];
+      return [row.id, { attend, deliver, level: Boolean(row.creator) || deliver }];
     }));
   };
 

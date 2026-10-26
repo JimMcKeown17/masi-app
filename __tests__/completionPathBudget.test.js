@@ -115,7 +115,6 @@ describe('completion-path statement budgets', () => {
         confirmed, changedAt: '2026-07-11T09:00:00.000Z',
       });
     }
-    await db.runAsync("insert into child_ea_assignments (id, user_id, child_id, assigned_at) values ('direct', 'user-1', 'child-0', '2026-01-15')");
     await createGroupsRepository({ database: db }).saveGroup({ id: 'group-1', name: 'Group 1', class_id: 'class-1', created_by: 'user-1' });
     const draft = await createLessonDraftsRepository({ database: db }).create(lessonDraftInput({
       attendance: { childIds: ['child-0'], absentChildIds: [], addedChildIds: [] }, reading_level_changes: {},
@@ -166,8 +165,6 @@ describe('completion-path statement budgets', () => {
     db = await createDatabase();
     await seedChildren(db, 10);
     const childIds = Array.from({ length: 10 }, (_, i) => `child-${i}`);
-    for (const id of childIds) await db.runAsync(
-      "insert into child_ea_assignments (id, user_id, child_id, assigned_at) values (?, 'user-1', ?, '2026-01-15')", `direct-${id}`, id);
     await createGroupsRepository({ database: db }).saveGroup({ id: 'group-1', name: 'Group 1', class_id: 'class-1', created_by: 'user-1' });
     const drafts = createLessonDraftsRepository({ database: db });
     const input = lessonDraftInput({ attendance: { childIds, absentChildIds: [], addedChildIds: [] },

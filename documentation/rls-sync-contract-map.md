@@ -1195,7 +1195,7 @@ names. The picker shows "Your children" then "Rest of the class", searches both,
 sections and derives language from the row's `home_language`. History keeps its existing
 signed-in-EA recorder filter and SQLite `getChildNamesByIds` fallback for children outside
 the current roster. My Children, ClassDetail,
-session/attendee pickers, `ChildSelector`, `GroupPickerBottomSheet`, onboarding, daily targets,
+session/attendee pickers (the lesson picker and its Add child sheet, which replaced `ChildSelector`), `GroupPickerBottomSheet`, onboarding, daily targets,
 session-count ranking and letter-mastery ranking keep delivery scope. `getChildrenTabStats`
 takes delivery and assessable populations separately: delivery determines child count,
 assessable determines coverage. These boundaries are pinned by `assessmentScope.test.js`.
@@ -1209,11 +1209,13 @@ matching its server RPC; the creator fallback does not apply. Refusal is `NOT_DE
 before any guarded mutation. ChildResults and LetterTracker pass delivery-context membership
 as `LetterMasteryPanel.isDelivery`; class-only children get no confirmation controls.
 
-In `literacySessionPersistence`, a per-attendee reading-level or mastery write refused with
-`NOT_DELIVERY_CHILD` is skipped with one warning per child. The session, attendee rows and
-all authorized child writes still commit in the same transaction. Other errors are rethrown
-and roll the transaction back. Tests: `nonDeliveryGuards.test.js`,
-`literacySessionPersistence.test.js`, and the named screen/panel suites.
+The lesson save (`lessonSave.saveLesson`, which replaced `literacySessionPersistence` with the
+old Record form) checks these rules before writing instead of skipping refused writes:
+`getWriteAuthority` gives `level` only to the creator or a deliverer, and `deliver` only to a
+deliverer. Wrap up shows letters and reading level only where they are allowed. If access
+changes before Save, the save refuses with `CHANGES_NOT_WRITABLE` and writes nothing, and the
+EA can save the lesson without those changes. A child with class or group access still attends.
+Tests: `nonDeliveryGuards.test.js`, `lessonSave.test.js`, and the named screen/panel suites.
 
 ### Stale active-pair supersede (2026-07-22)
 
@@ -1846,7 +1848,7 @@ The local authority mirrors are load-bearing and must change with their server r
 |---|---|---|
 | `children.getWriteAuthority().attend` | `private.current_user_can_write_for_child` (`20260521144901_masi_zazi_alignment_schema.sql:483`) | Active direct child assignment, or active class assignment + live class membership, or active group assignment + live group membership |
 | `.deliver` | `private.current_user_delivers_to_child` (`20261021160000_letter_mastery_current_state.sql:22`) | Active direct child assignment; required for tracker corrections |
-| `.level` | Effective children UPDATE policy (`20260521144901_masi_zazi_alignment_schema.sql:672`) | Child creator or `attend`; required only for a changed reading level |
+| `.level` | The phone's child-edit guard `assertDeliveryChild` (`childrenRepository.js`, ADR-0005), which `updateChild` applies. It is stricter than the children UPDATE policy (`20260521144901_masi_zazi_alignment_schema.sql:672`), which still accepts class or group access | Child creator or `deliver`; required only for a changed reading level. Class or group access lets a child attend but not be edited (2026-10-26, after whole-class assessment) |
 | `hasActiveProgrammeAssignment` | `sessions_insert_active_programme` (`20260521120147_masi_rls_advisor_cleanup.sql:361`) | Active assignment to exactly the draft's Programme |
 
 Sources: `src/db/repositories/childrenRepository.js:320`,
