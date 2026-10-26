@@ -48,7 +48,7 @@ test('running a gallery entry mounts its Question and shows its result', async (
   { motion: noMotion });
   expect(await screen.findByRole('header', { name: 'Result' })).toBeTruthy();
   expect(screen.getByText('stopped_reason: completed')).toBeTruthy();
-  expect(screen.getByText('0 / 0')).toBeTruthy();
+  expect(screen.getByText('—')).toBeTruthy();
   expect(screen.getByText('duration_ms: 0')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Run again' }));
   expect(await screen.findByRole('header', { name: 'Result' })).toBeTruthy();
@@ -115,15 +115,16 @@ test.each(['StandaloneTest', 'QuestionGalleryRun'])('TestFrame owns the top inse
 });
 
 test.each([
-  ['standalone:word_reading', 'xh', 'bundled', 'word_reading', 'sequential'],
-  ['battery:wela_plus_read_words', 'xh', 'bundled', 'wela_plus_read_words', undefined],
-  ['battery:wela_plus_story_writing', 'xh', 'fixture', 'wela_plus_story_writing', undefined],
-])('run resolves %s in %s with %s content', (entryKey, languageCode, contentMode, code, captureMode) => {
+  ['standalone:word_reading', 'xh', 'bundled', 'word_reading'],
+  ['battery:wela_plus_read_words', 'xh', 'bundled', 'wela_plus_read_words'],
+  ['battery:wela_plus_story_writing', 'xh', 'fixture', 'wela_plus_story_writing'],
+])('run resolves %s in %s with %s content', (entryKey, languageCode, contentMode, code) => {
   const screen = renderWithProviders(<QuestionGalleryRunScreen navigation={{ goBack: jest.fn() }}
     route={{ params: { entryKey, languageCode, contentMode } }} />);
   const props = screen.UNSAFE_getByType(questionComponentFor(code).Component).props;
-  expect(props).toMatchObject({ language: languageCode, childName: 'Gallery child' });
-  expect(props.captureMode).toBe(captureMode);
+  expect(props).toMatchObject({ language: languageCode, childName: 'Gallery child',
+    endNoun: entryKey.startsWith('standalone:') ? 'test' : 'question' });
+  expect(props).not.toHaveProperty('captureMode');
   if (contentMode === 'fixture') expect(props.itemSet).toBe(testFixtures.FIXTURE_STORY_WRITING_EN);
   else if (entryKey.startsWith('standalone:')) expect(props.itemSet).toBe(CURRENT_ITEM_SETS[code][languageCode]);
   else expect(props.itemSet).toBeUndefined();
@@ -188,8 +189,8 @@ test('EGRA run uses its exact item set and fixed language even with conflicting 
   expect(props.language).toBe('af');
   expect(props.instructions).toBe(entry.instructions.af);
   fireEvent.press(screen.getByText('Ask the questions'));
-  fireEvent.press(screen.getByText('Finish'));
-  fireEvent.press(screen.getByText('Save as Not asked'));
-  expect(screen.getByText('stopped_reason: completed')).toBeTruthy();
-  expect(screen.getByText('0 / 0')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('story-end'));
+  fireEvent.press(screen.getByText('End question'));
+  expect(screen.getByText('stopped_reason: ea_ended')).toBeTruthy();
+  expect(screen.getByText('—')).toBeTruthy();
 });

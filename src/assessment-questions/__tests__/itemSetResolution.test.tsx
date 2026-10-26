@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 import {
   CURRENT_ITEM_SETS,
   LetterSoundsQuestion,
@@ -45,7 +45,7 @@ describe('item-set resolution', () => {
     fireEvent.press(letters.getByText('Start'));
     expect(letters.getByLabelText('l, current')).toBeTruthy();
     expect(letters.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
-    const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} captureMode="sequential" onComplete={jest.fn()} />);
+    const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} onComplete={jest.fn()} />);
     fireEvent.press(words.getByText('Start'));
     expect(words.getByLabelText('die, current')).toBeTruthy();
   });
@@ -55,7 +55,7 @@ describe('item-set resolution', () => {
     afterEach(() => jest.useRealTimers());
 
     test('the word card starts on card rows 1–2, page 1 of 5', () => {
-      const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} captureMode="sequential" onComplete={jest.fn()} />);
+      const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} onComplete={jest.fn()} />);
       fireEvent.press(words.getByText('Start'));
       expect(words.getByText('Card rows 1–2 · page 1 of 5')).toBeTruthy();
     });
@@ -83,6 +83,8 @@ describe('item-set resolution', () => {
       }
       expect(onComplete).not.toHaveBeenCalled();
       fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(letters.getByText('Finish'));
       expect(onComplete).toHaveBeenCalledTimes(1);
       const result = onComplete.mock.calls[0][0];
       expect(result).toMatchObject({
@@ -98,13 +100,15 @@ describe('item-set resolution', () => {
       const cardLength = itemSet.words.length;
       expect(cardLength).toBe(50);
       const onComplete = jest.fn<void, [Result]>();
-      const words = render(<ReadWordsQuestion language="af" itemSet={itemSet} captureMode="sequential" onComplete={onComplete} />);
+      const words = render(<ReadWordsQuestion language="af" itemSet={itemSet} onComplete={onComplete} />);
       fireEvent.press(words.getByText('Start'));
       for (let i = 0; i < cardLength - 1; i += 1) {
         fireEvent.press(words.getByRole('button', { name: 'Correct' }));
       }
       expect(onComplete).not.toHaveBeenCalled();
       fireEvent.press(words.getByRole('button', { name: 'Correct' }));
+      expect(onComplete).not.toHaveBeenCalled();
+      fireEvent.press(words.getByText('Finish'));
       expect(onComplete).toHaveBeenCalledTimes(1);
       const result = onComplete.mock.calls[0][0];
       expect(result).toMatchObject({
@@ -139,7 +143,7 @@ describe('item-set resolution', () => {
       item_set_id: 'word_reading@override-1.en',
     };
     const onComplete = jest.fn();
-    const { getByText, getByLabelText } = render(
+    const screen = render(
       <ReadWordsQuestion
         language="en"
         itemSet={itemSet}
@@ -147,10 +151,10 @@ describe('item-set resolution', () => {
       />,
     );
 
-    fireEvent.press(getByText('Start'));
-    fireEvent.press(getByLabelText('cat, idle'));
-    fireEvent.press(getByText('End'));
-    fireEvent.press(getByText('Reached the end'));
+    fireEvent.press(screen.getByText('Start'));
+    fireEvent.press(screen.getByText('Correct'));
+    fireEvent.press(screen.getByTestId('word-end'));
+    fireEvent.press(within(screen.getByTestId('end-confirmation')).getByText('End question'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0]).toMatchObject({

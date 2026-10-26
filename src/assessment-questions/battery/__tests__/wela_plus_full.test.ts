@@ -26,12 +26,13 @@ test('2024.1 battery shape', () => {
   ]);
 });
 
-test('Q6 and Q8 instructions include the one-minute stop and passage marker', () => {
+test('Q6, Q7 and Q8 use exact sequential instructions and timed reading stops at one minute', () => {
   const words = B.questions.find((q) => q.question_code === 'wela_plus_read_words')!;
   const passage = B.questions.find((q) => q.question_code === 'wela_plus_read_passage')!;
   for (const language of B.languages) {
-    expect(words.instructions![language]).toBe('Hand the child Reading Card side B. Point to each word and ask the child to read it. If the child gets an item correct, tap it (it turns green). If they get it wrong, leave it blank. STOP immediately if the child gets 5 in a row wrong, or clearly does not know any. Otherwise STOP at 1 minute.');
-    expect(passage.instructions![language]).toBe('Hand the child Reading Card side C. Ask the child to read the story. Tap each word they read correctly. STOP at 1 minute, then mark the last word they attempted.');
+    expect(words.instructions![language]).toBe('Hand the child Reading Card side B. Point to each word and ask the child to read it. Mark each word Correct or Incorrect. The black ring shows which word you\'re on. The test stops by itself at 1 minute.');
+    expect(passage.instructions![language]).toBe("Hand the child Reading Card side C. Ask the child to read the story. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself at 1 minute.");
+    expect(B.questions[6].instructions![language]).toBe("Reading Card side B, sentences. Ask the child to read each sentence. Mark each word Correct or Incorrect. The black ring shows which word you're on.");
   }
 });
 
@@ -56,4 +57,9 @@ test('every question has en and xh instructions', () => {
     expect(typeof q.instructions?.xh).toBe('string');
     expect(q.instructions!.en.length).toBeGreaterThan(20);
   }
+});
+
+test.each(['en', 'xh'])('Q9 and Q10 use the exact sequential marking instructions in %s', language => {
+  expect(B.questions[8].instructions![language]).toBe("Writing Sheet, pictures 1–4. Say the name of each picture TWICE and ask the child to write the word. Mark each letter Correct or Incorrect. The black ring shows which letter you're on.");
+  expect(B.questions[9].instructions![language]).toBe("Writing Sheet, lines 1–2. Read the first sentence TWICE and let the child write it. Then do the same for the second sentence. Do NOT repeat a sentence while the child is writing. Mark each word Correct or Incorrect. The black ring shows which word you're on.");
 });

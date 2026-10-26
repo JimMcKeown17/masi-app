@@ -15,7 +15,7 @@ describe('LetterSoundsQuestion — OSS contract', () => {
     fireEvent.press(rendered.getByText('Start'));
     fireEvent.press(rendered.getByText('Correct'));
     fireEvent.press(rendered.getByTestId('letter-end'));
-    fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End test'));
+    fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End question'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);

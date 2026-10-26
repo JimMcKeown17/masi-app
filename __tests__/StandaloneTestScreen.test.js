@@ -11,6 +11,7 @@ import StandaloneTestScreen from '../src/screens/assessments/StandaloneTestScree
 
 let mockQuestionProps;
 let mockQuestionName;
+let mockUseRealQuestion = false;
 const mockResult = {
   question_code: 'letter_sounds', question_version: '2026.1',
   item_set_id: 'letter_sounds@2026.1.xh', language: 'xh',
@@ -24,6 +25,10 @@ jest.mock('../src/assessment-questions', () => {
   const question = name => props => {
     mockQuestionName = name;
     mockQuestionProps = props;
+    if (mockUseRealQuestion) {
+      const Question = actual[name];
+      return <Question {...props} />;
+    }
     return <View>
       <Pressable accessibilityRole="button" onPress={() => props.onStart?.()}>
         <Text>Start test</Text>
@@ -86,6 +91,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockQuestionProps = null;
   mockQuestionName = null;
+  mockUseRealQuestion = false;
   saveQuestionResult.mockReset().mockResolvedValue({ id: 'saved' });
 });
 
@@ -101,9 +107,9 @@ test.each([
   expect(mockQuestionName).toBe(component);
   expect(mockQuestionProps).toMatchObject({
     itemSet: CURRENT_ITEM_SETS[testCode][languageCode], durationSec: 60,
-    language: languageCode, childName: 'Amahle Dlamini', allowSkip: false,
+    language: languageCode, childName: 'Amahle Dlamini', allowSkip: false, endNoun: 'test',
   });
-  if (testCode === 'word_reading') expect(mockQuestionProps.captureMode).toBe('sequential');
+  expect(mockQuestionProps).not.toHaveProperty('captureMode');
 });
 
 test('shows the standalone header and passes the registry instructions', () => {
@@ -356,4 +362,14 @@ test('the container leaves the bottom inset to the Question', () => {
   const screen = renderHost();
   const root = screen.UNSAFE_getByType(StandaloneTestScreen).findAllByType(View)[0];
   expect(StyleSheet.flatten(root.props.style).paddingBottom).toBeUndefined();
+});
+
+
+test.each(['letter_sounds', 'word_reading'])('the real standalone %s capture keeps the End test link and sheet', testCode => {
+  mockUseRealQuestion = true;
+  const screen = renderHost(makeNavigation(), { ...params, testCode });
+  fireEvent.press(screen.getByText('Start'));
+  fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+  expect(screen.getByRole('header', { name: 'End this test?' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Keep marking' })).toBeTruthy();
 });

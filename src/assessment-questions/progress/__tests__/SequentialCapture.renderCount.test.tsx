@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { LETTER_PAGE_LAYOUT } from '../../ui';
+import { flatCopy } from '../captureCopy';
 import { SequentialCapture } from '../SequentialCapture';
 
 describe('SequentialCapture countdown isolation', () => {
@@ -29,8 +30,8 @@ describe('SequentialCapture countdown isolation', () => {
           language: 'en',
         }}
         items={[item as { item_key: string; prompt: string; row: number }]}
-        rows={[[0]]}
-        layout={LETTER_PAGE_LAYOUT}
+        copy={flatCopy('letter', 1)}
+        body={{ kind: 'grid', rows: [[0]], layout: LETTER_PAGE_LAYOUT, variant: 'letter', testID: 'letter-grid' }}
         stopRule={null}
         testIDPrefix="letter"
         durationSec={60}

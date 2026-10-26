@@ -1,7 +1,10 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import { FollowScrollView } from '../../../ui/FollowScrollView';
+import { Countdown } from '../../../progress/Countdown';
+import { validateResult } from '../../../contractTest/validateResult';
 import { tokens } from '../../../theme/tokens';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, within } from '@testing-library/react-native';
 import { ListenAndAnswerStoryQuestion } from '..';
 import { FIXTURE_LISTEN_AND_ANSWER_STORY_EN } from '../../../testFixtures';
 
@@ -94,7 +97,7 @@ describe('ListenAndAnswerStoryQuestion — active phase', () => {
 });
 
 describe('ListenAndAnswerStoryQuestion — marking', () => {
-  test('tap a prompt card marks it correct (accessibility flips)', () => {
+  test('Correct marks the current prompt and advances the ring', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
@@ -105,12 +108,12 @@ describe('ListenAndAnswerStoryQuestion — marking', () => {
     );
     fireEvent.press(getByText("I've finished reading"));
 
-    expect(getByLabelText('What was the name of the bird?, idle')).toBeTruthy();
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
-    expect(getByLabelText('What was the name of the bird?, correct')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
+    fireEvent.press(getByText('Correct'));
+    expect(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeTruthy();
   });
 
-  test('second tap clears the mark', () => {
+  test('tap a marked prompt flips it to incorrect', () => {
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
         language="en"
@@ -121,9 +124,10 @@ describe('ListenAndAnswerStoryQuestion — marking', () => {
     );
     fireEvent.press(getByText("I've finished reading"));
 
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
-    fireEvent.press(getByLabelText('What was the name of the bird?, correct'));
-    expect(getByLabelText('What was the name of the bird?, idle')).toBeTruthy();
+    fireEvent.press(getByText('Correct'));
+    fireEvent.press(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect'));
+    expect(getByLabelText('What was the name of the bird?, Pip, incorrect. Double-tap to change to correct')).toBeTruthy();
+    expect(getByLabelText('Where did Pip live?, a tree, in a tree, tree, current')).toBeTruthy();
   });
 });
 
@@ -173,16 +177,16 @@ describe('ListenAndAnswerStoryQuestion — Re-read story modal', () => {
     fireEvent.press(getByText("I've finished reading"));
 
     // Mark a card, open re-read, dismiss, verify mark survives.
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
+    fireEvent.press(getByText('Correct'));
     fireEvent.press(getByText('Re-read story'));
     fireEvent.press(getByText('Close'));
 
-    expect(getByLabelText('What was the name of the bird?, correct')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeTruthy();
   });
 });
 
 describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
-  test('Finish with all unmarked shows a confirmation listing unmarked count', () => {
+  test('End with nothing marked shows the exact marked and unreached counts', () => {
     const onComplete = jest.fn();
     const { getByText } = render(
       <ListenAndAnswerStoryQuestion
@@ -193,13 +197,13 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Finish'));
+    fireEvent.press(getByText('End question'));
 
-    expect(getByText(/5 items unmarked/i)).toBeTruthy();
+    expect(getByText("0 marked. The 5 not marked won't count towards the score.")).toBeTruthy();
     expect(onComplete).not.toHaveBeenCalled();
   });
 
-  test('Cancel from confirmation returns to active without emitting', () => {
+  test('Keep marking returns from End without emitting', () => {
     const onComplete = jest.fn();
     const { getByText, queryByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
@@ -210,15 +214,15 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Cancel'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('Keep marking'));
 
-    expect(queryByText(/items unmarked/i)).toBeNull();
-    expect(getByLabelText('What was the name of the bird?, idle')).toBeTruthy();
+    expect(queryByText('End this question?')).toBeNull();
+    expect(getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
     expect(onComplete).not.toHaveBeenCalled();
   });
 
-  test('Yes from confirmation emits Result with stopped_reason=completed', () => {
+  test('End confirmation emits Result with stopped_reason=ea_ended', () => {
     const onComplete = jest.fn();
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
@@ -229,19 +233,19 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
+    fireEvent.press(getByText('Correct'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('End question'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     const result = onComplete.mock.calls[0][0];
-    expect(result.stopped_reason).toBe('completed');
+    expect(result.stopped_reason).toBe('ea_ended');
     expect(result.derived.total_correct).toBe(1);
     expect(result.items[0].item_key).toBe('q2.story.item_1');
     expect(result.question_code).toBe('wela_plus_listen_and_answer_story');
   });
 
-  test('Finish with all marked emits immediately (no confirmation)', () => {
+  test('Finish from fully marked review emits without another confirmation', () => {
     const onComplete = jest.fn();
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
@@ -259,7 +263,7 @@ describe('ListenAndAnswerStoryQuestion — Finish flow', () => {
       'What colour was the bush?',
       'How did Pip feel at the end?',
     ].forEach((p) => {
-      fireEvent.press(getByLabelText(`${p}, idle`));
+      fireEvent.press(getByText('Correct'));
     });
     fireEvent.press(getByText('Finish'));
 
@@ -321,7 +325,7 @@ describe('ListenAndAnswerStoryQuestion — Skip flow', () => {
     fireEvent.press(getByText('Cancel'));
 
     expect(onComplete).not.toHaveBeenCalled();
-    expect(getByLabelText('What was the name of the bird?, idle')).toBeTruthy();
+    expect(getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
   });
 });
 
@@ -342,8 +346,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     );
     expect(queryByText('pretend story text')).toBeNull();
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('End question'));
 
     expect(onComplete.mock.calls[0][0].item_set_id).toBeDefined();
   });
@@ -371,8 +375,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     );
     expect(queryByText('Looks fine at the top level.')).toBeNull();
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('End question'));
 
     expect(onComplete.mock.calls[0][0].item_set_id).not.toBe('custom@1.0.en');
   });
@@ -417,8 +421,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('End question'));
 
     expect(onComplete.mock.calls[0][0].item_set_id).not.toBe('custom@1.0.en');
   });
@@ -447,8 +451,8 @@ describe('ListenAndAnswerStoryQuestion — itemSet override validation', () => {
     expect(getByText(/A unique story about a frog/)).toBeTruthy();
     fireEvent.press(getByText("I've finished reading"));
     expect(getByText('Where does the frog live?')).toBeTruthy();
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('End question'));
 
     expect(onComplete.mock.calls[0][0].item_set_id).toBe('custom@1.0.en');
   });
@@ -467,12 +471,12 @@ describe('ListenAndAnswerStoryQuestion — Pattern F is untimed', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
-    fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
+    fireEvent.press(getByText('Correct'));
+    fireEvent.press(getByText('End question'));
+    fireEvent.press(getByText('End question'));
 
     expect(onComplete.mock.calls[0][0].derived.was_timed).toBe(false);
-    expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBeNull();
+    expect(onComplete.mock.calls[0][0].derived.last_attempted_position).toBe(0);
   });
 });
 
@@ -489,7 +493,7 @@ describe('ListenAndAnswerStoryQuestion — onItemMarked', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
+    fireEvent.press(getByText('Correct'));
 
     expect(onItemMarked).toHaveBeenCalledTimes(1);
     const item = onItemMarked.mock.calls[0][0];
@@ -498,7 +502,7 @@ describe('ListenAndAnswerStoryQuestion — onItemMarked', () => {
     expect(item.is_correct).toBe(true);
   });
 
-  test('untap fires onItemMarked with is_correct=false', () => {
+  test('flip fires onItemMarked with is_correct=false', () => {
     const onItemMarked = jest.fn();
     const { getByText, getByLabelText } = render(
       <ListenAndAnswerStoryQuestion
@@ -510,8 +514,8 @@ describe('ListenAndAnswerStoryQuestion — onItemMarked', () => {
       />,
     );
     fireEvent.press(getByText("I've finished reading"));
-    fireEvent.press(getByLabelText('What was the name of the bird?, idle'));
-    fireEvent.press(getByLabelText('What was the name of the bird?, correct'));
+    fireEvent.press(getByText('Correct'));
+    fireEvent.press(getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect'));
 
     expect(onItemMarked).toHaveBeenCalledTimes(2);
     expect(onItemMarked.mock.calls[1][0].is_correct).toBe(false);
@@ -545,9 +549,9 @@ describe('ListenAndAnswerStoryQuestion — questions.length not hardcoded', () =
     // Defaults from bundled itemset must NOT leak
     expect(queryByText('What was the name of the bird?')).toBeNull();
 
+    fireEvent.press(getByText('Correct'));
+    expect(onComplete).not.toHaveBeenCalled();
     fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText(/1 items? unmarked/));
-    fireEvent.press(getByText('Yes, finish'));
 
     const result = onComplete.mock.calls[0][0];
     expect(result.items).toHaveLength(1);
@@ -562,16 +566,16 @@ test('prompt cards are rounded, full width, and solid green when marked', () => 
       instructions="." onComplete={jest.fn()} />,
   );
   fireEvent.press(r.getByText("I've finished reading"));
-  expect(StyleSheet.flatten(r.getByTestId('prompt-scroll').props.contentContainerStyle))
+  expect(StyleSheet.flatten(r.UNSAFE_getByType(FollowScrollView).props.contentContainerStyle))
     .toMatchObject({ padding: tokens.space.lg, gap: 10 });
-  expect(r.getByLabelText('What was the name of the bird?, idle')).toHaveStyle({
+  expect(r.getByLabelText('What was the name of the bird?, Pip, current')).toHaveStyle({
     borderRadius: tokens.radius.tile,
     alignSelf: 'stretch',
     backgroundColor: tokens.color.surface,
-    borderColor: tokens.color.line,
+    borderColor: tokens.color.ink,
   });
-  fireEvent.press(r.getByLabelText('What was the name of the bird?, idle'));
-  expect(r.getByLabelText('What was the name of the bird?, correct')).toHaveStyle({
+  fireEvent.press(r.getByText('Correct'));
+  expect(r.getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toHaveStyle({
     borderRadius: tokens.radius.tile,
     alignSelf: 'stretch',
     backgroundColor: tokens.color.marked,
@@ -581,7 +585,7 @@ test('prompt cards are rounded, full width, and solid green when marked', () => 
 });
 
 
-test('finish confirmation preserves the active scroller and hides its controls until Cancel', () => {
+test('End confirmation preserves the active scroller and hides its controls until Keep marking', () => {
   const onComplete = jest.fn();
   const onItemMarked = jest.fn();
   const r = render(
@@ -589,18 +593,19 @@ test('finish confirmation preserves the active scroller and hides its controls u
       instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
   );
   fireEvent.press(r.getByText("I've finished reading"));
-  fireEvent.press(r.getByLabelText('What was the name of the bird?, idle'));
+  fireEvent.press(r.getByText('Correct'));
   const scroller = r.getByTestId('prompt-scroll');
-  const tile = r.getByLabelText('What was the name of the bird?, correct');
-  fireEvent.press(r.getByText('Finish'));
-  const sheet = r.getByTestId('confirm-finish');
+  const markedLabel = 'What was the name of the bird?, Pip, correct. Double-tap to change to incorrect';
+  fireEvent.press(r.getByTestId('story-end'));
+  const sheet = r.getByTestId('end-confirmation');
   expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({
     ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: tokens.color.scrim,
   });
   expect(sheet.props.accessibilityViewIsModal).toBe(true);
   expect(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).toBe(scroller);
-  expect(r.getByLabelText('What was the name of the bird?, correct', { includeHiddenElements: true })).toBe(tile);
-  expect(r.queryByLabelText('What was the name of the bird?, correct')).toBeNull();
+  expect(within(r.getByTestId('prompt-scroll', { includeHiddenElements: true })).getByTestId('tile-0', { includeHiddenElements: true }).props.accessibilityLabel)
+    .toBe('What was the name of the bird?, Pip, correct');
+  expect(r.queryByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeNull();
   expect(r.queryByText('Finish')).toBeNull();
   let activeView = scroller.parent;
   while (activeView && activeView.props.accessibilityElementsHidden === undefined) {
@@ -609,10 +614,10 @@ test('finish confirmation preserves the active scroller and hides its controls u
   expect(activeView?.props.accessibilityElementsHidden).toBe(true);
   expect(activeView?.props.importantForAccessibility).toBe('no-hide-descendants');
   expect(activeView?.props.pointerEvents).toBe('none');
-  fireEvent.press(r.getByText('Cancel'));
-  expect(r.queryByTestId('confirm-finish')).toBeNull();
+  fireEvent.press(r.getByText('Keep marking'));
+  expect(r.queryByTestId('end-confirmation')).toBeNull();
   expect(r.getByTestId('prompt-scroll')).toBe(scroller);
-  expect(r.getByLabelText('What was the name of the bird?, correct')).toBe(tile);
+  expect(r.getByLabelText(markedLabel)).toBeTruthy();
   expect(activeView?.props.accessibilityElementsHidden).toBe(false);
   expect(activeView?.props.importantForAccessibility).toBe('auto');
   expect(activeView?.props.pointerEvents).toBe('auto');
@@ -620,34 +625,29 @@ test('finish confirmation preserves the active scroller and hides its controls u
   expect(onItemMarked).toHaveBeenCalledTimes(1);
 });
 
-test('repeated item keys keep independent positional marks and result identities', () => {
-  const onComplete = jest.fn();
-  const onItemMarked = jest.fn();
-  const r = render(
-    <ListenAndAnswerStoryQuestion language="en"
-      itemSet={{ ...FIXTURE_LISTEN_AND_ANSWER_STORY_EN, questions: [{ item_key: 'same', prompt: 'first', acceptable_answers: ['one'] }, { item_key: 'same', prompt: 'second', acceptable_answers: ['two'] }] }}
-      instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
-  );
+test('repeated item keys keep independent positional marks', () => {
+  const onComplete = jest.fn(), onItemMarked = jest.fn();
+  const r = render(<ListenAndAnswerStoryQuestion language="en"
+    itemSet={{ ...FIXTURE_LISTEN_AND_ANSWER_STORY_EN, questions: [
+      { item_key: 'same', prompt: 'same prompt', acceptable_answers: ['one'] },
+      { item_key: 'same', prompt: 'same prompt', acceptable_answers: ['two'] },
+    ] }} onComplete={onComplete} onItemMarked={onItemMarked} />);
   fireEvent.press(r.getByText("I've finished reading"));
-  fireEvent.press(r.getByLabelText('first, idle'));
-  expect(r.getByLabelText('second, idle')).toBeTruthy();
-  fireEvent.press(r.getByLabelText('second, idle'));
-  fireEvent.press(r.getByLabelText('first, correct'));
-  expect(r.getByLabelText('first, idle')).toBeTruthy();
-  expect(r.getByLabelText('second, correct')).toBeTruthy();
-  expect(onItemMarked).toHaveBeenCalledTimes(3);
+  const body = within(r.getByTestId('prompt-scroll'));
+  fireEvent.press(r.getByText('Correct'));
+  fireEvent.press(r.getByText('Incorrect'));
+  fireEvent.press(body.getByTestId('tile-0'));
+  fireEvent.press(r.getByText('Back'));
+  expect(body.getByTestId('tile-1').props.accessibilityLabel).toBe('same prompt, two, current');
+  fireEvent.press(r.getByText('Correct'));
   expect(onItemMarked.mock.calls.map(([item]) => [item.position, item.item_key, item.is_correct]))
-    .toEqual([[0, 'same', true], [1, 'same', true], [0, 'same', false]]);
+    .toEqual([[0, 'same', true], [1, 'same', false], [0, 'same', false], [1, 'same', true]]);
   fireEvent.press(r.getByText('Finish'));
-  expect(r.getByText('1 items unmarked — finish anyway?')).toBeTruthy();
-  fireEvent.press(r.getByText('Yes, finish'));
   expect(onComplete).toHaveBeenCalledTimes(1);
-  expect(onComplete.mock.calls[0][0].items.map((item: { position: number; item_key: string; is_correct: boolean }) =>
-    [item.position, item.item_key, item.is_correct]))
+  expect(onComplete.mock.calls[0][0].items.map((item: any) => [item.position, item.item_key, item.is_correct]))
     .toEqual([[0, 'same', false], [1, 'same', true]]);
-  expect(onComplete.mock.calls[0][0].derived.total_correct).toBe(1);
+  expect(onComplete.mock.calls[0][0].derived).toMatchObject({ total_correct: 1, total_attempted: 2, correction_count: 2 });
 });
-
 
 test('the answer screen starts the Re-read story control 16dp below the header', () => {
   const r = render(<ListenAndAnswerStoryQuestion language="en" onComplete={jest.fn()} />);
@@ -655,4 +655,52 @@ test('the answer screen starts the Re-read story control 16dp below the header',
   let wrapper = r.getByRole('button', { name: 'Re-read story' }).parent;
   while (wrapper && typeof wrapper.type !== 'string') wrapper = wrapper.parent;
   expect(wrapper).toHaveStyle({ paddingHorizontal: tokens.space.lg, paddingTop: tokens.space.lg });
+});
+
+
+test('Q2: the ring starts on question 1, and later questions are faded', () => {
+  const r = render(<ListenAndAnswerStoryQuestion language="en" itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN} onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText("I've finished reading"));
+  expect(r.getByLabelText('What was the name of the bird?, Pip, current')).toBeTruthy();
+  const second = within(r.getByTestId('prompt-scroll')).getByTestId('tile-1');
+  expect(second.props.accessibilityLabel).toBe('Where did Pip live?, a tree, in a tree, tree, not reached');
+  expect(second).toHaveStyle({ opacity: 0.55 });
+});
+
+test('Q2: Correct, Incorrect, End question saves asked for reached questions only', () => {
+  const onComplete = jest.fn();
+  const r = render(<ListenAndAnswerStoryQuestion language="en" itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN} onComplete={onComplete} />);
+  fireEvent.press(r.getByText("I've finished reading"));
+  fireEvent.press(r.getByText('Correct'));
+  fireEvent.press(r.getByText('Incorrect'));
+  fireEvent.press(r.getByTestId('story-end'));
+  fireEvent.press(r.getByText('End question'));
+  const result = onComplete.mock.calls[0][0];
+  expect(result.items.map((item: any) => item.metadata)).toEqual([
+    { reached: true, asked: true }, { reached: true, asked: true },
+    { reached: false, asked: false }, { reached: false, asked: false }, { reached: false, asked: false },
+  ]);
+  expect(result.derived).toMatchObject({ total_correct: 1, total_attempted: 2, questions_asked: 2,
+    percent: 50, last_attempted_position: 1, tracks_progress: true, capture_mode: 'sequential' });
+  expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+});
+
+test('Q2: Re-read story keeps marks and the ring', () => {
+  const r = render(<ListenAndAnswerStoryQuestion language="en" itemSet={FIXTURE_LISTEN_AND_ANSWER_STORY_EN} onComplete={jest.fn()} />);
+  fireEvent.press(r.getByText("I've finished reading"));
+  fireEvent.press(r.getByText('Correct'));
+  fireEvent.press(r.getByText('Re-read story'));
+  fireEvent.press(r.getByText('Close'));
+  expect(r.getByLabelText('What was the name of the bird?, Pip, correct. Double-tap to change to incorrect')).toBeTruthy();
+  expect(r.getByLabelText('Where did Pip live?, a tree, in a tree, tree, current')).toBeTruthy();
+});
+
+test('Q2: was_timed is false even when the host passes durationSec', () => {
+  const onComplete = jest.fn();
+  const r = render(<ListenAndAnswerStoryQuestion language="en" durationSec={60} onComplete={onComplete} />);
+  fireEvent.press(r.getByText("I've finished reading"));
+  expect(r.UNSAFE_queryByType(Countdown)).toBeNull();
+  fireEvent.press(r.getByTestId('story-end'));
+  fireEvent.press(r.getByText('End question'));
+  expect(onComplete.mock.calls[0][0].derived.was_timed).toBe(false);
 });

@@ -6,6 +6,7 @@ import { LETTER_SOUNDS_2026_2_EN } from '../../itemsets/letter_sounds@2026.2.en'
 import { LETTER_SOUNDS_2026_2_XH } from '../../itemsets/letter_sounds@2026.2.xh';
 import { MissingItemSet } from '../../progress/MissingItemSet';
 import { LETTER_PAGE_LAYOUT } from '../../ui';
+import { flatCopy } from '../../progress/captureCopy';
 import { buildSequentialCard, SequentialCapture } from '../../progress/SequentialCapture';
 
 function isFullItemSet(value: unknown): value is LetterSoundsItemSet {
@@ -38,5 +39,6 @@ function LetterSoundsQuestionContent(props: QuestionProps & { itemSet: LetterSou
       }))),
     );
   }, [props.itemSet.rows]);
-  return <SequentialCapture {...props} {...card} layout={LETTER_PAGE_LAYOUT} stopRule={props.itemSet.stop_rule} testIDPrefix="letter" />;
+  return <SequentialCapture {...props} items={card.items} copy={flatCopy('letter', card.items.length)}
+    body={{ kind: 'grid', rows: card.rows, layout: LETTER_PAGE_LAYOUT, variant: 'letter', testID: 'letter-grid', rowTestID: r => `letter-row-${r}` }} stopRule={props.itemSet.stop_rule} testIDPrefix="letter" />;
 }

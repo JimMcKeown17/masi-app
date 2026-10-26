@@ -70,7 +70,7 @@ test.each(CASES)('$code/$language reports its first capture start once and prese
 });
 
 test.each(WELA_PLUS_FULL_2024_1.languages)(
-  'story/%s re-reading, review cancellation and completion never report another capture start', language => {
+  'story/%s re-reading, End cancellation and completion never report another capture start', language => {
     const question = WELA_PLUS_FULL_2024_1.questions[1];
     const { Component, extraProps } = questionComponentFor(question.question_code)!;
     const itemSet = bundledItemSetFor(question.question_code, question.question_version, language)!;
@@ -85,12 +85,15 @@ test.each(WELA_PLUS_FULL_2024_1.languages)(
     expect(onStart).toHaveBeenCalledTimes(1);
     fireEvent.press(screen.getByRole('button', { name: 'Close' }));
     expect(onStart).toHaveBeenCalledTimes(1);
-    fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.press(screen.getByTestId('story-end'));
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
     expect(onStart).toHaveBeenCalledTimes(1);
     expect(onComplete).not.toHaveBeenCalled();
+    for (const _question of itemSet.questions as ReadonlyArray<unknown>) {
+      fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+    }
+    expect(onComplete).not.toHaveBeenCalled();
     fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Yes, finish' }));
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0].stopped_reason).toBe('completed');
     expect(onStart).toHaveBeenCalledTimes(1);

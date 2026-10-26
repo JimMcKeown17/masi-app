@@ -20,7 +20,7 @@ export interface QuestionEntry {
 
 const components = new Map<string, QuestionEntry>([
   ['reading_comprehension', { Component: ReadingComprehensionQuestion, extraProps: {} }],
-  ['oral_reading', { Component: ReadPassageQuestion, extraProps: { markingPolarity: 'tap_wrong' } }],
+  ['oral_reading', { Component: ReadPassageQuestion, extraProps: {} }],
   ['letter_sounds', { Component: LetterSoundsQuestion, extraProps: {} }],
   ['wela_plus_listen_and_answer_story', { Component: ListenAndAnswerStoryQuestion, extraProps: {} }],
   ['wela_plus_first_sound', { Component: ListenFirstSoundQuestion, extraProps: {} }],
@@ -32,7 +32,7 @@ const components = new Map<string, QuestionEntry>([
   ['wela_plus_write_cvcs', { Component: WriteCvcsQuestion, extraProps: {} }],
   ['wela_plus_write_sentences_dictation', { Component: WriteSentencesFromDictationQuestion, extraProps: {} }],
   ['wela_plus_story_writing', { Component: StoryWritingRubricQuestion, extraProps: {} }],
-  ['word_reading', { Component: ReadWordsQuestion, extraProps: { captureMode: 'sequential' } }],
+  ['word_reading', { Component: ReadWordsQuestion, extraProps: {} }],
   ['null_question', { Component: NullQuestion, extraProps: {} }],
 ]);
 

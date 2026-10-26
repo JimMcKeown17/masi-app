@@ -4480,6 +4480,78 @@ temporary probes (Cancel/reopen, rerender, deadline crossing with the sheet open
 Cancel, double Confirm), all passing, and pre-fix behaviour failed the regression tests. Following
 its suggestion, the Cancel/reopen probe was kept as a permanent test (row above):
 `capture.test.tsx` 13/13 ✅, and it fails with the pre-fix caller.
+### 2026-10-25 — Device check of "Lists keep their rows while refreshing" (Galaxy A03 build 44)
+
+Build 44 = `main` + #105 (`c88bfd3`, tree identical to squash `4b3efd6`), installed over build 43 with TestB Second
+still signed in. The bundle contains "Couldn't load this ranking", "Couldn't refresh this ranking" and
+"Assess your first child".
+
+- **Return to History:** passed. Opening TestB's only row (Gua McKeown, ACK-KRY) then pressing Back showed the row
+  in all six burst frames, with no "Loading…" frame.
+- **Quick taps:** passed. Three round trips, each tapping the row within about 0.3 s of returning, all opened the
+  summary.
+- **Assessment scores ranking:** passed. Scrolled to rows 6–9 and the "Not assessed" children, went to Home and
+  back. Rows were at identical coordinates, and none of the six burst frames showed a spinner.
+- **Pull-to-refresh on History:** not done. The A03 dropped off USB mid-check.
+- **Not checkable as TestB:** History scrolling, because TestB has one row.
+
+### 2026-10-25 — Spec: step-by-step marking for every Question (`docs/step-by-step-capture`)
+
+Field staff found WelaPLUS unclear after Question 1. "Leave blank for wrong", plus a finish sheet that fires
+whenever a child gets anything wrong, made normal results look like EA mistakes. With Jim, designed one marking
+method for every WelaPLUS and Full EGRA Question except the Q11 rubric:
+
+- a ring on the current item;
+- Correct / Incorrect / Back;
+- tap-to-flip on marked items;
+- a review step before Finish;
+- an early end that leaves unmarked items "not reached".
+
+Jim's decisions: Q9/Q10 keep their layout and step through it; Q6 stops after 10 wrong in a row; no "Not asked"
+button; the passage goes word by word in both batteries (one method beats DBE tap-the-mistakes administration
+for today's slow readers); a future passage method arrives as a server-assigned Battery version, never a switch.
+
+Eight mockups were approved (`design/mockups-2026-10-step-by-step/`). Evidence sits beside the spec: a
+16-agent read-only code map of all 13 Question components (`2026-10-25-step-by-step-capture-code-map.md`), and the
+EGRA session's capture audit (`2026-10-25-step-by-step-capture-egra-audit.md`, 60 claims checked, 49
+confirmed, 11 refined).
+
+Surprises:
+
+- WelaPLUS Q6's "5 in a row" stop is instruction text only.
+- EGRA's passage counts untouched words as correct, and its last-word sheet pre-selects the last wrong word,
+  saving an error-free reader as 1 word. That is fixed separately on `fix/egra-story-last-word`.
+- Old and new results stay distinguishable without new content versions: toggle Questions save
+  `capture_mode` null, and converted ones save `'sequential'`.
+
+### 2026-10-25 — Step-by-step marking build (`feat/step-by-step-capture`)
+
+Plan: `docs/superpowers/plans/2026-10-25-step-by-step-capture.md`. Codex (gpt-6.1-sol, high)
+builds each task; Claude reviews the diff, reruns the gates and commits. Baseline after
+`npm ci` in the worktree: 421 suites / 6,314 tests, `test:types` green. (The worktree had been
+resolving the main checkout's older `node_modules`, which lacked `@expo-google-fonts/andika`, so
+the two App suites failed until the worktree got its own install.)
+
+| Task | Result | Notes |
+| --- | --- | --- |
+| 1 Reducer `flip` | 19/19 reducer tests; full suite green | Surprise: before the change an unknown `flip` fell through to the Back/Undo tail and deleted the last mark, so two of the plan's stop examples passed by accident. They now also assert the cursor and marks. |
+| 2 UI parts | 423 suites / 6,328 tests; types, boundary, raw-hex and style guards green | `LinePart` lives in `ui/PositionLine.tsx` (re-exported from `progress/captureTypes.ts`) so `ui/` never imports from `progress/`. FlipNotice sits at `bottom: 0` of its parent; the engine places it above the bar. Device check: TalkBack may read a flip twice (live region plus explicit announcement); Task 13 checks this. |
+| 3 Engine: review, flip, End question sheet, flip notice | 425 suites / 6,359 tests; types green | Letter sounds and word reading moved to the new engine props. One test migration beyond the plan's list: `BatteryQuestionScreen.test.js` (the 60-letter English HL 1 run now presses Finish). The empty-word test is replaced by "no items, never starts". The skip picker's Cancel stays Cancel; only the End sheet's cancel became Keep marking. |
+| 4 Scrolling bodies | 427 suites / 6,377 tests | `FollowScrollView` ignores late native measurements (after Back, review or unmount). `TileGroup` is extracted from `TileGroups` so the new groups body shares today's look: the style guard forbids card colours under `progress/`. The engine passes `itemCount` to the body. |
+| 5 Validator invariants | same run | One old fixture ("reserved for 0.2.0 sequential mode") broke the new invariants and was corrected; the rule stayed strict. |
+| Task 3 review fixes | 427 suites / 6,380 tests; types green | Codex adversarial review (gpt-6-astra) found two medium defects. (1) **Skip ignored an overdue deadline** (an older gap): if the 250 ms check was late, Skip replaced a finished timed result and its marks with a skip. Skip now settles an overdue deadline first, like every other control. (2) **Skip → Cancel replayed an expired flip notice** and announced it again; the notice now clears when the picker opens. Dead end: I first also capped a skip's duration at the deadline when the timer ran out while the picker was open, but `readingDuration.test.tsx` deliberately pins a skip's duration as the real time until it was chosen, for every Question. A skip saves no marks or reading speed, so I reverted the cap. Gotcha: `jest.spyOn(AccessibilityInfo, 'announceForAccessibility')` returns the preset's shared mock, so calls build up across tests unless cleared. |
+| 6 Story questions (Q2 + EGRA) | 428 suites / 6,403 tests; types green | One `StoryQuestionsCapture` screen; no engine change was needed. The score is correct out of the questions asked (the reached prefix), so Q2's summary now reads e.g. "1 / 2" after End at question 2. The Battery summary and the gallery show "—" when nothing was asked (the gallery for every Question, including NullQuestion's empty result). EGRA items no longer carry `response`, and "Wrong" / "Not asked" are gone. |
+| 7 First sounds (Q3), Blending (Q4) | 428 suites / 6,412 tests; types green | Both are thin data wrappers on the engine's cards body, untimed even if a host passes `durationSec`. Q4's shipped English set has 8 words, so its line reads "Word 1 of 8". |
+| 8 Reading words (Q6) sequential only | 427 suites / 6,392 tests (the toggle-mode test file is deleted); types green | The toggle path and `captureMode` prop are gone (899 lines deleted). No Q6 stop rule, per Jim. The Q1 and Q6 copy drops the hand-stop lines ("STOP … 5 in a row", "Otherwise STOP at 1 minute"). `readingDuration.test.tsx` was rewritten per plan: 3 of the 4 Q1 letters and 5 Q6/Q8 words are marked, and End is split into openEnd/confirmEnd. Extra migration: the EGRA capture row for `wela_plus_read_words` now ends with End question (10 marked, 30 not marked). |
+| 9 Letter writing (Q5) | 427 suites / 6,398 tests; types green | Picture grid body, 12 per page in three columns ("Page 1 of 3"), no item metadata beyond `reached`. The plan's isiXhosa checkpoints hold: icephe → c = Letter 13 of 26, iroboti → r = Letter 22 of 26. Old toggle tests were migrated, not deleted. |
+| 10 Writing words (Q9), Writing sentences (Q10) | 427 suites / 6,403 tests; types green | Grouped card bodies with nestedCopy ("Word 2 · letter 3 of 4", "Sentence 1 · word 2 of 8"). `per_word` and `per_sentence` count reached items only, and are `[]` on a skip. Q10 keeps the numeric headings ("1."), not the mockup's placeholder "Sentence 1". |
+| Task 11 — Q7 and the passage | Q7 (sentence cards) and Q8/EGRA oral reading (flowing paragraphs) now mark word by word through the shared engine; the "mark the last word" sheet is no longer reached. Q7 `per_sentence_percent` counts reached words and is `null` for a sentence never reached; the passage computes WPM from the frozen duration (omitted when untimed or skipped). `oral_reading` drops `markingPolarity: 'tap_wrong'`. Each PR #106 story-score test was replaced with its step-by-step equivalent (20 Correct then End at 30 s → 40 WPM; error at word 6, timer at 60 s → 39 correct, saved at once; Keep marking keeps marks and End again saves 25 reached). Suite 427 / 6,413, types green. |
+| Task 12 — retire the old paths, guards, docs | Deleted `useToggleMark`, `LastAttemptedSheet`, `applyProgress`, `AssessmentChoiceCard` and `TileGroups` (its only caller was the last-word sheet); `TileGroup` moved to its own file. New `removedCopy.test.ts`: 16 retired phrases must not appear in package source (positive fixtures keep Q11's "finish anyway?" and Q5's child-facing "just leave it blank"), and every converted WelaPLUS and bundled EGRA Question carries its marking sentence in every language. RED found the old last-word copy and missing sentences in all 13 EGRA forms. EGRA letters/words copy now says the test stops by itself on a first row all wrong or at the time limit. CONTEXT.md (capture mode, stop rule, EGRA story questions, Patterns D/E/F) and design-system.md ("Step-by-step marking") updated; CONTEXT says Q6 has no stop rule in this build. ROADMAP: step-by-step item marked built, an EA usability check added, and Jim's three EGRA-content decisions added to the follow-on item. Suite 425 / 6,392 (net −2 suites from the deleted modules), types green. |
+| Whole-branch review (gpt-6-astra) | Verdict needs-attention, one medium finding; no scoring corruption in 229 isolated scenarios (both WelaPLUS languages, all 13 EGRA forms). Finding: the shared tile label omitted the gloss, so TalkBack users lost the EGRA answer guide (and Q2's acceptable answers, Q4's target word), which the old `AssessmentChoiceCard` exposed. Fix: `SequentialCapture` speaks `prompt, gloss, state[, hint]`. RED: new EGRA comprehension test plus Q4 label tests; 14 label assertions updated. Integration 77 / 961 and `test:content` 5 / 5 green. Suite 425 / 6,393, types green. |
+| Q6 words: 5 rows of 8 (Jim, 2026-10-26) | During the A03 pass Jim ruled that the screen leads and the card is reprinted: Q6's 40 words become `row_lengths [8,8,8,8,8]` in both 2024.1 languages, so each card row fills one phone page of four rows of two (was 7,7,7,7,7,5 over six pages, the last two pages part-empty). Changed in place in 2024.1 because WelaPLUS has no field results on the SQLite backend; the result viewer re-derives rows from the bundled set for results without row metadata, so any staging Q6 result now shows 8-word rows. Printout pack Side B word blocks regenerated from the item sets (same word order). RED: item-set, Q6 paging and AssessmentDetailGrid tests. Suite 425 / 6,393, integration 961, types green. |
+| A03 pass, build 45 (`2a5bcfb`), 360dp, font 1.0, WelaPLUS isiXhosa | All 11 Questions saved what was marked: Q1 5/60 (flip notice; stop card at exactly the 10th wrong in a row with the timer frozen; Undo resumed), Q2 4/5 (ring follows; Re-read story keeps marks), Q3 10/10 (flip to Correct; End → Keep marking; Back), Q4 1/8 (Skip → Cancel keeps marks; End), Q5 25/26 (pages turn with the ring; review page arrows browse), Q6 10/40 (timer expiry saves at once, no review), Q7 10/11, Q8 19/45 (early End), Q9 17/18, Q10 skipped (tired), Q11 skipped. Three layout defects found and fixed: (1) long position/review lines drew flush-left at x=0 although their native frame was full width and centred (a stretched centred Text with nested bold spans on Android); `PositionLine` now sits in a 16dp-gutter wrapper that sizes the Text to its content. (2) The flip notice sat on the position line; it now keeps 8dp above it. (3) On the last item of a scrolling body the follow-scroll stopped 16dp short, so the last sentence card sat flush on the line; following the last item (`lastIndex` from `CaptureBody`) now scrolls to the end when the item fits. Open: the phone's Wi-Fi was on but unconnected, so the 12 queued results have not reached staging yet. Suite 425 / 6,397, types green. |
+| Staging rows for the build 45 run (read-only helper, `project_ref=segygjzpujphwvrubusm`) | After Jim reconnected Wi-Fi the queue drained. All ten converted Questions saved `capture_mode = sequential`; Q11 saved `NULL` (unchanged path), with zero items as a skip. Reached counts equal the marks: Q1 60 items / 15 reached / 5 correct (`ea_ended`, 33,291 ms, `correction_count` 2), Q2 5/5/4, Q3 10/10/10, Q4 8/2/1, Q5 26/26/25, Q6 40/12/10 (`timer`, 60,000 ms), Q7 11/11/10, Q8 45/20/19 (19 WPM), Q9 18/18/17, Q10 `skipped_tired` with no items. Q8 saved `timer`, not `ea_ended`: it was written 68 s after Start, so the timer expired before the scripted End taps landed (uiautomator dumps stall while a countdown animates). Not an app defect; the EGRA pass repeats an early End with direct taps. |
+| A03 pass, build 47 (`a193d6b`), 360dp | Full EGRA isiXhosa EGRA 1: letters stopped at exactly the tenth first-row wrong ("got every item in the first row wrong"), saved 0/60; familiar words (80, 10 pages of 8) flip then early End saved 7/80; story early End via the sheet ("12 marked. The 41 not marked won't count") saved 11/53; story questions 4/5. On device the tile labels now speak the answer guide (`…?, Answer guide: nguLolo, correct. Double-tap to change to incorrect`). All three build-45 layout fixes hold: the review line is centred inside the gutters (native frame 45–675 px, was 0–720 drawn flush-left), the flip notice keeps 8dp above the position line, and the last story-question card keeps its gap above the line. Q6 in the gallery shows 8 words per page, `Card row 1 · page 1 of 5`, and fits at font 1.3. Not fixed: in review the page indicator grows by its Previous/Next arrows and the grid shifts down about 18dp (Q5); a content-pack guide in isiXhosa EGRA 1 Q4 ends with a stray `”`; the Select child list scrolls under the Android navigation bar (pre-existing). TalkBack speech (including whether the flip notice is read once or twice) was not listened to on device; it moves to the iPhone/VoiceOver and listening checklist. Jim (2026-10-26): no rebuild for font-1.3-only fixes. |
 
 ## Decision Register
 

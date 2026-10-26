@@ -5,6 +5,7 @@ import type { LetterSoundsItemSet } from '../questions/LetterSoundsQuestion/type
 import type { ReadWordsItemSet } from '../questions/ReadWordsQuestion/types';
 import type { ReadPassageItemSet } from '../questions/ReadPassageQuestion/types';
 import type { ReadingComprehensionItemSet } from '../questions/ReadingComprehensionQuestion/types';
+import { markingSentence } from '../battery/markingSentence';
 import { EGRA_LETTER_EXTENSIONS, EGRA_MIN_LETTERS } from './letterExtensions';
 
 export type EgraBattery = BatteryConfig & {
@@ -79,8 +80,10 @@ export function adaptEgraForm(form: EgraAssessment) {
   };
   const practice = (section: EgraGrid) => section.practiceItems.length
     ? ` Practice first (not scored): ${section.practiceItems.join(', ')}` : '';
-  const timedInstructions = (noun: string, section: EgraGrid) =>
-    `Ask the child to read the ${noun} in order. Mark each item Correct or Incorrect. Stop if every item in the first row is wrong. End when the child finishes.${practice(section)}`;
+  const timedInstructions = (noun: 'letter sounds' | 'words', section: EgraGrid) => {
+    const item = noun === 'letter sounds' ? 'letter' : 'word';
+    return `Ask the child to read the ${noun} in order. ${markingSentence(item)} The test stops by itself if every ${item} in the first row is wrong, or when the time is up.${practice(section)}`;
+  };
   const question = (code: string, title: string, instructions: string, durationSec?: number, version = form.id): BatteryQuestion & { title: string } => ({
     question_code: code, question_version: version, title,
     instructions: { [form.languageCode]: instructions },
@@ -97,8 +100,8 @@ export function adaptEgraForm(form: EgraAssessment) {
     questions: [
       question('letter_sounds', 'Letter sounds', timedInstructions('letter sounds', form.letters), form.letters.timeLimitSeconds, letterVersion),
       question('word_reading', 'Familiar words', timedInstructions('words', form.words), form.words.timeLimitSeconds),
-      question('oral_reading', 'Reading a story', 'Ask the child to read the story aloud. Tap words read incorrectly. At the timer or End, mark the last word read.', form.passage.timeLimitSeconds),
-      question('reading_comprehension', 'Story questions', 'Ask the story questions. Use the answer guide to mark each answer Correct, Wrong or Not asked.'),
+      question('oral_reading', 'Reading a story', `Ask the child to read the story aloud. ${markingSentence('word')} The test stops by itself when the time is up.`, form.passage.timeLimitSeconds),
+      question('reading_comprehension', 'Story questions', `Ask the story questions. Use the answer guide to decide. ${markingSentence('question')}`),
     ],
   } satisfies EgraBattery;
   return { form, battery, itemSets: { letter_sounds, word_reading, oral_reading, reading_comprehension } };

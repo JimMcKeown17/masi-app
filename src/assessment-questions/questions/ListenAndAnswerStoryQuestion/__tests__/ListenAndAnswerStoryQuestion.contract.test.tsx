@@ -19,7 +19,7 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
       'What colour was the bush?',
       'How did Pip feel at the end?',
     ].forEach((p) => {
-      fireEvent.press(rendered.getByLabelText(`${p}, idle`));
+      fireEvent.press(rendered.getByText('Correct'));
     });
     fireEvent.press(rendered.getByText('Finish'));
 
@@ -28,7 +28,7 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
     expect(v.errors).toEqual([]);
   });
 
-  test('Finish-with-unmarked confirmation path also emits a contract-valid Result', async () => {
+  test('early End with an unreached tail emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenAndAnswerStoryQuestion, {
       language: 'en',
       itemSet: FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
@@ -36,9 +36,9 @@ describe('ListenAndAnswerStoryQuestion — OSS contract', () => {
     });
 
     fireEvent.press(rendered.getByText("I've finished reading"));
-    fireEvent.press(rendered.getByLabelText('What was the name of the bird?, idle'));
-    fireEvent.press(rendered.getByText('Finish'));
-    fireEvent.press(rendered.getByText('Yes, finish'));
+    fireEvent.press(rendered.getByText('Correct'));
+    fireEvent.press(rendered.getByTestId('story-end'));
+    fireEvent.press(rendered.getByText('End question'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);

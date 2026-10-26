@@ -2,25 +2,24 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { tokens } from '../theme/tokens';
 import { IconButton } from './Button';
-import { UiText } from './Text';
+import type { LinePart } from './PositionLine';
+import { PositionLine } from './PositionLine';
 import { pageLabel, type Page } from './paginate';
 
-export function PageIndicator({ pages, current, onPrevious, onNext }: {
+export function PageIndicator({ pages, current, onPrevious, onNext, labelFor }: {
   pages: ReadonlyArray<Page>;
   current: number;
   onPrevious?: () => void;
   onNext?: () => void;
+  labelFor?: (page: Page, count: number) => ReadonlyArray<LinePart>;
 }): React.JSX.Element | null {
   if (pages.length <= 1) return null;
   const currentIndex = Number.isFinite(current) ? Math.max(0, Math.min(pages.length - 1, Math.trunc(current))) : 0;
-  const label = pageLabel(pages[currentIndex], pages.length);
-  const [cardRows, rest] = label.split(' · ');
+  const parts = (labelFor ?? defaultLabel)(pages[currentIndex], pages.length);
 
   return (
     <View testID="page-indicator" style={styles.indicator}>
-      <UiText testID="page-label" variant="caption" tone="muted" align="center" accessibilityLabel={label}>
-        <UiText variant="captionStrong" tone="ink">{cardRows}</UiText>{` · ${rest}`}
-      </UiText>
+      <PositionLine testID="page-label" parts={parts} />
       <View style={styles.controls}>
         {onPrevious && <IconButton icon="chevronLeft" accessibilityLabel="Previous page" onPress={onPrevious} disabled={currentIndex === 0} />}
         <View style={styles.dots}>
@@ -35,6 +34,11 @@ export function PageIndicator({ pages, current, onPrevious, onNext }: {
       </View>
     </View>
   );
+}
+
+function defaultLabel(page: Page, count: number): ReadonlyArray<LinePart> {
+  const [cardRows, rest] = pageLabel(page, count).split(' · ');
+  return [{ text: cardRows, strong: true }, { text: ' · ' + rest }];
 }
 
 const styles = StyleSheet.create({

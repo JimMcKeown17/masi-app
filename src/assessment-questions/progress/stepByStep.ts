@@ -12,6 +12,7 @@ export type StepState = {
 
 export type StepAction =
   | { type: 'decide'; correct: boolean }
+  | { type: 'flip'; position: number }
   | { type: 'back' }
   | { type: 'undoStop' };
 
@@ -31,6 +32,18 @@ export function stepReducer(
   ctx: { totalItems: number; stopRule: StopRule | null },
 ): StepState {
   switch (action.type) {
+    case 'flip': {
+      if (state.stopped || !Number.isInteger(action.position) ||
+        action.position < 0 || action.position >= state.cursor) return state;
+
+      const decisions = { ...state.decisions, [action.position]: !state.decisions[action.position] };
+      return {
+        ...state,
+        decisions,
+        correctionCount: state.correctionCount + 1,
+        maxConsecutiveWrong: longestConsecutiveWrong(decisions, state.cursor),
+      };
+    }
     case 'decide': {
       if (state.stopped || state.cursor >= ctx.totalItems) return state;
 

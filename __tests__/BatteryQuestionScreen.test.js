@@ -45,6 +45,8 @@ test('English HL 1 captures all 60 letters through the real Question, including 
   for (let index = 0; index < 60; index += 1) {
     fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
   }
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
   await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
   const saved = repositories.assessments.saveQuestionResult.mock.calls[0][0].result;
@@ -55,7 +57,7 @@ test('English HL 1 captures all 60 letters through the real Question, including 
     egraItemSetFor('letter_sounds', 'dbe-egra-en-hl-1-v1-masi60', 'en').rows.flat());
 });
 
-test('EGRA oral reading saves the explicitly chosen last word through the real Question', async () => {
+test('EGRA oral reading saves the explicitly marked prefix through the real Question', async () => {
   const battery = EGRA_BATTERIES.find(entry => entry.battery_version === 'dbe-egra-en-fal-2-v1');
   run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en',
     results: battery.questions.slice(0, 2).map((question, index) => ({ id: `egra-${index}`,
@@ -63,20 +65,19 @@ test('EGRA oral reading saves the explicitly chosen last word through the real Q
   questionComponentFor.mockImplementation(jest.requireActual('../src/assessment-questions').questionComponentFor);
   const screen = renderHost({ runId: ID, questionCode: 'oral_reading' });
   fireEvent.press(await screen.findByRole('button', { name: 'Start' }));
+  for (let i = 0; i < 20; i++) fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
   act(() => jest.advanceTimersByTime(30000));
-  fireEvent.press(screen.getByRole('button', { name: 'End' }));
-  const confirm = screen.getByRole('button', { name: 'Confirm' });
-  expect(confirm).toBeDisabled();
-  fireEvent.press(confirm);
+  fireEvent.press(screen.getByTestId('passage-end'));
+  expect(screen.queryByText('Last item attempted')).toBeNull();
   expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
-  const set = egraItemSetFor('oral_reading', battery.battery_version, 'en');
-  fireEvent.press(screen.getByLabelText(`${set.words[19].word}, item 20`));
-  fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
+  fireEvent.press(screen.getByRole('button', { name: 'End question' }));
   await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
   const saved = repositories.assessments.saveQuestionResult.mock.calls[0][0].result;
   expect(saved).toMatchObject({ question_code: 'oral_reading', stopped_reason: 'ea_ended',
-    derived: { last_attempted_position: 19, total_attempted: 20, total_correct: 20 } });
+    derived: { last_attempted_position: 19, total_attempted: 20, total_correct: 20, capture_mode: 'sequential', correct_words_per_minute: 40 } });
+  const set = egraItemSetFor('oral_reading', battery.battery_version, 'en');
+  expect(saved.items.map(item => item.metadata.reached)).toEqual(set.words.map((_, i) => i < 20));
 });
 
 jest.setTimeout(30000);
@@ -172,14 +173,14 @@ test('TestFrame title "6 · Reading words", subtitle "Lwazi Mbeki · isiXhosa ·
 });
 
 test('passes itemSet === bundledItemSetFor(code, version, language), language, instructions[language], durationSec, childName, allowSkip and extraProps', async () => {
-  questionComponentFor.mockReturnValue({ Component: MockQuestion, extraProps: { markingPolarity: 'tap_wrong' } });
+  questionComponentFor.mockReturnValue({ Component: MockQuestion, extraProps: { fixtureExtra: true } });
   await ready(renderHost());
   expect(bundledItemSetFor).toHaveBeenCalledWith(QUESTION.question_code, QUESTION.question_version, 'xh');
   const expected = jest.requireActual('../src/assessment-questions').bundledItemSetFor(
     QUESTION.question_code, QUESTION.question_version, 'xh');
   expect(mockQuestionProps.itemSet).toBe(expected);
   expect(mockQuestionProps).toMatchObject({ language: 'xh', instructions: QUESTION.instructions.xh,
-    durationSec: 60, childName: 'Lwazi Mbeki', allowSkip: true, markingPolarity: 'tap_wrong',
+    durationSec: 60, childName: 'Lwazi Mbeki', allowSkip: true, fixtureExtra: true,
     onStart: expect.any(Function), onComplete: expect.any(Function) });
   expect(mockQuestionProps.captureMode).toBeUndefined();
 });

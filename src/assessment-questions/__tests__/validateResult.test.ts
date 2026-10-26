@@ -158,13 +158,16 @@ describe('validateResult', () => {
     expect(verdict.errors.some((e) => e.includes('language'))).toBe(true);
   });
 
-  test('accepts derived.capture_mode and derived.correction_count (reserved for 0.2.0 sequential mode)', () => {
+  test('accepts derived.capture_mode and derived.correction_count with valid sequential progress', () => {
     const good: Result = {
       ...minimalValid,
+      items: [{ position: 0, item_key: 'a', prompt: 'A', is_correct: true, metadata: { reached: true } }],
       derived: {
         ...minimalValid.derived,
         capture_mode: 'sequential',
         correction_count: 3,
+        tracks_progress: true,
+        last_attempted_position: 0,
       },
     };
     expect(validateResult(good).valid).toBe(true);
@@ -219,6 +222,114 @@ describe('tracks_progress rule', () => {
   test('position beyond items is invalid', () => {
     const v = validateResult({ ...base, derived: { total_correct: 1, total_attempted: 6, percent: 17, last_attempted_position: 5, tracks_progress: true } });
     expect(v.valid).toBe(false);
+  });
+});
+
+describe('sequential invariants', () => {
+  function sequential(): Result {
+    return {
+      ...minimalValid, stopped_reason: 'ea_ended',
+      items: [
+        { position: 0, item_key: 'same', prompt: 'a', is_correct: true, metadata: { reached: true } },
+        { position: 1, item_key: 'same', prompt: 'a', is_correct: false, metadata: { reached: true } },
+        { position: 2, item_key: 'same', prompt: 'a', is_correct: false, metadata: { reached: false } },
+      ],
+      derived: { total_correct: 1, total_attempted: 2, percent: 50, last_attempted_position: 1,
+        capture_mode: 'sequential', tracks_progress: true },
+    };
+  }
+
+  test('one valid sequential result passes', () => {
+    expect(validateResult(sequential())).toEqual({ valid: true, errors: [] });
+  });
+
+  test('sequential capture requires tracks_progress true', () => {
+    const result = sequential();
+    result.derived.tracks_progress = false;
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: tracks_progress must be true'] });
+  });
+
+  test('sequential reached items must be a prefix', () => {
+    const result = sequential();
+    result.items[1].metadata = { reached: false };
+    result.items[2].metadata = { reached: true };
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: reached items must be a prefix'] });
+  });
+
+  test('sequential last_attempted_position must be the last reached position', () => {
+    const result = sequential();
+    result.derived.last_attempted_position = 0;
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: last_attempted_position must be the last reached position'] });
+  });
+
+  test('sequential unreached items cannot be correct', () => {
+    const result = sequential();
+    result.items[2].is_correct = true;
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: an unreached item cannot be correct'] });
+  });
+
+  test('a skipped sequential result with items: [] passes', () => {
+    const result = sequential();
+    result.stopped_reason = 'skipped_child_refused';
+    result.items = [];
+    result.derived = { total_correct: 0, total_attempted: 0, percent: 0,
+      last_attempted_position: null, capture_mode: 'sequential', tracks_progress: false };
+    expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+  });
+
+  test('a non-sequential result is unaffected', () => {
+    const result = sequential();
+    result.derived.capture_mode = 'grid';
+    result.derived.tracks_progress = false;
+    result.derived.last_attempted_position = null;
+    result.items[0].metadata = { reached: false };
+    expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+  });
+
+  test('sequential prefixes use positions rather than array order or repeated keys', () => {
+    const result = sequential();
+    result.items.reverse();
+    expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+  });
+
+  test('zero reached sequential items require position -1', () => {
+    const result = sequential();
+    result.items.forEach(item => { item.metadata = { reached: false }; item.is_correct = false; });
+    result.derived = { ...result.derived, total_correct: 0, total_attempted: 0, percent: 0,
+      last_attempted_position: -1 };
+    expect(validateResult(result)).toEqual({ valid: true, errors: [] });
+    result.derived.last_attempted_position = 0;
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: last_attempted_position must be the last reached position'] });
+  });
+
+  test('duplicate reached positions cannot stand in for a missing prefix position', () => {
+    const result = sequential();
+    result.items[1].position = 0;
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: reached items must be a prefix'] });
+  });
+
+  test('an unreached item cannot occupy a position inside the reached prefix', () => {
+    const result = sequential();
+    result.items[2].position = 0;
+    expect(validateResult(result)).toEqual({ valid: false,
+      errors: ['capture_mode sequential: reached items must be a prefix'] });
+  });
+
+  test('malformed sequential positions return errors without throwing', () => {
+    const result = sequential();
+    const malformed = { ...result, items: [
+      { ...result.items[0], position: Symbol('invalid') }, ...result.items.slice(1),
+    ] };
+    expect(validateResult(malformed)).toEqual({ valid: false, errors: [
+      'items[0].position: must be a number',
+      'capture_mode sequential: reached items must be a prefix',
+    ] });
   });
 });
 

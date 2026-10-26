@@ -78,8 +78,9 @@ These horizons summarize the ordered register below. They are not a second backl
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
 10. **P3: prove WelaPLUS on devices and produce its printout pack.** The Release 1 Battery Run
-   host is built (§8); native acceptance, print production and PR review remain. Artifact/photo
-   capture is separate deferred work on the integrated Question/result foundation.
+   host, Full EGRA and step-by-step marking are merged (§8); native acceptance, the EA usability
+   check, print production and the two follow-on specs (EGRA content, skip rules) remain.
+   Artifact/photo capture is separate deferred work on the integrated Question/result foundation.
 11. **P4: polish, hygiene, and longer-horizon scale work.**
 
 The deferred Head Office importer is not in the active execution order. It begins with read-only
@@ -818,7 +819,8 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   (Afrikaans: `word_reading@2026.1.af` holds Zazi's provisional, unreviewed list; a reviewed list
   becomes a new version).
 - [ ] **EGRA forms (13, from `content/egra/`): device gate and field materials.** Host wiring and the
-  Full EGRA form picker are built on `feat/egra-host` (2026-10-25), stacked on WelaPLUS Plan 3.
+  Full EGRA form picker merged as PR #104 (2026-10-25). Step-by-step marking covers all four
+  Questions; the A03 saved isiXhosa EGRA 1 correctly on 2026-10-26 (build 47, build log).
   Every EA with an active programme is offered Full EGRA alongside the programme default; forms
   retain pack order, distinct English HL/FAL and fixed language. The shared host persists the
   story-questions prerequisite skip and finalizes all four Questions. Remaining:
@@ -848,8 +850,9 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 
 ## 8. WelaPLUS
 
-**The Release 1 Battery Run host is built, pending the device gate and PR review.** Plan 3 is
-on `feat/welaplus-plan-3`, stacked on `feat/whole-class-assessment` (PR #100). It adds the
+**The Release 1 Battery Run host is merged** (Plan 3, PR #101, on whole-class access, PR #100;
+2026-10-25), pending the rest of its device gate. Every Question except the Q11 rubric is marked
+step by step (2026-10-26). Plan 3 adds the
 Assessments card and unfinished runs, whole-class child selection, create/resume/abandon,
 Question capture and skips, atomic saves, review/finalize and History-to-summary navigation.
 Both roster sections use the assessable roster, including ECD/Grade R and control children.
@@ -873,9 +876,6 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   Check Bold Red tokens, BottomSheets, large text, wrapping and bottom insets physically.
   Package capture Task 17's native/large-text gates remain open too; a local test pass does not
   close them (2026-10-22 build log).
-- [ ] Review and merge the Plan 3 PR on the whole-class base (PR #100); retain the controller's
-  full-suite/integration/type evidence in the build log. Complete the upload foundation's
-  remaining hosted/device proof (§1); no new hosted application is claimed by Plan 3 docs.
 - [ ] **Produce the printout pack:** approve artwork, physical proofs and stock from the
   [designer brief](./welaplus-printout-pack.md): Grid A 6 × 10, Andika Regular, exact language
   footers, boxed Run code, Reading Cards, Picture Cards and consumable Writing Sheets.
@@ -887,6 +887,51 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   guide, integration prompt, versioning, and licensing ratification.
 
 ### Pedagogy and field validation
+
+- [ ] **Step-by-step marking: what the A03 pass left open** (built 2026-10-26;
+  [spec](../docs/superpowers/specs/2026-10-25-step-by-step-capture-design.md),
+  [plan](../docs/superpowers/plans/2026-10-25-step-by-step-capture.md)). The A03 pass on builds
+  45 and 47 saved every Question correctly. Still to do:
+  - run it on the iPhone, and listen with TalkBack and VoiceOver: the flip notice should be read
+    once, and the spoken answer guides (Q2, Q4, EGRA comprehension) should make sense;
+  - Q5 review: the page indicator grows by its arrows and the grid shifts down about 18dp;
+  - isiXhosa EGRA 1 Q4's answer guide ends with a stray `”` (content pack);
+  - the Select child list scrolls under the Android navigation bar (pre-existing).
+- [ ] **EA usability check of step-by-step marking on a preview build.** Watch two or three EAs
+  mark a real child (or a colleague reading from the cards) through WelaPLUS and Full EGRA.
+  Look for: the ring followed without hunting, Back used rather than flipping, the End sheet
+  understood, the review line read before Finish, and the flip notice noticed but not
+  distracting.
+- [ ] **Follow-on spec: the EGRA content inside WelaPLUS** (Jim, 2026-10-25). Letters, words, the
+  passage and reading comprehension are identical in WelaPLUS, Full EGRA and the quick tests:
+  - **Letters:** the 100-letter mixed-case chart for each language, taken from Assessment 3
+    (isiXhosa HL 3, English HL 3, Afrikaans HL 3) as printed. isiZulu keeps all 110 letters of
+    its only form, SMRS 1. This replaces the 40/60-letter and Masi-60 letter cards.
+  - **Words, passage and comprehension:** Assessment 1 for each language, English Home
+    Language, from `content/egra/egra-assessments.json`. WelaPLUS gains the comprehension
+    Question after the passage, using the shared `reading_comprehension` code and screen.
+  - **Same form at every point:** baseline, midline and endline use the same form. A per-grade
+    form may come later.
+  - **One stop rule everywhere:** "first row all wrong" for letters and words.
+  - **Rollout:** ship as a new WelaPLUS version beside 2024.1. Head Office switches the literacy
+    programme's default once the reprinted Reading Cards (10 × 10 letters, 8 words a row) are
+    in the field. WelaPLUS 2024.1 Q6 already moved to 5 rows of 8 in the step-by-step build
+    (Jim, 2026-10-26), so its Side B reprint can go first. This supersedes the printout pack's Grid A 6 × 10.
+  - **English** words, story and questions use English **Home Language** Assessment 1 for now;
+    its 111-word story is accepted (Jim, 2026-10-25).
+  - **Keep Full EGRA**, still named "Full EGRA": one Battery per language (four today), with
+    content identical to the matching WelaPLUS parts. The language follows the child's class
+    language, with no form picker. Results saved from the 13 current forms keep their own
+    versions (Jim, 2026-10-25).
+  - **Owner:** the step-by-step session writes the spec; the EGRA session reviews the adapter,
+    the `letterExtensions.ts` retirement, the Full EGRA picker and the old `-masi60` results.
+- [ ] **Follow-on spec: skip rules, with a server-side switch** (Jim, 2026-10-25). Don't put a
+  child who cannot read letters through the reading and writing Questions, or a child who
+  cannot read words through the passage.
+  - **Candidate trigger:** the first-row stop itself (letters → reading and writing; words →
+    passage and comprehension).
+  - **The switch** is set per programme or Battery version, for when government requires every
+    Question. It is never an EA setting.
 
 - [ ] Close remaining content approvals: XH Q5 g/n/z picture choices and clock artwork, plus a
   first-language spelling review before the pilot (Release 1 §4.3; #34). The bilingual item

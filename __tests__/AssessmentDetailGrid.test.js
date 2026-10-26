@@ -24,7 +24,7 @@ test('stored row metadata preserves five rows of twelve and renders stored promp
 
 test('words without row metadata use the stored bundled set id, even when its layout differs from the current language set', () => {
   const screen = renderWithProviders(<AssessmentDetailGrid assessment={{ question_code: 'word_reading', language: 'en', item_set_id: 'wela_plus_read_words@2024.1.en', items: Array.from({ length: 40 }, (_, position) => item(position)) }} />);
-  expect(screen.getAllByTestId('assessment-detail-row').map(row => within(row).getAllByTestId('assessment-detail-item').length)).toEqual([7, 7, 7, 7, 7, 5]);
+  expect(screen.getAllByTestId('assessment-detail-row').map(row => within(row).getAllByTestId('assessment-detail-item').length)).toEqual([8, 8, 8, 8, 8]);
   expect(screen.getByText('stored-39')).toBeTruthy();
 });
 

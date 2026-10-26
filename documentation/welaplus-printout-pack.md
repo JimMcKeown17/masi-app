@@ -38,7 +38,7 @@ timers and marking controls; these are not additional print deliverables.
 
 Printed card rows are the content boundaries used by the phone. The phone can reflow items
 within those boundaries: it is not a facsimile of the card. Side A stays **6 rows × 10 letters**;
-Side B words stay **6 rows of 7, 7, 7, 7, 7, 5**. Side C stays in its source paragraphs, with
+Side B words are **5 rows of 8** (Jim, 2026-10-26: the phone's layout leads and the card is reprinted to match; one card row fills one phone screen of four rows of two words). The earlier 7, 7, 7, 7, 7, 5 print is superseded. Side C stays in its source paragraphs, with
 natural line wrapping. Do not redraw the paper as the phone's columns, tiles or buttons.
 
 Every printed footer must be one of these exact strings. The middle dot, spaces, version,
@@ -85,20 +85,19 @@ the paper's ten columns. Q1 is timed in the app; do not add marking boxes or a p
 
 ## Reading Card — side B: Q6 words and Q7 sentences
 
-Place Q6 first, with six distinct rows. Put the four **numbered** Q7 sentences below the word
-block, with a clear gap so the two Questions cannot be confused. Do not move words between
-rows, alphabetise them or remove duplicates. In particular, EN row 4 contains `there how`
-twice. The final word row has five words; leave its two remaining positions empty.
+Place Q6 first, with five distinct rows of eight words. Put the four **numbered** Q7 sentences
+below the word block, with a clear gap so the two Questions cannot be confused. Do not move
+words between rows, alphabetise them or remove duplicates. In particular, the EN words keep
+`there how` twice in a row (`… how there` ends row 3 and `how come …` starts row 4).
 
 **English Q6 — 40 words:**
 
 ```text
-the and in of be run bus
-not are we like can but an
-have that for what was your why
-there how there how come with my
-up green box happy play every week
-farm table boy new old
+the and in of be run bus not
+are we like can but an have that
+for what was your why there how there
+how come with my up green box happy
+play every week farm table boy new old
 ```
 
 **English Q7 — four sentences:**
@@ -113,12 +112,11 @@ farm table boy new old
 **isiXhosa Q6 — 40 words:**
 
 ```text
-le yam lo wam eli inja bona
-funa igama ndi ewe nini ikhaya thanda
-mama jonga hayi emva into ixesha imini
-ubhuti yiza izolo zisa ibali ibhola baleka
-nceda ilanga onke omkhulu phezulu inkulu bomvu
-bantu amanzi izinto usapho kakhulu
+le yam lo wam eli inja bona funa
+igama ndi ewe nini ikhaya thanda mama jonga
+hayi emva into ixesha imini ubhuti yiza izolo
+zisa ibali ibhola baleka nceda ilanga onke omkhulu
+phezulu inkulu bomvu bantu amanzi izinto usapho kakhulu
 ```
 
 **isiXhosa Q7 — four sentences:**
@@ -134,10 +132,10 @@ bantu amanzi izinto usapho kakhulu
 each Reading Card set. This side combines content formerly on the EA's booklet pages.
 
 **Production notes:** the phone's Q6 layout uses two columns and capacity ten, paging whole
-printed rows before reflowing them. These source rows therefore produce six phone pages,
-not four new rows of ten on paper. Preserve the six card rows above so the EA's page/card-row
-label remains meaningful. Sentences stay numbered 1–4 in order. Q6's 60-second timer and stop
-instructions are on the phone, not on the child's card.
+printed rows before reflowing them. Each 8-word card row therefore fills exactly one phone
+page (four rows of two), giving five pages. Preserve the five card rows above so the EA's
+"Card row N" label matches the child's card. Sentences stay numbered 1–4 in order. Q6's
+60-second timer is on the phone, not on the child's card.
 
 ## Reading Card — side C: Q8 passage
 

@@ -1,28 +1,20 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { tokens } from '../../../theme/tokens';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, within } from '@testing-library/react-native';
 import { ReadSentencesQuestion } from '..';
 import { FIXTURE_READ_SENTENCES_EN } from '../../../testFixtures';
 
-test('Finish reports every word attempted', () => {
+test('End reports only the reached prefix attempted', () => {
   const onComplete = jest.fn();
-  const r = render(
-    <ReadSentencesQuestion
-      language="en"
-      itemSet={FIXTURE_READ_SENTENCES_EN}
-      instructions="."
-      onComplete={onComplete}
-    />,
-  );
+  const r = render(<ReadSentencesQuestion language="en" itemSet={FIXTURE_READ_SENTENCES_EN} onComplete={onComplete} />);
   fireEvent.press(r.getByText('Start'));
-  fireEvent.press(r.getByText('Finish'));
-  const confirm = r.queryByText('Yes, finish');
-  if (confirm) fireEvent.press(confirm);
+  fireEvent.press(r.getByText('Correct'));
+  fireEvent.press(r.getByTestId('sentences-end'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End question'));
   const res = onComplete.mock.calls[0][0];
-  expect(res.derived.tracks_progress).toBe(true);
-  expect(res.derived.last_attempted_position).toBe(res.items.length - 1);
-  expect(res.derived.total_attempted).toBe(res.items.length);
+  expect(res.derived).toMatchObject({ tracks_progress: true, last_attempted_position: 0, total_attempted: 1 });
+  expect(res.items.slice(1).every((item: any) => !item.metadata.reached && !item.is_correct)).toBe(true);
 });
 
 describe('ReadSentencesQuestion — intro & active', () => {
@@ -57,7 +49,7 @@ describe('ReadSentencesQuestion — intro & active', () => {
 });
 
 describe('ReadSentencesQuestion — marking', () => {
-  test('tap a word marks it correct; second tap clears', () => {
+  test('Correct marks the current word; tapping flips its decision', () => {
     const { getByText, getByLabelText } = render(
       <ReadSentencesQuestion
         language="en"
@@ -67,17 +59,17 @@ describe('ReadSentencesQuestion — marking', () => {
       />,
     );
     fireEvent.press(getByText('Start'));
-    fireEvent.press(getByLabelText('The, idle'));
-    expect(getByLabelText('The, correct')).toBeTruthy();
-    fireEvent.press(getByLabelText('The, correct'));
-    expect(getByLabelText('The, idle')).toBeTruthy();
+    fireEvent.press(getByText('Correct'));
+    expect(getByLabelText('The, correct. Double-tap to change to incorrect')).toBeTruthy();
+    fireEvent.press(getByLabelText('The, correct. Double-tap to change to incorrect'));
+    expect(getByLabelText('The, incorrect. Double-tap to change to correct')).toBeTruthy();
   });
 });
 
 describe('ReadSentencesQuestion — Finish flow and per-sentence percent', () => {
-  test('Finish with all marked → derived.per_sentence_percent reflects 100% each', () => {
+  test('Finish after review reports per-sentence percentages from all decisions', () => {
     const onComplete = jest.fn();
-    const { getByText, getByTestId } = render(
+    const { getByText } = render(
       <ReadSentencesQuestion
         language="en"
         itemSet={FIXTURE_READ_SENTENCES_EN}
@@ -86,25 +78,13 @@ describe('ReadSentencesQuestion — Finish flow and per-sentence percent', () =>
       />,
     );
     fireEvent.press(getByText('Start'));
-    // s1: 4 words, all correct
-    ['s1.w1', 's1.w2', 's1.w3', 's1.w4'].forEach((k) =>
-      fireEvent.press(getByTestId(`pill-${k}`)),
-    );
-    // s2: 5 words, all correct
-    ['s2.w1', 's2.w2', 's2.w3', 's2.w4', 's2.w5'].forEach((k) =>
-      fireEvent.press(getByTestId(`pill-${k}`)),
-    );
-    // s3: 6 words, all correct
-    ['s3.w1', 's3.w2', 's3.w3', 's3.w4', 's3.w5', 's3.w6'].forEach((k) =>
-      fireEvent.press(getByTestId(`pill-${k}`)),
-    );
-    // s4: 5 words, mark 3 of 5 → 60%
-    ['s4.w1', 's4.w2', 's4.w3'].forEach((k) =>
-      fireEvent.press(getByTestId(`pill-${k}`)),
-    );
+    // All words in the first three sentences and the first three in sentence four are correct.
+    for (let position = 0; position < 18; position++) fireEvent.press(getByText('Correct'));
 
+    fireEvent.press(getByText('Incorrect'));
+    fireEvent.press(getByText('Incorrect'));
+    expect(onComplete).not.toHaveBeenCalled();
     fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish')); // 2 items unmarked confirmation
 
     const r = onComplete.mock.calls[0][0];
     expect(r.stopped_reason).toBe('completed');
@@ -135,6 +115,7 @@ describe('ReadSentencesQuestion — Skip flow', () => {
     expect(result.items).toEqual([]);
     expect(result.derived.last_attempted_position).toBeNull();
     expect(result.derived.tracks_progress).toBe(false);
+    expect(result.derived.per_sentence_percent).toEqual([]);
   });
 });
 
@@ -177,7 +158,7 @@ describe('ReadSentencesQuestion — itemSet override', () => {
         },
       ],
     };
-    const { getByText, getByTestId } = render(
+    const { getByText } = render(
       <ReadSentencesQuestion
         language="en"
         instructions="."
@@ -187,16 +168,16 @@ describe('ReadSentencesQuestion — itemSet override', () => {
     );
     fireEvent.press(getByText('Start'));
     expect(getByText('zebra')).toBeTruthy();
-    fireEvent.press(getByTestId('pill-sA.w1'));
+    fireEvent.press(getByText('Correct'));
+    fireEvent.press(getByText('Incorrect'));
     fireEvent.press(getByText('Finish'));
-    fireEvent.press(getByText('Yes, finish'));
     expect(onComplete.mock.calls[0][0].item_set_id).toBe('custom@1.0.en');
     expect(onComplete.mock.calls[0][0].derived.per_sentence_percent).toEqual([50]);
   });
 });
 
 
-test('Finish with unmarked items asks in a bottom sheet over the marked tiles', () => {
+test('End asks in a bottom sheet over the marked tiles; Keep marking restores them', () => {
   const onComplete = jest.fn();
   const onItemMarked = jest.fn();
   const r = render(
@@ -204,22 +185,21 @@ test('Finish with unmarked items asks in a bottom sheet over the marked tiles', 
       instructions="." onComplete={onComplete} onItemMarked={onItemMarked} />,
   );
   fireEvent.press(r.getByText('Start'));
-  fireEvent.press(r.getByLabelText('The, idle'));
-  fireEvent.press(r.getByLabelText('tree., idle'));
-  const markedTile = r.getByTestId('pill-s1.w1');
+  fireEvent.press(r.getByText('Correct'));
+  fireEvent.press(r.getByText('Correct'));
   const scroller = r.getByTestId('sentence-scroll');
-  fireEvent.press(r.getByText('Finish'));
-  const sheet = r.getByTestId('confirm-finish');
+  fireEvent.press(r.getByTestId('sentences-end'));
+  const sheet = r.getByTestId('end-confirmation');
   expect(StyleSheet.flatten(sheet.props.style)).toMatchObject({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
     backgroundColor: tokens.color.scrim,
   });
   expect(sheet.props.accessibilityViewIsModal).toBe(true);
-  expect(r.getByText('18 items unmarked — finish anyway?')).toBeTruthy();
-  expect(r.getByTestId('pill-s1.w1', { includeHiddenElements: true })).toBe(markedTile);
+  expect(r.getByText("2 marked. The 18 not marked won't count towards the score.")).toBeTruthy();
+  expect(r.getByTestId('tile-0', { includeHiddenElements: true })).toHaveStyle({ backgroundColor: tokens.color.marked });
   expect(r.getByTestId('sentence-scroll', { includeHiddenElements: true })).toBe(scroller);
-  expect(r.queryByLabelText('The, correct')).toBeNull();
+  expect(r.queryByLabelText('The, correct. Double-tap to change to incorrect')).toBeNull();
   let hiddenView = scroller.parent;
   while (hiddenView && hiddenView.props.accessibilityElementsHidden === undefined) {
     hiddenView = hiddenView.parent;
@@ -229,11 +209,11 @@ test('Finish with unmarked items asks in a bottom sheet over the marked tiles', 
   expect(hiddenView?.props.pointerEvents).toBe('none');
   expect(onComplete).not.toHaveBeenCalled();
   expect(onItemMarked).toHaveBeenCalledTimes(2);
-  fireEvent.press(r.getByText('Cancel'));
-  expect(r.queryByText(/items unmarked/)).toBeNull();
-  expect(r.queryByTestId('confirm-finish')).toBeNull();
-  expect(r.getByLabelText('The, correct')).toBeTruthy();
-  expect(r.getByLabelText('tree., correct')).toBeTruthy();
+  fireEvent.press(r.getByText('Keep marking'));
+  expect(r.queryByText(/not marked won/)).toBeNull();
+  expect(r.queryByTestId('end-confirmation')).toBeNull();
+  expect(r.getByLabelText('The, correct. Double-tap to change to incorrect')).toBeTruthy();
+  expect(r.getByLabelText('cat, correct. Double-tap to change to incorrect')).toBeTruthy();
   expect(hiddenView?.props.accessibilityElementsHidden).toBe(false);
   expect(hiddenView?.props.importantForAccessibility).toBe('auto');
   expect(hiddenView?.props.pointerEvents).toBe('auto');
@@ -245,24 +225,35 @@ test('Finish with unmarked items asks in a bottom sheet over the marked tiles', 
 test('repeated item keys keep positional tile identity and independent marks', () => {
   const onComplete = jest.fn();
   const onItemMarked = jest.fn();
-  const r = render(
-    <ReadSentencesQuestion language="en" instructions="." onComplete={onComplete} onItemMarked={onItemMarked}
-      itemSet={{ ...FIXTURE_READ_SENTENCES_EN, sentences: [
-        { item_key: 'same', words: [{ item_key: 'same', word: 'first' }] },
-        { item_key: 'same', words: [{ item_key: 'same', word: 'second' }] },
-      ] }} />,
-  );
+  const r = render(<ReadSentencesQuestion language="en" onComplete={onComplete} onItemMarked={onItemMarked}
+    itemSet={{ ...FIXTURE_READ_SENTENCES_EN, sentences: [
+      { item_key: 'same', words: [{ item_key: 'same', word: 'first' }] },
+      { item_key: 'same', words: [{ item_key: 'same', word: 'second' }] },
+    ] }} />);
   fireEvent.press(r.getByText('Start'));
-  fireEvent.press(r.getByLabelText('second, idle'));
-  expect(r.getByLabelText('first, idle')).toBeTruthy();
-  expect(r.getByLabelText('second, correct')).toBeTruthy();
-  expect(onItemMarked).toHaveBeenCalledTimes(1);
-  expect(onItemMarked).toHaveBeenLastCalledWith({ position: 1, item_key: 'same', prompt: 'second', is_correct: true });
+  fireEvent.press(r.getByText('Incorrect'));
+  fireEvent.press(r.getByText('Correct'));
+  expect(r.getByLabelText('first, incorrect. Double-tap to change to correct')).toBeTruthy();
+  expect(r.getByLabelText('second, correct. Double-tap to change to incorrect')).toBeTruthy();
+  expect(onItemMarked).toHaveBeenCalledTimes(2);
+  expect(onItemMarked).toHaveBeenLastCalledWith({ position: 1, item_key: 'same', prompt: 'second', is_correct: true,
+    metadata: { sentence_index: 1, word_index: 0, reached: true } });
   fireEvent.press(r.getByText('Finish'));
-  fireEvent.press(r.getByText('Yes, finish'));
   expect(onComplete).toHaveBeenCalledTimes(1);
   expect(onComplete.mock.calls[0][0].items).toEqual([
-    { position: 0, item_key: 'same', prompt: 'first', is_correct: false },
-    { position: 1, item_key: 'same', prompt: 'second', is_correct: true },
+    { position: 0, item_key: 'same', prompt: 'first', is_correct: false, metadata: { sentence_index: 0, word_index: 0, reached: true } },
+    { position: 1, item_key: 'same', prompt: 'second', is_correct: true, metadata: { sentence_index: 1, word_index: 0, reached: true } },
   ]);
+});
+
+test('Q7: per_sentence_percent counts reached words and is null for a sentence never reached', () => {
+  const onComplete = jest.fn();
+  const r = render(<ReadSentencesQuestion language="en" itemSet={FIXTURE_READ_SENTENCES_EN} onComplete={onComplete} />);
+  fireEvent.press(r.getByText('Start'));
+  fireEvent.press(r.getByText('Correct'));
+  fireEvent.press(r.getByText('Incorrect'));
+  fireEvent.press(r.getByTestId('sentences-end'));
+  fireEvent.press(within(r.getByTestId('end-confirmation')).getByText('End question'));
+  expect(onComplete.mock.calls[0][0].derived.per_sentence_percent).toEqual([50, null, null, null]);
+  expect(onComplete.mock.calls[0][0].items[1].metadata).toEqual({ sentence_index: 0, word_index: 1, reached: true });
 });

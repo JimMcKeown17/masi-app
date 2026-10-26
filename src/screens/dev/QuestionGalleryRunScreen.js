@@ -28,6 +28,7 @@ export default function QuestionGalleryRunScreen({ navigation, route }) {
       <View style={styles.question}>
         {Question ? <Question key={run} language={languageCode} itemSet={itemSet}
           durationSec={entry.durationSec} instructions={instructions} childName="Gallery child"
+          endNoun={entry.standalone ? 'test' : 'question'}
           {...question.extraProps} onComplete={onComplete} />
           : <Text style={styles.message}>This Question is unavailable.</Text>}
       </View>
@@ -38,7 +39,7 @@ export default function QuestionGalleryRunScreen({ navigation, route }) {
         </View>}>
         {result && <View style={styles.actions}>
           <Text style={styles.message}>stopped_reason: {result.stopped_reason}</Text>
-          <Text style={styles.score}>{result.derived.total_correct} / {result.derived.total_attempted}</Text>
+          <Text style={styles.score}>{result.derived.total_attempted === 0 ? '—' : `${result.derived.total_correct} / ${result.derived.total_attempted}`}</Text>
           <Text style={styles.message}>duration_ms: {result.duration_ms}</Text>
         </View>}
       </BottomSheet>

@@ -14,6 +14,10 @@ test('EGRA remains additive to all standalone item-set identities', () => {
   expect(WELA_PLUS_FULL_2024_1.questions).toHaveLength(11);
   expect(WELA_PLUS_FULL_2024_1.questions.some(q => q.question_code === 'oral_reading' || q.question_code === 'reading_comprehension')).toBe(false);
   expect(questionComponentFor('wela_plus_read_passage')).toEqual({ Component: ReadPassageQuestion, extraProps: {} });
-  expect(questionComponentFor('oral_reading')).toEqual({ Component: ReadPassageQuestion, extraProps: { markingPolarity: 'tap_wrong' } });
+  expect(questionComponentFor('oral_reading')).toEqual({ Component: ReadPassageQuestion, extraProps: {} });
   expect(questionComponentFor('reading_comprehension')).toEqual({ Component: ReadingComprehensionQuestion, extraProps: {} });
+});
+
+test('the oral_reading registry entry has no extra props', () => {
+  expect(questionComponentFor('oral_reading')).toEqual({ Component: ReadPassageQuestion, extraProps: {} });
 });

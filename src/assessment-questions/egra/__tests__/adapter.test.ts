@@ -1,3 +1,4 @@
+import { evaluateBatteryState } from '../../battery/evaluateBatteryState';
 import { egraCatalog } from '../../../../content/egra';
 import { adaptEgraForm, EGRA_FORMS, EGRA_BATTERIES, egraFormFor, listEgraForms, egraItemSetFor, egraBatteryFor, EGRA_LETTER_EXTENSIONS, EGRA_MIN_LETTERS } from '..';
 
@@ -38,6 +39,9 @@ test('all source forms adapt without changing order, case, repeats or identity',
     adapted.battery.questions.forEach((q, i) => {
       expect(q.question_version).toBe(i === 0 ? letterVersion : form.id);
       expect(q.instructions?.[form.languageCode]).toBeTruthy();
+      if (q.question_code === 'oral_reading') {
+        expect(q.instructions?.[form.languageCode]).toBe("Ask the child to read the story aloud. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself when the time is up.");
+      }
       expect(q.durationSec).toBe(i === 3 ? undefined : 60);
       expect(q.materials).toEqual(i === 3 ? null : { item: 'reading_card' });
     });
@@ -126,4 +130,18 @@ test('story questions auto-skip when the child read no story words or the story 
   expect(story('timer', 1).nextQuestion?.question_code).toBe('reading_comprehension');
   // Letters and words never auto-skip yet (stronger skip rules are a later decision).
   expect(evaluateBatteryState(battery, [{ question_code: 'letter_sounds', stopped_reason: 'stop_rule', score: 0 }]).nextQuestion?.question_code).toBe('word_reading');
+});
+
+test('EGRA: the story-questions gate still needs one word marked Correct', () => {
+  const { battery, itemSets } = adaptEgraForm(egraFormFor('dbe-egra-en-fal-2-v1')!);
+  const { buildEgraResult } = require('../../../../test-support/egraResults');
+  const before = ['letter_sounds', 'word_reading'].map(question_code => ({ question_code, stopped_reason: 'timer' as const, score: 5 }));
+  for (const totalCorrect of [0, 1]) {
+    const result = buildEgraResult(itemSets.oral_reading, { reason: 'ea_ended', attempted: 3, correct: totalCorrect ? [0] : [] });
+    expect(result.derived.capture_mode).toBe('sequential');
+    expect(result.items.filter((item: any) => item.metadata.reached)).toHaveLength(3);
+    const state = evaluateBatteryState(battery, [...before, { question_code: result.question_code, stopped_reason: result.stopped_reason, score: result.derived.total_correct }]);
+    expect(state.autoSkips).toEqual(totalCorrect ? [] : [{ question_code: 'reading_comprehension', reason: 'skipped_prerequisite_unmet' }]);
+    expect(state.nextQuestion?.question_code ?? null).toBe(totalCorrect ? 'reading_comprehension' : null);
+  }
 });

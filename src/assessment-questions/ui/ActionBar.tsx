@@ -4,7 +4,9 @@ import { tokens } from '../theme/tokens';
 import { BottomBar } from './BottomBar';
 import { PrimaryButton, SecondaryButton, TextLink } from './Button';
 
-export function DecisionBar({ testIDPrefix: p, onCorrect, onIncorrect, onBack, backDisabled, onEnd, endLabel = 'End test', onSkip }: {
+export function DecisionBar({ testIDPrefix: p, onCorrect, onIncorrect, onBack, backDisabled, onEnd, endLabel = 'End test', onSkip, mode = 'deciding', onFinish }: {
+  mode?: 'deciding' | 'review';
+  onFinish?: () => void;
   testIDPrefix: string;
   onCorrect: () => void;
   onIncorrect: () => void;
@@ -16,14 +18,14 @@ export function DecisionBar({ testIDPrefix: p, onCorrect, onIncorrect, onBack, b
 }) {
   return (
     <BottomBar>
-      <View testID={`${p}-decisions`} style={{ flexDirection: 'row', gap: tokens.space.md }}>
+      {mode === 'review' ? <PrimaryButton label="Finish" testID={`${p}-finish`} onPress={() => onFinish?.()} /> : <View testID={`${p}-decisions`} style={{ flexDirection: 'row', gap: tokens.space.md }}>
         <PrimaryButton tone="marked" icon="check" label="Correct" onPress={onCorrect} flex />
         <PrimaryButton tone="error" icon="cross" label="Incorrect" onPress={onIncorrect} flex />
-      </View>
+      </View>}
       <SecondaryButton icon="back" label="Back" onPress={onBack} disabled={backDisabled} />
       <View testID={`${p}-navigation`} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: tokens.space.xl, rowGap: tokens.space.xs }}>
         {onSkip && <TextLink label="Skip question" onPress={onSkip} />}
-        <TextLink tone="danger" label={endLabel} onPress={onEnd} testID={`${p}-end`} />
+        {mode === 'deciding' && <TextLink tone="danger" label={endLabel} onPress={onEnd} testID={`${p}-end`} />}
       </View>
     </BottomBar>
   );

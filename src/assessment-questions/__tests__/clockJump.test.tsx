@@ -62,7 +62,7 @@ test.each([
 describe.each(sequentialCases)('$name clock corrections', ({ Component, itemSet }) => {
   function start() {
     const onComplete = jest.fn();
-    const screen = render(<Component language="en" itemSet={itemSet} captureMode="sequential"
+    const screen = render(<Component language="en" itemSet={itemSet}
       durationSec={60} onComplete={onComplete} />);
     fireEvent.press(screen.getByText('Start'));
     return { screen, onComplete };
@@ -85,19 +85,6 @@ describe.each(sequentialCases)('$name clock corrections', ({ Component, itemSet 
     expect(validateResult(result, { stopAt: 10 })).toEqual({ valid: true, errors: [] });
   });
 
-  test('a forward clock jump at five seconds still expires at sixty monotonic seconds', () => {
-    const { screen, onComplete } = start();
-    act(() => jest.advanceTimersByTime(5000));
-    act(() => jest.setSystemTime(Date.now() + 3600000));
-    act(() => jest.advanceTimersByTime(54999));
-    expect(onComplete).not.toHaveBeenCalled();
-    expect(screen.getByText('Correct')).toBeTruthy();
-    act(() => jest.advanceTimersByTime(1));
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
-    expect(validateResult(onComplete.mock.calls[0][0])).toEqual({ valid: true, errors: [] });
-  });
-
   test.each([-3600000, 3600000])('Undo excludes the stop-card pause despite a %i ms wall-clock jump', (jump) => {
     const { screen, onComplete } = start();
     act(() => jest.advanceTimersByTime(10000));
@@ -117,40 +104,18 @@ describe.each(sequentialCases)('$name clock corrections', ({ Component, itemSet 
   });
 });
 
-describe('ReadWordsQuestion grid (WelaPLUS Q6) clock corrections', () => {
-  function start() {
+describe.each([...sequentialCases, { name: 'ReadPassageQuestion', Component: ReadPassageQuestion, itemSet: undefined }])('$name timer clock corrections', ({ Component, itemSet }) => {
+  test('a forward clock jump at five seconds still expires at sixty monotonic seconds', () => {
     const onComplete = jest.fn();
-    const screen = render(<ReadWordsQuestion language="en" captureMode="grid"
-      durationSec={60} onComplete={onComplete} />);
+    const screen = render(<Component language="en" itemSet={itemSet} durationSec={60} onComplete={onComplete} />);
     fireEvent.press(screen.getByText('Start'));
-    return { screen, onComplete };
-  }
-
-  test('a backward clock jump preserves End time through delayed last-attempted confirmation', () => {
-    const { screen, onComplete } = start();
-    act(() => jest.advanceTimersByTime(10000));
-    act(() => jest.setSystemTime(Date.now() - 3600000));
-    fireEvent.press(screen.getByText('End'));
-    expect(screen.getByText('Last item attempted')).toBeTruthy();
-    act(() => jest.advanceTimersByTime(90000));
-    expect(onComplete).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByText('Nothing attempted'));
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    const result = onComplete.mock.calls[0][0];
-    expect(result).toMatchObject({ stopped_reason: 'ea_ended', duration_ms: 10000 });
-    expect(validateResult(result)).toEqual({ valid: true, errors: [] });
-  });
-
-  test('a forward clock jump at five seconds does not open the timer marker before sixty seconds', () => {
-    const { screen, onComplete } = start();
+    fireEvent.press(screen.getByText('Correct'));
     act(() => jest.advanceTimersByTime(5000));
     act(() => jest.setSystemTime(Date.now() + 3600000));
     act(() => jest.advanceTimersByTime(54999));
-    expect(screen.queryByText('Last item attempted')).toBeNull();
     expect(onComplete).not.toHaveBeenCalled();
+    expect(screen.getByText('Correct')).toBeTruthy();
     act(() => jest.advanceTimersByTime(1));
-    expect(screen.getByText('Last item attempted')).toBeTruthy();
-    fireEvent.press(screen.getByText('Nothing attempted'));
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete.mock.calls[0][0]).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
     expect(validateResult(onComplete.mock.calls[0][0])).toEqual({ valid: true, errors: [] });

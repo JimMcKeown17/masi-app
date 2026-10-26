@@ -58,7 +58,7 @@ export default function StandaloneTestScreen({ navigation, route }) {
             language={languageCode}
             childName={[child.first_name, child.last_name].filter(Boolean).join(' ')}
             allowSkip={false}
-            captureMode="sequential"
+            endNoun="test"
             onStart={onStart}
             onComplete={onComplete}
           />

@@ -34,9 +34,9 @@ const resultFor = (overrides = {}) => ({
   ...overrides,
 });
 const press = (rendered, ...labels) => labels.forEach(label => fireEvent.press(rendered.getByText(label)));
-const endSequential = rendered => {
-  fireEvent.press(rendered.getByTestId('letter-end'));
-  fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End test'));
+const endSequential = (rendered, prefix = 'letter') => {
+  fireEvent.press(rendered.getByTestId(`${prefix}-end`));
+  fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End question'));
 };
 
 // Use the same real components, fixtures and verdict as the package contract tests.
@@ -61,23 +61,23 @@ const componentCases = [
   ['LetterSoundsQuestion', LetterSoundsQuestion, fixtures.FIXTURE_LETTER_SOUNDS_EN,
     r => { press(r, 'Start', 'Correct'); endSequential(r); }],
   ['ReadWordsQuestion', ReadWordsQuestion, fixtures.FIXTURE_READ_WORDS_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('cat, idle')); press(r, 'End', 'Reached the end'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'word'); }],
   ['ReadSentencesQuestion', ReadSentencesQuestion, fixtures.FIXTURE_READ_SENTENCES_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('The, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'sentences'); }],
   ['ReadPassageQuestion', ReadPassageQuestion, fixtures.FIXTURE_READ_PASSAGE_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByTestId('pill-p1.w1')); press(r, 'End', 'Reached the end'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'passage'); }],
   ['ListenFirstSoundQuestion', ListenFirstSoundQuestion, fixtures.FIXTURE_FIRST_SOUND_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('apple, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'first-sound'); }],
   ['ListenPhonemeBlendQuestion', ListenPhonemeBlendQuestion, fixtures.FIXTURE_PHONEME_BLEND_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('s-u-n, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'blend'); }],
   ['ListenAndAnswerStoryQuestion', ListenAndAnswerStoryQuestion, fixtures.FIXTURE_LISTEN_AND_ANSWER_STORY_EN,
-    r => { press(r, "I've finished reading"); fireEvent.press(r.getByLabelText('What was the name of the bird?, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, "I've finished reading", 'Correct'); endSequential(r, 'story'); }],
   ['LetterWritingFromPicturesQuestion', LetterWritingFromPicturesQuestion, fixtures.FIXTURE_LETTER_WRITING_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByTestId('cell-q5.item_1')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'letter-writing'); }],
   ['WriteCvcsQuestion', WriteCvcsQuestion, fixtures.FIXTURE_WRITE_CVCS_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('jam letter 1 j, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'cvc'); }],
   ['WriteSentencesFromDictationQuestion', WriteSentencesFromDictationQuestion, fixtures.FIXTURE_WRITE_SENTENCES_DICTATION_EN,
-    r => { press(r, 'Start'); fireEvent.press(r.getByLabelText('Mom, idle')); press(r, 'Finish', 'Yes, finish'); }],
+    r => { press(r, 'Start', 'Correct'); endSequential(r, 'dictation'); }],
   ['StoryWritingRubricQuestion', StoryWritingRubricQuestion, fixtures.FIXTURE_STORY_WRITING_EN,
     r => {
       press(r, 'Start');
@@ -150,6 +150,7 @@ describe('question result persistence through real SQLite', () => {
     const result = await emitResult(LetterSoundsQuestion, itemSet, r => {
       press(r, 'Start');
       for (let position = 0; position < 60; position += 1) press(r, 'Correct');
+      press(r, 'Finish');
     });
     expect(result).toMatchObject({ question_version: '2026.2', stopped_reason: 'completed',
       derived: { total_correct: 60, total_attempted: 60, last_attempted_position: 59 } });
@@ -256,8 +257,9 @@ describe('question result persistence through real SQLite', () => {
       expect(row.payload.score).toBe(12);
     }
     if (name === 'ListenAndAnswerStoryQuestion') {
-      expect(result.items.every(i => i.metadata === undefined)).toBe(true);
-      expect(read.items.every(i => JSON.stringify(i.metadata) === '{}')).toBe(true);
+      const expected = result.items.map((_, position) => ({ reached: position === 0, asked: position === 0 }));
+      expect(result.items.map(i => i.metadata)).toEqual(expected);
+      expect(read.items.map(i => i.metadata)).toEqual(expected);
     }
   });
 

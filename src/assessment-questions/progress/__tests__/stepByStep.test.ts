@@ -8,6 +8,48 @@ import type { StepAction, StepState, StopRule } from '../stepByStep';
 const STOP_RULE: StopRule = { kind: 'consecutive_wrong', stop_at: 10 };
 const TOTAL_ITEMS = 60;
 
+const ctx = { totalItems: 5, stopRule: { kind: 'consecutive_wrong', stop_at: 3 } as const };
+const run = (...actions: StepAction[]) => actions.reduce((s, a) => stepReducer(s, a, ctx), initStepState());
+const D = (correct: boolean) => ({ type: 'decide', correct } as const);
+
+test('flip inverts a marked item below the cursor and counts one correction', () => {
+  const s = run(D(true), D(false), { type: 'flip', position: 0 });
+  expect(s).toMatchObject({ cursor: 2, decisions: { 0: false, 1: false }, correctionCount: 1, stopped: false, maxConsecutiveWrong: 2 });
+});
+test.each([[-1], [2], [7], [1.5]])('flip at %p is ignored', (position) => {
+  const before = run(D(true), D(true));
+  expect(stepReducer(before, { type: 'flip', position }, ctx)).toBe(before);
+});
+test('flip is ignored while stopped', () => {
+  const stopped = run(D(false), D(false), D(false));
+  expect(stopped.stopped).toBe(true);
+  expect(stepReducer(stopped, { type: 'flip', position: 0 }, ctx)).toBe(stopped);
+});
+test('a flip never stops; the next decide re-checks the run from the marks', () => {
+  const flipped = run(D(false), D(false), D(true), { type: 'flip', position: 2 });
+  expect(flipped).toMatchObject({ cursor: 3, decisions: { 0: false, 1: false, 2: false }, maxConsecutiveWrong: 3 });
+  expect(flipped.stopped).toBe(false);
+  expect(stepReducer(flipped, D(false), ctx).stopped).toBe(true);
+});
+test('a flip that leaves the first row all wrong does not stop retroactively', () => {
+  const firstRow = { totalItems: 6, stopRule: { kind: 'first_row_all_wrong', first_row_length: 3 } as const };
+  let s = [D(false), D(false), D(true), D(true)].reduce((x, a) => stepReducer(x, a, firstRow), initStepState());
+  s = stepReducer(s, { type: 'flip', position: 2 }, firstRow);
+  expect(s).toMatchObject({ cursor: 4, decisions: { 0: false, 1: false, 2: false, 3: true } });
+  expect(s.stopped).toBe(false);
+  expect(stepReducer(s, D(false), firstRow).stopped).toBe(false);
+});
+
+test('flipping incorrect to correct recomputes the longest run without mutating prior marks', () => {
+  const before = run(D(false), D(false));
+  Object.freeze(before.decisions);
+  Object.freeze(before);
+  expect(stepReducer(before, { type: 'flip', position: 0 }, ctx)).toMatchObject({
+    cursor: 2, decisions: { 0: true, 1: false }, correctionCount: 1, stopped: false, maxConsecutiveWrong: 1,
+  });
+  expect(before.decisions).toEqual({ 0: false, 1: false });
+});
+
 function step(
   state: StepState,
   action: StepAction,

@@ -24,7 +24,7 @@ describe('ListenFirstSoundQuestion — OSS contract', () => {
       'ink',
       'jug',
     ].forEach((p) => {
-      fireEvent.press(rendered.getByLabelText(`${p}, idle`));
+      fireEvent.press(rendered.getByText('Correct'));
     });
     fireEvent.press(rendered.getByText('Finish'));
 
@@ -33,7 +33,7 @@ describe('ListenFirstSoundQuestion — OSS contract', () => {
     expect(v.errors).toEqual([]);
   });
 
-  test('Finish-with-unmarked confirmation path also emits a contract-valid Result', async () => {
+  test('early End with an unreached tail also emits a contract-valid Result', async () => {
     const { rendered, verdict } = runContractTest(ListenFirstSoundQuestion, {
       language: 'en',
       itemSet: FIXTURE_FIRST_SOUND_EN,
@@ -41,9 +41,9 @@ describe('ListenFirstSoundQuestion — OSS contract', () => {
     });
 
     fireEvent.press(rendered.getByText('Start'));
-    fireEvent.press(rendered.getByLabelText('apple, idle'));
-    fireEvent.press(rendered.getByText('Finish'));
-    fireEvent.press(rendered.getByText('Yes, finish'));
+    fireEvent.press(rendered.getByText('Correct'));
+    fireEvent.press(rendered.getByTestId('first-sound-end'));
+    fireEvent.press(rendered.getByText('End question'));
 
     const v = await verdict;
     expect(v.valid).toBe(true);

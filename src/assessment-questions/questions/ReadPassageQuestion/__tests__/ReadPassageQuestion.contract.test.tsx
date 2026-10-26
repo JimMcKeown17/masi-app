@@ -1,4 +1,4 @@
-import { fireEvent } from '@testing-library/react-native';
+import { fireEvent, within } from '@testing-library/react-native';
 import { runContractTest } from '../../../contractTest/runContractTest';
 import { ReadPassageQuestion } from '..';
 import { FIXTURE_READ_PASSAGE_EN } from '../../../testFixtures';
@@ -12,9 +12,9 @@ describe('ReadPassageQuestion — OSS contract', () => {
       durationSec: 60,
     });
     fireEvent.press(rendered.getByText('Start'));
-    fireEvent.press(rendered.getByTestId('pill-p1.w1'));
-    fireEvent.press(rendered.getByText('End'));
-    fireEvent.press(rendered.getByText('Reached the end'));
+    fireEvent.press(rendered.getByText('Correct'));
+    fireEvent.press(rendered.getByTestId('passage-end'));
+    fireEvent.press(within(rendered.getByTestId('end-confirmation')).getByText('End question'));
     const v = await verdict;
     expect(v.valid).toBe(true);
     expect(v.errors).toEqual([]);

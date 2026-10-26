@@ -86,3 +86,22 @@ test.each(['decision', 'toggle'] as const)('%s composition owns exactly one acti
     expect(panel.findAllByType(UiText).map((text: { props: { children?: React.ReactNode } }) => text.props.children)).toEqual(['Total: 3 / 4', 'Finish', 'Skip question']);
   }
 });
+
+
+test('review has Finish, Back and optional Skip, with no decisions or End link', () => {
+  const callbacks = props(), onFinish = jest.fn(), onSkip = jest.fn();
+  const r = render(<DecisionBar {...callbacks} mode="review" onFinish={onFinish} onSkip={onSkip} />);
+  expect(r.getAllByRole('button').map(button => button.props.accessibilityLabel)).toEqual(['Finish', 'Back', 'Skip question']);
+  expect(r.getByTestId('letter-finish')).toHaveStyle({ backgroundColor: tokens.color.ink });
+  expect(r.queryByTestId('letter-decisions')).toBeNull();
+  expect(r.queryByTestId('letter-end')).toBeNull();
+  fireEvent.press(r.getByText('Finish'));
+  fireEvent.press(r.getByText('Back'));
+  fireEvent.press(r.getByText('Skip question'));
+  expect(onFinish).toHaveBeenCalledTimes(1);
+  expect(callbacks.onBack).toHaveBeenCalledTimes(1);
+  expect(onSkip).toHaveBeenCalledTimes(1);
+  expect(callbacks.onEnd).not.toHaveBeenCalled();
+  r.rerender(<DecisionBar {...callbacks} mode="review" onFinish={onFinish} />);
+  expect(r.queryByText('Skip question')).toBeNull();
+});

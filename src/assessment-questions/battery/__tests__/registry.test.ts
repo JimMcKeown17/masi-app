@@ -1,4 +1,6 @@
 import {
+  questionComponentFor,
+  ReadWordsQuestion,
   batteryFor,
   bundledItemSetFor,
   skippedResult,
@@ -142,5 +144,16 @@ test('every battery Question and skip reason produces valid bundled provenance',
         expect(validateResult(result)).toEqual({ valid: true, errors: [] });
       }
     }
+  }
+});
+
+
+test('the Word Reading quick test keeps word_reading@2026.1 with no stop rule', () => {
+  expect(questionComponentFor('word_reading')).toEqual({ Component: ReadWordsQuestion, extraProps: {} });
+  for (const language of ['en', 'xh', 'af']) {
+    const set = bundledItemSetFor('word_reading', '2026.1', language)!;
+    expect(set).toMatchObject({ question_code: 'word_reading', question_version: '2026.1',
+      item_set_id: `word_reading@2026.1.${language}` });
+    expect((set as { stop_rule?: unknown }).stop_rule ?? null).toBeNull();
   }
 });
