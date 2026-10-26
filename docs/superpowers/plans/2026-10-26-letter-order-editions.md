@@ -257,13 +257,14 @@ edition a class can reach resolves to a release pack.
 
 **Files:**
 - Modify: `src/db/migrations.js` (version 19, `classes_letter_order_edition`)
-- Modify: `jest.integration.config.js` (add `classLetterOrderMigration.test.js` to `testMatch`, an explicit list)
+- Modify: `jest.integration.config.js` (add `classLetterOrderMigration.test.js` and `classLetterOrderSync.test.js` to `testMatch`, an explicit list)
 - Modify: `src/db/repositories/classesRepository.js` (`CLASS_COLUMNS`, `saveClass`, `updateClass`, new `getActiveClassForChild`)
 - Modify: `src/services/offlineSync.js` (`INTENTIONALLY_UNSYNCED.classes`)
 - Modify: `src/session/handleDataClient.js` (the header in `fencedFetch`)
 - Modify: `documentation/rls-sync-contract-map.md`
 - Test: `__tests__/classesRepository.test.js`, `__tests__/handleDataClient.test.js`,
-  `__tests__/syncContractCompleteness.test.js`, new `__tests__/classLetterOrderMigration.test.js` (real SQLite)
+  `__tests__/syncContractCompleteness.test.js`, `__tests__/sqliteFoundation.test.js`, new
+  `__tests__/classLetterOrderMigration.test.js` and `__tests__/classLetterOrderSync.test.js` (both real SQLite)
 
 **Interfaces:**
 - Consumes: `NEW_CLASS_LETTER_ORDER_EDITION`, `MASI_LETTER_ORDER_EDITIONS` (Task 1).
@@ -298,33 +299,45 @@ Phone rules:
 
 - [ ] **Step 1: Write the failing tests.**
   - Migration test (real SQLite): a v18 database holding a class migrates to 19, and the class
-    reads `letter_order_edition: '2026-10-23'`; a new insert without the column gets it;
-    `CURRENT_SCHEMA_VERSION` is 19.
-  - `classesRepository`:
-    - a synced server row with `2026-10-23` is stored;
-    - a server row for a class with a pending local rename updates only the edition, leaving the
-      local name and `sync_status: 'pending'`;
+    reads `letter_order_edition: '2026-10-23'`; a new insert without the column gets it.
+  - `sqliteFoundation.test.js`: `CURRENT_SCHEMA_VERSION` is 19 (line 143), and the exact migration
+    list (lines 586-605) ends with `{ version: 19, name: 'classes_letter_order_edition' }`.
+  - `classesRepository`. Server rows in these tests carry `2099-01-01`, a value the column default
+    cannot produce, so a missed write fails the test:
+    - a synced server row with `2099-01-01` is stored;
+    - a server row for a class with a pending local rename updates only the edition to `2099-01-01`,
+      leaving the local name and `sync_status: 'pending'`;
     - a server row with `letter_order_edition: null`, and one without the key, leaves the stored value;
     - a local `saveClass` passing `letter_order_edition: 'bogus'` stores `2026-10-23`;
     - `updateClass(id, { name: 'X', letter_order_edition: 'bogus' })` keeps `2026-10-23`;
-    - `updateClass(id, { home_language: 'English' })` keeps the edition (Review Focus 2);
+    - `updateClass(id, { home_language: 'English' })` keeps the edition;
     - `getActiveClassForChild` returns the active membership's class even when `children.class_id`
       names another class, ignores exited memberships, prefers the active year, and returns `null`
       with no active membership.
   - Upload: `_testBuildSyncPayload` for a classes `insert` and `update` whose record holds
     `letter_order_edition` produces payloads without the key.
+  - `classLetterOrderSync.test.js` (Review Focus 2, real SQLite, the `offlineSyncOutbox.test.js`
+    pattern: `createOutboxSyncEngine` with `createSupabaseMock`):
+    - create a class with `classesRepository.saveClass` (local), then rename it with `updateClass`
+      before any upload;
+    - run `engine.syncAll({ tableName: 'classes' })`. Every transmitted `classes` payload lacks
+      `letter_order_edition`, the last one carries the new name, the class's outbox rows are gone,
+      and the class is `synced`;
+    - save the pulled server row (the new name, edition `2099-01-01`) with `saveClass`. The class
+      reads the new name and `2099-01-01`.
   - `handleDataClient`: a `dataClient.from('classes').upsert(...)` through `fencedFetch` sends
     `X-Masi-Letter-Order-Editions: 2026-10-23` alongside `Authorization`. This is the handoff's
     "a class insert through the outbox carries it": the outbox uploads with this same
     `dataClient`. Existing outbox tests mock the client and so would skip `fencedFetch`.
 
-- [ ] **Step 2: Register the migration test and run them to verify they fail.** Add
-  `'<rootDir>/__tests__/classLetterOrderMigration.test.js'` to `testMatch` in
+- [ ] **Step 2: Register the new tests and run them to verify they fail.** Add
+  `'<rootDir>/__tests__/classLetterOrderMigration.test.js'` and
+  `'<rootDir>/__tests__/classLetterOrderSync.test.js'` to `testMatch` in
   `jest.integration.config.js`; a file missing from that list never runs in the integration gate.
-  Confirm with `npm run test:integration -- --listTests | grep classLetterOrderMigration` (one line).
-  Then run `npm test -- __tests__/classesRepository.test.js __tests__/handleDataClient.test.js`
-  and `npm run test:integration -- __tests__/classLetterOrderMigration.test.js`. Expected: FAIL on the
-  missing column, the missing method and the missing header, never "No tests found".
+  Confirm with `npm run test:integration -- --listTests | grep classLetterOrder` (two lines).
+  Then run `npm test -- __tests__/classesRepository.test.js __tests__/handleDataClient.test.js __tests__/sqliteFoundation.test.js`
+  and `npm run test:integration -- __tests__/classLetterOrderMigration.test.js __tests__/classLetterOrderSync.test.js`.
+  Expected: FAIL on the missing column, the missing method and the missing header, never "No tests found".
 
 - [ ] **Step 3: Implement the rules above.**
 
@@ -361,9 +374,11 @@ Phone rules:
     - `getPackById` (unchanged);
     - `packLetterOrderId`;
     - `CURRENT_PACK_IDS` shaped `{ release: { [orderId]: packId }, preview: { [orderId]: packId } }`.
-    - `getPack(languageCode, options)` survives this task only as a shim:
-      `getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code)?.id, options)`.
-      Task 5 deletes it.
+    - `getPack(languageCode, options)` survives this task with unchanged behaviour. It reads a
+      private `LEGACY_LANGUAGE_PACK_IDS`, which is today's language-keyed `CURRENT_PACK_IDS` value
+      (the v1 release packs and `isixhosa-candidates-preview-v1`). So no lesson changes in this
+      task, and the full suite stays green. Task 5 switches lessons to `getPackForOrder` and
+      deletes both.
 
 `CURRENT_PACK_IDS`:
 - release: `isixhosa-order-2026-10-23` → `isixhosa-interim-letters-v2`,
@@ -410,8 +425,8 @@ Phone rules:
     - `getPackForOrder('english-order-legacy')` is `null`;
     - `getPackForOrder(<order>)` returns the preview pack only with `{ allowPreview: true }`.
 
-    Delete the tests pinning the old language-keyed map and "every registry tracker order except
-    isiXhosa's".
+    Delete the tests pinning the old language-keyed `CURRENT_PACK_IDS` and "every registry tracker
+    order except isiXhosa's". Tests of `getPack` results stay until Task 5 deletes `getPack`.
 
 - [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lintMasiPack.test.js __tests__/lessonPlanPacks.test.js`. Expected: FAIL.
 
@@ -425,8 +440,9 @@ Phone rules:
   - `contentDiagnostics.currentPacks` keys by `xh`/`en`/`af`, through
     `getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, { allowPreview })`.
 
-- [ ] **Step 4: Run the tests.** Run the focused tests plus `npm test -- __tests__/contentDiagnostics.test.js __tests__/buildIsixhosaTestPack.test.js`. Expected: PASS.
-  The generator test still passes because its output id `isixhosa-candidates-preview-v1` is in the table.
+- [ ] **Step 4: Run the tests.** Run the focused tests plus `npm test -- __tests__/contentDiagnostics.test.js __tests__/buildIsixhosaTestPack.test.js`,
+  then the full `npm test`. Expected: PASS. The generator test still passes because its output id
+  `isixhosa-candidates-preview-v1` is in the table.
 
 - [ ] **Step 5: Update `documentation/content-packs.md`.**
   - Packs name their `letter_order`, and lint checks it.
@@ -444,10 +460,14 @@ Phone rules:
 - Modify: `src/lessonPlan/inputs/lessonInputs.js`, `src/hooks/useLessonDraft.js`, `src/lessonPlan/packs/index.js` (delete the `getPack` shim)
 - Modify: `src/components/lessons/LessonLettersSection.js`, `src/screens/lessons/LessonScreen.js`, `src/components/lessons/UpNextCard.js`, `src/components/lessons/GroupLessonRow.js`, `src/utils/lessonDates.js`
 - Modify: `src/lessonPlan/engine/index.js` (the `alphabet` doc comment only; the engine and its vectors do not change)
-- Test: `__tests__/lessonInputs.test.js`, `__tests__/useLessonDraft.test.js`, `__tests__/LessonScreen.test.js`, `__tests__/lessonPlanPacks.test.js`
+- Test: `__tests__/lessonInputs.test.js`, `__tests__/useLessonDraft.test.js`, `__tests__/LessonScreen.test.js`, `__tests__/lessonPlanPacks.test.js`,
+  `__tests__/lessonPlanEngine.realPacks.test.js`, `__tests__/lessonPlanPackIndex.test.js`
 
 **Interfaces:**
 - Consumes: `getTeachingOrder`, `UPDATE_APP_LETTERS_MESSAGE` (Task 1); `getPackForOrder`, `getPackById`, `packLetterOrderId` (Task 4); class rows with `letter_order_edition` (Task 3).
+
+This task switches lessons from the v1 packs to the 2026-10-23 packs, so it also owns the existing
+tests that switch breaks (Step 1, last group).
 - Produces:
   - `lessonOrderAndPack({ lessonClass, languageCode, packId, allowPreview }) => { teachingOrder: TeachingOrder, pack: object | null }`
     in `lessonInputs.js`:
@@ -513,9 +533,31 @@ Phone rules:
     - the hook exposes `teachingOrder`;
     - the existing test "a frozen version-1 draft keeps its stored review letters when resumed and
       saved" passes unchanged.
-  - `LessonScreen.test.js`: a lesson for an unknown-edition class shows
-    `Update the app to teach this class's letters.` and no letter tiles.
+  - `LessonScreen.test.js`:
+    - a lesson for an unknown-edition class shows `Update the app to teach this class's letters.`
+      and no letter tiles;
+    - a new preview lesson (bundled preview v2, which has no readers) shows
+      `No books for isiXhosa yet.`
   - `lessonPlanPacks.test.js`: `getPack` is no longer exported.
+  - Existing tests the switch breaks. Update each so it keeps what it checks:
+    - `lessonInputs.test.js:276-283` ("lesson input uses a pinned pack…"): a new preview lesson now
+      gets `isixhosa-candidates-preview-v2`, and the pinned-v1 lines move into the table above.
+    - `lessonPlanEngine.realPacks.test.js` and `lessonPlanPackIndex.test.js` call `getPack`. Their
+      engine fixture becomes `getPackById('isixhosa-candidates-preview-v1', { allowPreview: true })`.
+      The engine ignores orders and v1 stays bundled, so these suites keep their reader and blend
+      coverage. The release loop (`realPacks` lines 66-77) uses
+      `getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, options)`.
+    - `LessonScreen.test.js` `previewLesson()` (line 343) and the tests that use it (the blend
+      tests at lines 356-477 and the two ECD tests at 493-507) run on preview v2. The children's mastered letters become the first five steps of
+      `isixhosa-order-2026-10-23`, `o m l a k u e n i z s t`, in place of v1's `… i t s d`.
+      Expected blend items and tier labels are re-derived from v2's content. Each test keeps its
+      purpose: six suggested blends with hyphens, `+ more`, tier switching and the names of
+      children ahead, a ticked blend staying visible, and Save recording the tier.
+    - `LessonScreen.test.js` "the Read tick stores the book as printed" (lines 478-492) needs a
+      reader, and v2 has none. It runs on a test-local pack: preview v2 plus reader `xh-int-v1-r01`
+      (`Molo, Lolo!`) and its `reader_details`, copied from preview v1. That reader is on step 1
+      and uses only `m o l a`, which is v2's step 1 too. Serve the pack for that test only, for
+      example with `jest.spyOn` on the packs module's `getPackForOrder`. Its assertions stay.
 
 - [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js`. Expected: FAIL.
 
