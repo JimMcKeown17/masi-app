@@ -6009,3 +6009,76 @@ numbers), `ROADMAP.md` (Story writing, not Q11) and `design-system.md` (`dismiss
 the 13 adapter hashes, 16 shared item-set identities, every trigger and non-trigger, and no new
 first-row skips in the 14 old Batteries. Orchestrator re-run: the seven focused suites passed 7
 suites / 329 tests; types clean.
+
+
+### 2026-10-27 — EGRA content and skip rules: device-gate fixes (word card rows, skipped-row labels)
+
+Implemented Jim's two 2026-10-27 Galaxy A03 device-gate decisions on
+`feat/egra-content-skip-rules` in the `egra-content-spec` worktree.
+
+Words now set `WORD_PAGE_LAYOUT.breakAtCardRow: true`, retaining two columns, ten-item
+capacity, whole-card-row packing and oversized-row pagination. The 50-word isiZulu shape
+still has five pages of two card rows; each page now displays `2,2,1 | 2,2,1`, with one dashed
+divider before display row four. Positions 0–9 remain on page one. Eight-word card rows keep
+their existing one-card-row/four-display-row pages; their pagination and Question coverage
+was retained.
+
+Frame review found no fixed five-row assumption in production: `CaptureBody` passes all
+Question pages to `PagedGrid`, which sizes from the maximum display-row and divider counts.
+For six word rows and one divider it accounts for six gaps (four within groups and two divider
+margins) plus the 1dp line. Rendered geometry tests at 360 × 300dp prove six tile rows of
+263 / 6dp, 6dp gaps and an exactly 300dp frame without scrolling or overflow. Normal 10dp gaps
+retain the 159dp word column width at 360dp. Added short-word-page cases prove that tile
+sizes and the shared frame remain stable across pages. The existing 40dp tile / 6dp gap
+floor means this shape needs at least 277dp of grid height; native complete-screen and
+large-text fit remain device gates. No `PagedGrid` production change was necessary.
+
+`buildRunView` now returns the reason alone for skipped-row `detail`: manual reason,
+first-row trigger label, No story words read, or Not reached. Both overview and summary
+retain the neutral Skipped chip and explicitly announce `Skipped, <reason>` in each skipped
+row's accessibility label. Other row details and score suffixes are unchanged. The real-SQLite
+WelaPLUS integration expectation now uses `detail: label`.
+
+Repo-wide prefix/consumer search found no other runtime dependency on `Skipped · `:
+`BatteryQuestionScreen` uses writable/next state, and history/results/export do not parse
+this display prefix. Remaining literal examples are in documentation and the earlier static
+skip-card mockup. Protected standing-doc wording (including word flow and skipped labels)
+is left for the orchestrator's coordinated update, per the task boundary.
+
+TDD exercised the public paginator, public view builder and rendered screens. All Node
+commands below were prefixed with `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command | RED | GREEN |
+|---|---|---|
+| `npx jest src/assessment-questions/ui/__tests__/paginate.test.ts --runInBand` | 1 failed suite; 1 failed / 31 passed tests (32 total): continuous five-row shape instead of six card-aligned rows | 1 suite / 32 tests passed / 0 snapshots; exit 0 |
+| `npx jest __tests__/batteryRun.test.js --runInBand --silent` | 1 failed suite; 7 failed / 46 passed tests (53 total): unwanted Skipped prefix | 1 suite / 53 tests passed / 0 snapshots; exit 0 |
+| `npx jest __tests__/BatteryOverviewScreen.test.js --runInBand --silent` | 1 failed suite; 1 failed / 59 passed tests (60 total): missing Skipped in accessible row label | 1 suite / 60 tests passed / 0 snapshots; exit 0 |
+| `npx jest __tests__/BatteryRunSummaryScreen.test.js --runInBand --silent` | 1 failed suite; 1 failed / 35 passed tests (36 total): missing Skipped in accessible row label | 1 suite / 36 tests passed / 0 snapshots; exit 0 |
+
+| Verification command | Result |
+|---|---|
+| `npx jest src/assessment-questions/ui/__tests__/PagedGrid.test.tsx src/assessment-questions/questions/ReadWordsQuestion --runInBand --silent` | PASS: 3 suites / 42 tests / 0 snapshots; before adding two shared-frame word cases; exit 0 |
+| `npx jest src/assessment-questions/ui __tests__/batteryRun.test.js __tests__/BatteryOverviewScreen.test.js __tests__/BatteryRunSummaryScreen.test.js src/assessment-questions/questions/ReadWordsQuestion` | PASS: 23 suites / 373 tests / 0 snapshots; exit 0 |
+| `npx jest --silent` | PASS first attempt: 433 suites / 6,574 tests / 14 snapshots; both known load-flake suites passed; no serial rerun needed; exit 0 |
+| `npm run test:integration` | PASS: 78 suites / 966 tests / 0 snapshots, including real-SQLite WelaPLUS trigger journeys; exit 0 |
+| `npm run test:types` | PASS: strict tsc, no errors; exit 0 |
+| `git diff --check` | PASS before and after this append: no output; exit 0 |
+
+Integration output included expected error-path diagnostics; all suites passed. No native
+device recheck, hosted action or release verification was performed. No tests were deleted.
+Only four one-line production changes were needed, with seven test files updated and this
+single build-log entry appended. No protected documentation was edited. No branch switch,
+staging, commit, stash or other git-state mutation was performed. Orchestrator review,
+re-verification, documentation reconciliation, native recheck and commit remain the handoff.
+
+Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+Orchestrator additions. On the A03 (build 50) the skip card still showed a grab handle, which suggests
+a swipe that does nothing. `BottomSheet` now hides the handle when `dismissible={false}`, at `opacity: 0`
+so the title does not move; no sheet in the app is draggable, and the capture stop card already has no
+handle (`__tests__/BottomSheet.test.js` adds the case; 3 suites / 95 tests with the skip-card and
+overview suites). Jim chose both changes in this entry on 2026-10-27, after the device pass showed
+"vela | hlela" on isiZulu word pages and "Skipped · No story words read" wrapping beside the Skipped
+chip at 360dp. Docs updated by the orchestrator: `CONTEXT.md` (Skip rule example),
+`design-system.md` (word paging; `dismissible` hides the handle), and a dated amendment in the
+2026-10-26 spec.

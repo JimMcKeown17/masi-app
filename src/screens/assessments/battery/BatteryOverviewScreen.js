@@ -40,7 +40,7 @@ function QuestionRow({ row, writable, onStart, onSkip, showDivider, onLayout }) 
   // Re-measure a newly highlighted row even when its outer bounds did not change.
   return <View key={row.state} testID={`battery-row-${row.question.question_code}`} onLayout={onLayout}>
     <ListRow title={row.question.title} subtitle={row.detail} showDivider={showDivider}
-      accessibilityLabel={`${row.number}. ${row.question.title}, ${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
+      accessibilityLabel={`${row.number}. ${row.question.title}, ${row.state === 'skipped' ? 'Skipped, ' : ''}${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
       disabled={!startable} onPress={() => onStart(row.question.question_code)}
       style={row.state === 'next' ? styles.next : null}
       lead={<View style={[styles.number, row.state === 'done' && styles.numberDone,

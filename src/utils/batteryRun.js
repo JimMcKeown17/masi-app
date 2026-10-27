@@ -90,7 +90,7 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
             label = 'No story words read';
           }
         }
-        detail = `Skipped · ${label}`;
+        detail = label;
       } else {
         rowState = 'done';
         detail = 'Done';

@@ -187,6 +187,12 @@ its own story rule reads `Skipped · No story words read`, in WelaPLUS and Full 
 comes from the trigger, which the app can work out from the saved results; nothing extra is stored.
 A run resumed later shows the same row labels.
 
+> **Amended 2026-10-27 (Jim, after the A03 device gate):** the row shows the reason alone
+> (`Letters first row wrong`, `No story words read`, or a manual reason such as `Child refused`) beside
+> the existing **Skipped** chip, because `Skipped · …` repeated the chip and wrapped to two lines at
+> 360dp. Screen readers still hear “Skipped, <reason>”. The same review moved word pages to break at
+> card rows (isiZulu's rows of 5 had ended mid-line), and the skip card answers only to **Got it**.
+
 ## 5. Full EGRA
 
 - **One Full EGRA per language** (Jim), still called "Full EGRA": isiXhosa, English (Home Language),

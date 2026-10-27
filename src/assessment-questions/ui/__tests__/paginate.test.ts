@@ -42,15 +42,16 @@ test('fixture letters 12,12,1 → 2 pages: [row 1], [rows 2–3]', () => {
   expect(pages[1].displayRows.map(row => [row.positions.length, row.startsCardRow])).toEqual([[5,false],[5,false],[2,false],[1,true]]);
 });
 
-test('word_reading 10×5 → 5 pages of 2 card rows, continuous display rows of 2', () => {
+test('word_reading 10×5 → 5 pages of 2 card rows, each starting a display row', () => {
   const pages = paginate(rowsFromLengths(Array(10).fill(5)), WORD_PAGE_LAYOUT);
   expect(pages.map(p => [p.firstCardRow, p.lastCardRow])).toEqual([[0,1],[2,3],[4,5],[6,7],[8,9]]);
   expect(pages[0].positions).toEqual(Array.from({ length: 10 }, (_, i) => i));
   for (const page of pages) {
-    expect(lengths(page.displayRows)).toEqual([2,2,2,2,2]);
-    expect(page.displayRows.every(row => !row.startsCardRow)).toBe(true);
+    expect(lengths(page.displayRows)).toEqual([2,2,1,2,2,1]);
+    expect(page.displayRows.map(row => row.startsCardRow)).toEqual([false,false,false,true,false,false]);
   }
-  expect(pages[0].displayRows[2].positions).toEqual([4,5]);
+  expect(pages[0].displayRows[2].positions).toEqual([4]);
+  expect(pages[0].displayRows[3].positions).toEqual([5,6]);
 });
 
 test('wela_plus_read_words 8,8,8,8,8 → 5 pages of one card row, four full display rows each', () => {

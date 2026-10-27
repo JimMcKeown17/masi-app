@@ -45,7 +45,7 @@ test.each(['completed', 'skipped_tired'])('EGRA persists comprehension auto-skip
     assessmentId: expect.any(String), userId: 'ea-1', childId: CHILD.id, batteryRunId: ID,
     result: skippedResult(battery.questions[3], 'en', 'skipped_prerequisite_unmet'),
   });
-  expect(screen.getByText('Skipped · No story words read')).toBeTruthy();
+  expect(screen.getByText('No story words read')).toBeTruthy();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
   screen.refresh();
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
@@ -174,7 +174,8 @@ test('rows: done shows score / max and a success badge; skipped shows reason; ne
   expect(rows).toHaveLength(11);
   expect(within(rows[0]).getByText('Done')).toBeTruthy();
   expect(within(rows[0]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: '34 / 60', tone: 'success' });
-  expect(within(rows[2]).getByText('Skipped · Child is tired')).toBeTruthy();
+  expect(within(rows[2]).getByText('Child is tired')).toBeTruthy();
+  expect(screen.getByLabelText(`3. ${BATTERY.questions[2].title}, Skipped, Child is tired`)).toBeTruthy();
   expect(within(rows[2]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: 'Skipped', tone: 'neutral' });
   expect(StyleSheet.flatten(rows[4].props.style)).toMatchObject({ backgroundColor: colors.red50 });
   expect(screen.getByRole('button', { name: 'Skip Letter writing' })).toHaveTextContent('⋯');
@@ -221,7 +222,7 @@ test('confirming a skip saves skippedResult with batteryRunId and refreshes the 
     result: skippedResult(BATTERY.questions[5], 'xh', 'skipped_tired'),
   });
   await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
-  expect(screen.UNSAFE_getAllByType(ListRow)[5].props.subtitle).toBe('Skipped · Child is tired');
+  expect(screen.UNSAFE_getAllByType(ListRow)[5].props.subtitle).toBe('Child is tired');
   expect(mockSync).toHaveBeenCalledTimes(1);
 });
 
@@ -676,7 +677,7 @@ const noticeSheet = screen => screen.UNSAFE_getByType(SkipNoticeSheet);
 const expectAllSkipped = screen => {
   expect(noticeSheet(screen).props.skipped).toEqual(currentBattery.questions.slice(5).map(question => question.title));
   const rows = screen.UNSAFE_getAllByType(ListRow);
-  expect(rows.slice(5).map(row => row.props.subtitle)).toEqual(Array(7).fill('Skipped · Letters first row wrong'));
+  expect(rows.slice(5).map(row => row.props.subtitle)).toEqual(Array(7).fill('Letters first row wrong'));
 };
 
 test.each([
@@ -784,7 +785,7 @@ test('a prerequisite-only run never shows the card', async () => {
   currentRun([resultRow(currentBattery.questions[0]), { ...resultRow(currentBattery.questions[7]), score: 0 }, savedAutoSkip('reading_comprehension')]);
   const screen = renderOverview();
   await screen.findByText('WelaPLUS · isiXhosa · 3 of 12 decided');
-  expect(screen.getByText('Skipped · No story words read')).toBeTruthy();
+  expect(screen.getByText('No story words read')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
 });
 

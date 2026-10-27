@@ -60,15 +60,19 @@ test('every tile renders with flex before layout, then receives the measured col
   expect(r.queryByTestId('card-row-divider')).toBeNull();
 });
 
-test('continuous word pages have no dividers and use the word column count', () => {
+test('word pages separate card rows with a divider and retain the word column width', () => {
   const page = paginate(rowsFromLengths([5, 5]), WORD_PAGE_LAYOUT)[0];
   const r = render(<PagedGrid pages={[page]} pageIndex={0} variant="word" layout={WORD_PAGE_LAYOUT} testID="grid"
     renderTile={(position, size) => <MarkTile variant="word" state="idle" text={String(position)} accessibilityLabel={`item ${position}`} {...size} />} />);
   fireEvent(r.getByTestId('grid'), 'layout', { nativeEvent: { layout: { width: 360 } } });
   expect(r.getAllByLabelText(/^item \d+$/)).toHaveLength(10);
-  expect(parentView(parentView(r.getByLabelText('item 4')))).toBe(parentView(parentView(r.getByLabelText('item 5'))));
+  const lastRow = parentView(parentView(r.getByLabelText('item 4')));
+  const nextRow = parentView(parentView(r.getByLabelText('item 5')));
+  expect(lastRow).not.toBe(nextRow);
+  expect(within(lastRow).getAllByLabelText(/^item \d+$/)).toHaveLength(1);
+  expect(within(nextRow).getAllByLabelText(/^item \d+$/).map(tile => tile.props.accessibilityLabel)).toEqual(['item 5', 'item 6']);
   expect(r.getByLabelText('item 4')).toHaveStyle({ width: 159 });
-  expect(r.queryByTestId('card-row-divider')).toBeNull();
+  expect(r.getAllByTestId('card-row-divider')).toHaveLength(1);
 });
 
 test.each([
@@ -149,21 +153,24 @@ test('a full 10-word page fits a 360 by 300dp grid without scrolling or changing
   const r = sizedPage('word', 300);
   const { tiles, rows, gap, heights, total } = pageGeometry(r);
   expect(tiles).toHaveLength(10);
-  expect(rows).toHaveLength(5);
+  expect(rows).toHaveLength(6);
   expect(gap).toBe(6);
   heights.forEach(height => {
-    expect(height).toBeCloseTo(55.2);
-    expect(height).toBeLessThanOrEqual((300 - 4 * gap) / 5);
+    expect(height).toBeCloseTo(263 / 6);
+    expect(height).toBeLessThanOrEqual((300 - 6 * gap - 1) / 6);
   });
   expect(total).toBeLessThanOrEqual(300);
+  expect(r.getAllByTestId('card-row-divider')).toHaveLength(1);
+  const frame = parentView(parentView(rows[0]));
+  expect(frame).toHaveStyle({ height: 300, flexShrink: 0 });
   expect(r.UNSAFE_queryByType(ScrollView)).toBeNull();
 });
 
 test.each([
-  ['word', 58, 330],
+  ['word', 58, 409],
   ['letter', 60, 281],
 ] as const)('a roomy %s grid keeps its nominal height and 10dp gaps', (variant, nominalHeight, totalHeight) => {
-  const r = sizedPage(variant, 400);
+  const r = sizedPage(variant, 420);
   const { tiles, gap, heights, total } = pageGeometry(r);
   expect(gap).toBe(10);
   expect(heights.every(height => height === nominalHeight)).toBe(true);
@@ -172,17 +179,17 @@ test.each([
 });
 
 test('gaps shrink before word tiles, then both recover when the grid grows', () => {
-  const r = sizedPage('word', 322);
+  const r = sizedPage('word', 397);
   let geometry = pageGeometry(r);
   expect(geometry.gap).toBe(8);
-  expect(geometry.heights).toEqual([58, 58, 58, 58, 58]);
-  expect(geometry.total).toBe(322);
+  expect(geometry.heights).toEqual([58, 58, 58, 58, 58, 58]);
+  expect(geometry.total).toBe(397);
   expect(geometry.tiles[0]).toHaveStyle({ width: 160 });
-  for (const height of [300, 400]) {
+  for (const height of [300, 420]) {
     fireEvent(r.getByTestId('sized-grid'), 'layout', { nativeEvent: { layout: { width: 360, height } } });
     geometry = pageGeometry(r);
     expect(geometry.gap).toBe(height === 300 ? 6 : 10);
-    expect(geometry.heights.every(value => value === (height === 300 ? 55.2 : 58))).toBe(true);
+    expect(geometry.heights.every(value => value === (height === 300 ? 263 / 6 : 58))).toBe(true);
     expect(geometry.total).toBeLessThanOrEqual(height);
   }
 });
@@ -203,8 +210,8 @@ test('tiles stop shrinking at 40dp and gaps at 6dp even when that must overflow'
   const r = sizedPage('word', 100);
   const { gap, heights, total } = pageGeometry(r);
   expect(gap).toBe(6);
-  expect(heights).toEqual([40, 40, 40, 40, 40]);
-  expect(total).toBe(224);
+  expect(heights).toEqual([40, 40, 40, 40, 40, 40]);
+  expect(total).toBe(277);
   expect(total).toBeGreaterThan(100);
 });
 
@@ -227,17 +234,25 @@ test('picture pages fit measured height with an 88dp nominal row and a 72dp floo
 });
 
 
-test.each([[250, 250], [400, 281]])('a two-tile page shares full page geometry in %s dp and starts at the top of its centred frame', (height, frameHeight) => {
-  const pages = paginate(rowsFromLengths([10, 10, 2]), LETTER_PAGE_LAYOUT);
+test.each([
+  { variant: 'letter', lengths: [10, 10, 2], height: 250, frameHeight: 250, shortCount: 2 },
+  { variant: 'letter', lengths: [10, 10, 2], height: 400, frameHeight: 281, shortCount: 2 },
+  { variant: 'word', lengths: [5, 5, 5], height: 300, frameHeight: 300, shortCount: 5 },
+  { variant: 'word', lengths: [5, 5, 5], height: 420, frameHeight: 409, shortCount: 5 },
+] as const)('a short $variant page shares full page geometry in $height dp and starts at the top of its centred frame', ({ variant, lengths, height, frameHeight, shortCount }) => {
+  const layout = variant === 'letter' ? LETTER_PAGE_LAYOUT : WORD_PAGE_LAYOUT;
+  const pages = paginate(rowsFromLengths(lengths), layout);
   const grid = (pageIndex: number) => <PagedGrid pages={pages} pageIndex={pageIndex}
-    variant="letter" layout={LETTER_PAGE_LAYOUT} testID="grid" renderTile={renderLetter} />;
+    variant={variant} layout={layout} testID="grid" renderTile={(position, size) => (
+      <MarkTile variant={variant} state="idle" text={String(position)} accessibilityLabel={`item ${position}`} {...size} />
+    )} />;
   const r = render(grid(0));
   fireEvent(r.getByTestId('grid'), 'layout', { nativeEvent: { layout: { width: 360, height } } });
   const fullTileStyle = StyleSheet.flatten(r.getByLabelText('item 0').props.style);
   const fullGap = pageGeometry(r).gap;
   r.rerender(grid(1));
   const short = pageGeometry(r);
-  expect(short.tiles).toHaveLength(2);
+  expect(short.tiles).toHaveLength(shortCount);
   expect(short.tiles[0]).toHaveStyle({ height: fullTileStyle.height, width: fullTileStyle.width });
   expect(short.gap).toBe(fullGap);
   const frame = parentView(parentView(short.rows[0]));

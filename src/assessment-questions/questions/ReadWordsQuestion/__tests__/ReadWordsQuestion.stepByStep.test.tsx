@@ -103,22 +103,22 @@ test('a stop-rule override stops at ten across rows, guards queued taps, and fre
   expect(validateResult(result, { stopAt: 10 }).valid).toBe(true);
 });
 
-test('word_reading shows card rows 1–2 as page 1 of 5 in two continuous columns', () => {
+test('word_reading shows card rows 1–2 as page 1 of 5 with a divider between card rows', () => {
   const { screen } = start();
   expect(screen.getByText('Card rows 1–2 · page 1 of 5')).toBeTruthy();
   expect(screen.getAllByLabelText(/, (current|not reached)$/)).toHaveLength(10);
   expect(screen.queryAllByTestId(/^word-row-/)).toHaveLength(0);
   const grid = screen.getByTestId('word-grid');
   expect(grid).toHaveStyle({ flex: 1, paddingHorizontal: 16, justifyContent: 'center' });
-  expect(screen.queryByTestId('card-row-divider')).toBeNull();
+  expect(screen.getAllByTestId('card-row-divider')).toHaveLength(1);
   const displayRows: ReturnType<typeof screen.getByTestId>[] = grid.findAll(
     (node: ReturnType<typeof screen.getByTestId>) => node.type === 'View' && StyleSheet.flatten(node.props.style)?.flexDirection === 'row',
   );
-  expect(displayRows).toHaveLength(5);
+  expect(displayRows).toHaveLength(6);
   displayRows.forEach((row, index) => {
     const cells = within(row).getAllByLabelText(/, (current|not reached)$/);
     expect(cells.map(cell => cell.props.accessibilityLabel)).toEqual(
-      SET.words.slice(index * 2, index * 2 + 2).map(({ word }, column) =>
+      SET.words.slice([0, 2, 4, 5, 7, 9][index], [2, 4, 5, 7, 9, 10][index]).map(({ word }, column) =>
         `${word}, ${index === 0 && column === 0 ? 'current' : 'not reached'}`),
     );
   });

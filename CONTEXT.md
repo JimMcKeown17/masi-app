@@ -226,8 +226,8 @@ A Battery's automatic skip of later Questions when a trigger Question's saved fi
 reached and all wrong (read from the marks, not the stop reason). WelaPLUS 2026.1: a wrong first
 row in Letter sounds (Q1) or Letter writing (Q5) skips Q6–Q12; in Reading words (Q6), Q7–Q12.
 Q2–Q5 always run. The earliest trigger owns the skips. Skips save as
-`skipped_prerequisite_unmet`, the EA cannot undo them, and their rows say why (“Skipped ·
-Letters first row wrong”); a one-off **skip card** explains them to the EA. Ending a Question
+`skipped_prerequisite_unmet`, the EA cannot undo them, and their rows say why beside a **Skipped**
+chip (“Letters first row wrong”); a one-off **skip card** explains them to the EA. Ending a Question
 before its first row is fully marked, a manual skip, or an unmarked first-row item never triggers
 (early endings are to be revisited, ROADMAP §8). Older Batteries have no skip
 rule. A per-EA switch with a Head Office lock is deferred (ROADMAP §8).

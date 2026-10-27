@@ -336,3 +336,11 @@ test('a non-dismissible sheet ignores backdrop and consumes Back without an acce
   expect(sheet.queryByRole('button', { name: 'Dismiss test sheet' })).toBeNull();
   expect(sheet.queryAllByRole('button')).toHaveLength(0);
 });
+
+test('a non-dismissible sheet hides its grab handle but keeps its space; a default sheet shows it', () => {
+  const locked = renderSheet({ dismissible: false, onDismiss: jest.fn() });
+  expect(locked.getByTestId('bottom-sheet-handle')).toHaveStyle({ opacity: 0, width: 36, height: 4 });
+  locked.unmount();
+  const normal = renderSheet({ onDismiss: jest.fn() });
+  expect(normal.getByTestId('bottom-sheet-handle')).not.toHaveStyle({ opacity: 0 });
+});

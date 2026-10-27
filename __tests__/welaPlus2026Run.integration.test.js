@@ -130,7 +130,7 @@ describe('WelaPLUS 2026.1 first-row skips through real SQLite', () => {
     expect(view).toMatchObject({ decidedCount: 12, totalCount: 12, eligibleToFinalize: true, next: null, autoSkips: [] });
     expect(view.rows.slice(0, firstSkipped - 1).every(row => row.state === 'done')).toBe(true);
     for (const row of view.rows.slice(firstSkipped - 1)) {
-      expect(row).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`,
+      expect(row).toMatchObject({ state: 'skipped', detail: label,
         skipCause: { kind: 'first_row', trigger } });
       expect(resumed.results.find(result => result.question_code === row.question.question_code))
         .toMatchObject({ stopped_reason: 'skipped_prerequisite_unmet', total_items: 0, items: [] });

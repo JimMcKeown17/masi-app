@@ -131,8 +131,9 @@ export default function BottomSheet({
         },
       ]}
     >
+      {/* A sheet that must be answered shows no grab handle; its space stays so the title doesn't move. */}
       <View style={styles.handleContainer}>
-        <View style={styles.handle} />
+        <View testID="bottom-sheet-handle" style={[styles.handle, !dismissible && styles.handleHidden]} />
       </View>
 
       <View style={styles.header}>
@@ -241,6 +242,9 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: tints.control,
     borderRadius: 2,
+  },
+  handleHidden: {
+    opacity: 0,
   },
   header: {
     paddingHorizontal: spacing.lg,

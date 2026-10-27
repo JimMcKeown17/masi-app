@@ -79,13 +79,13 @@ test('skipped row uses the package label', () => {
       question_code: battery.questions[0].question_code,
       stopped_reason: reason, score: 0, total_items: 60, derived: {},
     }] });
-    expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`, scoreText: null, skipCause: null });
+    expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: label, scoreText: null, skipCause: null });
     expect(state.decidedCount).toBe(1);
   }
   expect(view({ results: [{
     question_code: battery.questions[0].question_code,
     stopped_reason: 'skipped_prerequisite_unmet', score: null, total_items: 0, derived: {},
-  }] }).rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Not reached', scoreText: null, skipCause: null });
+  }] }).rows[0]).toMatchObject({ state: 'skipped', detail: 'Not reached', scoreText: null, skipCause: null });
 });
 
 const firstRowSkips = [
@@ -129,7 +129,7 @@ test.each([
   expect(state.rows.filter(row => row.state === 'skipped').map(row => row.question.question_code)).toEqual(skippedCodes);
   state.rows.forEach(row => {
     if (skippedCodes.includes(row.question.question_code)) {
-      expect(row).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`,
+      expect(row).toMatchObject({ state: 'skipped', detail: label,
         skipCause: { kind: 'first_row', trigger }, scoreText: null });
     } else {
       expect(row.skipCause).toBeNull();
@@ -155,7 +155,7 @@ test('an old EGRA saved comprehension skip explains that no story words were rea
     markedResult('oral_reading', 10), savedSkip('reading_comprehension'),
   ] }, access);
   expect(state.firedTrigger).toBeNull();
-  expect(state.rows[3]).toMatchObject({ state: 'skipped', detail: 'Skipped · No story words read',
+  expect(state.rows[3]).toMatchObject({ state: 'skipped', detail: 'No story words read',
     skipCause: { kind: 'prerequisite', depends_on: 'oral_reading' } });
 });
 
@@ -166,10 +166,10 @@ test('a manual Q2 skip keeps its EA reason beside Q1-triggered saved skips', () 
     ...firstRowSkips.map(savedSkip),
   ]);
   expect(state.firedTrigger).toBe('letter_sounds');
-  expect(state.rows[1]).toMatchObject({ state: 'skipped', detail: 'Skipped · Child is tired', skipCause: null });
+  expect(state.rows[1]).toMatchObject({ state: 'skipped', detail: 'Child is tired', skipCause: null });
   expect(state.rows.filter(row => row.skipCause !== null).map(row => row.question.question_code)).toEqual(firstRowSkips);
   for (const row of state.rows.filter(row => firstRowSkips.includes(row.question.question_code))) {
-    expect(row).toMatchObject({ detail: 'Skipped · Letters first row wrong',
+    expect(row).toMatchObject({ detail: 'Letters first row wrong',
       skipCause: { kind: 'first_row', trigger: 'letter_sounds' } });
   }
 });
@@ -300,7 +300,7 @@ test('result mapping agrees with evaluator for duplicate and unrelated result co
   ] });
   expect(state.decidedCount).toBe(1);
   expect(state.next).toBe(battery.questions[1]);
-  expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Child is tired', scoreText: null });
+  expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: 'Child is tired', scoreText: null });
 });
 
 test('score formatting preserves zero and handles missing parsed derived data', () => {

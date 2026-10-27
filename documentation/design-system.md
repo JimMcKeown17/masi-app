@@ -456,8 +456,9 @@ gap above the meta row so GroupChip's negative margins cannot overlap the result
 scrollable=true, keyboardAvoiding=true, maxHeight='80%', bodyContentStyle, scrollViewProps={},
 panelRole, children`. Uses Paper `Portal`, flexbox bottom anchoring, a scrim and explicit Android-back
 dismissal while visible. Supply a meaningful backdrop `dismissLabel`. `dismissible={false}` is for a
-sheet that must be answered: the backdrop takes no press and is not an accessible button, and Android
-Back is consumed and does nothing (the capture stop card's contract); only the sheet's own buttons close it. Title is
+sheet that must be answered: the backdrop takes no press and is not an accessible button, Android
+Back is consumed and does nothing (the capture stop card's contract), and the grab handle is hidden
+(its space kept, so the title does not move); only the sheet's own buttons close it. Title is
 `displaySheetTitle`, subtitle `textParagraph`, radius 22, grabber 36×4/control, `shadows.sheet`,
 sides 24 and keyboard-down bottom padding `max(insets.bottom, 24)`. The footer has a divider;
 `footerStyle` merges last onto its View, allowing a caller to remove the divider or change padding.
@@ -946,7 +947,8 @@ The Story Writing rubric keeps its dimension chips and `ToggleBar`; it is the so
 
 **Paging and layout.** `paginate` packs whole card rows; only a row larger than the capacity
 spans pages. Letters use 5 columns / 20 items, start each card row on a display row and show a
-divider. Words use 2 columns / 10 items and flow continuously within a page. The 2026.3 letter
+divider. Words use 2 columns / 10 items and also start each card row on a display row with a divider
+(2026-10-27: isiZulu's rows of 5 had ended mid-line; 8-word rows fill one page each, so they look as before). The 2026.3 letter
 charts (10 × 10) have five pages and isiZulu's (11 × 10) six; Grid A (6 × 10, saved results only)
 has three; the historical 5 × 12 letter cards have five
 (`src/assessment-questions/ui/__tests__/paginate.test.ts:24`). Page labels name card rows;
