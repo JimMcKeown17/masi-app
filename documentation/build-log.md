@@ -5335,6 +5335,17 @@ classes changed that afternoon (other testing), so the apply is verified against
 snapshot of `id`, `updated_at` and `row_version` taken at the same time, not only the totals.
 Nothing on the server was changed. The hosted apply waits for Jim's yes.
 
+**Hosted apply (Jim's yes, 2026-10-28, `segygjzpujphwvrubusm`), from this worktree.**
+`sqlite:staging:dry-run` listed exactly `20261027120000_class_letter_order_edition.sql`. A fresh
+per-class snapshot just before the push matched the preflight one (no class changed in between).
+`sqlite:staging:push` applied it; its two NOTICEs are the first-run `drop ... if exists` skips.
+Read-only verification: all 15 classes hold `2026-10-23`; the column is `text`, not null, with
+no default; `classes_letter_order_edition_known` is `CHECK (letter_order_edition = '2026-10-23')`;
+trigger `classes_letter_order_edition` is `BEFORE INSERT OR UPDATE`; `anon` and `authenticated`
+cannot execute its function; `20261027120000` is recorded in `schema_migrations`. Every class's
+`updated_at` and `row_version` is identical to the snapshot, so the backfill rewrote no row. The
+temporary `.env.local` link was removed afterwards.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

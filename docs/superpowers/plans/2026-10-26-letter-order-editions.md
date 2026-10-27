@@ -788,7 +788,7 @@ tests that switch breaks (Step 1, last group).
     plus `select max(updated_at), sum(row_version) from public.classes;` for Step 4's comparison.
 
   Report the results to Jim.
-- [ ] **Step 4: Hosted apply, only after Jim's yes.** Run `npm run sqlite:staging:dry-run`. It must
+- [x] **Step 4: Hosted apply, only after Jim's yes.** Run `npm run sqlite:staging:dry-run`. It must
   list exactly `20261027120000_class_letter_order_edition.sql`; if anything else is pending, stop
   and report to Jim. Then run `npm run sqlite:staging:push` and verify read-only:
   - every class is `2026-10-23`;
@@ -796,7 +796,7 @@ tests that switch breaks (Step 1, last group).
   - the column has no default, and the constraint and trigger exist.
 
   Then remove the symlink with `rm .env.local`, which removes the link, not its target.
-- [ ] **Step 5: EAS builds after the apply.** Android and iOS, both `preview-content` and `preview`.
+- [ ] **Step 5: EAS builds after the apply.** Android and iOS, `preview-content` only (Jim, 2026-10-28: EAS credits; the release-pack choice is covered by tests).
 - [ ] **Step 6: Device run,** on the A03 when the other session frees it, and on Jim's iPhone.
   - Before installing, finish or discard every open lesson on the phone (Home shows them), so no
     draft pinned to a v1 pack carries over.
