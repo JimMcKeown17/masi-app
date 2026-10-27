@@ -5,7 +5,7 @@
  * No React, no side effects — just data in, stats out.
  */
 
-import { computeAssessmentMastery, pickLatestLetterResult } from './letterMastery';
+import { computeLetterMastery, eligibleLetterResults } from './letterMastery';
 import {
   languageCodeForHomeLanguage,
   LETTER_EVIDENCE_CODES,
@@ -194,10 +194,9 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
     }
 
     // Stored letter results count regardless of recorder or battery membership.
-    const latest = pickLatestLetterResult(assessments, { childId: child.id, languageCode });
-
-    // Assessment-mastered letters
-    const assessmentMastered = computeAssessmentMastery(latest, pedOrder);
+    // Each letter takes the newest result that reached it, as on the tracker.
+    const letterResults = eligibleLetterResults(assessments, { childId: child.id, languageCode });
+    const assessmentMastered = computeLetterMastery(letterResults, pedOrder);
 
     // Confirmed letters in the child's class language, regardless of recorder or programme.
     const taughtLetters = new Set();

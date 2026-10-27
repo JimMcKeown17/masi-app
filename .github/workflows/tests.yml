@@ -33,6 +33,8 @@ jobs:
         run: npm test -- --silent --maxWorkers=2
       - name: WelaPLUS assessment-questions type check
         run: npm run test:types
+      - name: Shared EGRA content pack is unchanged
+        run: npm run test:content
       - name: PostgreSQL history-authorization suite
         env:
           HISTORY_RLS_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres

@@ -55,7 +55,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
       .toEqual([{ child, masteredCount: 1, total: 26, percent: 4 }]);
   });
 
-  test('uses the newest eligible result by assessment date and created timestamp', () => {
+  test('each letter takes the newest eligible result that reached it, by assessment date then created time', () => {
     const assessments = [
       result({ id: 'older-date', assessment_date: '2026-10-19', created_at: '2026-10-21T09:00:00Z' }),
       result({ id: 'older-time', created_at: '2026-10-20T08:00:00Z' }),
@@ -69,8 +69,9 @@ describe('getLetterMasteryRanking — stored question items', () => {
     ];
 
     expect(pickLatestLetterResult(assessments, { childId: child.id, languageCode: 'xh' }).id).toBe('latest');
+    // b and c from the latest; a from the older results, because the latest did not ask it.
     expect(getLetterMasteryRanking([child], assessments, [], [xhosaClass]))
-      .toEqual([{ child, masteredCount: 2, total: 26, percent: 8 }]);
+      .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
   });
 
   test('the shared picker returns null without eligible evidence and leaves input order intact', () => {

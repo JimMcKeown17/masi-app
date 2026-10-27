@@ -8,7 +8,7 @@
  * pendingChanges. Only reads and pure counting live in this module.
  */
 import { PEDAGOGICAL_ORDERS } from './assessmentRegistry';
-import { computeAssessmentMastery } from './letterMastery';
+import { computeLetterMastery } from './letterMastery';
 
 export async function loadMasteryState({ repositories, userId, childId, languageCode }) {
   const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
@@ -22,10 +22,12 @@ export async function loadMasteryState({ repositories, userId, childId, language
   }
 
   // userId resolves the active programme; evidence may have been recorded by any EA.
-  const latestAssessment = await repositories.assessments.latestLetterResult({
+  // Newest first: each letter keeps the newest result that reached it.
+  const letterResults = await repositories.assessments.letterEvidenceFor({
     userId, childId, language: languageCode,
   });
-  const assessmentMastered = computeAssessmentMastery(latestAssessment, pedagogicalOrder);
+  const latestAssessment = letterResults[0] ?? null;
+  const assessmentMastered = computeLetterMastery(letterResults, pedagogicalOrder);
 
   const taughtRecords = (await repositories.mastery.getLetterMastery({
     childId, language: languageCode,

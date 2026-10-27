@@ -30,7 +30,7 @@ jest.mock('../src/context/OfflineContext', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    latestLetterResult: jest.fn(),
+    letterEvidenceFor: jest.fn(),
   },
 }));
 
@@ -58,7 +58,7 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
       refreshSyncStatus,
       triggerBackgroundSync,
     });
-    assessmentsRepository.latestLetterResult.mockResolvedValue(null);
+    assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
     let storedRecords = [];
     masteryRepository.getLetterMastery.mockImplementation(async () => storedRecords);
     masteryRepository.setLetterMastery.mockImplementation(async ({ childId, letter, language, confirmed }) => {
@@ -98,7 +98,7 @@ test('a class-only route uses membership language and shows no confirmation cont
   useChildren.mockReturnValue({ children: [] });
   useAuth.mockReturnValue({ user: { id: 'user-1' } });
   useOffline.mockReturnValue({ refreshSyncStatus: jest.fn() });
-  assessmentsRepository.latestLetterResult.mockResolvedValue(null);
+  assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
   masteryRepository.getLetterMastery.mockResolvedValue([]);
   const child = { id: 'control', first_name: 'Control', last_name: 'Child',
     class_id: 'membership-class', grade: '2', home_language: 'Afrikaans', is_delivery: true };
@@ -106,6 +106,6 @@ test('a class-only route uses membership language and shows no confirmation cont
     child, classItem: { id: 'stale-class', home_language: 'English' },
   } }} />);
   expect(await screen.findByText('0 / 26 letters mastered')).toBeTruthy();
-  expect(assessmentsRepository.latestLetterResult).toHaveBeenLastCalledWith({ userId: 'user-1', childId: 'control', language: 'af' });
+  expect(assessmentsRepository.letterEvidenceFor).toHaveBeenLastCalledWith({ userId: 'user-1', childId: 'control', language: 'af' });
   expect(screen.queryAllByRole('button')).toHaveLength(0);
 });
