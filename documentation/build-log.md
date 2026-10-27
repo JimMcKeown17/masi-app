@@ -6011,6 +6011,30 @@ first-row skips in the 14 old Batteries. Orchestrator re-run: the seven focused 
 suites / 329 tests; types clean.
 
 
+### 2026-10-27 — EGRA content and skip rules: device gate, Galaxy A03 builds 49–50
+
+Recorded after the merge from the plan ledger; it was missing from this log. Builds 49 (`15423ac`)
+and 50 (`68e33b3`), Android preview, on the Galaxy A03 at 360dp (`wm density 320`, font scale 1.0),
+signed in as TestB on the SQLite staging backend. Test classes created on staging: ZAF (Afrikaans,
+Anika Botha), ZZU (isiZulu, Thandeka Zulu; created as English and set to isiZulu by SQL, because the
+create-class form offers no isiZulu) and ZEN (English, Emma Smith).
+
+| Build | Check | Result |
+|---|---|---|
+| 49 | Full EGRA Afrikaans (Q98-PFQ) | Opened in the class language, no picker. Letters 4/100, words 3/80, story 0/64, Story comprehension skipped with "No story words read". Finalized. |
+| 49 | Full EGRA isiZulu (YXW-JYF) | Letters 5/110, words 0/50 by the first-row stop, story 6/43, comprehension 2/3. Force-quit mid-run and resume worked. Finalized. |
+| 49 | Quick tests in isiZulu (Thandeka Zulu) | Letter Sounds and Word Reading saved; instructions, practice items, footers and first rows matched the printout pack. |
+| 50 | Superseded-version guard | Before the migration the server still named WelaPLUS 2024.1; the Assessments card started 2026.1. An unfinished 2024.1 run and an unfinished old-form EGRA run each opened on their own version (Q4 titled "Story comprehension"). |
+| 50 | WelaPLUS isiXhosa, Q1 trigger (jancj lskxj, WVB-T4N) | Stop after ten wrong letters, then the skip card. Android Back and a backdrop tap left it open; no Dismiss in the view tree. It returned after force-quit and resume; after Got it it did not return. Finalized with Q1–Q5 done and Q6–Q12 skipped. |
+| 50 | Staging rows (read-only) | Full EGRA af: 4 results, 1 automatic skip. Full EGRA zu: 4, 0. WelaPLUS 2026.1 xh: 12 results, 7 automatic skips. Item sets `…@2026.3.<lang>`; quick tests carry no `battery_run_id`. |
+
+The migration `20261026120000` was applied to staging between these checks (2026-10-27 16:33 UTC:
+the dry run listed exactly one file; literacy moved from 2024.1 to 2026.1; other programmes
+untouched). These builds showed "Skipped · No story words read" wrapping beside the Skipped chip,
+isiZulu word rows running across a page row ("vela | hlela"), and a grab handle on the skip card;
+Jim's decisions and the fixes are the next entry. Timer expiry saving the result straight away is main's behaviour, unchanged.
+
+
 ### 2026-10-27 — EGRA content and skip rules: device-gate fixes (word card rows, skipped-row labels)
 
 Implemented Jim's two 2026-10-27 Galaxy A03 device-gate decisions on
@@ -6125,7 +6149,7 @@ Left for follow-up, outside this branch:
 Builds 51 (`a9d4141`) and 52 (`fa79053`), Android preview, on the Galaxy A03 at 360dp (`wm density
 320`), signed in as TestB on the SQLite staging backend after migration `20261026120000`. Earlier
 builds 49–50 covered Full EGRA in Afrikaans and isiZulu, isiZulu quick tests, force-quit resume, the
-superseded-version guard and the isiXhosa Q1 trigger (entries above and the plan ledger).
+superseded-version guard and the isiXhosa Q1 trigger ("device gate, Galaxy A03 builds 49–50" above).
 
 | Check | Result |
 |---|---|

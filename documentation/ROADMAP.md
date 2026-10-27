@@ -78,8 +78,9 @@ These horizons summarize the ordered register below. They are not a second backl
    Access grants and identity,
    then RLS/sync, then UI and durable session drafts.
 10. **P3: prove WelaPLUS on devices and produce its printout pack.** The Release 1 Battery Run
-   host, Full EGRA and step-by-step marking are merged (§8); native acceptance, the EA usability
-   check, print production and the two follow-on specs (EGRA content, skip rules) remain.
+   host, Full EGRA, step-by-step marking and the shared reading content with skip rules (PR #108)
+   are merged (§8), and the A03 pass is done. The iPhone pass, the EA usability check and print
+   production remain.
    Artifact/photo capture is separate deferred work on the integrated Question/result foundation.
 11. **P4: polish, hygiene, and longer-horizon scale work.**
 
@@ -775,6 +776,8 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 - [ ] **Bold Red clock row at large font:** at One UI's largest font (1.3), "Not clocked in" wraps to
   two lines at 411dp and three at 360dp, making the row tall. Text stays complete and the action
   tappable; consider a shorter label or stacking the button. Found on build 14, 2026-10-18.
+  Low priority: no EA has been seen using that font size, and device gates no longer check it
+  (Jim, 2026-10-27).
 
 ## 6. Head Office import and provisioning
 
@@ -817,14 +820,17 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   the separate Zazi app, not Masi.
 - [ ] **Full EGRA 2026.1: device gate and field materials.** One Battery, `egra@2026.1`, in
   isiXhosa, English (HL), Afrikaans and isiZulu on the shared 2026.3 content, opening in the class
-  language with no form picker (built 2026-10-26,
+  language with no form picker (merged in PR #108, 2026-10-27,
   [spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md)). The 13 old
   forms (PR #104) stay registered for saved and unfinished assessments only. The quick tests use
   the same DBE words, so the old placeholder word lists (including Zazi's provisional Afrikaans
-  list) are no longer offered. Remaining:
-  - run the device gate in zu and af: class-language start, the language sheet for a class with
-    none, "Not available in … yet" for other languages, capture, first-row stop → Undo → timer
-    expiry, zero/skipped story → "Skipped · No story words read", finalize, offline then sync, results;
+  list) are no longer offered. On the A03 (build 49, 2026-10-27) Afrikaans and isiZulu started in
+  the class language, captured, stopped on a first row, showed "No story words read" beside the
+  Skipped chip for a zero story, resumed after force-quit and finalized; the isiZulu quick tests
+  saved. Remaining:
+  - on the A03: the language sheet for a class with none, "Not available in … yet" for other
+    languages, Undo after a first-row stop, offline then sync, and the results screens;
+  - the iPhone pass;
   - print the Reading Card 2026.3 per language (task in §8);
   - resolve the pack's `sourceNotes` before field use (see the open decisions below).
 - [ ] **EGRA open decisions (Jim):**
@@ -848,11 +854,12 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 
 ## 8. WelaPLUS
 
-**WelaPLUS 2026.1 is built** (2026-10-26,
+**WelaPLUS 2026.1 is merged** (PR #108, 2026-10-27,
 [spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md)): 12
 Questions on the shared DBE/SMRS reading content (Story comprehension is Q9), first-row skip
 rules with a one-off skip card, one Reading Card per language, and the literacy default moved to
-2026.1 by migration. 2024.1 stays registered for saved assessments. The paragraphs below describe
+2026.1 by migration (applied to staging 2026-10-27). Apps built before PR #108 cannot start
+WelaPLUS on staging; new builds come from main. 2024.1 stays registered for saved assessments. The paragraphs below describe
 the Release 1 host it runs in.
 
 **The Release 1 Battery Run host is merged** (Plan 3, PR #101, on whole-class access, PR #100;
@@ -878,9 +885,13 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
 - [ ] **A03 and iPhone device gate:** prove the complete host flow, whole-class selection,
   language gating, materials handoff, skips, save/discard, between-Question force-quit/resume,
   single run-code/name tick, finalize/Back, pulled-run read-only summary and offline-then-sync.
-  Check Bold Red tokens, BottomSheets, large text, wrapping and bottom insets physically.
-  Package capture Task 17's native/large-text gates remain open too; a local test pass does not
-  close them (2026-10-22 build log).
+  Check Bold Red tokens, BottomSheets, wrapping and bottom insets physically, at default text
+  size: large text is no longer a device-gate check (Jim, 2026-10-27; `design-system.md`).
+  The A03 passes on builds 49–52 (build log, 2026-10-27) covered child selection, materials
+  handoff, every Question, skips, force-quit resume, the run-code tick and finalize. Still to
+  prove on the A03: language gating, the pulled-run read-only summary and offline-then-sync.
+  Everything remains for the iPhone. Package capture Task 17's native gates remain open too; a
+  local test pass does not close them (2026-10-22 build log).
 - [ ] **Produce the printout pack after the app is finished** (Jim, 2026-10-26: EAs receive cards
   and app together): approve artwork, physical proofs and stock from the
   [designer brief](./welaplus-printout-pack.md): one Reading Card 2026.3 per language (EN/XH
@@ -911,15 +922,25 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   Look for: the ring followed without hunting, Back used rather than flipping, the End sheet
   understood, the review line read before Finish, and the flip notice noticed but not
   distracting.
-- [ ] **Shared reading content and skip rules: device gate.** Built 2026-10-26
-  ([spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md),
+- [ ] **Shared reading content and skip rules: iPhone pass.** Merged in PR #108 (2026-10-27;
+  [spec](../docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md),
   [plan](../docs/superpowers/plans/2026-10-26-egra-content-and-skip-rules.md)); the literacy
-  default migration `20261026120000_welaplus_2026_1_default.sql` is applied to staging with the
-  preview build. On the A03 (then iPhone): WelaPLUS 2026.1 isiXhosa with a Q1 trigger (card, row
-  labels, finalize), English with a Q6 trigger, a Q5 trigger, a clean 12-Question run, Full EGRA
-  in isiZulu and Afrikaans, both quick tests in isiZulu, and a resumed assessment after force-quit.
-  Have the EGRA session review the adapter refactor, the retired `letterExtensions.ts` card rule
-  and the old `-masi60` results.
+  default migration `20261026120000_welaplus_2026_1_default.sql` is applied to staging. The A03
+  pass is done (builds 49–52, build log 2026-10-27): WelaPLUS 2026.1 isiXhosa with a Q1 trigger
+  (card, row labels, Back and backdrop ignored, card back after force-quit, finalize), English with
+  a Q6 trigger, isiXhosa with a Q5 trigger, a clean 12-Question run, Full EGRA in isiZulu and
+  Afrikaans, both quick tests in isiZulu, and staging rows matching each run. Still to do: the same
+  runs on the iPhone. The EGRA session was asked (2026-10-27) to review the adapter refactor, the
+  retired `letterExtensions.ts` card rule and the old `-masi60` results.
+- [ ] **Small follow-ups from the 2026-10-27 A03 pass** (none blocks the pilot):
+  - sheet footers sit flush against Android's three-button bar: `BottomSheet` pads its bottom with
+    `max(safe-area inset, 24dp)`, and on that bar the inset equals the bar (check the iPhone too);
+  - "Letter writing first row wrong" leaves "wrong" alone on a second line in question rows at
+    360dp (`ListRow` subtitles wrap greedily; Android's `textBreakStrategy="balanced"` would fix it);
+  - the create-class form offers no isiZulu home language (`HOME_LANGUAGES` lists isiXhosa,
+    English and Afrikaans), so isiZulu classes need a data fix today;
+  - the quick-test result says "Excellent work! 100% correct" when a child read 1 of 50 words
+    (it scores only the words marked).
 - [ ] **Skip-rule switch (deferred, Jim 2026-10-26).** Rules are always on in WelaPLUS 2026.1.
   Government-funded schools sometimes need every Question, so build later: a per-EA setting (not
   per school) with a Head Office default and lock, an EA Profile toggle that syncs when unlocked
