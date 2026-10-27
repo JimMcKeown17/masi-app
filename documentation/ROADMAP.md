@@ -415,8 +415,9 @@ correctly; the missing contract is inbound hydration.
   **Remaining: Task 7's hosted apply/practice-data wipe and two-phone device gate.** Each external
   step needs Jim's yes. The mastery walk is built in Assessment Results Plan 3 Task 7;
   its handle-owned store and triggers are built in Task 8; combined status/readers are built in Task 9.
-  Assessment evidence already uses the latest non-skipped stored letter result from any recorder
-  in the active Programme, including WelaPLUS Q1; `userId` scopes that Programme, not the recorder.
+  Assessment evidence already uses, for each letter, the newest non-skipped stored letter result
+  that reached it, from any recorder in the active Programme, including WelaPLUS Q1 and Full
+  EGRA (per-letter since 2026-10-27); `userId` scopes that Programme, not the recorder.
   Confirmation reads have no recorder or Programme filter. The correction rule is in the
   [design §10](../docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md#10-letter-mastery).
   Practice data is wiped only at the approved release gate; no field-data re-key is planned.
@@ -854,7 +855,12 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
     raw count "LCPM". An early End on the story shortens the time a per-minute figure divides by.
   - **isiXhosa letter practice items.** DBE's isiXhosa HL 3 chart prints none; confirm on the proof.
   - **Letter charts settled (Jim, 2026-10-27).** English letters use DBE English FAL 3 (all 26);
-    HL 3 never asked q, v, x or z. isiZulu's SMRS chart has no `r` and stays as printed.
+    HL 3 never asked q, v, x or z. isiZulu's SMRS chart has no `r` and stays as printed. Only the
+    English letter chart is FAL; English words, story and questions are HL 1. Since the tracker
+    keeps each letter's newest evidence, either English chart is safe for the tracker, so HL 3 vs
+    FAL 3 is now a teaching choice (are the English-assessed children HL or FAL learners?).
+    Before printing, switching is a one-line change; after the pilot starts, it needs a new
+    shared reading version (old results keep theirs) and reprinted Reading Card side A.
   - **Skip rules for Full EGRA (deferred, 2026-10-26).** WelaPLUS 2026.1 has first-row skip rules
     (§8); Full EGRA keeps only the story-comprehension skip. Decide whether Full EGRA gets them,
     and whether government-funded schools that need every Question can switch them off (the

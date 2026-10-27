@@ -42,7 +42,7 @@ describe('loadMasteryState', () => {
   };
 
   test('isiZulu has no mastery order and does not read results or confirmations', async () => {
-    const resultsRead = jest.spyOn(repositories.assessments, 'latestLetterResult');
+    const resultsRead = jest.spyOn(repositories.assessments, 'letterEvidenceFor');
     const masteryRead = jest.spyOn(repositories.mastery, 'getLetterMastery');
     const state = await load('zu');
     expect(state).toEqual({
@@ -59,7 +59,7 @@ describe('loadMasteryState', () => {
     }) });
     const word = await f.save(1, { result: questionResult(1, { question_code: 'word_reading', item_set_id: 'word_reading@2026.1.en' }) });
     await f.db.runAsync("update assessments set assessment_date = '2099-01-01' where id = ?", word.id);
-    const latest = jest.spyOn(repositories.assessments, 'latestLetterResult');
+    const latest = jest.spyOn(repositories.assessments, 'letterEvidenceFor');
     const state = await load('en');
     expect(latest).toHaveBeenCalledWith({ userId: f.userId, childId: f.childId, language: 'en' });
     expect(state.latestAssessment.id).toBe(id);
@@ -122,7 +122,7 @@ describe('loadMasteryState', () => {
   });
 
   test.each([null, undefined, 'zu', 'klingon'])('unsupported language %p returns no evidence without repository calls', async language => {
-    const latest = jest.spyOn(repositories.assessments, 'latestLetterResult');
+    const latest = jest.spyOn(repositories.assessments, 'letterEvidenceFor');
     const mastery = jest.spyOn(repositories.mastery, 'getLetterMastery');
     const state = await load(language);
     expect(state.assessmentMastered.size).toBe(0);

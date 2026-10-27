@@ -13,7 +13,7 @@ import { chunkArray, sqlPlaceholders } from './sqliteRepositoryUtils';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
-import { pickLatestLetterResult } from '../../utils/letterMastery';
+import { eligibleLetterResults } from '../../utils/letterMastery';
 import { toLocalDateString } from '../../utils/localDate';
 import { SERVER_COLUMNS } from '../../services/syncServerColumns';
 import { createSyncStateRepository } from './syncStateRepository';
@@ -269,7 +269,8 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     });
   };
 
-  const latestLetterResult = async ({ userId, childId, language } = {}) => pickLatestLetterResult(
+  // The child's eligible letter results in one language this academic year, newest first.
+  const letterEvidenceFor = async ({ userId, childId, language } = {}) => eligibleLetterResults(
     await getLetterEvidenceResults({ userId, childId }), { childId, languageCode: language },
   );
 
@@ -339,7 +340,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     getQuestionResults,
     getLetterResults,
     getLetterEvidenceResults,
-    latestLetterResult,
+    letterEvidenceFor,
     countResults,
     saveHistoryPage,
   };

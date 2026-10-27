@@ -163,6 +163,19 @@ describe('current academic year letter evidence through real SQLite', () => {
     expect(counts).toEqual([0, 0]);
   });
 
+  test('a newer result that does not ask a letter keeps the earlier evidence, on the tracker and the ranking alike', async () => {
+    await store(oldPhone, 1, '2026-03-01', ['a', 'm', 's']);
+    const newest = await store(oldPhone, 2, '2026-06-01', ['a']);
+    const state = await load(oldPhone);
+    expect(state.latestAssessment.id).toBe(newest);
+    expect(state.assessmentMastered).toEqual(new Set(['a', 'm', 's']));
+    const assessments = await oldPhone.repositories.assessments.getLetterEvidenceResults({ userId: USER });
+    const [rank] = getLetterMasteryRanking([{ id: CHILD, class_id: 'class-1' }], assessments,
+      [], [{ id: 'class-1', home_language: 'English' }]);
+    expect(rank.masteredCount).toBe(trackerCount(state));
+    expect(rank.masteredCount).toBe(3);
+  });
+
   test('year bounds are inclusive and child filters still apply', async () => {
     const first = await store(oldPhone, 1, '2026-01-15', ['a']);
     const last = await store(oldPhone, 2, '2026-12-15', ['m']);

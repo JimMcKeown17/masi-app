@@ -8,7 +8,7 @@ import { createBatteryRunsRepository } from '../src/db/repositories/batteryRunsR
 import { EGRA_FORMS, adaptEgraForm, egraBatteryFor, egraFormFor } from '../src/assessment-questions/egra';
 import { validateResult } from '../src/assessment-questions/contractTest/validateResult';
 import { assertSubmitShape, toSubmitArgs } from '../src/services/assessmentFamilyPayload';
-import { computeAssessmentMastery } from '../src/utils/letterMastery';
+import { computeLetterMastery } from '../src/utils/letterMastery';
 import { buildEgraResult } from '../test-support/egraResults';
 import { batteryFor, bundledItemSetFor } from '../src/assessment-questions';
 
@@ -125,9 +125,9 @@ test('English FAL 2 resumes four decided Questions, finalizes offline and suppli
     assertSubmitShape(family);
     expect(toSubmitArgs(family).p_items).toHaveLength(family.total_items);
   }
-  const latest = await assessments.latestLetterResult({ userId, childId, language: 'en' });
+  const [latest] = await assessments.letterEvidenceFor({ userId, childId, language: 'en' });
   expect(latest.id).toBe(ids[0]);
-  expect(computeAssessmentMastery(latest, Array.from('abcdefghijklmnopqrstuvwxyz'))).toEqual(new Set());
+  expect(computeLetterMastery([latest], Array.from('abcdefghijklmnopqrstuvwxyz'))).toEqual(new Set());
 
   // A later complete EGRA letter attempt proves repeated reached letters must all be correct.
   const prompts = itemSets.letter_sounds.rows.flat();
@@ -137,9 +137,9 @@ test('English FAL 2 resumes four decided Questions, finalizes offline and suppli
   const later = buildEgraResult(itemSets.letter_sounds, { correct });
   const evidenceId = uuid();
   await assessments.saveQuestionResult({ assessmentId: evidenceId, userId, childId, result: later });
-  const evidence = await assessments.latestLetterResult({ userId, childId, language: 'en' });
-  expect(evidence.id).toBe(evidenceId);
-  const mastered = computeAssessmentMastery(evidence, Array.from('abcdefghijklmnopqrstuvwxyz'));
+  const evidence = await assessments.letterEvidenceFor({ userId, childId, language: 'en' });
+  expect(evidence[0].id).toBe(evidenceId);
+  const mastered = computeLetterMastery(evidence, Array.from('abcdefghijklmnopqrstuvwxyz'));
   expect(mastered.has(repeated)).toBe(false);
   expect(mastered.size).toBe(new Set(prompts.map(p => p.toLowerCase())).size - 1);
 });

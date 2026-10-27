@@ -29,7 +29,7 @@ jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/OfflineContext', () => ({ useOffline: jest.fn() }));
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
-  assessmentsRepository: { latestLetterResult: jest.fn() },
+  assessmentsRepository: { letterEvidenceFor: jest.fn() },
 }));
 jest.mock('../src/db/repositories/masteryRepository', () => ({
   ...jest.requireActual('../src/db/repositories/masteryRepository'),
@@ -58,7 +58,7 @@ describe('LetterMasteryPanel', () => {
   beforeEach(() => {
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({ refreshSyncStatus, triggerBackgroundSync, lastSyncResult: null });
-    assessmentsRepository.latestLetterResult.mockResolvedValue(null);
+    assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
     storedRows = [];
     masteryRepository.getLetterMastery.mockImplementation(async ({ childId, language }) =>
       storedRows.filter(row => row.child_id === childId && row.language === language));
@@ -78,11 +78,11 @@ describe('LetterMasteryPanel', () => {
   });
 
   test('a non-delivery child shows mastery evidence without any confirmation controls', async () => {
-    assessmentsRepository.latestLetterResult.mockResolvedValue({
+    assessmentsRepository.letterEvidenceFor.mockResolvedValue([{
       id: 'control-assessment', child_id: child.id, question_code: 'letter_sounds',
       language: 'en', assessment_date: '2026-07-01',
       items: [{ prompt: 'A', is_correct: true, metadata: { reached: true } }],
-    });
+    }]);
     const screen = render(panel({ isDelivery: false }));
     expect(await screen.findByText('1 / 26 letters mastered')).toBeTruthy();
     expect(screen.getAllByText(/^[a-z]$/)).toHaveLength(26);
@@ -92,14 +92,14 @@ describe('LetterMasteryPanel', () => {
   });
 
   test('assessment mastery stays locked and cannot be pressed', async () => {
-    assessmentsRepository.latestLetterResult.mockResolvedValue({
+    assessmentsRepository.letterEvidenceFor.mockResolvedValue([{
       id: 'letter-assessment', child_id: child.id, question_code: 'letter_sounds',
       language: 'en', assessment_date: '2026-07-01',
       items: [{ prompt: 'A', is_correct: true, metadata: { reached: true } }],
-    });
+    }]);
     const screen = render(panel());
     const tile = await screen.findByLabelText('a, mastered from assessment, locked');
-    expect(assessmentsRepository.latestLetterResult).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'en' });
+    expect(assessmentsRepository.letterEvidenceFor).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'en' });
     expect(screen.getByText('Last assessed: 2026-07-01')).toBeTruthy();
     expect(tile.props.accessibilityState.disabled).toBe(true);
     expect(StyleSheet.flatten(tile.props.style)).toMatchObject({ backgroundColor: colors.successBg, borderColor: colors.successBorder });
@@ -111,7 +111,7 @@ describe('LetterMasteryPanel', () => {
     const screen = render(panel({ classItem: { home_language } }));
     expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
     expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
-    expect(assessmentsRepository.latestLetterResult).not.toHaveBeenCalled();
+    expect(assessmentsRepository.letterEvidenceFor).not.toHaveBeenCalled();
     expect(masteryRepository.getLetterMastery).not.toHaveBeenCalled();
     expect(masteryRepository.setLetterMastery).not.toHaveBeenCalled();
   });
@@ -120,7 +120,7 @@ describe('LetterMasteryPanel', () => {
     storedRows = [stored('a', true, { language: 'af' }), stored('s')];
     const screen = render(panel({ classItem: { id: 'class-af', home_language: 'Afrikaans' } }));
     expect(await screen.findByLabelText('a, taught by coach')).toBeTruthy();
-    expect(assessmentsRepository.latestLetterResult).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'af' });
+    expect(assessmentsRepository.letterEvidenceFor).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'af' });
     expect(masteryRepository.getLetterMastery).toHaveBeenCalledWith({ childId: child.id, language: 'af' });
     expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
     expect(screen.getByText('1 / 26 letters mastered')).toBeTruthy();

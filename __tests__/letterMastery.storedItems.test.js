@@ -1,5 +1,8 @@
-import { computeAssessmentMastery } from '../src/utils/letterMastery';
+import { computeLetterMastery } from '../src/utils/letterMastery';
 import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
+
+// One result on its own: every reached occurrence decides its letter.
+const computeAssessmentMastery = (result, order) => computeLetterMastery([result], order);
 
 const item = (prompt, is_correct, reached = true) => ({ prompt, is_correct, metadata: { reached } });
 

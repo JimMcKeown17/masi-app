@@ -1674,16 +1674,19 @@ the active Programme between the active academic year's `starts_on` and `ends_on
 It uses `getQuestionResults`'s `sinceDate` and `untilDate` filters; no active year yields `[]`.
 Ordinary `getLetterResults` owner history remains unbounded unless its caller supplies dates;
 co-EA history always obeys the active-year visibility rule above.
-`latestLetterResult` and the mastery ranking share `pickLatestLetterResult`: match child and
-language, require a `LETTER_EVIDENCE_CODES` Question, exclude skipped results and those with
-no reached items, then choose the latest `assessment_date`, breaking ties by `created_at`.
-The ranking screen supplies the bounded accessor; `loadMasteryState` continues through
-`latestLetterResult`. Both compute mastery from stored item prompts. Old phones retaining
+`assessments.letterEvidenceFor` and the mastery ranking share `eligibleLetterResults`: match
+child and language, require a `LETTER_EVIDENCE_CODES` Question, exclude skipped results and
+those with no reached items, then order newest first by `assessment_date`, breaking ties by
+`created_at`. `computeLetterMastery` decides each letter from the newest result that reached
+it, so a letter a chart does not ask or the child does not reach keeps its earlier evidence
+(2026-10-27). The ranking screen supplies the bounded accessor; `loadMasteryState` goes
+through `letterEvidenceFor` and labels "Last assessed" from its first result. Both compute
+mastery from stored item prompts. Old phones retaining
 last year's results and fresh phones therefore use the same evidence window.
 Confirmations remain current child state: no year, recorder or Programme filter is added to
 `mastery.getLetterMastery`. They still count before a new baseline or when no year is active.
 Real-SQLite `letterEvidenceYear.test.js` covers old/fresh agreement, both date bounds, no-year
-confirmation retention and tracker/ranking agreement. Panel read/tap ordering and the open
+confirmation retention, tracker/ranking agreement and per-letter carry-over. Panel read/tap ordering and the open
 sheet's accepted staleness are unchanged.
 
 **Mastery input completeness (Task 11, lesson-plan ask 3).**

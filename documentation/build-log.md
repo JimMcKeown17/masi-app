@@ -6248,3 +6248,50 @@ passed.
 
 Gates (Node 20): `jest --silent` 433 suites / 6,617 tests / 14 snapshots, exit 0 (+12 cases);
 `tsc --noEmit -p tsconfig.assessment-questions.json` clean. No device build (Jim).
+
+### 2026-10-27 — Letter tracker keeps each letter's newest evidence; shared EGRA pack restored
+
+Branch `fix/letter-evidence-pack-restore`, from main `92a27b8` (#112). Raised by another agent after
+#112; Jim chose to land both before the TestFlight pilot is cut, so no extra build.
+
+**Letter tracker.** Assessment evidence used only the child's latest letter result, so any letter
+that result did not reach was wiped: a chart that never asks it or a child who runs out of time.
+Letters each pack chart never asks (checked from the pack): isiXhosa HL 1 c i o p, HL 2 j; English
+HL 1 q, HL 2 o q v x z, HL 3 q v x z; English FAL 1 q x; Afrikaans HL 1 and 2 c q; isiZulu SMRS r;
+isiXhosa HL 3, English FAL 2 and 3 and Afrikaans HL 3 ask all 26. On
+English FAL 3, q first appears at letter 22, z at 27 and x at 31, so a child reading 25 letters in
+the 60 seconds lost z and x even after #112. Now each letter takes its status from the newest
+eligible result that reached it (`computeLetterMastery` over `eligibleLetterResults`, newest first);
+a newer wrong answer still un-masters it. The tracker (`loadMasteryState` through the new
+`assessments.letterEvidenceFor`, which replaces `latestLetterResult`) and the ranking share the same
+functions; "Last assessed" still shows the newest letter result. No schema, sync or RLS change.
+Consequence: chart choice no longer affects the tracker, so English HL 3 vs FAL 3 is now a teaching
+choice (roadmap).
+
+**Shared EGRA content pack.** #111 removed a stray `”` from `dbe-egra-xh-hl-1-v1`'s question 4 answer
+guide in place. The pack is byte-identical across both apps and both websites, its README lists
+that quote as retained from the DBE source, and a corrected form must get a new form id. The edit
+made `npm run test:content` fail on main (hash `a93275dc…` instead of `ce3f99d7…`), and CI never ran
+that check. Restored the JSON and the adapter baseline snapshot to the pre-#111 bytes; #111's quote
+test now records that one source exception; CI runs `npm run test:content`. A fix to the quote
+comes from the pack's owner as a new form id. Not changed: Afrikaans 2's chart says 60 but prints
+70 letters, already recorded in the pack README as visually checked, and no new assessment uses it.
+
+Docs: `CONTEXT.md` (Letter mastery), `rls-sync-contract-map.md` (current-year letter evidence),
+`egra_letter_sets.md`, `ROADMAP.md` (letter evidence, source notes, chart switching).
+
+TDD: six new unit cases (26 letters then the real HL 3 chart still 26; FAL 3 with 25 letters read
+keeps x and z; a newer wrong answer un-masters and a newer right one masters; date then creation
+time decide; skipped, other-language and other-child results give nothing; no results) and one
+real-SQLite tracker/ranking case failed first, then passed. One ranking expectation changed by
+design (2 → 3: the older results now supply `a`). Tracker mocks moved to `letterEvidenceFor`.
+
+Gates (Node 20): `jest --silent` 434 suites / 6,624 tests / 14 snapshots; integration 78 suites /
+967 tests; `tsc --noEmit -p tsconfig.assessment-questions.json` clean; `node --test
+content/egra/verify.cjs` 5/5. No device build (Jim).
+
+Review: Codex adversarial review (`gpt-6-astra`, base `origin/main`): approve, no material findings
+(its sandbox could not write the Jest cache, so it probed the functions directly; the suites above
+ran locally). It noted a consequence to keep in mind when reading the pilot: "Last assessed" is the
+newest letter result, not the date each mastered letter was last seen. A child with all 26 in March
+who gets the whole first row of FAL 3 wrong in October keeps the 16 letters October did not reach.

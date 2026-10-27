@@ -56,4 +56,6 @@ which letters are typically taught.
 The lesson plan's interim Afrikaans pack uses the same order (lesson-plan spec C10).
 
 All comparisons are case-insensitive; the tracker stores and displays lowercase. Mastery uses
-stored item prompts and these pedagogical orders, not positions in an assessment list.
+stored item prompts and these pedagogical orders, not positions in an assessment list. Each
+letter takes the newest result that reached it, so a chart that skips letters, or a child who
+stops before reaching them, leaves their earlier evidence in place (2026-10-27).

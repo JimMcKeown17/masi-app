@@ -20,7 +20,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    latestLetterResult: jest.fn(),
+    letterEvidenceFor: jest.fn(),
   },
 }));
 
@@ -48,7 +48,7 @@ const renderSheet = (props = {}) => render(
 
 describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
   beforeEach(() => {
-    assessmentsRepository.latestLetterResult.mockResolvedValue(null);
+    assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
     masteryRepository.getLetterMastery.mockResolvedValue([
       {
         id: 'mastery-a',
@@ -72,7 +72,7 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
   });
 
   test('locks stored letter-result evidence using the letter-only accessor', async () => {
-    assessmentsRepository.latestLetterResult.mockResolvedValue({
+    assessmentsRepository.letterEvidenceFor.mockResolvedValue([{
       id: 'a-letter', child_id: 'child-1', question_code: 'letter_sounds', language: 'en',
       assessment_date: '2026-07-01',
       items: [
@@ -80,13 +80,13 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
         { prompt: 'm', is_correct: true, metadata: { reached: true } },
         { prompt: 'a', is_correct: true, metadata: { reached: true } },
       ],
-    });
+    }]);
     masteryRepository.getLetterMastery.mockResolvedValue([]);
     const onChangesUpdate = jest.fn();
     const { getByLabelText, getByText } = renderSheet({ onChangesUpdate });
 
     await waitFor(() => expect(getByLabelText('a, mastered from assessment, locked')).toBeTruthy());
-    expect(assessmentsRepository.latestLetterResult).toHaveBeenCalledWith({
+    expect(assessmentsRepository.letterEvidenceFor).toHaveBeenCalledWith({
       userId: 'user-1', childId: 'child-1', language: 'en',
     });
     fireEvent.press(getByLabelText('a, mastered from assessment, locked'));
@@ -99,7 +99,7 @@ describe('LetterTrackerBottomSheet Plan 5 behavior', () => {
     const screen = renderSheet({ languageCode });
     expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
     expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
-    expect(assessmentsRepository.latestLetterResult).not.toHaveBeenCalled();
+    expect(assessmentsRepository.letterEvidenceFor).not.toHaveBeenCalled();
     expect(masteryRepository.getLetterMastery).not.toHaveBeenCalled();
   });
 });

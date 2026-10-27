@@ -24,7 +24,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../src/db/repositories/assessmentsRepository', () => ({
   ...jest.requireActual('../src/db/repositories/assessmentsRepository'),
   assessmentsRepository: {
-    latestLetterResult: jest.fn().mockResolvedValue(null),
+    letterEvidenceFor: jest.fn().mockResolvedValue([]),
   },
 }));
 

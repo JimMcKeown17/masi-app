@@ -390,9 +390,10 @@ describe('question result persistence through real SQLite', () => {
       [xh.id, '2026-10-19', '2026-10-19T11:00:00Z'],
       ...[skipped, unreached, empty].map(r => [r.id, '2026-10-20', '2026-10-20T12:00:00Z']),
     ]) await db.runAsync('update assessments set assessment_date = ?, created_at = ? where id = ?', date, created, id);
-    expect((await repository.latestLetterResult({ userId, childId, language: 'xh' })).id).toBe(xh.id);
-    expect((await repository.latestLetterResult({ userId, childId, language: 'en' })).id).toBe(newest.id);
-    expect(await repository.latestLetterResult({ userId, childId, language: 'zu' })).toBeNull();
+    const evidence = language => repository.letterEvidenceFor({ userId, childId, language });
+    expect((await evidence('xh')).map(r => r.id)).toEqual([xh.id]);
+    expect((await evidence('en')).map(r => r.id)).toEqual([newest.id, old.id]);
+    expect(await evidence('zu')).toEqual([]);
   });
 });
 
