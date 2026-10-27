@@ -6082,3 +6082,39 @@ overview suites). Jim chose both changes in this entry on 2026-10-27, after the 
 chip at 360dp. Docs updated by the orchestrator: `CONTEXT.md` (Skip rule example),
 `design-system.md` (word paging; `dismissible` hides the handle), and a dated amendment in the
 2026-10-26 spec.
+
+
+### 2026-10-27 — EGRA content and skip rules: skip card at large text
+
+The Galaxy A03 device pass on build 51 (`a9d4141`, 360dp) found the skip card's two side-by-side
+lists too narrow at Samsung's 130% text: "Story comprehension" broke mid-word as "Story compreh /
+ension" in the Skipped column. The sheet also reached its 80% height, and the body scrolled with
+nothing showing that four more titles sat below the fold. At 100% text the card was correct.
+
+Measured on the 100% screenshot, "comprehension" is 193px (about 97dp) in `textSmall`. A 152dp
+column leaves 128dp for text, and the word needs about 125dp at 130%, so Android broke it.
+`SkipNoticeSheet` now gives each list `flexBasis: 136dp × fontScale` inside a wrapping row
+(`flexGrow`/`flexShrink: 1`). On a 360dp phone the lists stay side by side up to about 110% text and
+stack above that. The footer keeps no rule while the body fits. When the body scrolls (body content
+taller than its viewport, from the ScrollView's `onLayout` and `onContentSizeChange`), it shows the
+standard `BottomSheet` footer rule. `BottomSheet` gains a `bottom-sheet-footer` testID only.
+`design-system.md` describes the wrap and the rule, and now gives the footer's real 24dp top
+padding (`spacing.lg`) where it said 16dp.
+
+TDD: three new cases in `__tests__/SkipNoticeSheet.test.js` failed first (missing test IDs and
+behaviour), then passed. The 100% and 130% cases pin the wrap rule (Jest has no layout engine; the
+A03 proves the result). The scroll case drives `onContentSizeChange` and `onLayout` and expects the
+rule only while content outgrows the body. The test reaches `useWindowDimensions` through
+`require('react-native')`: a spy on an `import * as` namespace copy never reaches the component.
+
+| Command (Node 20) | Result |
+|---|---|
+| `jest __tests__/SkipNoticeSheet.test.js` before the change | 1 suite failed: 3 failed / 4 passed |
+| `jest __tests__/SkipNoticeSheet.test.js __tests__/BottomSheet.test.js __tests__/BatteryOverviewScreen.test.js` | PASS: 3 suites / 98 tests |
+
+Left for follow-up, outside this branch:
+- `BottomSheet` pads its bottom with `max(safe-area inset, 24dp)`. On Android's three-button bar the
+  inset equals the bar, so every sheet's footer sits flush against it, and the skip card's Got it
+  shadow is cut. iPhone needs checking alongside.
+- `ListRow` subtitles wrap greedily. "Letter writing first row wrong" leaves "wrong" alone on a
+  second line at 360dp/100%. `textBreakStrategy="balanced"` (Android) would fix it app-wide.

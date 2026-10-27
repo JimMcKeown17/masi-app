@@ -506,8 +506,13 @@ introducing another overlay host.
 in `design/mockups-2026-10-skip-rules/skip-card.html`). The one-off skip card on a Battery's question
 list after a first-row trigger. `panelRole="alertdialog"`; the body is `textParagraph` in
 `textSecondary`; two side-by-side lists on `background` with `borderRadius.md`, headed **Still to
-do** (omitted when empty) and **Skipped** in `textSectionLabel`, titles in `textSmall`; one primary
-lg **Got it** in the footer, which has no rule and 16dp top padding. `dismissible={false}`: a backdrop
+do** (omitted when empty) and **Skipped** in `textSectionLabel`, titles in `textSmall`. Each list
+asks for a column 136dp × the text size wide, enough for the longest title word ("comprehension",
+about 97dp at 100% text) plus padding. When two such columns don't fit, each list wraps onto its own
+full-width row: on a 360dp phone the lists sit side by side up to about 110% text and stack above
+that, so a word is never broken. One primary lg **Got it** in the footer, which has 24dp top padding and no
+rule, except while the body scrolls (large text): then the standard footer rule shows that more sits
+above it. `dismissible={false}`: a backdrop
 tap or Android Back never acknowledges it; only **Got it** calls `onAcknowledge`. Copy never uses a pronoun for
 the child. The overview shows it only while focused and settled (`skipNoticeFor` in
 `src/utils/batteryRun.js`) and remembers **Got it** for the app session only

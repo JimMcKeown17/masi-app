@@ -168,7 +168,7 @@ export default function BottomSheet({
         </View>
       )}
 
-      {footer ? <View style={[styles.footer, footerStyle]}>{footer}</View> : null}
+      {footer ? <View testID="bottom-sheet-footer" style={[styles.footer, footerStyle]}>{footer}</View> : null}
     </Animated.View>
   );
 
