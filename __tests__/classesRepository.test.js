@@ -12,6 +12,128 @@ import {
 
 const FIXED_NOW = new Date('2026-05-21T08:00:00.000Z');
 
+describe('class letter order editions', () => {
+  let db;
+  let repository;
+  beforeEach(async () => {
+    db = await createMigratedDatabase(runMigrations);
+    await seedCoreData(db);
+    repository = createClassesRepository({ database: db });
+  });
+  afterEach(async () => db.closeAsync());
+
+  const serverClass = (overrides = {}) => ({
+    id: 'class-1', school_id: 'school-1', name: 'Server class', grade: '1',
+    academic_year_id: 'year-2026', created_by: 'user-1', sync_status: 'synced',
+    letter_order_edition: '2099-01-01', ...overrides,
+  });
+
+  test.each(['synced', 'terminal'])('a %s server row stores its edition', async sync_status => {
+    await repository.saveClass(serverClass({ sync_status }));
+    expect(await repository.getClassById('class-1')).toMatchObject({ letter_order_edition: '2099-01-01' });
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+  });
+
+  test('a server edition changes only the edition while a local rename is pending', async () => {
+    await repository.updateClass('class-1', { name: 'Local rename' });
+    const before = await repository.getClassById('class-1');
+    const outbox = await db.getAllAsync('select * from sync_outbox');
+
+    expect(await repository.saveClass(serverClass())).toBe(false);
+
+    expect(await repository.getClassById('class-1')).toEqual({
+      ...before, letter_order_edition: '2099-01-01',
+    });
+    expect(await repository.getClassById('class-1')).toMatchObject({ name: 'Local rename', sync_status: 'pending' });
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outbox);
+  });
+
+  test.each([null, undefined])('a server edition of %p preserves the stored edition', async edition => {
+    await repository.saveClass(serverClass());
+    const incoming = serverClass({ name: 'Pulled name' });
+    if (edition === undefined) delete incoming.letter_order_edition;
+    else incoming.letter_order_edition = edition;
+    await repository.saveClass(incoming);
+    expect(await repository.getClassById('class-1')).toMatchObject({
+      name: 'Pulled name', letter_order_edition: '2099-01-01',
+    });
+  });
+
+  test('a new local class ignores a supplied edition and takes the default', async () => {
+    await repository.saveClass(serverClass({ id: 'local-class', sync_status: 'pending', letter_order_edition: 'bogus' }));
+    expect(await repository.getClassById('local-class')).toMatchObject({ letter_order_edition: '2026-10-23' });
+  });
+
+  test('a local re-save keeps the stored server edition', async () => {
+    await repository.saveClass(serverClass());
+    await repository.saveClass(serverClass({ sync_status: 'pending', letter_order_edition: 'bogus' }));
+    expect(await repository.getClassById('class-1')).toMatchObject({ letter_order_edition: '2099-01-01' });
+  });
+
+  test('a local update ignores a supplied edition while applying the name', async () => {
+    await repository.updateClass('class-1', { name: 'X', letter_order_edition: 'bogus' });
+    expect(await repository.getClassById('class-1')).toMatchObject({ name: 'X', letter_order_edition: '2026-10-23' });
+  });
+
+  test('a language edit keeps the edition', async () => {
+    await repository.updateClass('class-1', { home_language: 'English' });
+    expect(await repository.getClassById('class-1')).toMatchObject({ home_language: 'English', letter_order_edition: '2026-10-23' });
+  });
+
+  describe('the active class for a child', () => {
+    beforeEach(async () => {
+      await db.runAsync("insert into children (id, first_name, last_name, class_id) values ('child-1', 'Test', 'Child', 'class-1')");
+      for (const year of [2023, 2024, 2025]) {
+        await db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+          values (?, ?, ?, ?, 0)`, `year-${year}`, String(year), `${year}-01-01`, `${year}-12-31`);
+      }
+      for (const id of ['class-2', 'class-3', 'class-4']) {
+        await repository.saveClass(serverClass({ id, home_language: 'English' }));
+      }
+    });
+
+    const membership = async (id, classId, year, enrolledAt, exitedAt = null) => db.runAsync(`
+      insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, exited_at)
+      values (?, 'child-1', ?, ?, ?, ?)
+    `, id, classId, year, enrolledAt, exitedAt);
+
+    test('follows the active membership instead of children.class_id and ignores exited memberships', async () => {
+      await membership('active', 'class-2', 'year-2026', '2026-02-01');
+      await membership('exited', 'class-3', 'year-2026', '2026-03-01', '2026-04-01');
+      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({
+        id: 'class-2', home_language: 'English', letter_order_edition: '2099-01-01',
+      });
+    });
+
+    test('prefers the active academic year over a newer enrollment in another year', async () => {
+      await membership('active-year', 'class-2', 'year-2026', '2026-01-01');
+      await membership('other-year', 'class-3', 'year-2025', '2026-05-01');
+      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({ id: 'class-2' });
+    });
+
+    test('ranks other years by newest enrollment then ascending membership id', async () => {
+      await membership('old', 'class-4', 'year-2023', '2025-01-01');
+      await membership('b', 'class-3', 'year-2024', '2025-05-01');
+      await membership('a', 'class-2', 'year-2025', '2025-05-01');
+      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({ id: 'class-2' });
+    });
+
+    test('an archived membership class is ignored', async () => {
+      await membership('archived', 'class-2', 'year-2026', '2026-01-01');
+      await membership('available', 'class-3', 'year-2025', '2025-01-01');
+      await db.runAsync("update classes set archived_at = '2026-10-26' where id = 'class-2'");
+      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({ id: 'class-3' });
+    });
+
+    test('returns null without an active membership even when children.class_id is set', async () => {
+      expect(await repository.getActiveClassForChild('child-1')).toBeNull();
+      await membership('exited', 'class-2', 'year-2026', '2026-01-01', '2026-02-01');
+      expect(await repository.getActiveClassForChild('child-1')).toBeNull();
+      expect(await repository.getActiveClassForChild('missing-child')).toBeNull();
+    });
+  });
+});
+
 describe('classesRepository', () => {
   test('getClassById returns an archived class that getClasses leaves out', async () => {
     const db = await createMigratedDatabase(runMigrations);

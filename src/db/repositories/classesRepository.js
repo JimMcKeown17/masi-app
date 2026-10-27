@@ -24,6 +24,7 @@ const CLASS_COLUMNS = [
   'teacher',
   'teacher_id',
   'home_language',
+  'letter_order_edition',
   'academic_year',
   'academic_year_id',
   'archived_at',
@@ -88,6 +89,21 @@ export const createClassesRepository = ({ database } = {}) => {
     return row ? mapDomainRow(row) : null;
   };
 
+  const getActiveClassForChild = async (childId) => {
+    const db = await resolveDatabase(database);
+    const row = await db.getFirstAsync(`
+      select classes.*
+      from child_class_memberships ccm
+      join classes on classes.id = ccm.class_id and classes.archived_at is null
+      left join academic_years ay on ay.id = ccm.academic_year_id
+      where ccm.child_id = ? and ccm.exited_at is null
+      order by case when ay.is_active = 1 then 0 else 1 end,
+        ccm.enrolled_at desc, ccm.id asc
+      limit 1
+    `, childId);
+    return row ? mapDomainRow(row) : null;
+  };
+
   const saveClass = async (classData, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const incomingSyncStatus = classData.sync_status || syncStatusFromSynced(classData.synced);
     const isLocalWrite = !['synced', 'terminal'].includes(incomingSyncStatus);
@@ -108,7 +124,14 @@ export const createClassesRepository = ({ database } = {}) => {
       created_by: classData.created_by || ownerUserId,
       sync_status: incomingSyncStatus,
     });
+    if (isLocalWrite || typeof record.letter_order_edition !== 'string') {
+      delete record.letter_order_edition;
+    }
     if (await serverPullWouldClobberPendingLocal(txn, 'classes', record)) {
+      // The server owns the edition even while the EA's other edits are pending.
+      if (typeof record.letter_order_edition === 'string') {
+        await txn.runAsync('update classes set letter_order_edition = ? where id = ?', record.letter_order_edition, record.id);
+      }
       return false;
     }
     await upsertDomainRecord(txn, {
@@ -172,6 +195,7 @@ export const createClassesRepository = ({ database } = {}) => {
       synced: false,
       last_sync_error: null,
     });
+    delete record.letter_order_edition;
     await upsertDomainRecord(txn, {
       tableName: 'classes',
       columns: CLASS_COLUMNS,
@@ -283,6 +307,7 @@ export const createClassesRepository = ({ database } = {}) => {
   return {
     getClasses,
     getClassById,
+    getActiveClassForChild,
     saveClass,
     saveServerClassRows,
     updateClass,

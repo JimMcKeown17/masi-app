@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { getLatestAuthSession } from './signedInHandle';
 import { AuthUnavailableError, StaleActorError } from './staleActor';
+import { MASI_LETTER_ORDER_EDITIONS } from '../utils/letterOrders';
 
 // The lifecycle module calls this only after constructing its handle. Session lookup is
 // deferred until a request; no database or current-handle fallback is resolved here.
@@ -28,6 +29,7 @@ export const createHandleDataClient = ({
     const task = handle.requestQueue.currentTask();
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${token}`);
+    headers.set('X-Masi-Letter-Order-Editions', MASI_LETTER_ORDER_EDITIONS.join(','));
     const controller = new AbortController();
     const callerSignal = init.signal ?? input?.signal;
     const signals = [...new Set([handle.abortSignal, callerSignal].filter(Boolean))];

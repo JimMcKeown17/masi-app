@@ -41,6 +41,8 @@ module.exports = {
     '<rootDir>/__tests__/childrenRepository.test.js',
     '<rootDir>/__tests__/childrenHistoryReference.test.js',
     '<rootDir>/__tests__/classesRepository.test.js',
+    '<rootDir>/__tests__/classLetterOrderMigration.test.js',
+    '<rootDir>/__tests__/classLetterOrderSync.test.js',
     '<rootDir>/__tests__/groupsRepository.test.js',
     '<rootDir>/__tests__/sessionsRepository.test.js',
     '<rootDir>/__tests__/sessionGroupSync.test.js',
