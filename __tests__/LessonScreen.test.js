@@ -9,7 +9,7 @@ import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { draftStart, holdDraftWrite, observe, deferred } from '../test-support/lessonDraftTestUtils';
-import { getPack } from '../src/lessonPlan/packs';
+import * as packs from '../src/lessonPlan/packs';
 import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { saveLesson } from '../src/services/lessonSave';
 import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
@@ -93,7 +93,7 @@ beforeEach(async () => {
   });
   await handle.repositories.sessions.saveSession({ id: 'monday', user_id: handle.userId, programme_id: 'programme-a',
     session_date: '2026-10-19', children_ids: ['c1', 'c2'], activities: { lesson: { version: 1 } } });
-  for (const letter of ['a', 'm', 's', 't']) await handle.repositories.mastery.setLetterMastery({
+  for (const letter of ['s', 'a', 'n', 'd']) await handle.repositories.mastery.setLetterMastery({
     childId: 'c1', letter, language: 'en', confirmed: true, programmeId: 'programme-a',
   });
   await handle.repositories.syncState.setPullState(`session_history_pull:${handle.userId}:programme-a`, {
@@ -113,19 +113,18 @@ testLesson("header shows grade, language and last seen; the title is the childre
 testLesson('suggested letters are not pre-ticked; ticking one stores it and freezes the plan', async () => {
   const view = mount();
   await ready(view);
-  expect(getPack('en').id).toBe('english-interim-letters-v1');
   expect(await handle.repositories.lessonDrafts.getActive()).toBeNull();
   await tick(view);
   const row = await handle.repositories.lessonDrafts.getActive();
   expect(row.plan_fixed_at).toBe('2026-10-22T09:00:00.000Z');
-  expect(row.plan.suggested_letters).toEqual(['a', 'm']);
+  expect(row.plan.suggested_letters).toEqual(['s', 'a']);
   expect(view.getByRole('button', { name: 'A, selected' })).toBeTruthy();
 });
 testLesson('marking a child absent before any tick changes the suggestions', async () => {
   const view = mount();
   await ready(view);
   fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'N, not selected' })).toBeTruthy());
+  await waitFor(() => expect(view.getByRole('button', { name: 'I, not selected' })).toBeTruthy());
   expect(view.queryByRole('button', { name: 'A, not selected' })).toBeNull();
   expect(view.getByRole('checkbox', { name: 'Lulu, absent' })).not.toBeChecked();
 });
@@ -278,7 +277,7 @@ testLesson('one engine evaluation per attendance change', async () => {
   expect(plan).toHaveBeenCalledTimes(1);
   expect(choices).toHaveBeenCalledTimes(1);
   fireEvent.press(view.getByRole('checkbox', { name: 'Lulu, here' }));
-  await waitFor(() => expect(view.getByRole('button', { name: 'N, not selected' })).toBeTruthy());
+  await waitFor(() => expect(view.getByRole('button', { name: 'I, not selected' })).toBeTruthy());
   expect(plan).toHaveBeenCalledTimes(2);
   expect(choices).toHaveBeenCalledTimes(2);
 });
@@ -297,12 +296,12 @@ testLesson('the controller write error appears at the top and clears after a suc
   const view = mount();
   await tick(view);
   const held = await holdDraftWrite({ fail: true });
-  fireEvent.press(view.getByRole('button', { name: 'M, not selected' }));
+  fireEvent.press(view.getByRole('button', { name: 'S, not selected' }));
   await held.entered;
   await act(async () => { held.release(); });
   expect(await view.findByText("Couldn't save your last change.")).toBeTruthy();
   held.restore();
-  fireEvent.press(view.getByRole('button', { name: 'M, not selected' }));
+  fireEvent.press(view.getByRole('button', { name: 'S, not selected' }));
   await waitFor(() => expect(view.queryByText("Couldn't save your last change.")).toBeNull());
 });
 
@@ -310,7 +309,7 @@ testLesson('a queued successful edit clears the screen error from an earlier fai
   const view = mount();
   await tick(view);
   const held = await holdDraftWrite({ fail: true });
-  fireEvent.press(view.getByRole('button', { name: 'M, not selected' }));
+  fireEvent.press(view.getByRole('button', { name: 'S, not selected' }));
   await held.entered;
   fireEvent.press(view.getByRole('button', { name: 'A, selected' }));
   await act(async () => { held.release(); });
@@ -348,7 +347,7 @@ const previewLesson = async (levels = ['4 Letter Blends', '4 Letter Blends']) =>
       await db.runAsync('update children set reading_level = ? where id = ?', levels[index], id);
     }
   });
-  for (const childId of ['c1', 'c2']) for (const letter of ['o', 'm', 'l', 'a', 'k', 'u', 'e', 'n', 'i', 't', 's', 'd']) {
+  for (const childId of ['c1', 'c2']) for (const letter of ['o', 'm', 'l', 'a', 'k', 'u', 'e', 'n', 'i', 'z', 's', 't']) {
     await handle.repositories.mastery.setLetterMastery({ childId, letter, language: 'xh', confirmed: true, programmeId: 'programme-a' });
   }
 };
@@ -477,18 +476,32 @@ testLesson('the higher-tier switch names all children who are ahead', async () =
 });
 testLesson('the Read tick stores the book as printed', async () => {
   await previewLesson();
-  const view = mount();
-  expect(await view.findByText('Molo, Lolo!')).toBeTruthy();
-  expect(view.getByText('Step 1')).toBeTruthy();
-  const read = view.getByRole('checkbox', { name: 'Read' });
-  expect(read).not.toBeChecked();
-  fireEvent.press(read);
-  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.books)
-    .toEqual([{ id: 'xh-int-v1-r01', how: 'printed' }]));
-  expect(view.getByRole('checkbox', { name: 'Read' })).toBeChecked();
-  expect((await handle.repositories.lessonDrafts.getActive()).plan_fixed_at).toBeTruthy();
-  fireEvent.press(view.getByRole('checkbox', { name: 'Read' }));
-  await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.books).toEqual([]));
+  const preview = packs.getPackById('isixhosa-candidates-preview-v2', { allowPreview: true });
+  const legacy = packs.getPackById('isixhosa-candidates-preview-v1', { allowPreview: true });
+  const readerId = 'xh-int-v1-r01';
+  const localPack = { ...preview,
+    letter_steps: preview.letter_steps.map(step => step.step === 1 ? { ...step, readers: [readerId] } : step),
+    readers: { [readerId]: legacy.readers[readerId] },
+    reader_details: { [readerId]: legacy.reader_details[readerId] },
+  };
+  const original = packs.getPackForOrder;
+  const lookup = jest.spyOn(packs, 'getPackForOrder').mockImplementation((orderId, options) =>
+    orderId === localPack.letter_order && options?.allowPreview === true ? localPack : original(orderId, options));
+  try {
+    const row = await handle.repositories.lessonDrafts.create({ ...draftStart(), language_code: 'xh', pack_id: null, plan: null });
+    const view = mount({ draftId: row.id });
+    expect(await view.findByText('Molo, Lolo!')).toBeTruthy();
+    expect(view.getByText('Step 1')).toBeTruthy();
+    const read = view.getByRole('checkbox', { name: 'Read' });
+    expect(read).not.toBeChecked();
+    fireEvent.press(read);
+    await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.books)
+      .toEqual([{ id: 'xh-int-v1-r01', how: 'printed' }]));
+    expect(view.getByRole('checkbox', { name: 'Read' })).toBeChecked();
+    expect((await handle.repositories.lessonDrafts.getActive()).plan_fixed_at).toBeTruthy();
+    fireEvent.press(view.getByRole('checkbox', { name: 'Read' }));
+    await waitFor(async () => expect((await handle.repositories.lessonDrafts.getActive()).ticks.books).toEqual([]));
+  } finally { lookup.mockRestore(); }
 });
 testLesson('an ECD class has no pair-reading section', async () => {
   await previewLesson();
@@ -500,7 +513,7 @@ testLesson('an ECD class has no pair-reading section', async () => {
 testLesson('a resumed archived ECD class has no pair-reading section', async () => {
   await previewLesson();
   const row = await handle.repositories.lessonDrafts.create({ ...draftStart(), language_code: 'xh',
-    pack_id: 'isixhosa-candidates-preview-v1', plan: null });
+    pack_id: 'isixhosa-candidates-preview-v2', plan: null });
   await handle.withTransaction(db => db.runAsync("update classes set grade = 'ECD', archived_at = '2026-10-21' where id = 'class-1'"));
   const view = mount({ draftId: row.id });
   await view.findByText('2 · Blending · 15 min · 4-letter');
@@ -595,4 +608,19 @@ testLesson('added-child read failure keeps last seen and retries without freezin
   await act(async () => { held.resolve(); });
   await waitFor(() => expect(view.getByRole('button', { name: 'Wrap up →' })).toBeEnabled());
   expect((await handle.repositories.lessonDrafts.getActive()).plan.present_child_ids).toEqual(['c1', 'c2', 'c3']);
+});
+
+
+testLesson('an unknown class edition asks for an app update and shows no letter tiles', async () => {
+  await handle.withTransaction(db => db.runAsync("update classes set letter_order_edition = '2099-01-01' where id = 'class-1'"));
+  const view = mount();
+  expect(await view.findByText("Update the app to teach this class's letters.")).toBeTruthy();
+  expect(view.queryAllByRole('button', { name: /^[A-Z], (not )?selected$/ })).toHaveLength(0);
+});
+
+testLesson('a new preview lesson has no books for isiXhosa yet', async () => {
+  await previewLesson();
+  const view = mount();
+  expect(await view.findByText('No books for isiXhosa yet.')).toBeTruthy();
+  expect(view.queryByText('Molo, Lolo!')).toBeNull();
 });

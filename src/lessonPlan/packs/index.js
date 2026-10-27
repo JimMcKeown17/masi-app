@@ -23,16 +23,6 @@ function deepFreeze(value) {
   return value;
 }
 
-// Existing lessons keep their language selections until they resolve a class's order.
-const LEGACY_LANGUAGE_PACK_IDS = deepFreeze({
-  release: {
-    xh: 'isixhosa-interim-letters-v1',
-    en: 'english-interim-letters-v1',
-    af: 'afrikaans-interim-letters-v1',
-  },
-  preview: { xh: 'isixhosa-candidates-preview-v1' },
-});
-
 // Internal construction seam; the app uses the single bundled registry below.
 export function createPackRegistry(packs, currentIds) {
   const packsById = Object.create(null);
@@ -48,21 +38,6 @@ export function createPackRegistry(packs, currentIds) {
         throw new Error(`Current pack ${packId} does not match letter order ${orderId}.`);
       }
     }
-  }
-
-  /**
-   * Resolve the current pack for an exact Masi language code.
-   * @param {unknown} languageCode
-   * @param {{allowPreview?: boolean} | null} [options]
-   * @returns {object | null}
-   */
-  function getPack(languageCode, options) {
-    if (typeof languageCode !== 'string') return null;
-    const { release, preview } = LEGACY_LANGUAGE_PACK_IDS;
-    const id = options?.allowPreview === true && has(preview, languageCode)
-      ? preview[languageCode]
-      : has(release, languageCode) ? release[languageCode] : null;
-    return getPackById(id, options);
   }
 
   /**
@@ -91,11 +66,11 @@ export function createPackRegistry(packs, currentIds) {
     return pack.channel === 'preview' && options?.allowPreview !== true ? null : pack;
   }
 
-  return { BUNDLED_PACKS, CURRENT_PACK_IDS, getPack, getPackForOrder, getPackById };
+  return { BUNDLED_PACKS, CURRENT_PACK_IDS, getPackForOrder, getPackById };
 }
 
 // Current is an explicit id, never the highest version across pack families.
-export const { BUNDLED_PACKS, CURRENT_PACK_IDS, getPack, getPackForOrder, getPackById } = createPackRegistry(
+export const { BUNDLED_PACKS, CURRENT_PACK_IDS, getPackForOrder, getPackById } = createPackRegistry(
   [isixhosaInterim, englishInterim, afrikaansInterim, isixhosaPreview,
     isixhosaInterimV2, englishInterimV2, afrikaansInterimV2,
     isixhosaPreviewV2, englishPreview, afrikaansPreview],

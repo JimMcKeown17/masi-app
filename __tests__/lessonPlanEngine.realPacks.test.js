@@ -1,8 +1,11 @@
 import * as engine from '../src/lessonPlan/engine';
-import { getPack } from '../src/lessonPlan/packs';
+import { getPackById, getPackForOrder } from '../src/lessonPlan/packs';
 import { analyzeToken, isDecodableAt, normalizeToken, tokenizeText } from '../src/utils/decodability';
 
-const pack = getPack('xh', { allowPreview: true });
+import { resolveTeachingOrder, NEW_CLASS_LETTER_ORDER_EDITION } from '../src/utils/letterOrders';
+
+const pack = getPackById('isixhosa-candidates-preview-v1', { allowPreview: true });
+const currentPack = (code, options) => getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, options);
 
 const input = ({ languageCode = 'xh', pack: p = pack, known, level = null }) => ({
   today: '2026-10-19',
@@ -61,9 +64,9 @@ test('isiXhosa all letters known: nothing needs a sound step', () => {
   for (const tier of choicesFor(input({ known, level: 'Word Reading' })).tiers)
     for (const item of tier.pool) expect(analyzeToken(item.text, pack).step).toBeLessThanOrEqual(12);
 });
-test.each([['xh', ['o', 'm', 'l', 'a']], ['en', ['a', 'm', 's', 't']], ['af', ['a', 's', 'm', 'e']]])(
+test.each([['xh', ['o', 'm', 'l', 'a']], ['en', ['s', 'a', 'n', 'd']], ['af', ['a', 'e', 'k', 'n']]])(
   '%s release pack (interim, letters only): step-1 letters, no blend or book content', (languageCode, step1) => {
-    const release = { languageCode, pack: getPack(languageCode), known: [] };
+    const release = { languageCode, pack: currentPack(languageCode), known: [] };
     const plan = planFor(input(release));
     expect(plan.reason).toBe('first_session');
     expect(plan.suggested_letters).toEqual(step1);
@@ -73,6 +76,6 @@ test.each([['xh', ['o', 'm', 'l', 'a']], ['en', ['a', 'm', 's', 't']], ['af', ['
   });
 test.each(Object.entries(engine.PACK_LANGUAGE_BY_CODE))(
   "the engine's %s matches the language of A1's release and preview packs", (languageCode, packLanguage) => {
-    expect(getPack(languageCode)?.language).toBe(packLanguage);
-    expect(getPack(languageCode, { allowPreview: true })?.language).toBe(packLanguage);
+    expect(currentPack(languageCode)?.language).toBe(packLanguage);
+    expect(currentPack(languageCode, { allowPreview: true })?.language).toBe(packLanguage);
   });

@@ -71,11 +71,12 @@ bundled for saved drafts and sessions. These files predate the `letter_order` fi
 that table, otherwise `null`. A retained pack's availability by id does not make its order current;
 for example, `getPackForOrder('english-order-legacy')` returns `null`.
 
-Existing lessons still call `getPack(languageCode, options)`. Its private
-`LEGACY_LANGUAGE_PACK_IDS` keeps their existing choices: all three v1 releases, with
-`isixhosa-candidates-preview-v1` for opted-in isiXhosa previews. English and Afrikaans still use
-their v1 releases through this language lookup, including in developer builds. Diagnostics use
-the current edition and `getPackForOrder`, so they report the new order-based selections.
+Lessons choose a pack by the class's teaching order, never by language. `lessonOrderAndPack`
+(`src/lessonPlan/inputs/lessonInputs.js`) resolves the class's edition and language to an order,
+then takes `getPackForOrder(order.id, options)` for a new lesson or `getPackById(draft.pack_id,
+options)` for a resumed one. It keeps the pack only when `packLetterOrderId(pack)` equals the
+order, so a 2026-10-23 class is never taught from a v1 pack. Diagnostics report the current
+edition's packs through `getPackForOrder`.
 
 The registry imports JSON files statically. `BUNDLED_PACKS` is a frozen array, every pack is
 deep-frozen once at module load, and lookup functions return those same objects. Every bundled
@@ -93,7 +94,7 @@ The order lookup falls back to its release when no preview is mapped. Options ma
 
 Preview content may contain unreviewed candidate words, so it is off by default. Only the literal environment value `MASI_PREVIEW_CONTENT=1` enables the setting; `app.config.js` exposes the result as the boolean `extra.previewContent`. Never set `MASI_PREVIEW_CONTENT` in an EAS environment. Use a local developer shell or the dedicated `preview-content` build profile instead.
 
-Two checks enforce lesson-plan C12. At build time, `resolvePreviewContentBuildConfig` refuses the setting when `EAS_BUILD_PROFILE` is `pilot` or `production`. At runtime, `isPreviewContentEnabled()` requires `Constants.expoConfig.extra.previewContent === true` and rejects native `Updates.channel` values `preview` and `production`. It returns `false` if reading runtime configuration fails. Callers pass `{ allowPreview: isPreviewContentEnabled() }` to `getPackForOrder`, `getPackById` and the existing `getPack` language lookup.
+Two checks enforce lesson-plan C12. At build time, `resolvePreviewContentBuildConfig` refuses the setting when `EAS_BUILD_PROFILE` is `pilot` or `production`. At runtime, `isPreviewContentEnabled()` requires `Constants.expoConfig.extra.previewContent === true` and rejects native `Updates.channel` values `preview` and `production`. It returns `false` if reading runtime configuration fails. Callers pass `{ allowPreview: isPreviewContentEnabled() }` to `getPackForOrder` and `getPackById`.
 
 Both checks are needed because an OTA evaluates app config without the build server's `EAS_BUILD_PROFILE`. An OTA published from a shell with the setting could therefore carry `extra.previewContent: true`. The runtime check still rejects it on field-channel phones: `Updates.channel` comes from the native build, and an OTA cannot change it. In particular, pilot builds use the `preview` channel and must keep release content only. A missing, null or empty channel does not opt in by itself; the boolean setting must also be true.
 
@@ -111,9 +112,8 @@ The three current previews are copied unchanged from the books repository's
 this commit and the SHA-256 pins identify the adopted export files. Do not edit them in Masi.
 
 These exports contain candidate word banks and sound steps for the `2026-10-23` orders. They
-have no readers. Once lessons use these order-based selections, developer builds lose
-**Molo, Lolo!** until books adds readers. The existing language lookup still selects the retained
-isiXhosa preview v1, including its reader.
+have no readers, so developer builds show no book (**Molo, Lolo!** is gone) until books adds
+readers. The retained isiXhosa preview v1 still holds that reader for saved drafts and sessions.
 
 To adopt another export, add a new version, copy it unchanged, verify its hash, bundle it, and
 update the appropriate order mapping and provenance pin. Retain versions referenced by saved

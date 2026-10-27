@@ -9,7 +9,7 @@ const c2 = { id: 'c2', first_name: 'Lulu', class_id: 'class-1', reading_level: n
 const groups = [{ id: 'g10', name: 'Group 10' }, { id: 'g2', name: 'Group 2' }];
 const input = () => ({
   base, groups, membersByGroup: { g10: [c1], g2: [c2] },
-  classes: [{ id: 'class-1', home_language: 'English', grade: 'ECD' }],
+  classes: [{ id: 'class-1', home_language: 'English', letter_order_edition: '2026-10-23', grade: 'ECD' }],
   children: [c1, c2, { id: 'ungrouped' }],
   childrenGroups: [{ child_id: 'c1', group_id: 'g10' }, { child_id: 'c2', group_id: 'g2' }],
   knownLettersByLanguage: { en: { c1: [], c2: [] } },
@@ -26,7 +26,7 @@ test('picker shape uses numeric group order, groupNumber and stable dot colours'
   expect(model.rows[0]).toEqual({
     groupId: 'g2', name: 'Group 2', number: 2, dotColor: getGroupDotColor(0),
     members: [{ id: 'c2', firstName: 'Lulu' }], classId: 'class-1', languageCode: 'en', isEcd: true,
-    lastSeenOn: null, taughtToday: false, nextLetters: ['a', 'm', 's', 't'], lettersReason: 'first_session',
+    lastSeenOn: null, taughtToday: false, nextLetters: ['s', 'a', 'n', 'd'], lettersNeedUpdate: false, lettersReason: 'first_session',
   });
   expect(model.upNextGroupId).toBe('g2');
   expect(model.ungrouped).toEqual([{ id: 'ungrouped' }]);
@@ -51,4 +51,18 @@ test('picker history is incomplete if any group member is incomplete', () => {
   data.historyByChild = { c1: true, c2: false };
   expect(shapePickerModel(data).historyComplete).toBe(false);
   expect(shapePickerModel({ ...data, groups: [] }).upNextGroupId).toBeNull();
+});
+
+
+test('groups with the same language resolve each class edition independently', () => {
+  const data = input();
+  data.classes.push({ id: 'future-class', home_language: 'English', letter_order_edition: '2099-01-01' });
+  data.groups = data.groups.map(group => group.id === 'g2' ? { ...group, class_id: 'future-class' } : group);
+  const model = shapePickerModel(data);
+  expect(model.rows.find(row => row.groupId === 'g2')).toMatchObject({
+    classId: 'future-class', nextLetters: [], lettersNeedUpdate: true,
+  });
+  expect(model.rows.find(row => row.groupId === 'g10')).toMatchObject({
+    classId: 'class-1', nextLetters: ['s', 'a', 'n', 'd'], lettersNeedUpdate: false,
+  });
 });

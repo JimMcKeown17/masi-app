@@ -1,14 +1,22 @@
 import { getActiveAcademicYear, getActiveProgrammeId } from '../../db/repositories/domainRepositoryUtils';
-import { PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
+import { languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
 import { compareGroups, getGroupDotColor, groupNumber, ungroupedChildren } from '../../utils/groupHelpers';
 import { rankGroups, resolveLessonClass } from '../engine';
-import { getPack, getPackById } from '../packs';
+import { getPackById, getPackForOrder, packLetterOrderId } from '../packs';
+import { getTeachingOrder } from '../../utils/letterOrders';
 import { isPreviewContentEnabled } from '../packs/previewContent';
 import { loadKnownLetters } from './knownLetters';
 import { packIndexFor } from './packIndexCache';
 
-const packFor = (languageCode, packId, allowPreview) => packId
-  ? getPackById(packId, { allowPreview }) : getPack(languageCode, { allowPreview });
+export const lessonOrderAndPack = ({ lessonClass, languageCode, packId, allowPreview }) => {
+  const teachingOrder = getTeachingOrder(lessonClass, languageCode);
+  const candidate = teachingOrder.kind === 'order'
+    ? packId ? getPackById(packId, { allowPreview }) : getPackForOrder(teachingOrder.id, { allowPreview })
+    : null;
+  const pack = teachingOrder.kind === 'order' && packLetterOrderId(candidate) === teachingOrder.id
+    ? candidate : null;
+  return { teachingOrder, pack };
+};
 
 export const loadLessonBase = async ({ handle, repositories, today, programmeId }) => {
   const db = await handle.getReader();
@@ -35,7 +43,7 @@ const describeGroups = ({ groups, membersByGroup, classes }) => {
       groupClassId: group.class_id, memberClassIds: members.map(child => child.class_id),
     });
     const lessonClass = classesById.get(classId);
-    return { group, members, classId, languageCode: languageCodeForHomeLanguage(lessonClass?.home_language),
+    return { group, members, classId, lessonClass, languageCode: languageCodeForHomeLanguage(lessonClass?.home_language),
       isEcd: lessonClass?.grade === 'ECD' };
   });
 };
@@ -51,9 +59,12 @@ const childInput = (child, knownLetters, historyByChild, masteryByChild) => ({
 const shapeResolvedPickerModel = ({ base, groups, descriptions, children, childrenGroups,
   knownLettersByLanguage = {}, historyByChild = {}, masteryByChild = {}, allowPreview = false }) => {
   const groupsById = new Map(descriptions.map(row => [row.group.id, row]));
+  const ordersByGroup = new Map(descriptions.map(({ group, lessonClass, languageCode }) => [group.id,
+    lessonOrderAndPack({ lessonClass, languageCode, allowPreview }),
+  ]));
   const engineGroups = descriptions.map(({ group, members, languageCode }) => ({
     id: group.id, name: group.name, displayNumber: groupNumber(group),
-    memberIds: members.map(child => child.id), languageCode, pack: packFor(languageCode, null, allowPreview),
+    memberIds: members.map(child => child.id), languageCode, pack: ordersByGroup.get(group.id).pack,
   }));
   const allChildren = Object.fromEntries(descriptions.flatMap(({ members }) => members.map(child => [
     child.id, childInput(child, [], historyByChild, masteryByChild),
@@ -80,6 +91,7 @@ const shapeResolvedPickerModel = ({ base, groups, descriptions, children, childr
         members: members.map(child => ({ id: child.id, firstName: child.first_name })),
         classId, languageCode, isEcd, lastSeenOn: row.lastSeenOn, taughtToday: row.taughtToday,
         nextLetters: letters.nextLetters, lettersReason: letters.lettersReason,
+        lettersNeedUpdate: ordersByGroup.get(group.id).teachingOrder.kind === 'update',
       };
     }),
     ungrouped: ungroupedChildren({ children, childrenGroups }),
@@ -132,6 +144,9 @@ export const loadPickerLetters = async ({ handle, repositories, services, base, 
     memberIdsByGroup[group.id].map(id => childrenById[id] ?? { id }),
   ]));
   const descriptions = describeGroups({ groups: ranking.groups, membersByGroup, classes });
+  const ordersByGroup = new Map(descriptions.map(({ group, lessonClass, languageCode }) => [group.id,
+    lessonOrderAndPack({ lessonClass, languageCode, allowPreview: isPreviewContentEnabled() }),
+  ]));
   const lettersByGroup = {};
   await Promise.all([...new Set(descriptions.map(row => row.languageCode))].map(async languageCode => {
     const languageGroups = descriptions.filter(row => row.languageCode === languageCode);
@@ -140,36 +155,41 @@ export const loadPickerLetters = async ({ handle, repositories, services, base, 
       languageCode, programmeId: base.programmeId, academicYear: base.academicYear });
     const result = rankGroups({ ...base, groups: languageGroups.map(({ group, members }) => ({
       id: group.id, name: group.name, displayNumber: groupNumber(group), memberIds: members.map(child => child.id),
-      languageCode, pack: packFor(languageCode, null, isPreviewContentEnabled()),
+      languageCode, pack: ordersByGroup.get(group.id).pack,
     })), children: Object.fromEntries(languageGroups.flatMap(({ members }) => members.map(child => [child.id,
       childInput(child, knownLetters[child.id], historyByChild, masteryByChild),
     ]))) });
     for (const row of result.rows) {
       const { classId, isEcd } = languageGroups.find(item => item.group.id === row.groupId);
       lettersByGroup[row.groupId] = { classId, languageCode, isEcd,
-        nextLetters: row.nextLetters, lettersReason: row.lettersReason };
+        nextLetters: row.nextLetters, lettersReason: row.lettersReason,
+        lettersNeedUpdate: ordersByGroup.get(row.groupId).teachingOrder.kind === 'update' };
     }
   }));
   return { lettersByGroup, historyComplete: childIds.every(id => historyByChild[id] === true) };
 };
 
 export const loadLessonParticipants = async ({ handle, repositories, services, programmeId,
-  languageCode, packId, participantChildIds }) => {
+  classId, languageCode, packId, participantChildIds }) => {
   const childIds = [...new Set(participantChildIds)];
-  const [childrenById, masteryByChild] = await Promise.all([
+  const [childrenById, masteryByChild, lessonClass] = await Promise.all([
     repositories.children.getChildrenByIds(childIds),
     services.assessmentHistory.masteryCompletenessByChild({ childIds, programmeId }),
+    repositories.classes.getClassById(classId),
   ]);
   // Read coverage before evidence, which may be newer but must never be older than its completeness claim.
   const knownLetters = await loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode });
-  const pack = packFor(languageCode, packId, isPreviewContentEnabled());
+  const { teachingOrder, pack } = lessonOrderAndPack({
+    lessonClass, languageCode, packId, allowPreview: isPreviewContentEnabled(),
+  });
   return {
     participants: childIds.map(id => {
       const child = childrenById[id] ?? { id };
       return { id, readingLevel: child.reading_level ?? null, knownLetters: knownLetters[id] ?? [],
         masteryComplete: masteryByChild[id] === true };
     }),
-    pack, packIndex: packIndexFor(pack), alphabet: PEDAGOGICAL_ORDERS[languageCode] ?? null,
+    lessonClass, teachingOrder, pack, packIndex: packIndexFor(pack),
+    alphabet: teachingOrder.kind === 'order' ? teachingOrder.letters : null,
   };
 };
 

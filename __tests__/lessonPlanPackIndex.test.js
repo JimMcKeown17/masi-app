@@ -1,8 +1,8 @@
 import { computeLessonPlan, computeLessonChoices, indexPack } from '../src/lessonPlan/engine';
 import { packIndexFor } from '../src/lessonPlan/inputs/packIndexCache';
-import { getPack } from '../src/lessonPlan/packs';
+import { getPackById } from '../src/lessonPlan/packs';
 
-const pack = getPack('xh', { allowPreview: true });
+const pack = getPackById('isixhosa-candidates-preview-v1', { allowPreview: true });
 const input = (extra = {}) => ({
   today: '2026-10-23', academicYearStart: '2026-01-14', programmeId: 'p-lit',
   groupId: 'g1', languageCode: 'xh', pack, isEcd: false, sessions: [],
@@ -31,7 +31,7 @@ test('the engine uses a supplied index', () => {
 });
 
 test.each(['other language', 'same id, different object'])('a mismatched index is ignored: %s', mismatch => {
-  const other = mismatch === 'other language' ? getPack('en') : { ...pack };
+  const other = mismatch === 'other language' ? getPackById('english-interim-letters-v2') : { ...pack };
   const packIndex = indexPack(other);
   packIndex.blendTiers[0] = [];
   expect(computeLessonChoices(input({ packIndex }))).toEqual(computeLessonChoices(input()));

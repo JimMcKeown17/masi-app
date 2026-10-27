@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { BUNDLED_PACKS, CURRENT_PACK_IDS, PACK_LANGUAGE_CODES, getPack, getPackById, getPackForOrder, packLetterOrderId, lintMasiPack, createPackRegistry }
+import { BUNDLED_PACKS, CURRENT_PACK_IDS, PACK_LANGUAGE_CODES, getPackById, getPackForOrder, packLetterOrderId, lintMasiPack, createPackRegistry }
   from '../src/lessonPlan/packs';
 import { LANGUAGE_LABELS, languageCodeForHomeLanguage } from '../src/utils/assessmentRegistry';
 
@@ -21,24 +21,6 @@ const RELEASE_PACK_SHA256 = {
   'english-interim-letters-v2': '54a73d3ccc783136565db39eb6baae4274db991debf694b907faa35eaaf3ae49',
   'afrikaans-interim-letters-v2': '92d837fde5fd89c7703fb65980fe05aab2af8dbbda23b47938200779213b3b16',
 };
-
-test.each([
-  ['xh', 'isixhosa', 'o m l a k u e n i t s d f b y c z p q w v g x h j r'],
-  ['en', 'english', 'a m s t n i p c f d h o r b l k e g w v u j y z q x'],
-  ['af', 'afrikaans', 'a s m e k i r o n t d l p u b g h v w y f j c z x q'],
-])('the %s release pack teaches the interim order, letters only', (code, name, expected) => {
-  const pack = getPack(code);
-  expect(pack).toEqual(expect.objectContaining({ language: name, channel: 'release' }));
-  expect(order(pack)).toBe(expected);
-  expect(pack.sound_inventory).toEqual([...'abcdefghijklmnopqrstuvwxyz']);
-  expect(pack.letter_steps.map(s => s.step)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-  expect(pack.letter_steps.map(s => s.new_letters.length)).toEqual([4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]);
-  for (const step of pack.letter_steps) {
-    expect([step.blends, step.words, step.readers]).toEqual([[], [], []]);
-    expect(has(step, 'size_exception')).toBe(false);
-  }
-  expect([pack.word_bank, pack.readers, pack.reader_details, pack.sound_steps]).toEqual([[], {}, {}, []]);
-});
 
 const PREVIEW_PACK_SHA256 = {
   'isixhosa-candidates-preview-v2': '7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366',
@@ -144,18 +126,6 @@ test.each([null, undefined, '', 'xh', 'constructor', '__proto__', 7, {}])('getPa
   expect(getPackForOrder(id)).toBeNull();
 });
 
-test('isiXhosa preview pack: developer builds only, same letter order as the release pack', () => {
-  expect(getPack('xh').id).toBe('isixhosa-interim-letters-v1');
-  expect(getPack('xh', { allowPreview: true }).id).toBe('isixhosa-candidates-preview-v1');
-  expect(getPackById('isixhosa-candidates-preview-v1')).toBeNull();
-  expect(getPackById('isixhosa-candidates-preview-v1', { allowPreview: true }).channel).toBe('preview');
-  expect(order(getPack('xh', { allowPreview: true }))).toBe(order(getPack('xh')));
-  for (const allowPreview of [false, 'yes', 1]) {
-    expect(getPack('xh', { allowPreview }).id).toBe('isixhosa-interim-letters-v1');
-    expect(getPackById('isixhosa-candidates-preview-v1', { allowPreview })).toBeNull();
-  }
-});
-
 test('pack language names resolve like class languages in the assessment registry', () => {
   // 'afrikaans' resolves to null until track AF adds 'af' to the registry, and then it must resolve to 'af'.
   for (const [name, code] of Object.entries(PACK_LANGUAGE_CODES)) {
@@ -198,25 +168,6 @@ test('every current id resolves to a bundled pack of that order and channel', ()
   }
 });
 
-test.each([undefined, null, '', 'English', 'english', 'isixhosa', 'isiXhosa', 'XH', ' xh', 'zu',
-  'constructor', '__proto__', 'toString', 42, {}])('getPack(%p) is null', key => {
-  expect(getPack(key)).toBeNull();
-});
-
-test('options may be missing or null', () => {
-  for (const options of [undefined, null]) {
-    expect(getPack('en', options).id).toBe('english-interim-letters-v1');
-    expect(getPackById('english-interim-letters-v1', options)).toBe(getPack('en'));
-  }
-  expect(getPack('xh', null).id).toBe('isixhosa-interim-letters-v1');
-});
-
-test('only allowPreview === true asks for preview; with no preview pack the release pack is returned', () => {
-  for (const allowPreview of [true, false, 'yes']) {
-    expect(getPack('en', { allowPreview }).id).toBe('english-interim-letters-v1');
-  }
-});
-
 test.each([undefined, null, '', 'isixhosa-integrated-v1', 'integrated-sequence-isixhosa-v1', 'xh', 'constructor', '__proto__', 7])(
   'getPackById(%p) is null', id => { expect(getPackById(id)).toBeNull(); });
 
@@ -226,14 +177,8 @@ test('getPackById resolves every bundled release pack', () => {
   }
 });
 
-test('getPack keeps the language selections used by existing lessons', () => {
-  for (const [code, id] of Object.entries({ xh: 'isixhosa-interim-letters-v1', en: 'english-interim-letters-v1', af: 'afrikaans-interim-letters-v1' })) {
-    expect(getPack(code)).toBe(getPackById(id));
-  }
-});
-
 test('a new current release keeps the old release resolvable and both versions frozen and unchanged', () => {
-  const oldPack = JSON.parse(JSON.stringify(getPack('en')));
+  const oldPack = JSON.parse(JSON.stringify(getPackById('english-interim-letters-v1')));
   const newPack = { ...JSON.parse(JSON.stringify(oldPack)), id: 'english-interim-letters-v2', letter_order: 'english-order-legacy' };
   const before = JSON.parse(JSON.stringify([newPack, oldPack]));
   const registry = createPackRegistry([newPack, oldPack], {
@@ -256,11 +201,11 @@ test('a new current release keeps the old release resolvable and both versions f
 });
 
 test('returned packs are deeply frozen', () => {
-  const pack = getPack('en');
+  const pack = getPackById('english-interim-letters-v1');
   expect(Object.isFrozen(pack.letter_steps[0].new_letters)).toBe(true);
   expect(() => pack.letter_steps.sort()).toThrow(TypeError);
   expect(() => pack.word_bank.push({ text: 'x', step: 1 })).toThrow(TypeError);
-  expect(getPack('en').letter_steps[0].new_letters).toEqual(['a', 'm', 's', 't']);
+  expect(getPackById('english-interim-letters-v1').letter_steps[0].new_letters).toEqual(['a', 'm', 's', 't']);
 });
 
 test('the bundled array, current mappings and all nested pack values are frozen', () => {
@@ -272,4 +217,8 @@ test('the bundled array, current mappings and all nested pack values are frozen'
   };
   assertFrozen(BUNDLED_PACKS);
   assertFrozen(CURRENT_PACK_IDS);
+});
+
+test('language-only pack lookup is no longer exported', () => {
+  expect(require('../src/lessonPlan/packs').getPack).toBeUndefined();
 });

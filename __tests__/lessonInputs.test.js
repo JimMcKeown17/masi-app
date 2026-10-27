@@ -12,14 +12,14 @@ import { loadKnownLetters } from '../src/lessonPlan/inputs/knownLetters';
 import { loadMasteryState } from '../src/utils/masteryState';
 import * as domainReads from '../src/db/repositories/domainRepositoryUtils';
 import * as pickerInputs from '../src/lessonPlan/inputs/lessonInputs';
-import { loadLessonBase, loadPickerRanking, loadPickerLetters, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadPickerRanking, loadPickerLetters, loadLessonParticipants, presentLessonInput, lessonOrderAndPack } from '../src/lessonPlan/inputs/lessonInputs';
 import { computeLessonPlan, rankGroups } from '../src/lessonPlan/engine';
 import * as lessonClasses from '../src/lessonPlan/engine/lessonClass';
 import * as groupEngine from '../src/lessonPlan/engine/groups';
-import { getPack } from '../src/lessonPlan/packs';
+import { getPackForOrder } from '../src/lessonPlan/packs';
 import { packIndexFor } from '../src/lessonPlan/inputs/packIndexCache';
 import * as previewContent from '../src/lessonPlan/packs/previewContent';
-import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
+import { resolveTeachingOrder } from '../src/utils/letterOrders';
 
 const today = '2026-10-22';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -56,13 +56,13 @@ const roster = async () => {
   )) };
 };
 const lesson = (extra = {}) => ({ groupId: 'g2', upNextGroupId: 'g2', languageCode: 'en',
-  packId: null, isEcd: false, presentChildIds: ['c1', 'c2'], ...extra });
+  classId: 'class-1', packId: null, isEcd: false, presentChildIds: ['c1', 'c2'], ...extra });
 const base = () => loadLessonBase({ handle, repositories, today });
 const input = async (extra = {}) => {
   const selected = lesson(extra);
   const loadedBase = await base();
   const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: loadedBase.programmeId,
-    languageCode: selected.languageCode, packId: selected.packId, participantChildIds: selected.presentChildIds });
+    classId: selected.classId, languageCode: selected.languageCode, packId: selected.packId, participantChildIds: selected.presentChildIds });
   return presentLessonInput({ base: loadedBase, lesson: selected, loaded, presentChildIds: selected.presentChildIds });
 };
 const fullPicker = async options => {
@@ -169,7 +169,7 @@ test('reads do not grow with the number of children', async () => {
   const measure = async task => { statements.length = 0; await task(); return statements.length; };
   const known = childIds => loadKnownLetters({ repositories, userId: handle.userId, childIds, languageCode: 'en' });
   const load = participantChildIds => loadLessonParticipants({ handle, repositories, services,
-    programmeId: loadedBase.programmeId, languageCode: 'en', packId: null, participantChildIds });
+    programmeId: loadedBase.programmeId, classId: 'class-1', languageCode: 'en', packId: null, participantChildIds });
   const data = await roster();
   const loadPicker = childIds => fullPicker({ base: loadedBase,
     ...data, groups: [data.groups[0]], getChildrenInGroup: () => data.children.filter(child => childIds.includes(child.id)) });
@@ -205,7 +205,7 @@ test('a child in an English group and an isiXhosa group gets each group\'s own l
   expect(resolveClass).toHaveBeenCalledTimes(2); // Once per group, across loading and shaping.
   expect(rank).toHaveBeenCalledTimes(3); // One ordering pass, then one per language.
   for (const row of model.rows) {
-    const loaded = await input({ groupId: row.groupId, languageCode: row.languageCode, presentChildIds: ['c1'] });
+    const loaded = await input({ groupId: row.groupId, classId: row.classId, languageCode: row.languageCode, presentChildIds: ['c1'] });
     const plan = computeLessonPlan(loaded);
     expect(row.nextLetters).toEqual(plan.suggested_letters);
     expect(row.lettersReason).toBe(plan.reason);
@@ -246,8 +246,8 @@ test('picker rows follow rankGroups order; a never-seen group is Up next; a grou
   const model = await picker();
   const loadedBase = await base();
   const expected = rankGroups({ ...loadedBase, groups: [
-    { id: 'g2', name: 'Group 2', displayNumber: 2, memberIds: ['c1'], languageCode: 'en', pack: getPack('en') },
-    { id: 'g10', name: 'Group 10', displayNumber: 10, memberIds: ['c2'], languageCode: 'en', pack: getPack('en') },
+    { id: 'g2', name: 'Group 2', displayNumber: 2, memberIds: ['c1'], languageCode: 'en', pack: getPackForOrder('english-order-2026-10-23') },
+    { id: 'g10', name: 'Group 10', displayNumber: 10, memberIds: ['c2'], languageCode: 'en', pack: getPackForOrder('english-order-2026-10-23') },
   ], children: {} });
   expect(model.upNextGroupId).toBe('g10');
   expect(model.rows.map(row => row.groupId)).toEqual(expected.rows.map(row => row.groupId));
@@ -275,7 +275,7 @@ test('a mixed-class group has classId null and no letters until the class is cho
   });
   expect((await picker()).rows.find(row => row.groupId === 'g2'))
     .toMatchObject({ classId: null, languageCode: null, nextLetters: [], lettersReason: 'no_pack' });
-  expect((await input({ languageCode: 'en' })).pack).toBe(getPack('en'));
+  expect((await input({ languageCode: 'en' })).pack).toBe(getPackForOrder('english-order-2026-10-23'));
 });
 
 test('lesson base reports missing dependencies and honours an explicit programme', async () => {
@@ -290,9 +290,8 @@ test('lesson base reports missing dependencies and honours an explicit programme
 
 test('lesson input uses a pinned pack and respects preview eligibility and unsupported languages', async () => {
   jest.spyOn(previewContent, 'isPreviewContentEnabled').mockReturnValue(true);
-  expect((await input({ languageCode: 'xh', packId: 'isixhosa-interim-letters-v1' })).pack.id).toBe('isixhosa-interim-letters-v1');
   const loadedPreview = await input({ languageCode: 'xh' });
-  expect(loadedPreview.pack.id).toBe('isixhosa-candidates-preview-v1');
+  expect(loadedPreview.pack.id).toBe('isixhosa-candidates-preview-v2');
   expect(loadedPreview.packIndex).toBe(packIndexFor(loadedPreview.pack));
   previewContent.isPreviewContentEnabled.mockReturnValue(false);
   expect((await input({ languageCode: 'xh', packId: 'isixhosa-candidates-preview-v1' })).pack).toBeNull();
@@ -301,7 +300,7 @@ test('lesson input uses a pinned pack and respects preview eligibility and unsup
     expect(loaded.pack).toBeNull(); expect(loaded.alphabet).toBeNull();
     expect(loaded.presentChildren.map(child => child.knownLetters)).toEqual([[], []]);
   }
-  expect((await input({ languageCode: 'af' })).alphabet).toEqual(PEDAGOGICAL_ORDERS.af);
+  expect((await input({ languageCode: 'af' })).alphabet).toEqual(resolveTeachingOrder('2026-10-23', 'af').letters);
 });
 
 
@@ -309,7 +308,7 @@ test('participant facts include absentees and project present children in screen
   await confirm('c2', 'm', 'en');
   const loadedBase = await base();
   const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: loadedBase.programmeId,
-    languageCode: 'en', packId: null, participantChildIds: ['c1', 'c2'] });
+    classId: 'class-1', languageCode: 'en', packId: null, participantChildIds: ['c1', 'c2'] });
   expect(loaded.participants.map(child => child.id)).toEqual(['c1', 'c2']);
   expect(loaded.participants[1].knownLetters).toEqual(['m']);
   statements.length = 0;
@@ -387,4 +386,100 @@ test('picker ranking stays within six statements and shares programme and year w
   expect(year).toHaveBeenCalledTimes(1);
   console.log('D5 split picker', { ranking: { statements: ranked.statements, rows: ranked.rows },
     letters: { statements: letters.statements, rows: letters.rows } });
+});
+
+const currentClass = { id: 'class-1', letter_order_edition: '2026-10-23' };
+test.each([
+  [null, true, 'isixhosa-candidates-preview-v2'],
+  [null, false, 'isixhosa-interim-letters-v2'],
+  ['isixhosa-candidates-preview-v2', true, 'isixhosa-candidates-preview-v2'],
+  ['isixhosa-candidates-preview-v2', false, null],
+  ['isixhosa-candidates-preview-v1', true, null],
+  ['isixhosa-interim-letters-v1', false, null],
+])('lesson pack %p with preview %p resolves to %p', (packId, allowPreview, expected) => {
+  const resolved = lessonOrderAndPack({ lessonClass: currentClass, languageCode: 'xh', packId, allowPreview });
+  expect(resolved.teachingOrder).toMatchObject({ kind: 'order', id: 'isixhosa-order-2026-10-23' });
+  expect(resolved.pack?.id ?? null).toBe(expected);
+});
+
+test('an English class never teaches from a pinned legacy pack', () => {
+  expect(lessonOrderAndPack({ lessonClass: currentClass, languageCode: 'en',
+    packId: 'english-interim-letters-v1', allowPreview: false }).pack).toBeNull();
+});
+
+test.each([
+  ['isiXhosa', 'xh', ['o', 'm', 'l', 'a']],
+  ['English', 'en', ['s', 'a', 'n', 'd']],
+  ['Afrikaans', 'af', ['a', 'e', 'k', 'n']],
+])('a new %s class starts with its edition letters', async (language, code, first) => {
+  await write(db => db.runAsync('update classes set home_language = ?', language));
+  const model = await picker();
+  for (const row of model.rows) expect(row).toMatchObject({ languageCode: code, nextLetters: first, lettersNeedUpdate: false });
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: 'programme-a',
+    classId: 'class-1', languageCode: code, participantChildIds: ['c1'] });
+  expect(loaded.lessonClass).toMatchObject({ id: 'class-1', letter_order_edition: '2026-10-23' });
+  expect(loaded.teachingOrder).toMatchObject({ kind: 'order', id: resolveTeachingOrder('2026-10-23', code).id });
+});
+
+test('regrouping keeps the same class order for both groups', async () => {
+  const data = await roster();
+  const loaded = await Promise.all(data.groups.map(group => loadLessonParticipants({ handle, repositories, services,
+    programmeId: 'programme-a', classId: 'class-1', languageCode: 'en',
+    participantChildIds: data.getChildrenInGroup(group.id).map(child => child.id) })));
+  expect(loaded.map(row => row.teachingOrder.id)).toEqual(['english-order-2026-10-23', 'english-order-2026-10-23']);
+});
+
+test('the group class wins when its members belong to another class', async () => {
+  await write(async db => {
+    await db.runAsync("insert into classes (id, school_id, name, grade, home_language) values ('group-class', 'school-1', 'Group class', '1', 'Afrikaans')");
+    await db.runAsync("update groups set class_id = 'group-class' where id = 'g2'");
+  });
+  const row = (await picker()).rows.find(item => item.groupId === 'g2');
+  expect(row).toMatchObject({ classId: 'group-class', languageCode: 'af', nextLetters: ['a', 'e', 'k', 'n'] });
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: 'programme-a',
+    classId: row.classId, languageCode: row.languageCode, participantChildIds: ['c1'] });
+  expect(loaded.teachingOrder.id).toBe('afrikaans-order-2026-10-23');
+});
+
+test('an EA-chosen language resolves for a class without a home language', async () => {
+  await write(db => db.runAsync('update classes set home_language = null'));
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: 'programme-a',
+    classId: 'class-1', languageCode: 'en', participantChildIds: ['c1'] });
+  expect(loaded.teachingOrder).toMatchObject({ kind: 'order', id: 'english-order-2026-10-23' });
+});
+
+test.each(['zu', null])('language %p has no teaching order, pack or alphabet', async languageCode => {
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: 'programme-a',
+    classId: 'class-1', languageCode, participantChildIds: ['c1'] });
+  expect(loaded).toMatchObject({ teachingOrder: { kind: 'none' }, pack: null, alphabet: null });
+});
+
+test('an unknown edition needs an app update in participants and picker rows', async () => {
+  await write(db => db.runAsync("update classes set letter_order_edition = '2099-01-01'"));
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: 'programme-a',
+    classId: 'class-1', languageCode: 'en', participantChildIds: ['c1'] });
+  expect(loaded).toMatchObject({ teachingOrder: { kind: 'update' }, pack: null, alphabet: null });
+  for (const row of (await picker()).rows) expect(row).toMatchObject({ lettersNeedUpdate: true, nextLetters: [] });
+});
+
+test('a lesson without a matching pack still uses its class alphabet', async () => {
+  const loaded = await loadLessonParticipants({ handle, repositories, services, programmeId: 'programme-a',
+    classId: 'class-1', languageCode: 'af', packId: 'afrikaans-interim-letters-v1', participantChildIds: ['c1'] });
+  expect(loaded.pack).toBeNull();
+  expect(loaded.alphabet).toEqual(resolveTeachingOrder('2026-10-23', 'af').letters);
+});
+
+
+test('picker letters resolve different editions independently within one language batch', async () => {
+  await write(async db => {
+    await db.runAsync("insert into classes (id, school_id, name, grade, home_language, letter_order_edition) values ('future-class', 'school-1', 'Future class', '1', 'English', '2099-01-01')");
+    await db.runAsync("update groups set class_id = 'future-class' where id = 'g2'");
+  });
+  const rows = (await picker()).rows;
+  expect(rows.find(row => row.groupId === 'g2')).toMatchObject({
+    languageCode: 'en', nextLetters: [], lettersNeedUpdate: true,
+  });
+  expect(rows.find(row => row.groupId === 'g10')).toMatchObject({
+    languageCode: 'en', nextLetters: ['s', 'a', 'n', 'd'], lettersNeedUpdate: false,
+  });
 });

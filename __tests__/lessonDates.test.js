@@ -16,6 +16,11 @@ test('lessonRowDetail leaves out letters when there are none', () => {
   expect(lessonRowDetail('Mon', ['a', 'm'])).toBe('Mon ·\u00a0letters\u00a0a\u00a0m');
   expect(lessonRowDetail('Not seen yet', [])).toBe('Not\u00a0seen\u00a0yet');
 });
+test('the update message wraps between its words; the dot stays with its first word', () => {
+  const { lessonRowDetail } = require('../src/utils/lessonDates');
+  expect(lessonRowDetail('Not seen yet', ['s', 'a'], { needsAppUpdate: true }))
+    .toBe("Not\u00a0seen\u00a0yet \u00b7\u00a0Update the app to teach this class's letters.");
+});
 
 
 test.each([
