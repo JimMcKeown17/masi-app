@@ -5145,6 +5145,22 @@ no session was saved; TestB belongs to the EGRA session's testing, and a saved l
 changed its Home counts. The phone was restored: font 1.0, density reset (280), stay-awake and
 touches off, auto time on, airplane off, Wi-Fi on. Screenshots: session scratchpad `s48-*.png`.
 
+### 2026-10-27 — Lesson flow rebased onto main again
+
+**Rebase (Jim's go-ahead).** The branch's 39 commits now sit on `origin/main` `1401b6d`, after
+"One set of reading content everywhere, and WelaPLUS skip rules" (#108). No conflicts: the only
+files both sides changed were `CONTEXT.md`, `documentation/ROADMAP.md`, `documentation/design-system.md`,
+this log and `jest.integration.config.js`, and git merged each cleanly (main's new integration
+test and this branch's lesson tests are both registered). Commit ids changed again; the build log's
+older ids (`ed52f8e`, `d384f8d`) refer to the pre-rebase history. No lesson code changed, so
+builds 48 and 23 still show this flow.
+
+**Gates on the rebased branch (Node 20).** Unit **445/445 suites, 6,856 tests**; integration
+**84/84 suites, 1,155 tests**; types clean.
+
+**Found while planning letter orders.** #108's server migration took version `20261026120000`,
+the number the letter orders plan had picked; the plan now uses `20261027120000`.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
