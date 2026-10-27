@@ -138,7 +138,9 @@ export default function LessonWrapUpScreen({ navigation, route }) {
       if (active.current && handle.isCurrent()) setCompletion({
         ...buildSessionCompleteParams({ selectedChildren: presentChildIds(snapshot.attendance).map(id => children[id] ?? { id }),
           selectedLetters: snapshot.ticks.letters, sessionReadingLevel: deriveSessionReadingLevel(snapshot.ticks.blends),
-          sessionDateKey: snapshot.lesson_date }), languageCode: snapshot.language_code,
+          sessionDateKey: snapshot.lesson_date,
+          teachingOrder: lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null,
+        }), languageCode: snapshot.language_code,
       });
     } catch (caught) {
       if (isStaleActorError(caught) || !handle.isCurrent()) return;

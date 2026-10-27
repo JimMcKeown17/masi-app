@@ -71,7 +71,7 @@ test('pill and receipt', async () => {
   const screen = renderScreen();
   expect(screen.getByText('Saved for 2 children')).toBeTruthy();
   expect(screen.getByLabelText('Children: Anelisa and Athenkosi')).toBeTruthy();
-  expect(screen.getByLabelText('Letters: M, L, N, S')).toBeTruthy();
+  expect(screen.getByLabelText('Letters: S, M, N, L')).toBeTruthy();
   expect(screen.getByLabelText('Reading level: 3 Letter Blends')).toBeTruthy();
   await flush();
   expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith({ handle: mockHandle, userId: 'ea-1' });

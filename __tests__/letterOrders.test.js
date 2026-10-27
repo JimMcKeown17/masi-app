@@ -73,4 +73,7 @@ test('sortLettersByOrder with no order returns a copy in the given order', () =>
   const result = sortLettersByOrder(letters, null);
   expect(result).toEqual(letters);
   expect(result).not.toBe(letters);
+  // A caller that leaves the order out gets the same, never a crash on save.
+  expect(sortLettersByOrder(letters, undefined)).toEqual(letters);
+  expect(sortLettersByOrder(letters)).toEqual(letters);
 });

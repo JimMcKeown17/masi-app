@@ -78,7 +78,7 @@ export function getTeachingOrder(classRow, languageCode) {
 }
 
 export function sortLettersByOrder(letters, orderLetters) {
-  if (orderLetters === null) return [...letters];
+  if (!Array.isArray(orderLetters)) return [...letters];
   const positions = new Map(orderLetters.map((letter, index) => [letter, index]));
   return [...letters].sort((a, b) => (positions.get(a) ?? orderLetters.length)
     - (positions.get(b) ?? orderLetters.length));

@@ -366,4 +366,5 @@ testSave('Wrap up displays letters in the class order and preserves tap order in
   fireEvent.press(view.getByRole('button', { name: 'Save session' }));
   await view.findByText('Session complete route');
   expect((await sessions())[0].activities.letters_focused).toEqual(['d', 's', 'n', 'a']);
+  expect(view.navigationRef.getCurrentRoute().params.letters).toEqual(['s', 'a', 'n', 'd']);
 });

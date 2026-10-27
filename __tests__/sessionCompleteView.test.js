@@ -6,6 +6,7 @@ import {
   describeCapturedPill,
   HEADLINES,
 } from '../src/utils/sessionCompleteView';
+import { resolveTeachingOrder } from '../src/utils/letterOrders';
 import { deriveGoalState } from '../src/utils/sessionGoal';
 import { colors } from '../src/constants/colors';
 
@@ -183,11 +184,11 @@ describe('captured pill', () => {
 });
 
 describe('receipt', () => {
-  test('children, teaching-order letters and reading level have spoken labels', () => {
+  test('children, supplied letters and reading level have spoken labels', () => {
     expect(buildReceiptRows({ childNames: ['Anelisa', 'Athenkosi'], letters: ['s', 'm', 'n', 'l'], readingLevel: '3 Letter Blends' }))
       .toEqual([
         { key: 'children', label: 'Children', value: 'Anelisa & Athenkosi', accessibilityLabel: 'Children: Anelisa and Athenkosi' },
-        { key: 'letters', label: 'Letters', value: ['m', 'l', 'n', 's'], accessibilityLabel: 'Letters: M, L, N, S' },
+        { key: 'letters', label: 'Letters', value: ['s', 'm', 'n', 'l'], accessibilityLabel: 'Letters: S, M, N, L' },
         { key: 'readingLevel', label: 'Reading level', value: '3 Letter Blends', accessibilityLabel: 'Reading level: 3 Letter Blends' },
       ]);
   });
@@ -197,7 +198,7 @@ describe('receipt', () => {
   });
   test('only letters gives one row', () => {
     expect(buildReceiptRows({ letters: ['s', 'm'] })).toEqual([
-      { key: 'letters', label: 'Letters', value: ['m', 's'], accessibilityLabel: 'Letters: M, S' },
+      { key: 'letters', label: 'Letters', value: ['s', 'm'], accessibilityLabel: 'Letters: S, M' },
     ]);
   });
 });
@@ -208,10 +209,11 @@ test('route params come from what the form already holds', () => {
     selectedLetters: ['s', 'm', 'n', 'l'],
     sessionReadingLevel: '3 Letter Blends',
     sessionDateKey: '2026-10-13',
+    teachingOrder: resolveTeachingOrder('2026-10-23', 'en').letters,
   })).toEqual({
     childCount: 3,
     childNames: ['Anelisa', 'Child', 'Child'],
-    letters: ['m', 'l', 'n', 's'],
+    letters: ['s', 'n', 'l', 'm'],
     readingLevel: '3 Letter Blends',
     sessionDate: '2026-10-13',
   });
@@ -226,11 +228,38 @@ test('sorting leaves the selections unchanged and keeps unknown letters last in 
   const selectedLetters = Object.freeze(['?', 's', 'm', '!', 'l', 'm']);
   const result = buildSessionCompleteParams({
     selectedChildren, selectedLetters, sessionReadingLevel: 'Cannot blend', sessionDateKey: '2026-10-13',
+    teachingOrder: resolveTeachingOrder('2026-10-23', 'en').letters,
   });
-  expect(result.letters).toEqual(['m', 'm', 'l', 's', '?', '!']);
+  expect(result.letters).toEqual(['s', 'l', 'm', 'm', '?', '!']);
   expect(JSON.parse(JSON.stringify(result))).toEqual(result);
-  const rows = buildReceiptRows({ childNames: result.childNames, letters: selectedLetters });
+  const rows = buildReceiptRows({ childNames: result.childNames, letters: result.letters });
   expect(rows[0].value).toBe('Amahle & Amahle');
   expect(rows[1].value).toEqual(result.letters);
   expect(selectedLetters).toEqual(['?', 's', 'm', '!', 'l', 'm']);
+});
+
+
+test.each([
+  ['en', ['d', 's', 'n', 'a'], ['s', 'a', 'n', 'd']],
+  ['xh', ['a', 'o'], ['o', 'a']],
+])('receipt params follow the %s class order', (code, selectedLetters, expected) => {
+  const params = buildSessionCompleteParams({
+    selectedChildren: [], selectedLetters, sessionReadingLevel: null, sessionDateKey: '2026-10-13',
+    teachingOrder: resolveTeachingOrder('2026-10-23', code).letters,
+  });
+  expect(params.letters).toEqual(expected);
+  expect(buildReceiptRows(params)[0].value).toEqual(expected);
+});
+
+test('receipt params with no teaching order keep selection order', () => {
+  const selectedLetters = Object.freeze(['d', 's', 'n', 'a']);
+  const params = buildSessionCompleteParams({
+    selectedChildren: [], selectedLetters, sessionReadingLevel: null, sessionDateKey: '2026-10-13',
+    teachingOrder: null,
+  });
+  expect(params.letters).toEqual(['d', 's', 'n', 'a']);
+  expect(params.letters).not.toBe(selectedLetters);
+  expect(buildReceiptRows(params)[0]).toEqual({
+    key: 'letters', label: 'Letters', value: ['d', 's', 'n', 'a'], accessibilityLabel: 'Letters: D, S, N, A',
+  });
 });

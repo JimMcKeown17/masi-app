@@ -1,4 +1,4 @@
-import { LETTER_ORDER } from '../constants/literacyConstants';
+import { sortLettersByOrder } from './letterOrders';
 import { formatNameList } from './childNames';
 import { toLocalDateString } from './localDate';
 import { formatSessionDate } from './sessionDateFormat';
@@ -8,21 +8,11 @@ import { getGaugeColor, getGoalCopy } from './sessionGoalPresentation';
 export const CELEBRATION_LEVELS = ['full', 'calm'];
 export const HEADLINES = { captured: 'Session\ncaptured.', reached: 'Daily target\nreached.' };
 
-function letterIndex(letter) {
-  const index = LETTER_ORDER.indexOf(letter);
-  return index < 0 ? LETTER_ORDER.length : index;
-}
-
-function sortLetters(letters) {
-  // Sort a copy; equal ranks retain selection order, including unknown letters.
-  return [...letters].sort((a, b) => letterIndex(a) - letterIndex(b));
-}
-
-export function buildSessionCompleteParams({ selectedChildren, selectedLetters, sessionReadingLevel, sessionDateKey }) {
+export function buildSessionCompleteParams({ selectedChildren, selectedLetters, sessionReadingLevel, sessionDateKey, teachingOrder }) {
   return {
     childCount: selectedChildren.length,
     childNames: selectedChildren.map((child) => child.first_name || 'Child'),
-    letters: sortLetters(selectedLetters),
+    letters: sortLettersByOrder(selectedLetters, teachingOrder),
     readingLevel: sessionReadingLevel,
     sessionDate: sessionDateKey,
   };
@@ -52,10 +42,9 @@ export function buildReceiptRows({ childNames, letters, readingLevel }) {
     });
   }
   if (letters?.length) {
-    const sortedLetters = sortLetters(letters);
     rows.push({
-      key: 'letters', label: 'Letters', value: sortedLetters,
-      accessibilityLabel: 'Letters: ' + sortedLetters.map((letter) => letter.toUpperCase()).join(', '),
+      key: 'letters', label: 'Letters', value: letters,
+      accessibilityLabel: 'Letters: ' + letters.map((letter) => letter.toUpperCase()).join(', '),
     });
   }
   if (readingLevel) {
