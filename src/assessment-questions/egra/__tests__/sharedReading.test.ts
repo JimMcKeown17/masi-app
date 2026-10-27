@@ -13,10 +13,18 @@ const languages = ['xh', 'en', 'af', 'zu'] as const;
 const codes = ['letter_sounds', 'word_reading', 'oral_reading', 'reading_comprehension'] as const;
 const expectedForms = {
   xh: { letters: 'dbe-egra-xh-hl-3-v1', reading: 'dbe-egra-xh-hl-1-v1' },
-  en: { letters: 'dbe-egra-en-hl-3-v1', reading: 'dbe-egra-en-hl-1-v1' },
+  en: { letters: 'dbe-egra-en-fal-3-v1', reading: 'dbe-egra-en-hl-1-v1' },
   af: { letters: 'dbe-egra-af-hl-3-v1', reading: 'dbe-egra-af-hl-1-v1' },
   zu: { letters: 'smrs-egra-zu-1-v1', reading: 'smrs-egra-zu-1-v1' },
 };
+
+// Letter mastery reads the latest letter result, so a chart that never asks a letter
+// would wipe that letter from the tracker. isiZulu's SMRS chart has no r (Jim, 2026-10-27).
+test.each(languages)('the %s letter chart asks every letter of the alphabet', language => {
+  const asked = new Set(SHARED_READING_SETS.letter_sounds[language].rows.flat().map(letter => letter.toLowerCase()));
+  const missing = [...'abcdefghijklmnopqrstuvwxyz'].filter(letter => !asked.has(letter));
+  expect(missing).toEqual(language === 'zu' ? ['r'] : []);
+});
 
 // Literal identities captured by running bundledItemSetFor on the unmodified code.
 const legacy: {

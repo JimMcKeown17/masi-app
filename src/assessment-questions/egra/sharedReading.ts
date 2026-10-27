@@ -11,7 +11,8 @@ type SharedLanguage = 'xh' | 'en' | 'af' | 'zu';
 
 export const SHARED_READING_FORMS: Record<SharedLanguage, { letters: string; reading: string }> = {
   xh: { letters: 'dbe-egra-xh-hl-3-v1', reading: 'dbe-egra-xh-hl-1-v1' },
-  en: { letters: 'dbe-egra-en-hl-3-v1', reading: 'dbe-egra-en-hl-1-v1' },
+  // English HL 3 never asks q, v, x or z; FAL 3 has all 26 (Jim, 2026-10-27).
+  en: { letters: 'dbe-egra-en-fal-3-v1', reading: 'dbe-egra-en-hl-1-v1' },
   af: { letters: 'dbe-egra-af-hl-3-v1', reading: 'dbe-egra-af-hl-1-v1' },
   zu: { letters: 'smrs-egra-zu-1-v1', reading: 'smrs-egra-zu-1-v1' },
 };

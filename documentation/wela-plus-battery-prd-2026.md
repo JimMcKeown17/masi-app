@@ -1,5 +1,11 @@
 # PRD: WelaPLUS Assessment Battery — In-App, Modular, Open-Source
 
+> **Status note, 2026-10-27:** this PRD is implemented on `main`, not "off `main`" as the status
+> line below says. The Battery Run host (#101), Full EGRA (#104), step-by-step marking (#107) and
+> WelaPLUS 2026.1 with skip rules on the shared reading content (#108) are merged; the 2026-10-26
+> spec (`docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md`) narrows this PRD
+> where they differ. What remains is in `documentation/ROADMAP.md` §8.
+
 **Date:** 2026-05-27
 **Status:** **Design complete; implementation remains off `main`.** Fourth Codex review revisions applied 2026-05-29. The 11 Question components and tests now exist on `feature/wela-plus-battery-merge` at `fed3175` (34 commits behind `main`, 19 ahead as of 2026-07-23), but host schema, sync, Run lifecycle, packaging/publication, content, and field testing remain open. The old `.claude` worktree no longer exists. Content licensing (CC-BY 4.0 for bundled item sets, picture cards, story scripts, and rubric anchors) remains subject to Masi leadership ratification.
 

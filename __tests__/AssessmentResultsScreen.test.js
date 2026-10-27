@@ -30,13 +30,18 @@ afterEach(async () => {
   await fixture.db.closeAsync();
 });
 
-async function renderSavedResult({ stoppedReason = 'completed', missing = false, correct = 9 } = {}) {
+async function renderSavedResult({
+  stoppedReason = 'completed', missing = false, correct = 9, grade = '1',
+  testCode = 'letter_sounds', questionVersion = '2026.1',
+} = {}) {
   const assessmentId = uuid();
-  const child = { id: fixture.childId, first_name: 'Amahle', last_name: 'Dlamini' };
+  const child = { id: fixture.childId, first_name: 'Amahle', last_name: 'Dlamini', grade };
   if (!missing) {
     await fixture.assessments.saveQuestionResult({
       assessmentId, childId: fixture.childId, userId: fixture.userId, captureMode: 'sequential',
       result: questionResult(60, {
+        question_code: testCode, question_version: questionVersion,
+        item_set_id: `${testCode}@${questionVersion}.en`,
         stopped_reason: stoppedReason, duration_ms: 61000,
         items: Array.from({ length: 60 }, (_, position) => ({
           position, item_key: `letter-${position}`, prompt: 'a', is_correct: position < correct,
@@ -54,7 +59,7 @@ async function renderSavedResult({ stoppedReason = 'completed', missing = false,
   const screen = renderWithProviders(
     <SignedInEAContext.Provider value={{ repositories: { assessments: fixture.assessments } }}>
       <AssessmentResultsScreen navigation={navigation}
-        route={{ params: { assessmentId, testCode: 'letter_sounds', child, languageCode: 'en' } }} />
+        route={{ params: { assessmentId, testCode, child, languageCode: 'en' } }} />
     </SignedInEAContext.Provider>,
   );
   return { ...screen, navigation, assessmentId, child, read };
@@ -64,15 +69,37 @@ test('reads the saved family by id and shows its raw score, attempted count and 
   const screen = await renderSavedResult();
   expect(await screen.findByLabelText('Assessment main result')).toHaveTextContent('9 / 60');
   expect(screen.getByText('Completed in 61s')).toBeTruthy();
-  expect(screen.getByText('47% correct')).toBeTruthy();
+  expect(screen.getByText('47% of attempted correct')).toBeTruthy();
   expect(screen.read).toHaveBeenCalledWith({ userId: fixture.userId, assessmentId: screen.assessmentId });
   expect(within(screen.UNSAFE_getAllByType(SurfaceCard)[0]).getByText('19')).toBeTruthy();
 });
 
-test('a real saved stop_rule result shows the stop reason and 9 / 60', async () => {
+test('an older saved letter result stopped by 10 in a row says so, with 9 / 60', async () => {
   const screen = await renderSavedResult({ stoppedReason: 'stop_rule' });
   expect(await screen.findByText('Stopped: 10 in a row wrong')).toBeTruthy();
   expect(screen.getByLabelText('Assessment main result')).toHaveTextContent('9 / 60');
+});
+
+test.each([['letter_sounds'], ['word_reading']])('a %s result on the 2026.3 chart says the whole first row was wrong', async testCode => {
+  const screen = await renderSavedResult({ stoppedReason: 'stop_rule', correct: 0, testCode, questionVersion: '2026.3' });
+  expect(await screen.findByText('Stopped: the whole first row was wrong')).toBeTruthy();
+  expect(screen.queryByText('Stopped: 10 in a row wrong')).toBeNull();
+});
+
+test.each([
+  ['1', 45, 'Excellent work!'], ['1', 35, 'Great job!'], ['1', 25, 'Good effort!'], ['1', 9, 'Keep practicing!'],
+  ['R', 22, 'Excellent work!'],
+])('letter praise follows the grade %s score band: %p letters → %s', async (grade, correct, message) => {
+  const screen = await renderSavedResult({ grade, correct });
+  expect(await screen.findByText(message)).toBeTruthy();
+});
+
+test('a test with no score bands gives no praise, however accurate the few items read', async () => {
+  const screen = await renderSavedResult({ testCode: 'word_reading', questionVersion: '2026.3', correct: 19 });
+  expect(await screen.findByText('100% of attempted correct')).toBeTruthy();
+  for (const praise of ['Excellent work!', 'Great job!', 'Good effort!', 'Nice try!', 'Keep practicing!']) {
+    expect(screen.queryByText(praise)).toBeNull();
+  }
 });
 
 test('Try again replaces the host with the test, child and language, without reusing the saved id', async () => {

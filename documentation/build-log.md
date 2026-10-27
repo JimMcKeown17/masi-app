@@ -6204,3 +6204,47 @@ so the generic `fixedLanguage` path stays covered. Docs: the stray-quote item le
 
 Gates (Node 20): `jest --silent` 433 suites / 6,605 tests / 14 snapshots, exit 0 (+27 cases);
 `tsc --noEmit -p tsconfig.assessment-questions.json` clean.
+
+
+### 2026-10-27 — English letters on DBE FAL 3; quick-test result text; docs drift from the EGRA review
+
+The EGRA session's full review of #108 found the code correct and left content questions, two
+small results-screen bugs and doc drift. Jim chose (2026-10-27): fix the results screen and the doc
+drift in one PR without a device build, and fix the English letter chart, not Letter mastery.
+
+**English letters.** DBE English Home Language Assessment 3 has 100 letters but only 22 distinct:
+no q, v, x or z (counted from `content/egra/egra-assessments.json`). Letter mastery reads a child's
+latest letter result, so an English child's tracker would have dropped to at most 22 of 26 after
+one 2026.3 assessment. Of the pack's charts, English FAL 3 is the only 100-letter English one with
+all 26 (19 upper case, practice items `d h v`). `SHARED_READING_FORMS.en.letters` now points at
+`dbe-egra-en-fal-3-v1`, changed in place at 2026.3: nothing was printed and no field results
+existed. Saved results keep their own prompts, so the few English staging test results still read
+correctly. isiZulu's SMRS chart has no `r` and stays as printed (Jim). A new test checks every
+shared chart asks all 26 letters except isiZulu `r`. The printout pack's English side A is
+regenerated from the pack data and names the FAL booklet (`egra-efal-guide.pdf`, PDF page 15).
+
+**Quick-test results screen.** It said "Stopped: 10 in a row wrong" for every stop, but since #108
+the quick tests stop when the whole first row is wrong (8 words in English, 5 in isiZulu). The text
+now follows the saved item set's own rule: "Stopped: the whole first row was wrong" on 2026.3,
+"Stopped: 10 in a row wrong" for older results. Its praise came from accuracy over the items read,
+so a child who read one word correctly heard "Excellent work! 100% correct". Praise now follows the
+child's score band (`getScoreBand`, the same bands as the rankings; grade from the roster child).
+Word Reading has no bands yet, so it gets no praise, like its neutral ranking, and the accuracy line
+reads "N% of attempted correct". "Nice try!" (accuracy 40–59%) has no band and is gone.
+
+**Docs.** `CONTEXT.md`: the `-masi60` extension matters only for finishing an unfinished old Grade 1
+assessment (verified: outside capture the item-set lookups serve only answering or skipping a
+Question in an unfinished run, the dev gallery and the new stop text). The spec gets dated
+corrections. `PRD.md` §6.7 (four quick-test languages; no last-attempted confirmation) and §7.3
+(wired). Dated status notes on the WelaPLUS agent briefing, the WelaPLUS PRD, the July SQLite device
+gates and the content-pack plan. `egra_letter_sets.md` no longer asks for real word lists.
+`ROADMAP.md` gains the review's content questions (isiZulu Q4 and English Q5 answer guides, DBE
+administration rules, per-minute scores, source-note decisions, isiXhosa practice items) and
+follow-ups (#102's two End sheets, ranking bar order, the dev gallery).
+
+TDD: the alphabet test (English failed first) and seven results-screen cases (stop text for 2026.3
+letters and words; praise by band for grades 1 and R; no praise without bands) failed first, then
+passed.
+
+Gates (Node 20): `jest --silent` 433 suites / 6,617 tests / 14 snapshots, exit 0 (+12 cases);
+`tsc --noEmit -p tsconfig.assessment-questions.json` clean. No device build (Jim).

@@ -1,5 +1,10 @@
 # EGRA content pack integration (package and data side)
 
+> **Status 2026-10-27:** superseded for new assessments by the shared 2026.3 reading content
+> (`docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md`, PRs #108 and #111).
+> The form picker and the 60-letter `-masi60` cards are no longer offered: the 13 forms serve saved
+> and unfinished assessments only, and the four 60-letter cards below will not be printed.
+
 > **Status 2026-10-25:** Host registration, item-set lookup and the Full EGRA form picker are built on `feat/egra-host`, stacked on WelaPLUS Plan 3. Local screen/repository verification is recorded in `documentation/build-log.md`; device acceptance, four 60-letter printed cards and source-note resolution remain open in ROADMAP §7. The original plan below is historical.
 
 > **Status 2026-10-23 (after build):** Jim made two changes after this plan was built. (1) The four

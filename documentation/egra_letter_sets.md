@@ -11,8 +11,10 @@ There is no English fallback for an unknown language or a missing set.
 `CURRENT_ITEM_SETS` points both quick tests at the **shared reading sets** (`question_version`
 `2026.3`, built from `content/egra/` in
 [sharedReading.ts](../src/assessment-questions/egra/sharedReading.ts)) in `xh`, `en`, `af` and
-`zu`: the 100-letter DBE Assessment 3 charts (isiZulu: SMRS 1's 110 letters) and the DBE
-Assessment 1 words (80, rows of 8; isiZulu 50, rows of 5), both with the first-row stop.
+`zu`: the 100-letter DBE Assessment 3 charts (English uses the **First Additional Language** chart,
+because Home Language 3 never asks q, v, x or z; Jim, 2026-10-27; isiZulu: SMRS 1's 110 letters,
+which have no `r`) and the DBE Assessment 1 words (80, rows of 8; isiZulu 50, rows of 5), both with
+the first-row stop. A test checks that every chart asks all 26 letters except isiZulu `r`.
 WelaPLUS 2026.1 and Full EGRA 2026.1 use the same sets. The paragraphs below describe the sets
 that were current before; they stay bundled for saved results.
 
@@ -31,14 +33,14 @@ saved result: each result retains its item-set id and stored prompts.
 Before 2026-10-26, standalone **Word Reading** used `word_reading@2026.1.en`, `word_reading@2026.1.xh` and
 `word_reading@2026.1.af`, with `row_lengths` carried by each set. No standalone word set configures
 a stop rule. The Afrikaans set is Zazi's provisional, diacritic-free, unreviewed `afrikaans_words_50`,
-copied from commit `f0c9ee49`. These lists remain placeholders; they are not the WelaPLUS Q6 sets.
+copied from commit `f0c9ee49`. Those lists were placeholders and are no longer offered; the quick
+tests now use the DBE Assessment 1 words above.
 
 See [contentStatus.ts](../src/assessment-questions/itemsets/contentStatus.ts) for the maintained
-content-status entries. Grid A is supplied; the app still needs a typeface that makes capital I and
-lowercase l distinguishable (the printed card uses a serifed capital I), and a designer will
-recreate the printed card from the bundled rows. Masi still needs real standalone word lists. The
-file also tracks pending WelaPLUS pictures, story-writing rubric anchors and isiXhosa language
-review. Do not treat passing code tests as typography, print or pedagogy approval. Word score bands
+content-status entries (its word-list placeholders describe the retired 2026.1 sets). Printed
+cards now come from the [printout pack](./welaplus-printout-pack.md), set in Andika so capital I and
+lowercase l stay distinguishable. The file also tracks pending WelaPLUS pictures, story-writing
+rubric anchors and isiXhosa language review. Do not treat passing code tests as typography, print or pedagogy approval. Word score bands
 remain unset; see
 [the score-band configuration](./assessment-score-bands-config.md).
 

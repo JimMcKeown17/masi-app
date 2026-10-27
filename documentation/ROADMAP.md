@@ -835,6 +835,23 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   - resolve the pack's `sourceNotes` before field use (see the open decisions below).
 - [ ] **EGRA open decisions (Jim):**
   - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
+    Each note on a chart in use needs a recorded keep-or-fix decision before printing (for example
+    the isiXhosa story's "nguSidumo Wabona", printed without a full stop).
+  - **Answer guides to review (EGRA review, 2026-10-27).** isiZulu question 4 ("Umama wamtshela
+    ukuthi yini ebalulekile?") expects "Ukusizana kanye nokuhlanzeka", but in the story Usisi says
+    that and Umama says everyone must wash dishes, so a careful child is marked wrong; it needs an
+    isiZulu reviewer. English question 5's guide gives only "The dog ate the bone"; DBE's worked
+    example also accepts "He slept".
+  - **DBE administration rules (training or instructions).** The shared instructions leave out
+    DBE rules that change scores: about 3 s of hesitation is Incorrect, self-corrections count as
+    correct, and story questions are asked only for the part of the story the child read.
+  - **Per-minute scores.** DBE scores letters and words as correct per minute (correct ÷ elapsed
+    × 60); the app saves the raw count in 60 s (`duration_ms` is kept, so a rate can be derived).
+    They differ only when a child finishes early; `scoreBands.js` and the score-bands doc call the
+    raw count "LCPM". An early End on the story shortens the time a per-minute figure divides by.
+  - **isiXhosa letter practice items.** DBE's isiXhosa HL 3 chart prints none; confirm on the proof.
+  - **Letter charts settled (Jim, 2026-10-27).** English letters use DBE English FAL 3 (all 26);
+    HL 3 never asked q, v, x or z. isiZulu's SMRS chart has no `r` and stays as printed.
   - **Skip rules for Full EGRA (deferred, 2026-10-26).** WelaPLUS 2026.1 has first-row skip rules
     (§8); Full EGRA keeps only the story-comprehension skip. Decide whether Full EGRA gets them,
     and whether government-funded schools that need every Question can switch them off (the
@@ -848,7 +865,8 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
     versions (2026-10-26 spec).
   - **Comparable and per-grade forms (later).** Baseline, midline and endline use the same form
     for now (Jim, 2026-10-25); experts may write comparable versions and per-grade forms later.
-- [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral.
+- [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral, and the
+  Word Reading quick-test result gives no praise (it follows the bands, 2026-10-27).
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
   tested synced-table configuration path exists.
 
@@ -929,17 +947,22 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   (card, row labels, Back and backdrop ignored, card back after force-quit, finalize), English with
   a Q6 trigger, isiXhosa with a Q5 trigger, a clean 12-Question run, Full EGRA in isiZulu and
   Afrikaans, both quick tests in isiZulu, and staging rows matching each run. Still to do: the same
-  runs on the iPhone. The EGRA session was asked (2026-10-27) to review the adapter refactor, the
-  retired `letterExtensions.ts` card rule and the old `-masi60` results.
-- [ ] **Small follow-ups from the 2026-10-27 A03 pass** (none blocks the pilot):
+  runs on the iPhone. The EGRA session reviewed #108 (2026-10-27): the adapter refactor is
+  byte-identical for the 13 forms, saved `-masi60` results still read in history, rankings and
+  mastery, and scoring holds under step-by-step marking. Its fixes landed in #111 and the English
+  letter-chart PR; its content questions are in §7 ("EGRA open decisions").
+- [ ] **Small follow-ups from the 2026-10-27 A03 pass and EGRA review** (none blocks the pilot):
   - sheet footers sit flush against Android's three-button bar: `BottomSheet` pads its bottom with
     `max(safe-area inset, 24dp)`, and on that bar the inset equals the bar (check the iPhone too);
   - "Letter writing first row wrong" leaves "wrong" alone on a second line in question rows at
     360dp (`ListRow` subtitles wrap greedily; Android's `textBreakStrategy="balanced"` would fix it);
   - the create-class form offers no isiZulu home language (`HOME_LANGUAGES` lists isiXhosa,
     English and Afrikaans), so isiZulu classes need a data fix today;
-  - the quick-test result says "Excellent work! 100% correct" when a child read 1 of 50 words
-    (it scores only the words marked).
+  - quick tests: "End this test?" saves while Back/✕ "End the test?" discards, one word apart
+    (issue #102, still open after #107);
+  - rankings: bar width is score ÷ that result's own item count but rows sort by raw score, so
+    mixing 60-, 100- and 110-letter cards (or 50- and 80-word cards) puts bars out of order;
+  - the dev/preview Question Gallery still lists only the 13 old forms and WelaPLUS 2024.1.
 - [ ] **Skip-rule switch (deferred, Jim 2026-10-26).** Rules are always on in WelaPLUS 2026.1.
   Government-funded schools sometimes need every Question, so build later: a per-EA setting (not
   per school) with a Head Office default and lock, an EA Profile toggle that syncs when unlocked
