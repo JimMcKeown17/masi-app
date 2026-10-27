@@ -102,7 +102,7 @@ both with `git -C <books> show 9cd66f8:<path>`. Branch: `feat/letter-orders`, st
   - `getTeachingOrder(classRow: { letter_order_edition: string } | null, languageCode: unknown) => TeachingOrder`,
     where `TeachingOrder` is `{ kind: 'order', id, letters } | { kind: 'none' } | { kind: 'update' }`.
 
-- [ ] **Step 1: Set up the worktree.** In `.claude/worktrees/letter-orders`, run `npm ci` under
+- [x] **Step 1: Set up the worktree.** In `.claude/worktrees/letter-orders`, run `npm ci` under
   Node 20. The handoff's "check first" was run on 2026-10-26 against `04de20a`, and all nine
   comparisons matched:
   - each legacy constant (`ISIXHOSA_`, `ENGLISH_` and `AFRIKAANS_PEDAGOGICAL_ORDER`) equals its
@@ -112,7 +112,7 @@ both with `git -C <books> show 9cd66f8:<path>`. Branch: `feat/letter-orders`, st
 
   Task 8 records this in the build log.
 
-- [ ] **Step 2: Write the failing tests** in `__tests__/letterOrders.test.js`:
+- [x] **Step 2: Write the failing tests** in `__tests__/letterOrders.test.js`:
 
 ```js
 test('the vendored registry is the books file, byte for byte', () => {
@@ -161,10 +161,10 @@ test('a language edit keeps the edition and follows the language', () => {
 });
 ```
 
-- [ ] **Step 3: Run them to verify they fail.** Run: `npm test -- __tests__/letterOrders.test.js`.
+- [x] **Step 3: Run them to verify they fail.** Run: `npm test -- __tests__/letterOrders.test.js`.
   Expected: FAIL, cannot find module `src/utils/letterOrders`.
 
-- [ ] **Step 4: Implement.** Copy the registry with
+- [x] **Step 4: Implement.** Copy the registry with
   `git -C <books> show 9cd66f8:languages/letter-orders.json > src/constants/contracts/letter-orders-v1.json`.
   Write `src/utils/letterOrders.js`. `resolveTeachingOrder` finds the edition by `id` in
   `registry.editions` (an array), maps the code through `PACK_LANGUAGE_BY_CODE`, finds the order in
@@ -173,9 +173,9 @@ test('a language edit keeps the edition and follows the language', () => {
   `none` for a missing class or unsupported language, maps `UNKNOWN_EDITION` to `update`, and
   rethrows anything else.
 
-- [ ] **Step 5: Run the tests.** Expected: PASS.
+- [x] **Step 5: Run the tests.** Expected: PASS.
 
-- [ ] **Step 6: Commit.** `feat(letter-order): vendor the registry and resolve a class's teaching order`
+- [x] **Step 6: Commit.** `feat(letter-order): vendor the registry and resolve a class's teaching order`
 
 ### Task 2: Server column, check and trigger
 
@@ -229,7 +229,7 @@ edition a class can reach resolves to a release pack.
 
   Re-run it only if another migration touching `classes` lands before this one.
 
-- [ ] **Step 1: Write the failing static test** `__tests__/letterOrderMigration.test.js`. It reads
+- [x] **Step 1: Write the failing static test** `__tests__/letterOrderMigration.test.js`. It reads
   the migration file and asserts:
   - the check's quoted list equals `MASI_LETTER_ORDER_EDITIONS`;
   - every literal edition in the file equals `NEW_CLASS_LETTER_ORDER_EDITION`;
@@ -237,9 +237,9 @@ edition a class can reach resolves to a release pack.
   - it has no `update public.classes` statement;
   - it has no `new_class_edition`.
 
-- [ ] **Step 2: Run it to verify it fails.** Run `npm test -- __tests__/letterOrderMigration.test.js`. Expected: FAIL (file missing).
+- [x] **Step 2: Run it to verify it fails.** Run `npm test -- __tests__/letterOrderMigration.test.js`. Expected: FAIL (file missing).
 
-- [ ] **Step 3: Write the harness, then the migration.** The harness replays every migration
+- [x] **Step 3: Write the harness, then the migration.** The harness replays every migration
   before `20261027120000` into the disposable database, inserts fixture classes with known
   `updated_at` and `row_version`, applies the new migration, then replays it once more. Labelled
   cases, each recorded `passed` in the summary:
@@ -260,15 +260,15 @@ edition a class can reach resolves to a release pack.
   - `function-not-executable`: `anon` and `authenticated` lack EXECUTE on the function.
   - `migration-idempotent-replay`: the second apply succeeds and changes no value.
 
-- [ ] **Step 4: Run the static test and the harness.** Run `npm test -- __tests__/letterOrderMigration.test.js`
+- [x] **Step 4: Run the static test and the harness.** Run `npm test -- __tests__/letterOrderMigration.test.js`
   and `npm run verify:letter-order:postgres` (needs local PostgreSQL 17 on port 65433, as the other
   harnesses do). Expected: PASS, and a JSON summary with all 10 labels `passed`.
 
-- [ ] **Step 5: Update the contract map's `classes` row.** `letter_order_edition` is server-owned.
+- [x] **Step 5: Update the contract map's `classes` row.** `letter_order_edition` is server-owned.
   The trigger sets `2026-10-23` for app roles, and app roles can't change it. It is never in the
   push payload, and pulls take the server's value (Task 3).
 
-- [ ] **Step 6: Commit.** `feat(letter-order): the server sets each class's letter order edition`
+- [x] **Step 6: Commit.** `feat(letter-order): the server sets each class's letter order edition`
 
 ### Task 3: Phone storage, pull and upload
 
@@ -314,7 +314,7 @@ Phone rules:
   - `updateClass` strips it from the merged record, so `updates` can never change it.
 - **Upload:** `INTENTIONALLY_UNSYNCED.classes.letter_order_edition` = `'Server-owned: the classes trigger sets it (migration 20261027120000); pulls take the server value.'`
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - Migration test (real SQLite): a v18 database holding a class migrates to 19, and the class
     reads `letter_order_edition: '2026-10-23'`; a new insert without the column gets it.
   - `sqliteFoundation.test.js`: `CURRENT_SCHEMA_VERSION` is 19 (line 143), and the exact migration
@@ -347,7 +347,7 @@ Phone rules:
     "a class insert through the outbox carries it": the outbox uploads with this same
     `dataClient`. Existing outbox tests mock the client and so would skip `fencedFetch`.
 
-- [ ] **Step 2: Register the new tests and run them to verify they fail.** Add
+- [x] **Step 2: Register the new tests and run them to verify they fail.** Add
   `'<rootDir>/__tests__/classLetterOrderMigration.test.js'` and
   `'<rootDir>/__tests__/classLetterOrderSync.test.js'` to `testMatch` in
   `jest.integration.config.js`; a file missing from that list never runs in the integration gate.
@@ -356,16 +356,16 @@ Phone rules:
   and `npm run test:integration -- __tests__/classLetterOrderMigration.test.js __tests__/classLetterOrderSync.test.js`.
   Expected: FAIL on the missing column, the missing method and the missing header, never "No tests found".
 
-- [ ] **Step 3: Implement the rules above.**
+- [x] **Step 3: Implement the rules above.**
 
-- [ ] **Step 4: Run the tests, then the full suites.** Run the focused tests above, then
+- [x] **Step 4: Run the tests, then the full suites.** Run the focused tests above, then
   `npm test` and `npm run test:integration`. Expected: PASS, including `syncContractCompleteness`
   and `syncContractServerSchema`.
 
-- [ ] **Step 5: Update the contract map.** The `classes` row (pull, push, local rules) and the
+- [x] **Step 5: Update the contract map.** The `classes` row (pull, push, local rules) and the
   "Signed-in EA handle" section (the header).
 
-- [ ] **Step 6: Commit.** `feat(letter-order): phones store the server's edition and never send it`
+- [x] **Step 6: Commit.** `feat(letter-order): phones store the server's edition and never send it`
 
 ### Task 4: Packs carry their order, and new packs for 2026-10-23
 
@@ -419,7 +419,7 @@ Phone rules:
 - empty `blends`, `words` and `readers`, with no `size_exception`;
 - empty `sound_steps`, `readers`, `word_bank` and `reader_details`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `lintMasiPack.test.js`: give `validPack()` `letter_order: 'isixhosa-order-2026-10-18'` (the
     shared vector sequence is that order) and keep `a valid pack passes`. Add one case per new
     error code:
@@ -450,9 +450,9 @@ Phone rules:
     construction check rejects it. Other tests of `getPack` results stay until Task 5 deletes
     `getPack`.
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lintMasiPack.test.js __tests__/lessonPlanPacks.test.js`. Expected: FAIL.
+- [x] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lintMasiPack.test.js __tests__/lessonPlanPacks.test.js`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Write the v2 files and compute their hashes with `shasum -a 256`.
   - Copy the previews with `git -C <books> show 6cd5e64:exports/app-preview/<file> > src/lessonPlan/packs/<file>`
     and check each hash against Global Constraints.
@@ -462,11 +462,11 @@ Phone rules:
   - `contentDiagnostics.currentPacks` keys by `xh`/`en`/`af`, through
     `getPackForOrder(resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, { allowPreview })`.
 
-- [ ] **Step 4: Run the tests.** Run the focused tests plus `npm test -- __tests__/contentDiagnostics.test.js __tests__/buildIsixhosaTestPack.test.js`,
+- [x] **Step 4: Run the tests.** Run the focused tests plus `npm test -- __tests__/contentDiagnostics.test.js __tests__/buildIsixhosaTestPack.test.js`,
   then the full `npm test`. Expected: PASS. The generator test still passes because its output id
   `isixhosa-candidates-preview-v1` is in the table.
 
-- [ ] **Step 5: Update `documentation/content-packs.md`.**
+- [x] **Step 5: Update `documentation/content-packs.md`.**
   - Packs name their `letter_order`, and lint checks it.
   - Current packs are keyed by order id.
   - The v2 release table.
@@ -474,7 +474,7 @@ Phone rules:
     isiXhosa generator only reproduces the 2026-10-18 preview v1 and refuses other orders.
   - Note that the books v2 previews have no readers, so developer builds lose "Molo, Lolo!" until books adds readers.
 
-- [ ] **Step 6: Commit.** `feat(letter-order): packs name their order and new packs teach 2026-10-23`
+- [x] **Step 6: Commit.** `feat(letter-order): packs name their order and new packs teach 2026-10-23`
 
 ### Task 5: The lesson flow reads the class's order
 
@@ -527,7 +527,7 @@ tests that switch breaks (Step 1, last group).
   - `LessonLettersSection` gains a `needsAppUpdate` prop. When true, the section shows only
     `UPDATE_APP_LETTERS_MESSAGE` under its heading, before the isiZulu check.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `lessonInputs.test.js`:
     - one 2026-10-23 class per language gives a first-lesson picker row of `o m l a` / `s a n d` / `a e k n`;
     - two groups in one class get the same order id (regrouping keeps the order);
@@ -596,13 +596,13 @@ tests that switch breaks (Step 1, last group).
       and uses only `m o l a`, which is v2's step 1 too. Serve the pack for that test only, for
       example with `jest.spyOn` on the packs module's `getPackForOrder`. Its assertions stay.
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js __tests__/LessonPickerScreen.test.js __tests__/lessonInputsShape.test.js`. Expected: FAIL.
+- [x] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/lessonInputs.test.js __tests__/useLessonDraft.test.js __tests__/LessonScreen.test.js __tests__/LessonPickerScreen.test.js __tests__/lessonInputsShape.test.js`. Expected: FAIL.
 
-- [ ] **Step 3: Implement as specified,** then delete the shim and every `getPack(` call.
+- [x] **Step 3: Implement as specified,** then delete the shim and every `getPack(` call.
 
-- [ ] **Step 4: Run the tests, then the full suite.** Run the focused tests, then `npm test`. Expected: PASS. The engine vector suites are unchanged.
+- [x] **Step 4: Run the tests, then the full suite.** Run the focused tests, then `npm test`. Expected: PASS. The engine vector suites are unchanged.
 
-- [ ] **Step 5: Commit.** `feat(letter-order): lessons teach and suggest from the class's order`
+- [x] **Step 5: Commit.** `feat(letter-order): lessons teach and suggest from the class's order`
 
 ### Task 6: Trackers show the class's order, and counts use the 26-letter set
 
@@ -647,7 +647,7 @@ tests that switch breaks (Step 1, last group).
     because `toggleTick` appends. This changes the display only: `draft.ticks.letters`,
     `tracker_changes` and the saved record keep tap order.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `sortLettersByOrder`: `['d', 's', 'n', 'a']` with the English 2026-10-23 order gives
     `s a n d`, and `['a', 'o']` with the isiXhosa order gives `o a`. A letter not in the order goes
     last, and `null` keeps the given order.
@@ -671,13 +671,13 @@ tests that switch breaks (Step 1, last group).
     fixtures. `setLetterMastery` still rejects `zu` and a letter outside `a`–`z`.
   - Rewrite the registry tests that pinned `PEDAGOGICAL_ORDERS` to pin `TRACKER_LETTERS`.
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterMasteryPanel.test.js __tests__/LessonWrapUpScreen.test.js __tests__/LessonWrapUp.save.test.js __tests__/letterOrders.test.js`. Expected: FAIL.
+- [x] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/LetterTrackerBottomSheet.test.js __tests__/LetterMasteryPanel.test.js __tests__/LessonWrapUpScreen.test.js __tests__/LessonWrapUp.save.test.js __tests__/letterOrders.test.js`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** Then grep: no `PEDAGOGICAL_ORDER` remains anywhere in `src/`.
+- [x] **Step 3: Implement.** Then grep: no `PEDAGOGICAL_ORDER` remains anywhere in `src/`.
 
-- [ ] **Step 4: Run the full unit and integration suites.** Expected: PASS.
+- [x] **Step 4: Run the full unit and integration suites.** Expected: PASS.
 
-- [ ] **Step 5: Commit.** `feat(letter-order): trackers draw the class's order; counts use the 26-letter set`
+- [x] **Step 5: Commit.** `feat(letter-order): trackers draw the class's order; counts use the 26-letter set`
 
 ### Task 7: Session complete receipt
 
@@ -694,7 +694,7 @@ tests that switch breaks (Step 1, last group).
   - `buildReceiptRows` shows `letters` in the order given and no longer sorts.
   - Wrap up passes `teachingOrder: lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - Selected `['d', 's', 'n', 'a']` with the English 2026-10-23 order gives receipt letters
     `s a n d`; the isiXhosa order turns `['a', 'o']` into `o a`.
   - `null` keeps selection order.
@@ -703,11 +703,11 @@ tests that switch breaks (Step 1, last group).
     Session complete params' `letters` are `['s', 'a', 'n', 'd']`
     (`view.navigationRef.getCurrentRoute().params`, as `LessonWrapUp.save.test.js:79` does).
 
-- [ ] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/sessionCompleteView.test.js __tests__/SessionReceipt.test.js __tests__/LessonWrapUp.save.test.js`. Expected: FAIL.
+- [x] **Step 2: Run them to verify they fail.** Run `npm test -- __tests__/sessionCompleteView.test.js __tests__/SessionReceipt.test.js __tests__/LessonWrapUp.save.test.js`. Expected: FAIL.
 
-- [ ] **Step 3: Implement, delete `LETTER_ORDER`, and run the tests.** Expected: PASS.
+- [x] **Step 3: Implement, delete `LETTER_ORDER`, and run the tests.** Expected: PASS.
 
-- [ ] **Step 4: Commit.** `feat(letter-order): the receipt lists letters in the class's order`
+- [x] **Step 4: Commit.** `feat(letter-order): the receipt lists letters in the class's order`
 
 ### Task 8: Agreement, leftovers and documents
 
@@ -717,7 +717,7 @@ tests that switch breaks (Step 1, last group).
 - Modify: `jest.integration.config.js` (add `letterOrderAgreement.test.js` to `testMatch`)
 - Modify: `CONTEXT.md`, `docs/superpowers/specs/2026-10-20-lesson-plan-design.md` (§4.2), `documentation/ROADMAP.md`, `documentation/build-log.md`
 
-- [ ] **Step 1: Write the agreement test.** For one 2026-10-23 class per language, each with two
+- [x] **Step 1: Write the agreement test.** For one 2026-10-23 class per language, each with two
   children in a group, whose history is complete and empty (so the engine's first-lesson rule,
   `letters.js:86-94`, applies), let `order = resolveTeachingOrder('2026-10-23', code)` and
   `stepOne = getLetterOrder(order.id).letter_steps[0]`. Each surface is compared with the part of
@@ -735,17 +735,17 @@ tests that switch breaks (Step 1, last group).
   `jest.integration.config.js`, and confirm with
   `npm run test:integration -- --listTests | grep letterOrderAgreement` (one line).
 
-- [ ] **Step 2: Write the leftovers test.** It scans `src/` and fails on:
+- [x] **Step 2: Write the leftovers test.** It scans `src/` and fails on:
   - `PEDAGOGICAL_ORDER`;
   - `LETTER_ORDER`;
   - `getPack(`;
   - any `CURRENT_PACK_IDS` key that isn't an order id in the registry.
 
-- [ ] **Step 3: Run both.** Run `npm test -- __tests__/letterOrderLeftovers.test.js` and
+- [x] **Step 3: Run both.** Run `npm test -- __tests__/letterOrderLeftovers.test.js` and
   `npm run test:integration -- __tests__/letterOrderAgreement.test.js`. Expected: PASS (they pass at
   once, because Tasks 1–7 built the behaviour; they guard against regressions).
 
-- [ ] **Step 4: Documents.**
+- [x] **Step 4: Documents.**
   - **`CONTEXT.md`:** add **Letter order** (a language's teaching sequence in steps, from the
     registry) and **Letter order edition** (a set of orders, one per language; each class records
     one, set by the server, never changed). Update **Content pack** (chosen by the class's order,
@@ -760,11 +760,11 @@ tests that switch breaks (Step 1, last group).
     - the books v2 previews need readers.
   - **Build log:** the "check first" result, each task's gates, and the preview-hash correction.
 
-- [ ] **Step 5: Commit.** `docs(letter-order): agreement guard, glossary, ADR and log`
+- [x] **Step 5: Commit.** `docs(letter-order): agreement guard, glossary, ADR and log`
 
 ### Task 9: Release gates and rollout
 
-- [ ] **Step 1: Full gates under Node 20.** Run:
+- [x] **Step 1: Full gates under Node 20.** Run:
   - `npm test`;
   - `npm run test:integration`;
   - `npm run test:types`;
@@ -772,10 +772,10 @@ tests that switch breaks (Step 1, last group).
   - `npm run verify:letter-order:postgres` plus the existing PostgreSQL harnesses.
 
   Expected: all pass. Record the counts in the build log.
-- [ ] **Step 2: Codex adversarial review** of `feat/lesson-flow...feat/letter-orders`
+- [x] **Step 2: Codex adversarial review** of `feat/lesson-flow...feat/letter-orders`
   (`--model gpt-6-astra`). Fix confirmed findings test-first, and re-review until a round finds
   nothing new above low.
-- [ ] **Step 3: Prepare this worktree for the helper, then the read-only preflight.** In
+- [x] **Step 3: Prepare this worktree for the helper, then the read-only preflight.** In
   `.claude/worktrees/letter-orders`:
   - `ln -s /Users/jimmckeown/Development/masi-app/.env.local .env.local`. The symlink is temporary
     and gitignored. The helper reads only the staging values from it and never passes the file

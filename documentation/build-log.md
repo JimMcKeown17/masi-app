@@ -5308,6 +5308,33 @@ phones must finish or discard old v1 drafts. The roadmap retains the two content
 Masi's second-edition schedule and readers for the new-order previews. No dependencies were
 changed.
 
+**Task 9 release gates on `d787816` (orchestrator, Node 20.19.4).**
+
+| Gate | Result |
+| --- | --- |
+| `npm test` | 451/451 suites, 6,966 tests passed |
+| `npm run test:integration` | 87/87 suites, 1,203 tests passed |
+| `npm run test:types` | clean |
+| `node --test content/egra/verify.cjs` | 5 pass, 0 fail |
+| All ten PostgreSQL harnesses on a disposable local PostgreSQL 17 (`PGTZ=UTC`) | every case passed: history authorization, upload contract, organisation label, support incident, assessment results (113), assessment history (144), EA access (43), letter mastery (20), session group (36), letter order (10) |
+
+**Codex adversarial review (`gpt-6-astra`) of `feat/lesson-flow...d787816`: approve, no material
+findings.** It traced server ownership, pending-edit protection, missing or null server editions,
+order-based pack selection with the preview gate, and every production caller of
+`getTeachingOrder`, and found no path that shows a user the missing-edition `TypeError`. The plan
+stops reviewing when a round finds nothing above low, so one round closed it.
+
+**Read-only staging preflight (2026-10-27, `project_ref=segygjzpujphwvrubusm`), from this
+worktree through the helper.** `sqlite:staging:check` and `sqlite:staging:link` pointed at the
+SQLite backend. `sqlite:staging:migrations`: all 35 earlier migrations match, including #108's
+`20261026120000`; `20261027120000` is the only local migration not applied, and no remote-only
+migration exists. #108's migration does not touch `classes`, so the 2026-10-26 live table check
+still holds. Classes: 15, all active (isiXhosa 9, English 2, Afrikaans 2, isiZulu 1, no language
+1); `max(updated_at)` 2026-10-27 16:43:28.764+00, `sum(row_version)` 21. English and Afrikaans
+classes changed that afternoon (other testing), so the apply is verified against a per-class
+snapshot of `id`, `updated_at` and `row_version` taken at the same time, not only the totals.
+Nothing on the server was changed. The hosted apply waits for Jim's yes.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
