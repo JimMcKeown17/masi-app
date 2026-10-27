@@ -27,6 +27,11 @@ toasts wrap. Some existing compact displays deliberately cap scaling (documented
 copy those restrictions onto ordinary body text. Screen headers and button labels use sentence
 case; proper nouns such as Head Office and EGRA retain their capitals.
 
+**Device gates run at default text size (Jim, 2026-10-27).** Don't check 130% (1.3×) system text in
+device gates: it takes too long, and no EA has been seen using it. The large-text items in the older
+gate lists below are retired. Code still follows the rules above so text can grow, and existing
+Jest cases for large text stay.
+
 | Concern | Source | Verification |
 |---|---|---|
 | Colours, tints, spacing, radii, shadows | [`src/constants/colors.js`](../src/constants/colors.js) | `colors.test.js`, `contrast.test.js`, `noLegacyHues.test.js` |
