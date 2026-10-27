@@ -6118,3 +6118,35 @@ Left for follow-up, outside this branch:
   shadow is cut. iPhone needs checking alongside.
 - `ListRow` subtitles wrap greedily. "Letter writing first row wrong" leaves "wrong" alone on a
   second line at 360dp/100%. `textBreakStrategy="balanced"` (Android) would fix it app-wide.
+
+
+### 2026-10-27 — EGRA content and skip rules: device gate, Galaxy A03 builds 51–52
+
+Builds 51 (`a9d4141`) and 52 (`fa79053`), Android preview, on the Galaxy A03 at 360dp (`wm density
+320`), signed in as TestB on the SQLite staging backend after migration `20261026120000`. Earlier
+builds 49–50 covered Full EGRA in Afrikaans and isiZulu, isiZulu quick tests, force-quit resume, the
+superseded-version guard and the isiXhosa Q1 trigger (entries above and the plan ledger).
+
+| Check | Result |
+|---|---|
+| isiZulu Word Reading quick test (Thandeka Zulu) | Pages break at card rows: "umama ikati / ubaba itiye / vela", divider, "hlela sika / …". 10 words, page 1 of 5. Discarded without saving. |
+| WelaPLUS English, Q6 trigger (Emma Smith, AQM-G57) | Q1–Q5 short, no card. Q6: stop sheet after the 8th wrong word; one card row per page (page 1 of 10). Card "No more reading or writing today", ends "Tap Review and finalize to finish", Skipped Q7–Q12, no handle. Rows show "Words first row wrong" beside the Skipped chip. Finalized. |
+| WelaPLUS isiXhosa, Q5 trigger (Msm nznx, 8YG-VDQ) | Letter writing has no in-question stop; End question with letters 1–6 wrong fired the trigger. Card names the Writing Sheet, ends "Tap Review and finalize to finish", Skipped Q6–Q12. Finalized. |
+| WelaPLUS isiXhosa, clean run (Tootie monshy, Q7M-JS0) | All 12 Questions, no card, Story comprehension offered (story 3/53). Finalized. |
+| Staging rows (read-only) | English Q6 run: 12 results, 6 automatic skips, Q6 `stop_rule`. Q5 run: 12 / 7. Clean run: 12 / 0. All `wela_plus_full@2026.1`. |
+| Build 51 at 130% text (skckc mskcnc, GJW-79N, Q1 trigger) | Defect: "Story compreh / ension" in the narrow Skipped column; body scrolled with no cue. Fixed in `fa79053` (entry above). |
+| Build 52 at 130% | Lists stacked full width, every title whole, footer rule shown while the body scrolls. |
+| Build 52 at 100% | Two side-by-side lists, no rule, no scrolling: unchanged from build 51. |
+
+Also seen, not changed in this branch: "Letter writing first row wrong" wraps with "wrong" alone at
+360dp (shared `ListRow`); sheet footers sit flush against Android's three-button bar (shared
+`BottomSheet` bottom padding); changing system text size while the app runs leaves Home's text
+clipped until the next cold launch (React Native keeps old measurements; a cold launch at 130% is
+correct); Story comprehension's score counts the questions asked ("1 / 2"), as on main. Device
+restored afterwards: `wm density reset` (physical 280), font scale 1.0.
+
+Gates on `fa79053` (Node 20): `jest --silent` 433 suites / 6,578 tests / 14 snapshots, exit 0;
+`npm run test:integration` 78 suites / 966 tests, exit 0. Scoped Codex adversarial review
+(gpt-6-astra, base `a9d4141`): approve, no findings; it confirmed from Yoga's source that the gap
+counts when deciding where to wrap (two columns need 280dp at 100% and 361.6dp at 130% of the 312dp
+available).
