@@ -35,7 +35,7 @@ test('all source forms adapt without changing order, case, repeats or identity',
     const passage = adapted.itemSets.oral_reading;
     expect(passage.words.map(w => w.word).join(' ')).toBe(form.passage.text.trim().replace(/\s+/g, ' '));
     expect(passage.paragraph_starts).toHaveLength(form.passage.text.split('\n\n').length);
-    expect(adapted.battery.questions.map(q => q.title)).toEqual(['Letter sounds', 'Familiar words', 'Reading a story', 'Story questions']);
+    expect(adapted.battery.questions.map(q => q.title)).toEqual(['Letter sounds', 'Familiar words', 'Reading a story', 'Story comprehension']);
     adapted.battery.questions.forEach((q, i) => {
       expect(q.question_version).toBe(i === 0 ? letterVersion : form.id);
       expect(q.instructions?.[form.languageCode]).toBeTruthy();
@@ -123,7 +123,7 @@ test('story questions auto-skip when the child read no story words or the story 
   ];
   const story = (stopped_reason: string, score: number | null) =>
     evaluateBatteryState(battery, [...before, { question_code: 'oral_reading', stopped_reason, score }]);
-  expect(story('ea_ended', 0).autoSkips).toEqual([{ question_code: 'reading_comprehension', reason: 'skipped_prerequisite_unmet' }]);
+  expect(story('ea_ended', 0).autoSkips).toEqual([{ question_code: 'reading_comprehension', reason: 'skipped_prerequisite_unmet', trigger: null }]);
   expect(story('ea_ended', 0).nextQuestion).toBeNull();
   expect(story('skipped_tired', null).autoSkips).toHaveLength(1);
   expect(story('timer', 1).autoSkips).toEqual([]);
@@ -141,7 +141,7 @@ test('EGRA: the story-questions gate still needs one word marked Correct', () =>
     expect(result.derived.capture_mode).toBe('sequential');
     expect(result.items.filter((item: any) => item.metadata.reached)).toHaveLength(3);
     const state = evaluateBatteryState(battery, [...before, { question_code: result.question_code, stopped_reason: result.stopped_reason, score: result.derived.total_correct }]);
-    expect(state.autoSkips).toEqual(totalCorrect ? [] : [{ question_code: 'reading_comprehension', reason: 'skipped_prerequisite_unmet' }]);
+    expect(state.autoSkips).toEqual(totalCorrect ? [] : [{ question_code: 'reading_comprehension', reason: 'skipped_prerequisite_unmet', trigger: null }]);
     expect(state.nextQuestion?.question_code ?? null).toBe(totalCorrect ? 'reading_comprehension' : null);
   }
 });

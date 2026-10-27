@@ -1,7 +1,10 @@
 import { v4 as uuid } from 'uuid';
+import { resetSkipNoticeSeen } from '../src/utils/skipNoticeSeen';
 import { egraBatteryFor } from '../src/assessment-questions/egra';
-import { buildRunView, formatRunStart, materialsLine, runCode } from '../src/utils/batteryRun';
-import { MANUAL_SKIP_REASONS, WELA_PLUS_FULL_2024_1 } from '../src/assessment-questions';
+import { buildRunView, formatRunStart, materialsLine, runCode, skipNoticeFor, TRIGGER_LABELS } from '../src/utils/batteryRun';
+import { MANUAL_SKIP_REASONS, WELA_PLUS_FULL_2024_1, WELA_PLUS_FULL_2026_1 } from '../src/assessment-questions';
+
+beforeEach(() => resetSkipNoticeSeen());
 
 const battery = WELA_PLUS_FULL_2024_1;
 const run = {
@@ -76,13 +79,99 @@ test('skipped row uses the package label', () => {
       question_code: battery.questions[0].question_code,
       stopped_reason: reason, score: 0, total_items: 60, derived: {},
     }] });
-    expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: `Skipped · ${label}`, scoreText: null });
+    expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: label, scoreText: null, skipCause: null });
     expect(state.decidedCount).toBe(1);
   }
   expect(view({ results: [{
     question_code: battery.questions[0].question_code,
     stopped_reason: 'skipped_prerequisite_unmet', score: null, total_items: 0, derived: {},
-  }] }).rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Not reached', scoreText: null });
+  }] }).rows[0]).toMatchObject({ state: 'skipped', detail: 'Not reached', scoreText: null, skipCause: null });
+});
+
+const firstRowSkips = [
+  'word_reading', 'wela_plus_read_sentences', 'oral_reading', 'reading_comprehension',
+  'wela_plus_write_cvcs', 'wela_plus_write_sentences_dictation', 'wela_plus_story_writing',
+];
+const markedResult = (question_code, length, correct = false) => ({
+  question_code, stopped_reason: 'completed', score: correct ? length : 0,
+  total_items: length, derived: {},
+  items: Array.from({ length }, (_, position) => ({
+    position, is_correct: correct, metadata: { reached: true },
+  })),
+});
+const savedSkip = question_code => ({
+  question_code, stopped_reason: 'skipped_prerequisite_unmet', score: null,
+  total_items: 0, derived: {}, items: [],
+});
+const currentView = results => buildRunView(WELA_PLUS_FULL_2026_1, { ...run, results }, access);
+
+test('trigger labels export the approved EA wording', () => {
+  expect(TRIGGER_LABELS).toEqual({
+    letter_sounds: 'Letters first row wrong',
+    wela_plus_letter_writing: 'Letter writing first row wrong',
+    word_reading: 'Words first row wrong',
+  });
+});
+
+test.each([
+  ['letter_sounds', 0, 10, firstRowSkips, 'Letters first row wrong'],
+  ['wela_plus_letter_writing', 4, 6, firstRowSkips, 'Letter writing first row wrong'],
+  ['word_reading', 5, 8, firstRowSkips.slice(1), 'Words first row wrong'],
+])('2026.1 resumed run labels every saved skip from %s', (trigger, index, length, skippedCodes, label) => {
+  const results = [
+    ...WELA_PLUS_FULL_2026_1.questions.slice(0, index).map(question => markedResult(question.question_code, 10, true)),
+    markedResult(trigger, length),
+    ...skippedCodes.map(savedSkip),
+  ];
+  const state = currentView(results);
+  expect(state.firedTrigger).toBe(trigger);
+  expect(state.autoSkips).toEqual([]);
+  expect(state.rows.filter(row => row.state === 'skipped').map(row => row.question.question_code)).toEqual(skippedCodes);
+  state.rows.forEach(row => {
+    if (skippedCodes.includes(row.question.question_code)) {
+      expect(row).toMatchObject({ state: 'skipped', detail: label,
+        skipCause: { kind: 'first_row', trigger }, scoreText: null });
+    } else {
+      expect(row.skipCause).toBeNull();
+    }
+  });
+});
+
+test('2026.1 Q1 item evidence proposes Q6–Q12 auto-skips before they are saved', () => {
+  const state = currentView([markedResult('letter_sounds', 10)]);
+  expect(state.firedTrigger).toBe('letter_sounds');
+  expect(state.autoSkips).toEqual(firstRowSkips.map(question_code => ({
+    question_code, reason: 'skipped_prerequisite_unmet', trigger: 'letter_sounds',
+  })));
+  expect(state.decidedCount).toBe(1);
+  expect(state.next).toBe(WELA_PLUS_FULL_2026_1.questions[1]);
+  expect(state.rows.filter(row => firstRowSkips.includes(row.question.question_code))
+    .every(row => row.state === 'not_started' && row.skipCause === null)).toBe(true);
+});
+
+test('an old EGRA saved comprehension skip explains that no story words were read', () => {
+  const egra = egraBatteryFor('egra', 'dbe-egra-en-hl-1-v1');
+  const state = buildRunView(egra, { ...run, results: [
+    markedResult('oral_reading', 10), savedSkip('reading_comprehension'),
+  ] }, access);
+  expect(state.firedTrigger).toBeNull();
+  expect(state.rows[3]).toMatchObject({ state: 'skipped', detail: 'No story words read',
+    skipCause: { kind: 'prerequisite', depends_on: 'oral_reading' } });
+});
+
+test('a manual Q2 skip keeps its EA reason beside Q1-triggered saved skips', () => {
+  const state = currentView([
+    markedResult('letter_sounds', 10),
+    { ...savedSkip('wela_plus_listen_and_answer_story'), stopped_reason: 'skipped_tired' },
+    ...firstRowSkips.map(savedSkip),
+  ]);
+  expect(state.firedTrigger).toBe('letter_sounds');
+  expect(state.rows[1]).toMatchObject({ state: 'skipped', detail: 'Child is tired', skipCause: null });
+  expect(state.rows.filter(row => row.skipCause !== null).map(row => row.question.question_code)).toEqual(firstRowSkips);
+  for (const row of state.rows.filter(row => firstRowSkips.includes(row.question.question_code))) {
+    expect(row).toMatchObject({ detail: 'Letters first row wrong',
+      skipCause: { kind: 'first_row', trigger: 'letter_sounds' } });
+  }
 });
 
 test('writing-sheet reminder only before the first writing-sheet Question', () => {
@@ -211,7 +300,7 @@ test('result mapping agrees with evaluator for duplicate and unrelated result co
   ] });
   expect(state.decidedCount).toBe(1);
   expect(state.next).toBe(battery.questions[1]);
-  expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: 'Skipped · Child is tired', scoreText: null });
+  expect(state.rows[0]).toMatchObject({ state: 'skipped', detail: 'Child is tired', scoreText: null });
 });
 
 test('score formatting preserves zero and handles missing parsed derived data', () => {
@@ -262,4 +351,83 @@ test('EGRA: nothing asked then End shows "—" in the Battery summary', () => {
   const state = buildRunView(egra, { ...run, results: [{ question_code: 'reading_comprehension',
     stopped_reason: 'ea_ended', score: 0, total_items: 5, derived: { questions_asked: 0 } }] }, access);
   expect(state.rows[3]).toMatchObject({ state: 'done', scoreText: '—' });
+});
+
+test('2026.1 reading cards name shared content while all other materials retain the battery footer', () => {
+  const { WELA_PLUS_FULL_2026_1: current } = require('../src/assessment-questions');
+  expect(materialsLine(current.questions[0], 'xh', current)).toEqual({
+    item: 'Reading Card', side: 'side A', footer: 'Reading Card 2026.3 · XH · side A',
+  });
+  expect(materialsLine(battery.questions[0], 'xh', battery).footer).toBe('WelaPLUS 2024.1 · XH · side A');
+  for (const [index, side] of [[5, 'B'], [6, 'D'], [7, 'C']]) {
+    expect(materialsLine(current.questions[index], 'en', current).footer).toBe(`Reading Card 2026.3 · EN · side ${side}`);
+  }
+  expect(materialsLine(current.questions[4], 'xh', current).footer).toBe('WelaPLUS 2026.1 · XH · Writing Sheet');
+  expect(materialsLine(current.questions[11], 'xh', current).footer).toBe('WelaPLUS 2026.1 · XH · Picture Cards');
+  expect(materialsLine(current.questions[8], 'xh', current)).toBeNull();
+});
+
+test.each([
+  ['letter_sounds', 0, 10, firstRowSkips, 'No reading or writing today',
+    "Lwazi got every letter in the first row wrong. So Lwazi won't be asked to read or write words, sentences or a story. This is normal.",
+    ['Listen to a story', 'First sounds', 'Blending sounds', 'Letter writing']],
+  ['wela_plus_letter_writing', 4, 6, firstRowSkips, 'No reading or writing today',
+    "Lwazi got every letter in the first row of the Writing Sheet wrong. So Lwazi won't be asked to read or write words, sentences or a story. This is normal.", []],
+  ['word_reading', 5, 8, firstRowSkips.slice(1), 'No more reading or writing today',
+    "Lwazi got every word in the first row wrong. So Lwazi won't be asked to read sentences or a story, or to write. This is normal.", []],
+])('skipNoticeFor derives exact copy and lists from saved %s results', (trigger, index, length, codes, title, body, stillToDo) => {
+  const state = currentView([
+    ...WELA_PLUS_FULL_2026_1.questions.slice(0, index).map(question => markedResult(question.question_code, 10, true)),
+    markedResult(trigger, length), ...codes.map(savedSkip),
+  ]);
+  expect(skipNoticeFor({ battery: WELA_PLUS_FULL_2026_1, view: state, firstName: 'Lwazi' })).toEqual({
+    trigger, title, body: `${body} ${stillToDo.length ? 'Carry on with the next Question.' : 'Tap Review and finalize to finish.'}`,
+    stillToDo, skipped: WELA_PLUS_FULL_2026_1.questions.filter(question => codes.includes(question.question_code)).map(question => question.title),
+  });
+});
+
+test('skipNoticeFor is null without a trigger, before any skip is saved, or with prerequisite skips alone', () => {
+  for (const results of [[], [markedResult('letter_sounds', 10)], [
+    markedResult('oral_reading', 10), savedSkip('reading_comprehension'),
+  ]]) {
+    expect(skipNoticeFor({ battery: WELA_PLUS_FULL_2026_1, view: currentView(results), firstName: 'Lwazi' })).toBeNull();
+  }
+});
+
+test('skipNoticeFor shows no card for a trigger it has no copy for', () => {
+  const view = {
+    firedTrigger: 'future_trigger',
+    rows: [{ question: { title: 'Later' }, state: 'skipped', skipCause: { kind: 'first_row', trigger: 'future_trigger' } }],
+  };
+  expect(skipNoticeFor({ view, firstName: 'Lwazi' })).toBeNull();
+});
+
+test('skipNoticeFor lists only first-row skips in a run mixing manual, prerequisite and first-row skips', () => {
+  // Production WelaPLUS has just one prerequisite, whose cause is superseded by a first-row trigger.
+  // Add a prerequisite on a non-target Question to exercise all three causes together through the real evaluator.
+  const mixedBattery = { ...WELA_PLUS_FULL_2026_1, prerequisites: {
+    ...WELA_PLUS_FULL_2026_1.prerequisites,
+    wela_plus_first_sound: { depends_on: 'wela_plus_listen_and_answer_story', minScore: 1,
+      on_unmet_reason: 'skipped_prerequisite_unmet' },
+  } };
+  const state = buildRunView(mixedBattery, { ...run, results: [
+    markedResult('letter_sounds', 10),
+    { ...savedSkip('wela_plus_listen_and_answer_story'), stopped_reason: 'skipped_tired' },
+    savedSkip('wela_plus_first_sound'), ...firstRowSkips.map(savedSkip),
+  ] }, access);
+  expect(state.rows[1].skipCause).toBeNull();
+  expect(state.rows[2].skipCause).toEqual({ kind: 'prerequisite', depends_on: 'wela_plus_listen_and_answer_story' });
+  const notice = skipNoticeFor({ battery: mixedBattery, view: state, firstName: 'Lwazi' });
+  expect(notice.skipped).toEqual(WELA_PLUS_FULL_2026_1.questions.slice(5).map(question => question.title));
+  expect(notice.stillToDo).toEqual(['Blending sounds', 'Letter writing']);
+});
+
+test.each([
+  ['letter_sounds', 10, 'every letter in the first row', 'read or write words, sentences or a story'],
+  ['wela_plus_letter_writing', 6, 'every letter in the first row of the Writing Sheet', 'read or write words, sentences or a story'],
+  ['word_reading', 8, 'every word in the first row', 'read sentences or a story, or to write'],
+])('missing first name uses This child and this child for %s, with no pronoun', (trigger, length, wrong, activity) => {
+  const state = currentView([markedResult(trigger, length), ...firstRowSkips.filter(code => code !== trigger).map(savedSkip)]);
+  expect(skipNoticeFor({ battery: WELA_PLUS_FULL_2026_1, view: state }).body)
+    .toBe(`This child got ${wrong} wrong. So this child won't be asked to ${activity}. This is normal. Carry on with the next Question.`);
 });

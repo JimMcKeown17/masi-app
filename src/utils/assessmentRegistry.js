@@ -1,8 +1,15 @@
+import { sharedInstructionsFor } from '../assessment-questions';
 import { ENGLISH_PEDAGOGICAL_ORDER, ISIXHOSA_PEDAGOGICAL_ORDER, AFRIKAANS_PEDAGOGICAL_ORDER } from '../constants/egraConstants';
 
 export const LETTER_EVIDENCE_CODES = ['letter_sounds'];
 
 export const LANGUAGE_LABELS = { en: 'English', xh: 'isiXhosa', zu: 'isiZulu', af: 'Afrikaans' };
+
+export function languageList(codes) {
+  const labels = codes.map(code => LANGUAGE_LABELS[code] ?? code);
+  if (labels.length < 2) return labels.join('');
+  return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`;
+}
 
 export function languageCodeForHomeLanguage(text) {
   if (typeof text !== 'string') return null;
@@ -23,26 +30,27 @@ export const PEDAGOGICAL_ORDERS = {
   af: AFRIKAANS_PEDAGOGICAL_ORDER,
 };
 
+function instructionsFor(code) {
+  return Object.fromEntries(['xh', 'en', 'af', 'zu'].map(language => {
+    const text = sharedInstructionsFor(code, language);
+    if (text === null) throw new TypeError(`Missing shared instructions: ${code}/${language}`);
+    return [language, text];
+  }));
+}
+
 export const STANDALONE_TESTS = [
   {
     code: 'letter_sounds',
     title: 'Letter Sounds',
     durationSec: 60,
     component: 'LetterSoundsQuestion',
-    instructions: '1. Tap Start to begin the 60-second timer.\n'
-      + '2. The highlighted letter is the one the child is reading.\n'
-      + '3. Tap Correct or Incorrect. The next letter is highlighted automatically.\n'
-      + '4. Tap Back to fix a mistake.\n'
-      + '5. After 10 wrong in a row, the test stops.',
+    instructions: instructionsFor('letter_sounds'),
   },
   {
     code: 'word_reading',
     title: 'Word Reading',
     durationSec: 60,
     component: 'ReadWordsQuestion',
-    instructions: '1. Tap Start to begin the 60-second timer.\n'
-      + '2. The highlighted word is the one the child is reading.\n'
-      + '3. Tap Correct or Incorrect. The next word is highlighted automatically.\n'
-      + '4. Tap Back to fix a mistake.',
+    instructions: instructionsFor('word_reading'),
   },
 ];

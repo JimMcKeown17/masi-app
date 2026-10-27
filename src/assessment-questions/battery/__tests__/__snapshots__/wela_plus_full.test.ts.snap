@@ -1,0 +1,154 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`2024.1 stays deep-equal to the pre-2026.1 battery, including every question title and instruction 1`] = `
+{
+  "aboutMinutes": 30,
+  "battery_code": "wela_plus_full",
+  "battery_version": "2024.1",
+  "languages": [
+    "en",
+    "xh",
+  ],
+  "prerequisites": {},
+  "questions": [
+    {
+      "durationSec": 60,
+      "instructions": {
+        "en": "Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The black ring shows which letter you're on. The test stops by itself after 10 wrong in a row or at 1 minute.",
+        "xh": "Hand the child Reading Card side A. Point to each letter and ask the child for its sound. Mark each letter Correct or Incorrect. The black ring shows which letter you're on. The test stops by itself after 10 wrong in a row or at 1 minute.",
+      },
+      "materials": {
+        "item": "reading_card",
+        "side": "A",
+      },
+      "question_code": "letter_sounds",
+      "question_version": "2026.2",
+      "title": "Letter sounds",
+    },
+    {
+      "instructions": {
+        "en": "Say: "I am going to read you a short story aloud ONCE and then ask you some questions. Please listen carefully and answer the questions as best you can. Do you understand what you must do? Ready, let's begin." Read the story slowly, about one word per second. You may only read it once. Then ask each question. Mark each question Correct or Incorrect. The black ring shows which question you're on.",
+        "xh": "Say: "I am going to read you a short story aloud ONCE and then ask you some questions. Please listen carefully and answer the questions as best you can. Do you understand what you must do? Ready, let's begin." Read the story slowly, about one word per second. You may only read it once. Then ask each question. Mark each question Correct or Incorrect. The black ring shows which question you're on.",
+      },
+      "materials": null,
+      "question_code": "wela_plus_listen_and_answer_story",
+      "question_version": "2024.1",
+      "title": "Listen to a story",
+    },
+    {
+      "instructions": {
+        "en": "Practise first! Say: "Look, I am sitting. Listen carefully. Can you hear that 'sit' starts with the sound sss?" Then say each word and ask: "What sound does this word start with?" Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+        "xh": "Zama ukuqala uziqhelanise! Thetha nomntwana uthi: "Jonga, ndiyasela. Mamela, ndiyasela. Phulaphula ngenyameko. Uyeva ukuba u 'sela' uqala ngesandi u s?" Then say each word and ask which sound it starts with. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+      },
+      "materials": null,
+      "question_code": "wela_plus_first_sound",
+      "question_version": "2024.1",
+      "title": "First sounds",
+    },
+    {
+      "instructions": {
+        "en": "Practise first! Say: "Listen carefully to these sounds: /c/ /a/ /t/ … this says 'cat'! /sh/ /o/ /p/ … this says 'shop'!" Then say each word's sounds with a one-second pause between them, and never say the whole word. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+        "xh": "Qala ngokuziqhelanisa! Thetha nomntwana uthi: "Phulaphula ezi zandi ngenyameko: /x/ /a/ … eli gama ngu 'xa'! /Nk/ /o/ … eli gama ngu 'Nko'!" Then say each word's sounds with a one-second pause between them, and never say the whole word. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+      },
+      "materials": null,
+      "question_code": "wela_plus_phoneme_blend",
+      "question_version": "2024.1",
+      "title": "Blending sounds",
+    },
+    {
+      "instructions": {
+        "en": "Give the child the Writing Sheet. Say: "Look at the apple … 'apple' starts with /a/. Can you write /a/?" Work left to right. Say the letter SOUND, not the letter name. If the child does not know a letter, say: "Don't worry, just leave it blank. Let's try another letter." When the child has finished, mark their sheet here, in order. Mark each letter Correct or Incorrect. The black ring shows which letter you're on.",
+        "xh": "Give the child the Writing Sheet. Say: "Look at the apple … 'apple' starts with /a/. Can you write /a/?" Work left to right. Say the letter SOUND, not the letter name. If the child does not know a letter, say: "Don't worry, just leave it blank. Let's try another letter." When the child has finished, mark their sheet here, in order. Mark each letter Correct or Incorrect. The black ring shows which letter you're on.",
+      },
+      "materials": {
+        "item": "writing_sheet",
+      },
+      "paper_marked": true,
+      "question_code": "wela_plus_letter_writing",
+      "question_version": "2024.1",
+      "title": "Letter writing",
+    },
+    {
+      "durationSec": 60,
+      "instructions": {
+        "en": "Hand the child Reading Card side B. Point to each word and ask the child to read it. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself at 1 minute.",
+        "xh": "Hand the child Reading Card side B. Point to each word and ask the child to read it. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself at 1 minute.",
+      },
+      "materials": {
+        "item": "reading_card",
+        "side": "B",
+      },
+      "question_code": "wela_plus_read_words",
+      "question_version": "2024.1",
+      "title": "Reading words",
+    },
+    {
+      "instructions": {
+        "en": "Reading Card side B, sentences. Ask the child to read each sentence. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+        "xh": "Reading Card side B, sentences. Ask the child to read each sentence. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+      },
+      "materials": {
+        "item": "reading_card",
+        "side": "B",
+      },
+      "question_code": "wela_plus_read_sentences",
+      "question_version": "2024.1",
+      "title": "Reading sentences",
+    },
+    {
+      "durationSec": 60,
+      "instructions": {
+        "en": "Hand the child Reading Card side C. Ask the child to read the story. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself at 1 minute.",
+        "xh": "Hand the child Reading Card side C. Ask the child to read the story. Mark each word Correct or Incorrect. The black ring shows which word you're on. The test stops by itself at 1 minute.",
+      },
+      "materials": {
+        "item": "reading_card",
+        "side": "C",
+      },
+      "question_code": "wela_plus_read_passage",
+      "question_version": "2024.1",
+      "title": "Reading a story",
+    },
+    {
+      "instructions": {
+        "en": "Writing Sheet, pictures 1–4. Say the name of each picture TWICE and ask the child to write the word. Mark each letter Correct or Incorrect. The black ring shows which letter you're on.",
+        "xh": "Writing Sheet, pictures 1–4. Say the name of each picture TWICE and ask the child to write the word. Mark each letter Correct or Incorrect. The black ring shows which letter you're on.",
+      },
+      "materials": {
+        "item": "writing_sheet",
+      },
+      "paper_marked": true,
+      "question_code": "wela_plus_write_cvcs",
+      "question_version": "2024.1",
+      "title": "Writing words",
+    },
+    {
+      "instructions": {
+        "en": "Writing Sheet, lines 1–2. Read the first sentence TWICE and let the child write it. Then do the same for the second sentence. Do NOT repeat a sentence while the child is writing. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+        "xh": "Writing Sheet, lines 1–2. Read the first sentence TWICE and let the child write it. Then do the same for the second sentence. Do NOT repeat a sentence while the child is writing. Mark each word Correct or Incorrect. The black ring shows which word you're on.",
+      },
+      "materials": {
+        "item": "writing_sheet",
+      },
+      "paper_marked": true,
+      "question_code": "wela_plus_write_sentences_dictation",
+      "question_version": "2024.1",
+      "title": "Writing sentences",
+    },
+    {
+      "instructions": {
+        "en": "Show the child the Picture Cards and ask: "What can you see in these pictures?" You may ask, for example, "Where are the children?" or "Why is the little girl crying?". Then say: "Can you write a story about the pictures? Don't worry if you can't spell some words, just do your best." If the child cannot write sentences, encourage a few words. When they finish say: "This is a lovely story. Can you think of anything more to write?" Then score the story here.",
+        "xh": "Show the child the Picture Cards and ask: "What can you see in these pictures?" You may ask, for example, "Where are the children?" or "Why is the little girl crying?". Then say: "Can you write a story about the pictures? Don't worry if you can't spell some words, just do your best." If the child cannot write sentences, encourage a few words. When they finish say: "This is a lovely story. Can you think of anything more to write?" Then score the story here.",
+      },
+      "materials": {
+        "item": "picture_cards",
+      },
+      "paper_marked": true,
+      "question_code": "wela_plus_story_writing",
+      "question_version": "2024.1",
+      "title": "Story writing",
+    },
+  ],
+  "title": "WelaPLUS",
+}
+`;

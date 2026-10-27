@@ -192,7 +192,7 @@ export default function BatteryRunSummaryScreen({ navigation, route }) {
       </InlineNote>}
       <ListGroup>{(expanded ? view.rows : view.rows.slice(0, 4)).map(row => (
         <ListRow key={row.question.question_code} title={row.question.title} subtitle={row.detail}
-          accessibilityLabel={`${row.number}. ${row.question.title}, ${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
+          accessibilityLabel={`${row.number}. ${row.question.title}, ${row.state === 'skipped' ? 'Skipped, ' : ''}${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
           accessibilityRole="text" disabled lead={<Text style={styles.number}>{row.number}</Text>}
           trailing={row.state === 'done' ? <StatusBadge tone="success" label={row.scoreText ?? 'Done'} />
             : row.state === 'skipped' ? <StatusBadge tone="neutral" label="Skipped" /> : null} />

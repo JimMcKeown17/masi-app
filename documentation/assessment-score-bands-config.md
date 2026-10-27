@@ -53,8 +53,10 @@ A `(tool_code, grade, language)` with no row at all is also **unknown**.
 
 ## EGRA Letter Sounds (`tool_code = letter_sounds`) — go-live
 
-- **Raw score:** letters correct per minute (LCPM), out of the 60-letter Grid A card
-  (`letter_sounds@2026.2.*`), 60-second timed window.
+- **Raw score:** letters correct per minute (LCPM), 60-second timed window. Since 2026-10-26 the
+  card is the 100-letter DBE chart (110 for isiZulu; `letter_sounds@2026.3.*`), so a fast reader
+  is no longer capped at 60. Results saved on the 60-letter Grid A card (`letter_sounds@2026.2.*`)
+  keep counting; bands read LCPM, not the card.
 - **Language:** `*` — South Africa sets the LCPM benchmark independent of language.
 - **Afrikaans:** uses these `*` rows, whose cut-offs were set for other languages. Treat Afrikaans
   bands as provisional until pedagogy confirms them.

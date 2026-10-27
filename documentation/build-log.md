@@ -5731,3 +5731,422 @@ Out of scope, noted for later: at font scale 1.3 the Home clock card wraps "Not 
 three lines. After a runtime font-scale change Android keeps stale text measurements until the app
 restarts (host-wide, not an app bug). Q11's isiXhosa rubric labels are still English
 (already listed in `CONTENT_PENDING`).
+
+### 2026-10-26 — EGRA content and skip rules, Task 1: shared reading item sets
+
+Spec: `docs/superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md`; plan:
+`docs/superpowers/plans/2026-10-26-egra-content-and-skip-rules.md`; branch
+`feat/egra-content-skip-rules`. Before any refactor, `cf8bb5e` snapshotted the EGRA adapter's
+output for all 13 registered forms, so the refactor had to keep them byte-for-byte.
+
+`c857c70` builds one frozen item set per language for `letter_sounds`, `word_reading`,
+`oral_reading` and `reading_comprehension` at `question_version` `2026.3`, read from the EGRA pack
+in `src/assessment-questions/egra/sharedReading.ts`. isiXhosa, English and Afrikaans take the DBE
+Home Language Assessment 3 letters and Assessment 1 reading; isiZulu takes SMRS 1 for both. Letters
+are 100 in rows of 10 (isiZulu 110); words are 80 in rows of 8 (isiZulu 50 in rows of 5). Every set
+uses the first-row stop. The shared lookup answers only exact version `2026.3`, so older
+Questions keep resolving their own sets. Each shared Question has one instruction text naming its
+Reading Card side and its practice items. Practice items are not filtered out by text, because
+some practice prompts also appear as scored items (English letters m and y, Afrikaans words pot
+and jas, isiXhosa utata).
+
+| Check | Result |
+|---|---|
+| `npx jest src/assessment-questions/egra --ci` | PASS 62/62; 13 adapter baseline snapshots unchanged (never `-u`) |
+| `npm run test:types` | PASS |
+| `npx jest --silent` | PASS 427 suites / 6,429 tests |
+
+The shared sets are deep-frozen. Task 3's and Task 5's render tests confirmed no Question component
+mutates an item set. Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed
+by the orchestrator. All Node commands used Node 20.19.4.
+
+### 2026-10-26 — EGRA content and skip rules, Task 2: pure Battery skip policy
+
+Implemented only Task 2 on `feat/egra-content-skip-rules`. Added pure `firstRowWrong`,
+`firedTrigger`, and `skipCauseFor` helpers, their exported types, optional Battery skip-rule
+configuration and decided-item evidence, `autoSkips[].trigger`, and `BatteryState.firedTrigger`.
+First-row causes take precedence over prerequisites and follow Battery question order; already-saved
+skips keep the same derived cause on resume. Finalization still requires every skip to be saved.
+Old Batteries without a skip rule keep their existing behavior. No real Battery definitions,
+content, snapshots, host behavior, dependencies, database schema, or server contracts changed.
+
+Confirmed from `SequentialCapture` that all non-skipped item positions are saved with explicit
+`metadata.reached = position < cursor`; unreached items are also incorrect, so both fields are
+required. Letter writing saves all 26 prompts (positions 0–25), with the first six `a f k o s w`
+in both languages. The printed six-item row is distinct from the phone's three-column layout.
+
+TDD: the new table-driven suite failed before implementation because `../skipRules` did not exist
+(1 failed suite, 0 tests). Initial verification caught an accidental extra field in prerequisite
+fixture expectations and an incorrect new-test assumption that WelaPLUS 2024.1 had EGRA's story
+prerequisite; corrected the tests to actual old behavior. Strict typing also caught the fixture
+field and inferred old-Battery union. A further regression reproduced a helper/evaluator mismatch
+for out-of-Battery dependency evidence (1 failed, 30 passed); the helper now respects the evaluator's
+existing Battery boundary. Final new-suite coverage is 31 cases, including timer and End boundaries,
+position lookup, first-six letter writing, earliest-trigger precedence, real old Batteries, and
+resume with zero, some, and all skips saved.
+
+Verification (each command used Node 20.19.4 through the exact PATH prefix below):
+
+| Command | Final result |
+|---|---|
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest src/assessment-questions/battery src/assessment-questions/egra --ci` | PASS: 11 suites / 201 tests / 13 snapshots, exit 0 (4.958 s) |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent` | PASS: 428 suites / 6,460 tests / 13 snapshots, exit 0 (63.056 s); no FAIL lines |
+| `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:types` | PASS: strict `tsc --noEmit -p tsconfig.assessment-questions.json`, exit 0, no errors |
+| `git diff --check` | PASS |
+
+No unresolved Task 2 concerns. Resume verification is pure evaluator replay, not host process-kill
+or native-device proof; persistence and the one-off card remain later tasks. Built by Codex
+(gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+
+### 2026-10-26 — EGRA content and skip rules, Task 3: WelaPLUS 2026.1
+
+`afedfe5` registers `wela_plus_full@2026.1` (`battery/wela_plus_full_2026_1.ts`), with twelve
+Questions. Letter sounds (Q1, Reading Card side A), Reading words (Q6, side B) and the story (Q8,
+side C) use the shared 2026.3 content. A new Story comprehension Question (Q9) gets a prerequisite
+on the story. Sentences (Q7) move to side D. The 2024.1 listening, sounds, letter-writing and
+writing Questions are reused unchanged. The Battery declares `readingCard: 'Reading Card 2026.3'`
+and the skip rule. It fires when the first row is all wrong on Letter sounds (10), Letter writing
+(6) or Reading words (8), and it skips the reading and writing Questions after the trigger.
+`wela_plus_full@2024.1` stays registered and is now pinned by a snapshot.
+
+| Check | Result |
+|---|---|
+| `npx jest src/assessment-questions --ci` | PASS 77 suites / 1,089 tests / 14 snapshots (incl. the new 2024.1 pin) |
+| `npm run test:types` | PASS |
+| `npx jest --silent` | PASS 430 suites / 6,478 tests |
+
+A render test mounts the four shared-content Questions on the frozen sets. Built by Codex
+(gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator. All Node
+commands used Node 20.19.4.
+
+### 2026-10-26 — EGRA content and skip rules, Task 4: one Full EGRA in four languages
+
+Added `egra@2026.1` on
+shared 2026.3 content, with four-language instructions, Reading Card 2026.3 sides A/B/C and
+only the existing story prerequisite. The Full EGRA card now starts child selection directly;
+both cards use `languageList`. Deleted the form picker, kept all 13 old Batteries registered,
+and changed only their Q4 title to Story comprehension. Child-select required no production
+change: new screen tests cover isiZulu start, all four explicit language choices, Sesotho refusal
+and WelaPLUS isiZulu refusal; old-form resume remains green.
+
+TDD: new-Battery lookup failed (1 test) before registration; old-title assertions failed
+(4 tests) before the adapter change; card assertions failed (3 tests) before implementation.
+The first full run found the exact utility export-list assertion; added the approved helper name
+without relaxing it. Corrected a strict TypeScript cast in the new test. Non-silent summary-screen
+proof emits a non-blocking React act warning from navigation.setOptions; no native device check.
+
+All Node commands below used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`:
+
+| Command | Result |
+|---|---|
+| `npx jest src/assessment-questions/egra --ci` | PASS: 6 suites / 80 tests / 13 snapshots |
+| `npx jest __tests__/AssessmentsScreen.test.js __tests__/AssessmentChildSelectScreen.battery.test.js __tests__/BatteryRunSummaryScreen.test.js` | PASS: 3 suites / 126 tests |
+| `npx jest --silent` | PASS: 431 suites / 6,500 tests / 14 snapshots; no FAIL lines |
+| `npm run test:types` | PASS: strict tsc, no errors |
+| `npx jest src/assessment-questions/egra/__tests__/adapterBaseline.test.ts --ci` | PASS: 13 tests / 13 unchanged snapshots; never -u |
+| `git diff --check` | PASS |
+
+Built by Codex (gpt-6.1-sol, high; one transient "model at capacity" stop, resumed in the same
+thread); diff reviewed, re-verified and committed by the orchestrator.
+
+### 2026-10-26 — EGRA content and skip rules, Task 5: quick tests on shared content
+
+Both quick tests now use
+shared 2026.3 sets and exact shared instructions in xh/en/af/zu. Historical behavior fixtures
+are pinned by version; old sets remain registered. Real host tests render, mark and save all
+eight frozen sets (including zu's 110 letters / five-word rows) without mutation. isiZulu
+launches from both entry paths; mastery already returns empty without repository reads.
+TDD: current identities failed before the switch (1 test), registry instructions/load guards
+failed before implementation (3), and host language forwarding failed before its fix (21).
+Full-suite routing drift and fixture type errors were corrected. One unmodified story-contract
+test failed once, then passed isolated and on subsequent package/full runs; non-silent runs
+emit React act warnings. No native-device check. One package run had a single failure in the
+untouched `ListenAndAnswerStoryQuestion.contract.test.tsx` ("Finish on a fully-marked Run"); it
+passed 15/15 repeated isolated runs and every later full run, so it is recorded as a load-related
+flake to watch, not a Task 5 regression. Built by Codex; reviewed, re-verified and committed by
+the orchestrator.
+
+All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH` (v20.19.4).
+
+| Command | Result |
+|---|---|
+| `npx jest src/assessment-questions --ci` | PASS: 78 suites / 1,107 tests / 14 snapshots |
+| `npx jest __tests__/StandaloneTestScreen.test.js __tests__/assessmentRegistry.test.js __tests__/masteryState.test.js __tests__/QuestionGalleryScreen.test.js` | PASS: 4 suites / 109 tests |
+| `npx jest --silent` | PASS: 431 suites / 6,525 tests / 14 snapshots; no FAIL lines |
+| `npm run test:types` | PASS: strict tsc, no errors |
+| `npx jest __tests__/AssessmentChildSelectScreen.languagePicker.test.js __tests__/assessmentEntryRouting.test.js` | PASS: 2 suites / 22 tests |
+| `git diff --check` | PASS |
+
+
+### 2026-10-26 — EGRA content and skip rules, Task 6: skip-row labels
+
+`buildRunView`
+now passes hydrated item evidence to evaluation and saved-row cause derivation,
+returns `firedTrigger` and per-row `skipCause`, and exports the three exact trigger
+labels. Saved story prerequisite skips say “Skipped · No story words read”; manual
+EA reasons and the 2024.1 no-cause fallback remain covered. Tests use the real
+2026.1 Battery for all three triggers, unsaved Q6–Q12 auto-skips, and mixed manual
+and automatic skips. No screen implementation change or Task 7 work.
+TDD: targeted RED was 2 failed / 1 passed suites, 10 failed / 115 passed tests;
+the same command passed after implementation. Existing summary navigation emits
+an act warning in the non-silent run; no native-device check. Built by Codex; reviewed,
+re-verified and committed by the orchestrator.
+All Node commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command | Result |
+|---|---|
+| `npx jest __tests__/batteryRun.test.js __tests__/BatteryOverviewScreen.test.js __tests__/BatteryRunSummaryScreen.test.js` | PASS: 3 suites / 125 tests |
+| `npx jest --silent` | PASS: 431 suites / 6,532 tests / 14 snapshots; no FAIL lines |
+| `npm run test:types` | PASS: strict tsc, no errors |
+| `git diff --check` | PASS |
+
+### 2026-10-26 — EGRA content and skip rules, Task 7: skip card
+
+Added the saved-result-derived skip notice, token-styled BottomSheet, and session-only acknowledgement; focus and refresh gates hide it over Question screens and during saves. Auto-skip batching is unchanged. TDD RED: helper 3 failed/44 passed; sheet missing-module failure; overview 9 failed/49 passed. GREEN: required targeted command 4 suites/149 tests; full `npx jest --silent` 432 suites/6,560 tests/14 snapshots, no FAIL lines; `npm run test:types` passed; explicit Question-screen/design-system guards 2 suites/359 tests; diff check passed. All Node commands used Node 20.19.4. Existing summary act warning remains; no native-device check. The mixed-cause fixture adds one prerequisite to the real WelaPLUS battery because production first-row attribution supersedes its only prerequisite. Orchestrator review added one guard: `skipNoticeFor` returns no card for a trigger it has no copy for, instead of throwing (`2a58db8`; its test landed in `6dc29e5`, "skipNoticeFor shows no card for a trigger it has no copy for"; `__tests__/batteryRun.test.js` 53/53). Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+### 2026-10-26 — EGRA content and skip rules, Task 8: default migration and real-SQLite run proof
+
+Wrote the guarded literacy-default migration from WelaPLUS 2024.1 to 2026.1, preserving Head Office choices; migration written but NOT applied (staging apply remains Task 10). Added and registered real-SQLite Q1/Q5/Q6 trigger journeys using validated capture results, restored skip labels and reached metadata, duplicate-skip rejection, successful finalization, and all 13 pending outbox families. TDD RED: migration file absent, 1 failed / 3 passed tests; focused GREEN: 1 suite / 4 tests. Initial overlapping broad runs hit existing Literacy Session Form timeouts; unchanged serial reruns passed: integration 78 suites / 966 tests, normal Jest with --silent --runInBand 433 suites / 6,565 tests / 14 snapshots, no FAIL lines; types and diff check passed. All Node commands used Node 20.19.4. No native-device or staging verification. `documentation/rls-sync-contract-map.md` needs no change: the migration is data-only (one guarded `update` of `programmes.default_battery_*`), and the map does not cover the default Battery; no table, policy, payload column or outbox order changes. Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+Orchestrator re-verification on Node 20.19.4: focused suite 4/4; `npm run test:integration` 78 suites /
+966 tests; `npm run test:types` clean. The first `npx jest --silent` had one failure: in
+`__tests__/LiteracySessionForm.submit.test.js`, under full parallel load the suite took 52 s and one
+test timed out. Alone it passes 14/14 in 6 s. A second full run passed 433 suites / 6,565 tests /
+14 snapshots (that suite 39 s). This branch does not touch the form, `masteryState.js` or the suite,
+and Codex saw the same timeout. It is recorded as a load-dependent flake, joining
+`ListenAndAnswerStoryQuestion.contract.test.tsx` (Task 5).
+
+### 2026-10-26 — EGRA content and skip rules, Task 9: documents
+
+Standing docs updated on the same branch as the code (anti-drift rule):
+
+| Doc | Change |
+|---|---|
+| `documentation/welaplus-printout-pack.md` | Rewritten as the brief for Reading Card 2026.3, WelaPLUS 2026.1 and Full EGRA. Card content for xh/en/af/zu (sides A–C, plus side D sentences for en/xh) was generated by a script straight from the EGRA pack (`content/egra/`), using the same form ids the app's shared sets read, not retyped. Footers `Reading Card 2026.3 · XX · side X`; the Writing Sheet is renumbered Q5, Q10, Q11, Q12; first rows are marked load-bearing. |
+| `CONTEXT.md` | Item set, Stop rule, EGRA form and Full EGRA entries corrected. New terms: Reading Card 2026.3 and Skip rule. Dated notes on the canonical-Battery and prerequisite-gate decisions name the migration. |
+| `documentation/ROADMAP.md` | §7: the Full EGRA 2026.1 device gate replaces the EGRA forms and placeholder word-list items; Full EGRA skip rules deferred. §8: WelaPLUS 2026.1 is built; the follow-on spec items become the device gate, the deferred skip-rule switch and "revisit early endings as triggers". |
+| `documentation/design-system.md` | `assessments/SkipNoticeSheet` entry; 2026.3 letter charts page as five pages (isiZulu six). |
+| `docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md` | Dated status note: auto-skip added, new Battery version. |
+| `documentation/egra_letter_sets.md`, `documentation/assessment-score-bands-config.md` | Shared 2026.3 sets are current; older sets stay bundled for saved results; bands read LCPM, so the 100-letter card needs no band change. |
+
+A throwaway Jest check (not committed) parsed the brief's Reading Card tables and compared them
+with the app's bundled sets. Side A letters row by row, side B words row by row and side C story
+paragraph by paragraph matched in xh/en/af/zu; the side D sentences matched WelaPLUS 2026.1 Q7 in
+en and xh, in order. Result: 14/14 passed.
+
+`documentation/rls-sync-contract-map.md` is unchanged (see Task 8). No code change in this task.
+
+
+### 2026-10-27 — EGRA content and skip rules: branch-review fixes (superseded version, skip card)
+
+New assessments resolve through `batteryForNewRun`, whose private superseded-version map
+moves cached `wela_plus_full@2024.1` to `2026.1`, follows chains, rejects cycles, and returns
+null for an unregistered final identity. `batteryFor` and every Battery object are unchanged:
+unfinished and saved 2024.1 runs still resolve their original 11 Questions. The Assessments tab
+shows the resolved 12-Question, about-32-minute card and navigates with its identity; an unknown
+programme default shows exactly “Your programme uses a newer assessment. Update the app to
+start it.” Empty/null defaults show no note. Quick assessments and Full EGRA remain available.
+Child selection starts and filters completed history with the resolved identity, while the
+unfinished-run sheet still resumes an existing 2024.1 run by id.
+
+`BottomSheet` now accepts `dismissible` (default true). When false, the backdrop has no press
+callback or accessible button/label, and hardware Back is consumed without calling `onDismiss`.
+`SkipNoticeSheet` opts out of dismissal and exposes `onAcknowledge` only on Got it. The overview
+still hides the card while blurred or refreshing, without acknowledging it; Back/backdrop leave
+it unseen, refocus shows it again, and Got it suppresses it for the session.
+
+TDD used the public registry exports and rendered screens/components with real retained
+navigation. Existing coverage was retained and the fixtures now distinguish saved 2024.1 runs
+from new 2026.1 runs. All commands below used
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH` (Node v20.19.4).
+
+| Command | RED | GREEN |
+|---|---|---|
+| `npx jest --runInBand --silent src/assessment-questions/battery/__tests__/registry.test.ts` | 1 failed suite; 1 failed / 89 passed tests (90 total): new export absent | 1 suite / 90 tests passed |
+| `npx jest --runInBand --silent __tests__/AssessmentsScreen.test.js` | 1 failed suite; 4 failed / 32 passed tests (36 total): stale card, missing update notes, new-run fixture wiring | 1 suite / 36 tests passed |
+| `npx jest --runInBand --silent __tests__/AssessmentChildSelectScreen.battery.test.js` | 1 failed suite; 6 failed / 50 passed tests (56 total): stale start/history identity and new-run fixture wiring | 1 suite / 56 tests passed |
+| `npx jest --runInBand --silent __tests__/BottomSheet.test.js` | 1 failed suite; 1 failed / 29 passed tests (30 total): backdrop + Back called onDismiss twice | 1 suite / 30 tests passed |
+| `npx jest --runInBand --silent __tests__/SkipNoticeSheet.test.js __tests__/BatteryOverviewScreen.test.js` | 2 failed suites; 4 failed / 60 passed tests (64 total): Got it callback missing, accessible dismiss button, Back/backdrop marked notice seen | 2 suites / 64 tests passed |
+
+The first BottomSheet test attempt failed to locate React Native's Pressable by component type
+(1 failed / 29 passed); this was a test-query failure, not the behavioral RED. Added a stable
+`bottom-sheet-backdrop` testID and reran before changing dismissal behavior, producing the
+actual two-callback failure recorded above.
+
+| Verification command | Result |
+|---|---|
+| `npx jest --runInBand --silent src/assessment-questions/battery/__tests__/registry.test.ts __tests__/AssessmentsScreen.test.js __tests__/AssessmentChildSelectScreen.battery.test.js __tests__/BottomSheet.test.js __tests__/SkipNoticeSheet.test.js __tests__/BatteryOverviewScreen.test.js __tests__/batteryRun.test.js` | PASS twice: 7 suites / 329 tests / 0 snapshots; final rerun after fixture review |
+| `npx jest --silent` | PASS first attempt: 433 suites / 6,572 tests / 14 snapshots; no FAIL lines; both known load-flake suites passed, so no serial full rerun needed |
+| `npm run test:integration` | PASS: 78 suites / 966 tests / 0 snapshots; includes the real-SQLite WelaPLUS trigger journeys |
+| `npm run test:types` | PASS: strict tsc, exit 0, no errors |
+| `git diff --check` | PASS before and after this append: exit 0, no output |
+
+The non-silent integration run emitted auth/offline/network and SQLite error-path diagnostics;
+all suites passed. No device, hosted migration, printing or release verification was performed.
+No schema, persistence, Battery-definition or saved-run behavior change. Git state was not
+mutated: no branch switch, staging, commit or stash. Concurrent changes appeared in `CONTEXT.md`,
+`documentation/ROADMAP.md` and `documentation/design-system.md` after the initial clean-state
+check; Codex did not make or revert them. The only documentation edit by this task is this
+single appended entry. Orchestrator review and commit remain the handoff.
+
+Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+Context and orchestrator notes. The whole-branch Codex adversarial review (gpt-6-astra,
+`--base origin/main`) returned **needs-attention** with three findings, all accepted:
+[high] a phone whose cached programme still said `wela_plus_full@2024.1` would start the retired
+instrument offline after upgrading; [medium] Back or a backdrop tap acknowledged the skip card;
+[medium] `CONTEXT.md` still gave the ten-in-a-row stop for the current sets and called Story
+writing Q11. Ruling on the first: follow a declared superseded map to the successor rather than
+block WelaPLUS until the phone is online. Both meet spec §7 ("no longer offered for new
+assessments"; 2024.1 cards are never printed), and following the map keeps an offline EA working.
+Cost if wrong: Head Office cannot start 2024.1 on new builds, which the spec already forbids.
+The update-app note covers the other skew direction for future cut-overs (a peer session found
+that main-built apps silently do nothing once the server names a version they lack). The orchestrator fixed
+the docs: `CONTEXT.md` (stop-rule decision; writing Questions named, with 2024.1 and 2026.1
+numbers), `ROADMAP.md` (Story writing, not Q11) and `design-system.md` (`dismissible`,
+`onAcknowledge`, version-specific Question numbers). The review's read-only probes passed: types,
+the 13 adapter hashes, 16 shared item-set identities, every trigger and non-trigger, and no new
+first-row skips in the 14 old Batteries. Orchestrator re-run: the seven focused suites passed 7
+suites / 329 tests; types clean.
+
+
+### 2026-10-27 — EGRA content and skip rules: device-gate fixes (word card rows, skipped-row labels)
+
+Implemented Jim's two 2026-10-27 Galaxy A03 device-gate decisions on
+`feat/egra-content-skip-rules` in the `egra-content-spec` worktree.
+
+Words now set `WORD_PAGE_LAYOUT.breakAtCardRow: true`, retaining two columns, ten-item
+capacity, whole-card-row packing and oversized-row pagination. The 50-word isiZulu shape
+still has five pages of two card rows; each page now displays `2,2,1 | 2,2,1`, with one dashed
+divider before display row four. Positions 0–9 remain on page one. Eight-word card rows keep
+their existing one-card-row/four-display-row pages; their pagination and Question coverage
+was retained.
+
+Frame review found no fixed five-row assumption in production: `CaptureBody` passes all
+Question pages to `PagedGrid`, which sizes from the maximum display-row and divider counts.
+For six word rows and one divider it accounts for six gaps (four within groups and two divider
+margins) plus the 1dp line. Rendered geometry tests at 360 × 300dp prove six tile rows of
+263 / 6dp, 6dp gaps and an exactly 300dp frame without scrolling or overflow. Normal 10dp gaps
+retain the 159dp word column width at 360dp. Added short-word-page cases prove that tile
+sizes and the shared frame remain stable across pages. The existing 40dp tile / 6dp gap
+floor means this shape needs at least 277dp of grid height; native complete-screen and
+large-text fit remain device gates. No `PagedGrid` production change was necessary.
+
+`buildRunView` now returns the reason alone for skipped-row `detail`: manual reason,
+first-row trigger label, No story words read, or Not reached. Both overview and summary
+retain the neutral Skipped chip and explicitly announce `Skipped, <reason>` in each skipped
+row's accessibility label. Other row details and score suffixes are unchanged. The real-SQLite
+WelaPLUS integration expectation now uses `detail: label`.
+
+Repo-wide prefix/consumer search found no other runtime dependency on `Skipped · `:
+`BatteryQuestionScreen` uses writable/next state, and history/results/export do not parse
+this display prefix. Remaining literal examples are in documentation and the earlier static
+skip-card mockup. Protected standing-doc wording (including word flow and skipped labels)
+is left for the orchestrator's coordinated update, per the task boundary.
+
+TDD exercised the public paginator, public view builder and rendered screens. All Node
+commands below were prefixed with `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+| Command | RED | GREEN |
+|---|---|---|
+| `npx jest src/assessment-questions/ui/__tests__/paginate.test.ts --runInBand` | 1 failed suite; 1 failed / 31 passed tests (32 total): continuous five-row shape instead of six card-aligned rows | 1 suite / 32 tests passed / 0 snapshots; exit 0 |
+| `npx jest __tests__/batteryRun.test.js --runInBand --silent` | 1 failed suite; 7 failed / 46 passed tests (53 total): unwanted Skipped prefix | 1 suite / 53 tests passed / 0 snapshots; exit 0 |
+| `npx jest __tests__/BatteryOverviewScreen.test.js --runInBand --silent` | 1 failed suite; 1 failed / 59 passed tests (60 total): missing Skipped in accessible row label | 1 suite / 60 tests passed / 0 snapshots; exit 0 |
+| `npx jest __tests__/BatteryRunSummaryScreen.test.js --runInBand --silent` | 1 failed suite; 1 failed / 35 passed tests (36 total): missing Skipped in accessible row label | 1 suite / 36 tests passed / 0 snapshots; exit 0 |
+
+| Verification command | Result |
+|---|---|
+| `npx jest src/assessment-questions/ui/__tests__/PagedGrid.test.tsx src/assessment-questions/questions/ReadWordsQuestion --runInBand --silent` | PASS: 3 suites / 42 tests / 0 snapshots; before adding two shared-frame word cases; exit 0 |
+| `npx jest src/assessment-questions/ui __tests__/batteryRun.test.js __tests__/BatteryOverviewScreen.test.js __tests__/BatteryRunSummaryScreen.test.js src/assessment-questions/questions/ReadWordsQuestion` | PASS: 23 suites / 373 tests / 0 snapshots; exit 0 |
+| `npx jest --silent` | PASS first attempt: 433 suites / 6,574 tests / 14 snapshots; both known load-flake suites passed; no serial rerun needed; exit 0 |
+| `npm run test:integration` | PASS: 78 suites / 966 tests / 0 snapshots, including real-SQLite WelaPLUS trigger journeys; exit 0 |
+| `npm run test:types` | PASS: strict tsc, no errors; exit 0 |
+| `git diff --check` | PASS before and after this append: no output; exit 0 |
+
+Integration output included expected error-path diagnostics; all suites passed. No native
+device recheck, hosted action or release verification was performed. No tests were deleted.
+Only four one-line production changes were needed, with seven test files updated and this
+single build-log entry appended. No protected documentation was edited. No branch switch,
+staging, commit, stash or other git-state mutation was performed. Orchestrator review,
+re-verification, documentation reconciliation, native recheck and commit remain the handoff.
+
+Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+Orchestrator additions. On the A03 (build 50) the skip card still showed a grab handle, which suggests
+a swipe that does nothing. `BottomSheet` now hides the handle when `dismissible={false}`, at `opacity: 0`
+so the title does not move; no sheet in the app is draggable, and the capture stop card already has no
+handle (`__tests__/BottomSheet.test.js` adds the case; 3 suites / 95 tests with the skip-card and
+overview suites). Jim chose both changes in this entry on 2026-10-27, after the device pass showed
+"vela | hlela" on isiZulu word pages and "Skipped · No story words read" wrapping beside the Skipped
+chip at 360dp. Docs updated by the orchestrator: `CONTEXT.md` (Skip rule example),
+`design-system.md` (word paging; `dismissible` hides the handle), and a dated amendment in the
+2026-10-26 spec.
+
+
+### 2026-10-27 — EGRA content and skip rules: skip card at large text
+
+The Galaxy A03 device pass on build 51 (`a9d4141`, 360dp) found the skip card's two side-by-side
+lists too narrow at Samsung's 130% text: "Story comprehension" broke mid-word as "Story compreh /
+ension" in the Skipped column. The sheet also reached its 80% height, and the body scrolled with
+nothing showing that four more titles sat below the fold. At 100% text the card was correct.
+
+Measured on the 100% screenshot, "comprehension" is 193px (about 97dp) in `textSmall`. A 152dp
+column leaves 128dp for text, and the word needs about 125dp at 130%, so Android broke it.
+`SkipNoticeSheet` now gives each list `flexBasis: 136dp × fontScale` inside a wrapping row
+(`flexGrow`/`flexShrink: 1`). On a 360dp phone the lists stay side by side up to about 110% text and
+stack above that. The footer keeps no rule while the body fits. When the body scrolls (body content
+taller than its viewport, from the ScrollView's `onLayout` and `onContentSizeChange`), it shows the
+standard `BottomSheet` footer rule. `BottomSheet` gains a `bottom-sheet-footer` testID only.
+`design-system.md` describes the wrap and the rule, and now gives the footer's real 24dp top
+padding (`spacing.lg`) where it said 16dp.
+
+TDD: three new cases in `__tests__/SkipNoticeSheet.test.js` failed first (missing test IDs and
+behaviour), then passed. The 100% and 130% cases pin the wrap rule (Jest has no layout engine; the
+A03 proves the result). The scroll case drives `onContentSizeChange` and `onLayout` and expects the
+rule only while content outgrows the body. The test reaches `useWindowDimensions` through
+`require('react-native')`: a spy on an `import * as` namespace copy never reaches the component.
+
+| Command (Node 20) | Result |
+|---|---|
+| `jest __tests__/SkipNoticeSheet.test.js` before the change | 1 suite failed: 3 failed / 4 passed |
+| `jest __tests__/SkipNoticeSheet.test.js __tests__/BottomSheet.test.js __tests__/BatteryOverviewScreen.test.js` | PASS: 3 suites / 98 tests |
+
+Left for follow-up, outside this branch:
+- `BottomSheet` pads its bottom with `max(safe-area inset, 24dp)`. On Android's three-button bar the
+  inset equals the bar, so every sheet's footer sits flush against it, and the skip card's Got it
+  shadow is cut. iPhone needs checking alongside.
+- `ListRow` subtitles wrap greedily. "Letter writing first row wrong" leaves "wrong" alone on a
+  second line at 360dp/100%. `textBreakStrategy="balanced"` (Android) would fix it app-wide.
+
+
+### 2026-10-27 — EGRA content and skip rules: device gate, Galaxy A03 builds 51–52
+
+Builds 51 (`a9d4141`) and 52 (`fa79053`), Android preview, on the Galaxy A03 at 360dp (`wm density
+320`), signed in as TestB on the SQLite staging backend after migration `20261026120000`. Earlier
+builds 49–50 covered Full EGRA in Afrikaans and isiZulu, isiZulu quick tests, force-quit resume, the
+superseded-version guard and the isiXhosa Q1 trigger (entries above and the plan ledger).
+
+| Check | Result |
+|---|---|
+| isiZulu Word Reading quick test (Thandeka Zulu) | Pages break at card rows: "umama ikati / ubaba itiye / vela", divider, "hlela sika / …". 10 words, page 1 of 5. Discarded without saving. |
+| WelaPLUS English, Q6 trigger (Emma Smith, AQM-G57) | Q1–Q5 short, no card. Q6: stop sheet after the 8th wrong word; one card row per page (page 1 of 10). Card "No more reading or writing today", ends "Tap Review and finalize to finish", Skipped Q7–Q12, no handle. Rows show "Words first row wrong" beside the Skipped chip. Finalized. |
+| WelaPLUS isiXhosa, Q5 trigger (Msm nznx, 8YG-VDQ) | Letter writing has no in-question stop; End question with letters 1–6 wrong fired the trigger. Card names the Writing Sheet, ends "Tap Review and finalize to finish", Skipped Q6–Q12. Finalized. |
+| WelaPLUS isiXhosa, clean run (Tootie monshy, Q7M-JS0) | All 12 Questions, no card, Story comprehension offered (story 3/53). Finalized. |
+| Staging rows (read-only) | English Q6 run: 12 results, 6 automatic skips, Q6 `stop_rule`. Q5 run: 12 / 7. Clean run: 12 / 0. All `wela_plus_full@2026.1`. |
+| Build 51 at 130% text (skckc mskcnc, GJW-79N, Q1 trigger) | Defect: "Story compreh / ension" in the narrow Skipped column; body scrolled with no cue. Fixed in `fa79053` (entry above). |
+| Build 52 at 130% | Lists stacked full width, every title whole, footer rule shown while the body scrolls. |
+| Build 52 at 100% | Two side-by-side lists, no rule, no scrolling: unchanged from build 51. |
+
+Also seen, not changed in this branch: "Letter writing first row wrong" wraps with "wrong" alone at
+360dp (shared `ListRow`); sheet footers sit flush against Android's three-button bar (shared
+`BottomSheet` bottom padding); changing system text size while the app runs leaves Home's text
+clipped until the next cold launch (React Native keeps old measurements; a cold launch at 130% is
+correct); Story comprehension's score counts the questions asked ("1 / 2"), as on main. Device
+restored afterwards: `wm density reset` (physical 280), font scale 1.0.
+
+Gates on `fa79053` (Node 20): `jest --silent` 433 suites / 6,578 tests / 14 snapshots, exit 0;
+`npm run test:integration` 78 suites / 966 tests, exit 0. Scoped Codex adversarial review
+(gpt-6-astra, base `a9d4141`): approve, no findings; it confirmed from Yoga's source that the gap
+counts when deciding where to wrap (two columns need 280dp at 100% and 361.6dp at 130% of the 312dp
+available).

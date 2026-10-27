@@ -15,20 +15,22 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, ScrollView, StyleSheet, View } from 'react-native';
 import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
-import { batteryFor, MANUAL_SKIP_REASONS, skippedResult, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
+import { batteryFor, MANUAL_SKIP_REASONS, skippedResult, WELA_PLUS_FULL_2026_1, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import { colors, spacing } from '../src/constants/colors';
 import { fontFamilies } from '../src/constants/typography';
 import InlineNote from '../src/components/common/InlineNote';
 import ListRow from '../src/components/common/ListRow';
 import StatusBadge from '../src/components/common/StatusBadge';
 import BatteryOverviewScreen from '../src/screens/assessments/battery/BatteryOverviewScreen';
+import SkipNoticeSheet from '../src/components/assessments/SkipNoticeSheet';
+import { hasSeenSkipNotice, resetSkipNoticeSeen } from '../src/utils/skipNoticeSeen';
 import { egraBatteryFor } from '../src/assessment-questions/egra';
 
 test.each(['completed', 'skipped_tired'])('EGRA persists comprehension auto-skip after zero/skipped story (%s), with no Writing Sheet', async stoppedReason => {
@@ -43,7 +45,7 @@ test.each(['completed', 'skipped_tired'])('EGRA persists comprehension auto-skip
     assessmentId: expect.any(String), userId: 'ea-1', childId: CHILD.id, batteryRunId: ID,
     result: skippedResult(battery.questions[3], 'en', 'skipped_prerequisite_unmet'),
   });
-  expect(screen.getByText('Skipped · Not reached')).toBeTruthy();
+  expect(screen.getByText('No story words read')).toBeTruthy();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
   screen.refresh();
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
@@ -115,6 +117,7 @@ function renderOverview({ realRoster = false } = {}) {
         <Stack.Screen name="Entry" component={EmptyScreen} />
         <Stack.Screen name="BatteryOverview" component={Host} />
         <Stack.Screen name="Away" component={EmptyScreen} />
+        <Stack.Screen name="BatteryQuestion" component={EmptyScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   </Wrapper>);
@@ -127,6 +130,7 @@ async function ready(screen) {
 const openSkip = (screen, index = 5) => fireEvent.press(screen.getByRole('button', { name: `Skip ${BATTERY.questions[index].title}` }));
 
 beforeEach(() => {
+  resetSkipNoticeSeen();
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockRealRoster = false;
@@ -170,7 +174,8 @@ test('rows: done shows score / max and a success badge; skipped shows reason; ne
   expect(rows).toHaveLength(11);
   expect(within(rows[0]).getByText('Done')).toBeTruthy();
   expect(within(rows[0]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: '34 / 60', tone: 'success' });
-  expect(within(rows[2]).getByText('Skipped · Child is tired')).toBeTruthy();
+  expect(within(rows[2]).getByText('Child is tired')).toBeTruthy();
+  expect(screen.getByLabelText(`3. ${BATTERY.questions[2].title}, Skipped, Child is tired`)).toBeTruthy();
   expect(within(rows[2]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: 'Skipped', tone: 'neutral' });
   expect(StyleSheet.flatten(rows[4].props.style)).toMatchObject({ backgroundColor: colors.red50 });
   expect(screen.getByRole('button', { name: 'Skip Letter writing' })).toHaveTextContent('⋯');
@@ -217,7 +222,7 @@ test('confirming a skip saves skippedResult with batteryRunId and refreshes the 
     result: skippedResult(BATTERY.questions[5], 'xh', 'skipped_tired'),
   });
   await screen.findByText(`${BATTERY.title} · isiXhosa · 5 of 11 decided`);
-  expect(screen.UNSAFE_getAllByType(ListRow)[5].props.subtitle).toBe('Skipped · Child is tired');
+  expect(screen.UNSAFE_getAllByType(ListRow)[5].props.subtitle).toBe('Child is tired');
   expect(mockSync).toHaveBeenCalledTimes(1);
 });
 
@@ -654,4 +659,176 @@ test.each(['skip', 'abandon'])('a roster removal updates sheet validity without 
     expect(repositories.batteryRuns.abandonRun).toHaveBeenCalledWith(ID);
   }
   expect(screen.queryByRole('button', { name: /^Start / })).toBeNull();
+});
+
+
+const currentBattery = WELA_PLUS_FULL_2026_1;
+const firstRowCodes = currentBattery.questions.slice(5).map(question => question.question_code);
+const savedAutoSkip = question_code => ({ question_code, stopped_reason: 'skipped_prerequisite_unmet',
+  score: null, total_items: 0, derived: {}, items: [] });
+const wrongFirstRow = (question_code = 'letter_sounds', length = 10) => ({ question_code,
+  stopped_reason: 'completed', score: 0, total_items: length, derived: {},
+  items: Array.from({ length }, (_, position) => ({ position, is_correct: false, metadata: { reached: true } })),
+});
+function currentRun(results) {
+  run = { ...run, battery_version: currentBattery.battery_version, results };
+}
+const noticeSheet = screen => screen.UNSAFE_getByType(SkipNoticeSheet);
+const expectAllSkipped = screen => {
+  expect(noticeSheet(screen).props.skipped).toEqual(currentBattery.questions.slice(5).map(question => question.title));
+  const rows = screen.UNSAFE_getAllByType(ListRow);
+  expect(rows.slice(5).map(row => row.props.subtitle)).toEqual(Array(7).fill('Letters first row wrong'));
+};
+
+test.each([
+  ['before the skips save', 0], ['after some skips save', 3], ['after all skips save', 7],
+])('card survives a restart %s', async (_, savedCount) => {
+  currentRun([wrongFirstRow(), ...firstRowCodes.slice(0, savedCount).map(savedAutoSkip)]);
+  const screen = renderOverview();
+  await screen.findByRole('button', { name: 'Got it' });
+  expectAllSkipped(screen);
+  const saves = repositories.assessments.saveQuestionResult.mock.calls;
+  expect(saves.map(([{ result }]) => result.question_code)).toEqual(firstRowCodes.slice(savedCount));
+  expect(new Set(saves.map(([{ result }]) => result.question_code)).size).toBe(7 - savedCount);
+  expect(mockToast).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Got it' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull());
+  expect(hasSeenSkipNotice(ID)).toBe(true);
+  act(() => screen.navigationRef.navigate('BatteryQuestion'));
+  act(() => screen.navigationRef.goBack());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Start Listen to a story' })).not.toBeDisabled());
+  expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(7 - savedCount);
+});
+
+test('Got it suppresses the card on a second mount; a session reset shows it once more without saves', async () => {
+  currentRun([wrongFirstRow(), ...firstRowCodes.map(savedAutoSkip)]);
+  const first = renderOverview();
+  fireEvent.press(await first.findByRole('button', { name: 'Got it' }));
+  first.unmount();
+  const second = renderOverview();
+  await second.findByText('WelaPLUS · isiXhosa · 8 of 12 decided');
+  expect(second.queryByRole('button', { name: 'Got it' })).toBeNull();
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  second.unmount();
+  resetSkipNoticeSeen();
+  const restarted = renderOverview();
+  fireEvent.press(await restarted.findByRole('button', { name: 'Got it' }));
+  await waitFor(() => expect(restarted.queryByRole('button', { name: 'Got it' })).toBeNull());
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+});
+
+test('first view load fails after skips save; the next successful load shows the card', async () => {
+  currentRun([wrongFirstRow()]);
+  repositories.batteryRuns.getRunWithResults.mockImplementationOnce(async () => clone(run))
+    .mockRejectedValueOnce(new Error('read failed'));
+  const screen = renderOverview();
+  await screen.findByText("Couldn't load this assessment. Try again.");
+  expect(run.results).toHaveLength(8);
+  expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  expect(hasSeenSkipNotice(ID)).toBe(false);
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  await screen.findByRole('button', { name: 'Got it' });
+  expectAllSkipped(screen);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(7);
+});
+
+test('blur hides the card while a Question is focused on top without acknowledging it; refresh waits for saved results', async () => {
+  currentRun([wrongFirstRow(), ...firstRowCodes.map(savedAutoSkip)]);
+  const screen = renderOverview();
+  await screen.findByRole('button', { name: 'Got it' });
+  act(() => screen.navigationRef.navigate('BatteryQuestion'));
+  expect(screen.navigationRef.getCurrentRoute().name).toBe('BatteryQuestion');
+  expect(noticeSheet(screen).props.visible).toBe(false);
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull());
+  expect(hasSeenSkipNotice(ID)).toBe(false);
+  const pending = deferred();
+  repositories.batteryRuns.getRunWithResults.mockReturnValueOnce(pending.promise);
+  act(() => screen.navigationRef.goBack());
+  expect(noticeSheet(screen).props.visible).toBe(false);
+  expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  await act(async () => pending.resolve(clone(run)));
+  await screen.findByRole('button', { name: 'Got it' });
+  expect(hasSeenSkipNotice(ID)).toBe(false);
+});
+
+test('fresh trigger while a Question is on top shows the card only after returning and the full skip batch saves', async () => {
+  currentRun([]);
+  const screen = renderOverview();
+  await screen.findByRole('button', { name: 'Start Letter sounds' });
+  act(() => screen.navigationRef.navigate('BatteryQuestion'));
+  run.results.push(wrongFirstRow());
+  const pending = deferred();
+  const save = repositories.assessments.saveQuestionResult.getMockImplementation();
+  repositories.assessments.saveQuestionResult.mockImplementationOnce(async args => { await pending.promise; return save(args); });
+  act(() => screen.navigationRef.goBack());
+  await waitFor(() => expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  await act(async () => pending.resolve());
+  await screen.findByRole('button', { name: 'Got it' });
+  expectAllSkipped(screen);
+});
+
+test.each(['unassigned', 'completed', 'other_phone'])('a %s read-only run never shows the card', async reason => {
+  currentRun([wrongFirstRow(), ...firstRowCodes.map(savedAutoSkip)]);
+  if (reason === 'unassigned') mockRoster = { ...mockRoster, all: [] };
+  if (reason === 'completed') run.status = 'completed';
+  if (reason === 'other_phone') run.started_here = 0;
+  const screen = renderOverview();
+  if (reason === 'unassigned') await screen.findByText('This child is no longer assigned to you — you can abandon this assessment.');
+  else await waitFor(() => expect(screen.navigation.replace).toHaveBeenCalledWith('BatteryRunSummary', { runId: ID }));
+  expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+});
+
+test('a prerequisite-only run never shows the card', async () => {
+  currentRun([resultRow(currentBattery.questions[0]), { ...resultRow(currentBattery.questions[7]), score: 0 }, savedAutoSkip('reading_comprehension')]);
+  const screen = renderOverview();
+  await screen.findByText('WelaPLUS · isiXhosa · 3 of 12 decided');
+  expect(screen.getByText('No story words read')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+});
+
+test.each([
+  ['Q5', 4, 'wela_plus_letter_writing', 6], ['Q6', 5, 'word_reading', 8],
+])('%s trigger shows finalize copy, no Still to do block and a Review and finalize footer', async (_, index, code, length) => {
+  currentRun([...currentBattery.questions.slice(0, index).map(resultRow), wrongFirstRow(code, length)]);
+  const screen = renderOverview();
+  await screen.findByRole('button', { name: 'Got it' });
+  expect(noticeSheet(screen).props.body).toMatch(/Tap Review and finalize to finish\.$/);
+  expect(screen.queryByText('Still to do')).toBeNull();
+  expect(noticeSheet(screen).props.stillToDo).toEqual([]);
+  fireEvent.press(screen.getByRole('button', { name: 'Got it' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Review and finalize' })).toBeTruthy());
+  expect(screen.queryByRole('button', { name: /^Start / })).toBeNull();
+});
+
+
+test.each(['backdrop', 'Back'])('%s never acknowledges the skip card; it returns after blur until Got it', async action => {
+  const backSpy = jest.spyOn(BackHandler, 'addEventListener');
+  try {
+    currentRun([wrongFirstRow(), ...firstRowCodes.map(savedAutoSkip)]);
+    const screen = renderOverview();
+    await screen.findByRole('button', { name: 'Got it' });
+    if (action === 'backdrop') fireEvent.press(screen.getByTestId('bottom-sheet-backdrop'));
+    else {
+      const backCall = backSpy.mock.calls.filter(([event]) => event === 'hardwareBackPress').at(-1);
+      let consumed;
+      act(() => { consumed = backCall[1](); });
+      expect(consumed).toBe(true);
+    }
+    expect(hasSeenSkipNotice(ID)).toBe(false);
+    expect(screen.getByRole('button', { name: 'Got it' })).toBeTruthy();
+    act(() => screen.navigationRef.navigate('BatteryQuestion'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull());
+    expect(hasSeenSkipNotice(ID)).toBe(false);
+    act(() => screen.navigationRef.goBack());
+    fireEvent.press(await screen.findByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull());
+    expect(hasSeenSkipNotice(ID)).toBe(true);
+    act(() => screen.navigationRef.navigate('BatteryQuestion'));
+    act(() => screen.navigationRef.goBack());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Listen to a story' })).not.toBeDisabled());
+    expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  } finally { backSpy.mockRestore(); }
 });

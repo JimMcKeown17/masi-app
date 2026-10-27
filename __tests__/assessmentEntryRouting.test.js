@@ -164,10 +164,20 @@ describe('assessment entry routing', () => {
     await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
   });
 
-  test('child results sends unknown languages to child select without a fallback', async () => {
+  test.each(['letter_sounds', 'word_reading'])('child results launches %s for an isiZulu class in zu', async testCode => {
     const navigation = makeNavigation();
     const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
       child, classItem: { ...classItem, home_language: 'isiZulu' },
+    } }} />);
+    fireEvent.press(screen.getAllByText('Assess now')[testCode === 'letter_sounds' ? 0 : 1]);
+    expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', { testCode, child, languageCode: 'zu' });
+    await waitFor(() => expect(assessmentsRepository.getQuestionResults).toHaveBeenCalled());
+  });
+
+  test('child results sends unknown languages to child select without a fallback', async () => {
+    const navigation = makeNavigation();
+    const screen = render(<ChildResultsScreen navigation={navigation} route={{ params: {
+      child, classItem: { ...classItem, home_language: 'Sesotho' },
     } }} />);
     fireEvent.press(screen.getAllByText('Assess now')[0]);
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', { testCode: 'letter_sounds' });

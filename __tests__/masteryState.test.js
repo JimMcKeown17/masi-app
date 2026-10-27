@@ -41,6 +41,18 @@ describe('loadMasteryState', () => {
     row.correction_id, row.changed_by, row.programme_id, row.sync_status);
   };
 
+  test('isiZulu has no mastery order and does not read results or confirmations', async () => {
+    const resultsRead = jest.spyOn(repositories.assessments, 'latestLetterResult');
+    const masteryRead = jest.spyOn(repositories.mastery, 'getLetterMastery');
+    const state = await load('zu');
+    expect(state).toEqual({
+      assessmentMastered: new Set(), pedagogicalOrder: null,
+      latestAssessment: null, taughtRecords: [],
+    });
+    expect(resultsRead).not.toHaveBeenCalled();
+    expect(masteryRead).not.toHaveBeenCalled();
+  });
+
   test('picks the latest LETTER assessment even when a word assessment is newer', async () => {
     const { id } = await f.save(1, { result: questionResult(1, {
       items: [{ position: 0, item_key: 'a', prompt: 'A', is_correct: true }],

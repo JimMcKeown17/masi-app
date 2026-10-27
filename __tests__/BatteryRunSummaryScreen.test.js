@@ -26,7 +26,7 @@ test.each([[3, 2, 'completed', '2 / 3'], [0, 0, 'ea_ended', '—']])(
   const screen = renderSummary();
   await screen.findByText(`${battery.title} · English · 4 of 4 decided`);
   expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(4);
-  expect(screen.getByRole('text', { name: `4. Story questions, Done, ${scoreText}` })).toBeTruthy();
+  expect(screen.getByRole('text', { name: `4. Story comprehension, Done, ${scoreText}` })).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
@@ -150,7 +150,8 @@ test('eligible run: child name, run code, "WelaPLUS · isiXhosa · 11 of 11 deci
   expect(rows).toHaveLength(4);
   expect(rows[0].props.subtitle).toBe('Done');
   expect(within(rows[0]).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: '34 / 60', tone: 'success' });
-  expect(rows[2].props.subtitle).toBe('Skipped · Child is tired');
+  expect(rows[2].props.subtitle).toBe('Child is tired');
+  expect(screen.getByLabelText(`3. ${BATTERY.questions[2].title}, Skipped, Child is tired`)).toBeTruthy();
   expect(within(rows[2]).getByText('Skipped')).toBeTruthy();
   expect(screen.queryByText('Letter writing')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Show all 11' }));

@@ -159,9 +159,24 @@ describe('AssessmentChildSelectScreen language picker', () => {
     expect(screen.queryByLabelText('Dismiss assessment language picker')).toBeNull();
   });
 
+  test.each(['letter_sounds', 'word_reading'])('an isiZulu class starts %s in isiZulu without asking', async testCode => {
+    mockUseChildren().children[0].home_language = 'isiZulu';
+    mockUseClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: 'isiZulu' }] });
+    const navigation = { navigate: jest.fn() };
+    const screen = render(<PaperProvider settings={{ icon: () => null }}><AssessmentChildSelectScreen
+      navigation={navigation} route={{ params: { testCode } }} /></PaperProvider>);
+    await screen.findByText('Amahle Dlamini');
+    fireEvent.press(screen.getByText('Amahle Dlamini'));
+    expect(navigation.navigate).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', {
+      testCode, child: mockUseChildren().children[0], languageCode: 'zu',
+    });
+    expect(screen.queryByLabelText('Dismiss assessment language picker')).toBeNull();
+  });
+
   test.each([
     [null, 'class-1'],
-    ['isiZulu', 'class-1'],
+    ['Sesotho', 'class-1'],
     [undefined, null],
   ])('asks for an available language for %s and class %s without preselecting English', async (homeLanguage, classId) => {
     const child = { ...mockUseChildren().children[0], class_id: classId, home_language: homeLanguage };
@@ -174,7 +189,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
     await screen.findByText('Amahle Dlamini');
     fireEvent.press(screen.getByText('Amahle Dlamini'));
     const picker = screen.UNSAFE_getByType(SelectSheet);
-    expect(picker.props.options).toEqual([{ key: 'en', label: 'English' }, { key: 'xh', label: 'isiXhosa' }, { key: 'af', label: 'Afrikaans' }]);
+    expect(picker.props.options).toEqual([{ key: 'xh', label: 'isiXhosa' }, { key: 'en', label: 'English' }, { key: 'af', label: 'Afrikaans' }, { key: 'zu', label: 'isiZulu' }]);
     expect(picker.props.selectedKey).toBeNull();
     expect(screen.getByRole('button', { name: 'English' }).props.accessibilityState.selected).toBe(false);
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
@@ -197,7 +212,7 @@ describe('AssessmentChildSelectScreen language picker', () => {
     /></PaperProvider>);
     await screen.findByText('Amahle Dlamini');
     fireEvent.press(screen.getByText('Amahle Dlamini'));
-    expect(screen.UNSAFE_getByType(SelectSheet).props.options.map(option => option.label)).toEqual(['English', 'isiXhosa', 'Afrikaans']);
+    expect(screen.UNSAFE_getByType(SelectSheet).props.options.map(option => option.label)).toEqual(['isiXhosa', 'English', 'Afrikaans', 'isiZulu']);
     fireEvent.press(screen.getByText('English'));
     fireEvent.press(screen.getByText('Start'));
     expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', {

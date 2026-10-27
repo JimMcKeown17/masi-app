@@ -2,7 +2,7 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: tru
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'ea-1' } }) }));
 jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: () => mockRoster }));
 jest.mock('../src/assessment-questions', () => ({
-  ...jest.requireActual('../src/assessment-questions'), batteryFor: jest.fn(),
+  ...jest.requireActual('../src/assessment-questions'), batteryFor: jest.fn(), batteryForNewRun: jest.fn(),
 }));
 
 import React from 'react';
@@ -10,14 +10,70 @@ import { StyleSheet, View } from 'react-native';
 import { colors } from '../src/constants/colors';
 import { fontFamilies, typeRoles } from '../src/constants/typography';
 import ListRow from '../src/components/common/ListRow';
-import { act, configure, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
-import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
+import { batteryFor, batteryForNewRun, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import AssessmentChildSelectScreen from '../src/screens/assessments/AssessmentChildSelectScreen';
 import { EGRA_BATTERIES } from '../src/assessment-questions/egra';
+
+test('Full EGRA 2026.1 starts a zu-class child in zu with no language sheet', async () => {
+  const child = { ...CHILD, home_language: 'zu' };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: '2026.1' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await waitFor(() => expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'BatteryOverview']));
+  expect(screen.queryByRole('header', { name: 'Select language' })).toBeNull();
+  expect(screen.queryByTestId('bottom-sheet-panel')).toBeNull();
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+    id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+    batteryCode: 'egra', batteryVersion: '2026.1', language: 'zu',
+  });
+});
+
+test.each([['xh', 'isiXhosa'], ['en', 'English'], ['af', 'Afrikaans'], ['zu', 'isiZulu']])(
+  'Full EGRA without a class language offers exactly four languages and can start in %s', async (code, label) => {
+    const child = { ...CHILD, home_language: null };
+    mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+    const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: '2026.1' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+    await screen.findByRole('header', { name: 'Select language' });
+    const sheet = within(screen.getByTestId('bottom-sheet-panel'));
+    const options = sheet.getAllByRole('button').filter(button =>
+      typeof button.props.accessibilityState?.selected === 'boolean');
+    expect(options.map(button => button.props.accessibilityLabel)).toEqual(['isiXhosa', 'English', 'Afrikaans', 'isiZulu']);
+    for (const option of options) expect(option.props.accessibilityState.selected).toBe(false);
+    expect(sheet.getByRole('button', { name: 'Start' })).toBeDisabled();
+    expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+    fireEvent.press(sheet.getByRole('button', { name: label }));
+    fireEvent.press(sheet.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(screen.routes()[1].name).toBe('BatteryOverview'));
+    expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
+    expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+      id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+      batteryCode: 'egra', batteryVersion: '2026.1', language: code,
+    });
+  },
+);
+
+test.each([
+  ['egra', 'Sesotho', 'Sesotho'],
+  ['wela_plus_full', 'zu', 'isiZulu'],
+])('%s 2026.1 blocks an unsupported class language %s and displays %s', async (batteryCode, language, label) => {
+  const child = { ...CHILD, home_language: language };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = renderSelect({ batteryCode, batteryVersion: '2026.1' });
+  await screen.findByText(`Not available in ${label} yet`);
+  const row = screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' });
+  expect(row).toBeDisabled();
+  fireEvent.press(row);
+  expect(repositories.batteryRuns.startRun).not.toHaveBeenCalled();
+  expect(screen.queryByRole('header', { name: 'Select language' })).toBeNull();
+  expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'ChildSelect']);
+});
 
 test.each(EGRA_BATTERIES)('$title starts in the form language instead of the class language, with no language sheet', async battery => {
   const child = { ...CHILD, home_language: battery.fixedLanguage === 'xh' ? 'en' : 'xh' };
@@ -124,6 +180,7 @@ beforeEach(() => {
       startRun: jest.fn().mockImplementation(async ({ id }) => ({ id })) },
   };
   batteryFor.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
+  batteryForNewRun.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryForNewRun(...args));
 });
 afterEach(async () => {
   await act(async () => jest.runOnlyPendingTimers());
@@ -160,7 +217,7 @@ test.each([['af', 'Afrikaans'], ['isiZulu', 'isiZulu']])(
   },
 );
 
-test('ECD and Grade R children are offered in Your children then Rest of the class; either section can start with its membership class', async () => {
+test('cached 2024.1 route starts 2026.1: ECD and Grade R children are offered in Your children then Rest of the class; either section can start with its membership class', async () => {
   const ecd = { ...CHILD, id: 'ecd', first_name: 'Amahle', grade: 'ECD', is_delivery: true };
   const gradeR = { ...CHILD, grade: 'R' };
   mockRoster = { yourChildren: [ecd], restOfClass: [gradeR], all: [ecd, gradeR], loading: false };
@@ -174,7 +231,7 @@ test('ECD and Grade R children are offered in Your children then Rest of the cla
   const input = repositories.batteryRuns.startRun.mock.calls[0][0];
   expect(input).toEqual({ id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
     userId: 'ea-1', childId: CHILD.id, classId: 'membership-class', batteryCode: BATTERY.battery_code,
-    batteryVersion: BATTERY.battery_version, language: 'xh' });
+    batteryVersion: '2026.1', language: 'xh' });
   expect(screen.routes()[1].params).toEqual({ runId: input.id });
 });
 
@@ -201,7 +258,7 @@ test.each(['af', null, 'xh'])(
   'fixedLanguage bypasses the gate and picker for class language %s, using a registered fixture battery', async homeLanguage => {
     const fixture = { title: 'Fixture reading', battery_code: 'fixture_reading', battery_version: '1', aboutMinutes: 2,
       languages: ['en'], fixedLanguage: 'en', questions: BATTERY.questions.slice(0, 2), prerequisites: {} };
-    batteryFor.mockImplementation((code, version) => code === fixture.battery_code && version === fixture.battery_version ? fixture : null);
+    batteryForNewRun.mockImplementation((code, version) => code === fixture.battery_code && version === fixture.battery_version ? fixture : null);
     const child = { ...CHILD, home_language: homeLanguage };
     mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
     const screen = await ready(renderSelect({ batteryCode: fixture.battery_code, batteryVersion: fixture.battery_version }));
@@ -258,7 +315,7 @@ test.each(['Resume', 'Abandon it and start new', 'Cancel'])(
       expect(repositories.batteryRuns.startRun).toHaveBeenCalledTimes(1);
       expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith(expect.objectContaining({
         abandonRunId: ID, childId: CHILD.id, classId: CHILD.class_id, language: 'xh',
-        batteryCode: BATTERY.battery_code, batteryVersion: BATTERY.battery_version,
+        batteryCode: BATTERY.battery_code, batteryVersion: '2026.1',
       }));
       const newId = repositories.batteryRuns.startRun.mock.calls[0][0].id;
       expect(newId).not.toBe(ID);
@@ -422,6 +479,7 @@ test('another fixture battery supplies its own supported language and question t
   const fixture = { ...BATTERY, title: 'Fixture reading', battery_code: 'fixture_reading', battery_version: '1',
     languages: ['af'], questions: BATTERY.questions.slice(0, 2) };
   batteryFor.mockReturnValue(fixture);
+  batteryForNewRun.mockReturnValue(fixture);
   const child = { ...CHILD, home_language: 'Afrikaans' };
   mockRoster = { yourChildren: [child], restOfClass: [], all: [child], loading: false };
   repositories.batteryRuns.getUnfinishedRunsForUser.mockResolvedValue([unfinished({ question_count: 1,
@@ -509,14 +567,15 @@ test('leaving the picker dismisses its unfinished sheet; refocusing reloads the 
   await screen.findByText('WelaPLUS · Started Tue 14:05 · 5 of 11 Questions done · code KWY-2M4');
 });
 
-test('battery picker shows the latest finalized run start day for this battery only', async () => {
+test('cached 2024.1 picker shows completed history for resolved 2026.1 only', async () => {
   repositories.batteryRuns.getRunsForUser.mockResolvedValue([
-    unfinished({ status: 'completed', started_at: '2026-09-03T12:00:00Z' }),
-    unfinished({ status: 'abandoned', started_at: '2026-10-23T12:00:00Z' }),
-    unfinished({ status: 'in_progress', started_at: '2026-10-23T14:00:00Z' }),
-    unfinished({ status: 'completed', started_at: '2026-10-23T15:00:00Z', battery_code: 'another_battery' }),
-    unfinished({ status: 'completed', started_at: '2026-10-23T16:00:00Z', child_id: 'other-child' }),
-    unfinished({ status: 'completed', started_at: '2026-10-19T22:30:00Z', started_here: 0 }),
+    unfinished({ status: 'completed', started_at: '2026-09-03T12:00:00Z', battery_version: '2026.1' }),
+    unfinished({ status: 'abandoned', started_at: '2026-10-23T12:00:00Z', battery_version: '2026.1' }),
+    unfinished({ status: 'in_progress', started_at: '2026-10-23T14:00:00Z', battery_version: '2026.1' }),
+    unfinished({ status: 'completed', started_at: '2026-10-23T15:00:00Z', battery_code: 'another_battery', battery_version: '2026.1' }),
+    unfinished({ status: 'completed', started_at: '2026-10-23T16:00:00Z', child_id: 'other-child', battery_version: '2026.1' }),
+    unfinished({ status: 'completed', started_at: '2026-10-19T22:30:00Z', started_here: 0, battery_version: '2026.1' }),
+    unfinished({ status: 'completed', started_at: '2026-10-23T17:00:00Z' }),
   ]);
   const screen = await ready(renderSelect());
   expect(screen.getByText('Grade 2 · isiXhosa · last assessed 20 Oct')).toBeTruthy();

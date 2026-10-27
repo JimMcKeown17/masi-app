@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { v4 as uuid } from 'uuid';
 import { batteryFor, MANUAL_SKIP_REASONS, skippedResult } from '../../../assessment-questions';
 import BrandButton from '../../../components/common/BrandButton';
+import SkipNoticeSheet from '../../../components/assessments/SkipNoticeSheet';
 import ConfirmSheet from '../../../components/common/ConfirmSheet';
 import InlineNote from '../../../components/common/InlineNote';
 import ListGroup from '../../../components/common/ListGroup';
@@ -22,7 +23,8 @@ import { useAssessableChildren } from '../../../hooks/useAssessableChildren';
 import { getActiveProgrammeGate } from '../../../services/activeProgrammeGate';
 import { isStaleActorError } from '../../../session/staleActor';
 import { LANGUAGE_LABELS } from '../../../utils/assessmentRegistry';
-import { buildRunView, runCode } from '../../../utils/batteryRun';
+import { buildRunView, runCode, skipNoticeFor } from '../../../utils/batteryRun';
+import { hasSeenSkipNotice, markSkipNoticeSeen } from '../../../utils/skipNoticeSeen';
 
 const SKIP_OPTIONS = MANUAL_SKIP_REASONS.map(({ reason, label }) => ({ key: reason, label }));
 const UNASSIGNED = 'This child is no longer assigned to you — you can abandon this assessment.';
@@ -38,7 +40,7 @@ function QuestionRow({ row, writable, onStart, onSkip, showDivider, onLayout }) 
   // Re-measure a newly highlighted row even when its outer bounds did not change.
   return <View key={row.state} testID={`battery-row-${row.question.question_code}`} onLayout={onLayout}>
     <ListRow title={row.question.title} subtitle={row.detail} showDivider={showDivider}
-      accessibilityLabel={`${row.number}. ${row.question.title}, ${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
+      accessibilityLabel={`${row.number}. ${row.question.title}, ${row.state === 'skipped' ? 'Skipped, ' : ''}${row.detail}${row.scoreText ? `, ${row.scoreText}` : ''}`}
       disabled={!startable} onPress={() => onStart(row.question.question_code)}
       style={row.state === 'next' ? styles.next : null}
       lead={<View style={[styles.number, row.state === 'done' && styles.numberDone,
@@ -71,6 +73,8 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   const [data, setData] = useState({ loading: true });
   const [skipQuestion, setSkipQuestion] = useState(null);
   const [abandonVisible, setAbandonVisible] = useState(false);
+  const [, refreshSkipNotice] = useState(0);
+  const isFocused = useIsFocused();
   const [mutation, setMutation] = useState(null);
   const focused = useRef(false);
   const generation = useRef(0);
@@ -198,6 +202,8 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   const view = battery && buildRunView(battery, run, {
     activeProgrammeId: data.activeProgrammeId, childAssigned: Boolean(child),
   });
+  const notice = view?.writable && run && !hasSeenSkipNotice(run.id)
+    ? skipNoticeFor({ battery, view, firstName: data.childFirstName }) : null;
   // Actions wait for a refresh to finish, so a just-finished Question can't be started from stale rows.
   current.current = ready && view && !data.refreshing ? { run, battery, view } : null;
   const mutating = mutation?.handle === handle || Boolean(data.refreshing);
@@ -339,6 +345,13 @@ export default function BatteryOverviewScreen({ navigation, route }) {
       <BrandButton label="Abandon assessment" variant="tertiary" tone="ink" size="lg"
         disabled={mutating} onPress={() => { if (!launching.current) setAbandonVisible(true); }} />
     </View>
+    <SkipNoticeSheet visible={Boolean(isFocused && !data.refreshing && notice)}
+      title={notice?.title} body={notice?.body}
+      stillToDo={notice?.stillToDo ?? []} skipped={notice?.skipped ?? []}
+      onAcknowledge={() => {
+        markSkipNoticeSeen(run.id);
+        refreshSkipNotice(value => value + 1);
+      }} />
     <SelectSheet key={skipQuestion?.question_code ?? 'closed'} visible={Boolean(skipQuestion)}
       title={`Skip ${skipQuestion?.title ?? ''}?`}
       subtitle="It is saved as skipped with your reason. You can't undo a skip in this assessment."

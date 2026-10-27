@@ -1,5 +1,17 @@
 # WelaPLUS Release 1 — Design
 
+> **Status note — 2026-10-26 (auto-skip added; new version):** The
+> [one set of reading content and WelaPLUS skip rules spec](./2026-10-26-egra-content-and-skip-rules-design.md)
+> adds **automatic skips**, superseding this document's "no auto-skip": in the new version
+> `wela_plus_full@2026.1`, a whole first row wrong in Letter sounds (Q1) or Letter writing (Q5)
+> skips Q6–Q12 and in Reading words (Q6) skips Q7–Q12, with a one-off card explaining it to the
+> EA. 2026.1 also moves letters, words and the story to the shared DBE/SMRS content, adds Story
+> comprehension as Q9 (writing Questions become Q10–Q12) and prints one Reading Card per language
+> (sides A–D). It is the literacy default from launch; 2024.1 stays registered for saved
+> assessments and its cards are never printed. The
+> [printout pack brief](../../../documentation/welaplus-printout-pack.md) now describes the 2026.1
+> pack. The body below is preserved.
+
 > 2026-10-25 (Jim): UI copy never says 'run'. EAs see 'assessment' for a Run and 'Assessment code' for the run code, on screen and on the Writing Sheet; internal names are unchanged.
 
 > **Status note — 2026-10-23 (Plan 3 built; print production brief):** The host Run flow is

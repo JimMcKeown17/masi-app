@@ -1,5 +1,9 @@
 import { WELA_PLUS_FULL_2024_1 as B } from '../wela_plus_full';
-import { CURRENT_ITEM_SETS } from '../../itemsets/current';
+import { bundledItemSetFor } from '../bundledItemSets';
+
+test('2024.1 stays deep-equal to the pre-2026.1 battery, including every question title and instruction', () => {
+  expect(B).toMatchSnapshot();
+});
 
 test('2024.1 battery shape', () => {
   expect(B.battery_code).toBe('wela_plus_full');
@@ -14,7 +18,7 @@ test('2024.1 battery shape', () => {
   ]);
   for (const language of ['en', 'xh'] as const) {
     expect(B.questions[0].question_version)
-      .toBe(CURRENT_ITEM_SETS.letter_sounds[language].question_version);
+      .toBe(bundledItemSetFor('letter_sounds', '2026.2', language)!.question_version);
   }
   expect(B.questions[0].question_version).toBe('2026.2');
   expect(B.questions.slice(1).every((q) => q.question_version === '2024.1')).toBe(true);

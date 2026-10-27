@@ -1,6 +1,6 @@
 export interface PageLayout { columns: number; capacity: number; breakAtCardRow: boolean }
 export const LETTER_PAGE_LAYOUT: PageLayout = { columns: 5, capacity: 20, breakAtCardRow: true };
-export const WORD_PAGE_LAYOUT: PageLayout = { columns: 2, capacity: 10, breakAtCardRow: false };
+export const WORD_PAGE_LAYOUT: PageLayout = { columns: 2, capacity: 10, breakAtCardRow: true };
 export interface DisplayRow { positions: number[]; startsCardRow: boolean }
 export interface Page {
   index: number;

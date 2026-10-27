@@ -24,6 +24,7 @@ import { duration, easing } from '../../constants/motion';
 export default function BottomSheet({
   visible,
   onDismiss,
+  dismissible = true,
   title,
   subtitle,
   dismissLabel,
@@ -103,15 +104,15 @@ export default function BottomSheet({
   } = scrollViewProps;
 
   // Portal has no equivalent of Modal's onRequestClose, so the Android
-  // hardware back button must dismiss the sheet explicitly.
+  // hardware Back must be consumed while visible, even when dismissal is blocked.
   React.useEffect(() => {
     if (!visible) return undefined;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      onDismiss?.();
+      if (dismissible) onDismiss?.();
       return true;
     });
     return () => subscription.remove();
-  }, [visible, onDismiss]);
+  }, [visible, onDismiss, dismissible]);
 
   if (!visible && !retained) return null;
 
@@ -130,8 +131,9 @@ export default function BottomSheet({
         },
       ]}
     >
+      {/* A sheet that must be answered shows no grab handle; its space stays so the title doesn't move. */}
       <View style={styles.handleContainer}>
-        <View style={styles.handle} />
+        <View testID="bottom-sheet-handle" style={[styles.handle, !dismissible && styles.handleHidden]} />
       </View>
 
       <View style={styles.header}>
@@ -166,7 +168,7 @@ export default function BottomSheet({
         </View>
       )}
 
-      {footer ? <View style={[styles.footer, footerStyle]}>{footer}</View> : null}
+      {footer ? <View testID="bottom-sheet-footer" style={[styles.footer, footerStyle]}>{footer}</View> : null}
     </Animated.View>
   );
 
@@ -186,10 +188,12 @@ export default function BottomSheet({
         accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
         <Animated.View testID="bottom-sheet-scrim" pointerEvents="none" style={[styles.backdrop, { opacity: scrimOpacity }]} />
         <Pressable
-          onPress={onDismiss}
-          accessibilityRole="button"
-          accessibilityLabel={dismissLabel}
-          disabled={!visible}
+          testID="bottom-sheet-backdrop"
+          onPress={dismissible ? onDismiss : undefined}
+          accessible={dismissible}
+          accessibilityRole={dismissible ? 'button' : undefined}
+          accessibilityLabel={dismissible ? dismissLabel : undefined}
+          disabled={!visible || !dismissible}
           style={StyleSheet.absoluteFill}
         />
         {keyboardAvoiding ? (
@@ -238,6 +242,9 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: tints.control,
     borderRadius: 2,
+  },
+  handleHidden: {
+    opacity: 0,
   },
   header: {
     paddingHorizontal: spacing.lg,

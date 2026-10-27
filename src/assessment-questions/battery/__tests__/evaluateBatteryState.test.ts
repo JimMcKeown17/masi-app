@@ -31,7 +31,7 @@ test('gate: unmet prerequisite produces an autoSkip and next skips past it', () 
     { question_code: 'q1', stopped_reason: 'completed', score: 4 },
     { question_code: 'q2', stopped_reason: 'completed', score: 3 },
   ]);
-  expect(s.autoSkips).toEqual([{ question_code: 'q3', reason: 'skipped_prerequisite_unmet' }]);
+  expect(s.autoSkips).toEqual([{ question_code: 'q3', reason: 'skipped_prerequisite_unmet', trigger: null }]);
   expect(s.nextQuestion).toBeNull();
   expect(s.eligibleToFinalize).toBe(false); // the host must persist the auto-skip first
 });

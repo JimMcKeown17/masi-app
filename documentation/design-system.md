@@ -27,6 +27,11 @@ toasts wrap. Some existing compact displays deliberately cap scaling (documented
 copy those restrictions onto ordinary body text. Screen headers and button labels use sentence
 case; proper nouns such as Head Office and EGRA retain their capitals.
 
+**Device gates run at default text size (Jim, 2026-10-27).** Don't check 130% (1.3×) system text in
+device gates: it takes too long, and no EA has been seen using it. The large-text items in the older
+gate lists below are retired. Code still follows the rules above so text can grow, and existing
+Jest cases for large text stay.
+
 | Concern | Source | Verification |
 |---|---|---|
 | Colours, tints, spacing, radii, shadows | [`src/constants/colors.js`](../src/constants/colors.js) | `colors.test.js`, `contrast.test.js`, `noLegacyHues.test.js` |
@@ -452,10 +457,13 @@ gap above the meta row so GroupChip's negative margins cannot overlap the result
 
 ### Sheets
 
-**`BottomSheet`** — `visible, onDismiss, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
+**`BottomSheet`** — `visible, onDismiss, dismissible=true, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
 scrollable=true, keyboardAvoiding=true, maxHeight='80%', bodyContentStyle, scrollViewProps={},
 panelRole, children`. Uses Paper `Portal`, flexbox bottom anchoring, a scrim and explicit Android-back
-dismissal while visible. Supply a meaningful backdrop `dismissLabel`. Title is
+dismissal while visible. Supply a meaningful backdrop `dismissLabel`. `dismissible={false}` is for a
+sheet that must be answered: the backdrop takes no press and is not an accessible button, Android
+Back is consumed and does nothing (the capture stop card's contract), and the grab handle is hidden
+(its space kept, so the title does not move); only the sheet's own buttons close it. Title is
 `displaySheetTitle`, subtitle `textParagraph`, radius 22, grabber 36×4/control, `shadows.sheet`,
 sides 24 and keyboard-down bottom padding `max(insets.bottom, 24)`. The footer has a divider;
 `footerStyle` merges last onto its View, allowing a caller to remove the divider or change padding.
@@ -497,6 +505,23 @@ The D8 launch-guard sheet: primary “Clock in now”, md warning note, warning 
 clocking in”, then ink tertiary “Cancel”. It keeps its existing warning copy and handlers and
 opts out of scrolling/keyboard avoidance. Other domain sheets compose `BottomSheet` rather than
 introducing another overlay host.
+
+**`assessments/SkipNoticeSheet`** — `visible, title, body, stillToDo, skipped, onAcknowledge`
+([source](../src/components/assessments/SkipNoticeSheet.js); 2026-10-26 spec §4.3, mockup option A
+in `design/mockups-2026-10-skip-rules/skip-card.html`). The one-off skip card on a Battery's question
+list after a first-row trigger. `panelRole="alertdialog"`; the body is `textParagraph` in
+`textSecondary`; two side-by-side lists on `background` with `borderRadius.md`, headed **Still to
+do** (omitted when empty) and **Skipped** in `textSectionLabel`, titles in `textSmall`. Each list
+asks for a column 136dp × the text size wide, enough for the longest title word ("comprehension",
+about 97dp at 100% text) plus padding. When two such columns don't fit, each list wraps onto its own
+full-width row: on a 360dp phone the lists sit side by side up to about 110% text and stack above
+that, so a word is never broken. One primary lg **Got it** in the footer, which has 24dp top padding and no
+rule, except while the body scrolls (large text): then the standard footer rule shows that more sits
+above it. `dismissible={false}`: a backdrop
+tap or Android Back never acknowledges it; only **Got it** calls `onAcknowledge`. Copy never uses a pronoun for
+the child. The overview shows it only while focused and settled (`skipNoticeFor` in
+`src/utils/batteryRun.js`) and remembers **Got it** for the app session only
+(`src/utils/skipNoticeSeen.js`).
 
 ### Password sheets (Bold Red Profile)
 
@@ -932,8 +957,10 @@ The Story Writing rubric keeps its dimension chips and `ToggleBar`; it is the so
 
 **Paging and layout.** `paginate` packs whole card rows; only a row larger than the capacity
 spans pages. Letters use 5 columns / 20 items, start each card row on a display row and show a
-divider. Words use 2 columns / 10 items and flow continuously within a page. Grid A (6 × 10)
-has three pages; the historical 5 × 12 letter cards have five
+divider. Words use 2 columns / 10 items and also start each card row on a display row with a divider
+(2026-10-27: isiZulu's rows of 5 had ended mid-line; 8-word rows fill one page each, so they look as before). The 2026.3 letter
+charts (10 × 10) have five pages and isiZulu's (11 × 10) six; Grid A (6 × 10, saved results only)
+has three; the historical 5 × 12 letter cards have five
 (`src/assessment-questions/ui/__tests__/paginate.test.ts:24`). Page labels name card rows;
 controls read “Previous page” / “Next page” (`src/assessment-questions/ui/paginate.ts:2`,
 `src/assessment-questions/ui/paginate.ts:21`, `src/assessment-questions/ui/PageIndicator.tsx:14`,
@@ -962,7 +989,7 @@ leave letters aligned
 `src/assessment-questions/itemsets/wela_plus_letter_writing.xh.ts:39`,
 `src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:48`,
 `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119`). Sentence, passage and
-dictation items wrap in groups; Q9 uses 52dp letter tiles
+dictation items wrap in groups; CVC writing (Q9 in WelaPLUS 2024.1, Q10 in 2026.1) uses 52dp letter tiles
 (`src/assessment-questions/ui/TileGroup.tsx`,
 `src/assessment-questions/questions/WriteCvcsQuestion/index.tsx`).
 
@@ -979,7 +1006,7 @@ or fewer. The timer row has `flexShrink: 0`, so long passages cannot squash the 
 
 `DecisionBar` owns one `BottomBar`: Correct/Incorrect side by side (Finish in review),
 full-width Back, then a wrapping row of the optional Skip question link and destructive End
-question / End test link while marking. Q11's `ToggleBar` owns its `BottomBar` too, with an
+question / End test link while marking. Story writing's `ToggleBar` (Q11 in WelaPLUS 2024.1, Q12 in 2026.1) owns its `BottomBar` too, with an
 ink Finish primary, Skip question as a link and the rubric total in its header. Never wrap
 either bar in another `BottomBar`
 ([ActionBar](../src/assessment-questions/ui/ActionBar.tsx)). The white panel

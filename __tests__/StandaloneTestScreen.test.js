@@ -6,7 +6,7 @@ import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { AuthContext } from '../src/context/AuthContext';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
-import { CURRENT_ITEM_SETS } from '../src/assessment-questions';
+import { CURRENT_ITEM_SETS, SHARED_READING_SETS, sharedInstructionsFor } from '../src/assessment-questions';
 import StandaloneTestScreen from '../src/screens/assessments/StandaloneTestScreen';
 
 let mockQuestionProps;
@@ -99,14 +99,17 @@ test.each([
   ['letter_sounds', 'en', 'LetterSoundsQuestion'],
   ['letter_sounds', 'xh', 'LetterSoundsQuestion'],
   ['letter_sounds', 'af', 'LetterSoundsQuestion'],
+  ['letter_sounds', 'zu', 'LetterSoundsQuestion'],
   ['word_reading', 'en', 'ReadWordsQuestion'],
   ['word_reading', 'xh', 'ReadWordsQuestion'],
   ['word_reading', 'af', 'ReadWordsQuestion'],
+  ['word_reading', 'zu', 'ReadWordsQuestion'],
 ])('hosts %s in %s using its package item set', (testCode, languageCode, component) => {
   renderHost(makeNavigation(), { ...params, testCode, languageCode });
   expect(mockQuestionName).toBe(component);
   expect(mockQuestionProps).toMatchObject({
     itemSet: CURRENT_ITEM_SETS[testCode][languageCode], durationSec: 60,
+    instructions: sharedInstructionsFor(testCode, languageCode),
     language: languageCode, childName: 'Amahle Dlamini', allowSkip: false, endNoun: 'test',
   });
   expect(mockQuestionProps).not.toHaveProperty('captureMode');
@@ -119,13 +122,7 @@ test('shows the standalone header and passes the registry instructions', () => {
   expect(screen.getByText('Letter Sounds')).toBeTruthy();
   expect(screen.getByText('Asanda Moose · isiXhosa')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Close test' })).toBeTruthy();
-  expect(mockQuestionProps.instructions).toBe(
-    '1. Tap Start to begin the 60-second timer.\n'
-    + '2. The highlighted letter is the one the child is reading.\n'
-    + '3. Tap Correct or Incorrect. The next letter is highlighted automatically.\n'
-    + '4. Tap Back to fix a mistake.\n'
-    + '5. After 10 wrong in a row, the test stops.',
-  );
+  expect(mockQuestionProps.instructions).toBe(sharedInstructionsFor('letter_sounds', 'xh'));
 });
 
 test('shows Afrikaans in the standalone header', () => {
@@ -285,7 +282,7 @@ test('a new screen instance gets a new assessment id', async () => {
   expect(saveQuestionResult.mock.calls[1][0].assessmentId).not.toBe(firstId);
 });
 
-test.each([null, 'zu'])('a missing item set for %p renders an error and never substitutes English', languageCode => {
+test.each([null, 'st'])('a missing item set for %p renders an error and never substitutes English', languageCode => {
   const screen = renderHost(makeNavigation(), { ...params, languageCode });
   expect(screen.getByText('This test has no card for this language yet.')).toBeTruthy();
   expect(mockQuestionProps).toBeNull();
@@ -372,4 +369,51 @@ test.each(['letter_sounds', 'word_reading'])('the real standalone %s capture kee
   fireEvent.press(screen.getByRole('button', { name: 'End test' }));
   expect(screen.getByRole('header', { name: 'End this test?' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Keep marking' })).toBeTruthy();
+});
+
+
+test('isiZulu Word Reading passes side B and the exact practice words', () => {
+  renderHost(makeNavigation(), { ...params, testCode: 'word_reading', languageCode: 'zu' });
+  expect(mockQuestionProps.instructions).toBe(sharedInstructionsFor('word_reading', 'zu'));
+  expect(mockQuestionProps.instructions).toContain('Reading Card side B');
+  expect(mockQuestionProps.instructions).toContain('usisi');
+  expect(mockQuestionProps.instructions).toContain('icici');
+});
+
+test.each(['letter_sounds', 'word_reading'].flatMap(code =>
+  ['xh', 'en', 'af', 'zu'].map(language => [code, language]),
+))('real shared %s in %s renders, marks, and saves without mutating its frozen set', async (testCode, languageCode) => {
+  mockUseRealQuestion = true;
+  const set = SHARED_READING_SETS[testCode][languageCode];
+  const before = JSON.stringify(set);
+  expect(Object.isFrozen(set)).toBe(true);
+  if (testCode === 'letter_sounds') {
+    expect(set.rows.flat()).toHaveLength(languageCode === 'zu' ? 110 : 100);
+    expect(set.rows.every(row => Object.isFrozen(row) && row.length === 10)).toBe(true);
+  } else {
+    expect(set.row_lengths).toEqual(Array(10).fill(languageCode === 'zu' ? 5 : 8));
+    expect(set.words.every(word => Object.isFrozen(word))).toBe(true);
+  }
+  const screen = renderHost(makeNavigation(), { ...params, testCode, languageCode });
+  expect(mockQuestionProps.itemSet).toBe(set);
+  expect(screen.getByText(sharedInstructionsFor(testCode, languageCode))).toBeTruthy();
+  fireEvent.press(screen.getByText('Start'));
+  const pageLabel = testCode === 'word_reading' && languageCode !== 'zu'
+    ? 'Card row 1 · page 1 of 10'
+    : `Card rows 1–2 · page 1 of ${testCode === 'letter_sounds' && languageCode === 'zu' ? 6 : 5}`;
+  expect(screen.getByLabelText(pageLabel)).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Incorrect' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+  fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+  fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+  await waitFor(() => expect(saveQuestionResult).toHaveBeenCalledTimes(1));
+  const { result } = saveQuestionResult.mock.calls[0][0];
+  expect(result).toMatchObject({
+    question_code: testCode, question_version: '2026.3',
+    item_set_id: `${testCode}@2026.3.${languageCode}`, language: languageCode,
+    derived: { total_correct: 2, total_attempted: 3 },
+  });
+  expect(JSON.stringify(set)).toBe(before);
+  expect(Object.isFrozen(set)).toBe(true);
 });

@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 import SectionHeader from '../../components/common/SectionHeader';
 import InlineLoading from '../../components/common/InlineLoading';
-import { batteryFor, CURRENT_ITEM_SETS } from '../../assessment-questions';
+import { batteryFor, batteryForNewRun, CURRENT_ITEM_SETS } from '../../assessment-questions';
 import { colors, spacing, borderRadius, shadows } from '../../constants/colors';
 
 import SearchField from '../../components/common/SearchField';
@@ -52,7 +52,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
   const { user } = useAuth();
   const { testCode, batteryCode, batteryVersion } = route.params;
   const batteryMode = batteryCode != null && batteryVersion != null;
-  const battery = batteryMode ? batteryFor(batteryCode, batteryVersion) : null;
+  const battery = batteryMode ? batteryForNewRun(batteryCode, batteryVersion) : null;
   const itemSets = CURRENT_ITEM_SETS[testCode] ?? {};
   const languages = batteryMode ? battery?.languages ?? [] : Object.keys(itemSets);
   const languageOptions = languages.map(code => ({ key: code, label: LANGUAGE_LABELS[code] ?? code }));
@@ -98,8 +98,8 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
             if (active && handle.isCurrent()) {
               const latest = {};
               for (const run of history) {
-                if (run.status !== 'completed' || run.battery_code !== batteryCode
-                  || run.battery_version !== batteryVersion) continue;
+                if (run.status !== 'completed' || run.battery_code !== battery?.battery_code
+                  || run.battery_version !== battery?.battery_version) continue;
                 if (!latest[run.child_id] || run.started_at > latest[run.child_id]) latest[run.child_id] = run.started_at;
               }
               setLastRuns(latest);
@@ -126,7 +126,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
         }
         setAssessmentMap(latestByChild);
       })();
-    }, [assessmentsRepository, testCode, user.id, batteryMode, batteryRuns, handle, batteryCode, batteryVersion, retryCount])
+    }, [assessmentsRepository, testCode, user.id, batteryMode, batteryRuns, handle, battery, retryCount])
   );
 
   const compareChildren = (a, b) => {
@@ -166,7 +166,7 @@ export default function AssessmentChildSelectScreen({ navigation, route }) {
     setStarting(true);
     try {
       const run = await batteryRuns.startRun({ id: uuid(), userId: user.id, childId: child.id,
-        classId: child.class_id, batteryCode, batteryVersion, language,
+        classId: child.class_id, batteryCode: battery.battery_code, batteryVersion: battery.battery_version, language,
         ...(abandonRunId ? { abandonRunId } : {}) });
       if (handle.isCurrent() && focusedRef.current) navigation.replace('BatteryOverview', { runId: run.id });
     } catch (error) {

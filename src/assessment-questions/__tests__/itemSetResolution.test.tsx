@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, within } from '@testing-library/react-native';
 import {
-  CURRENT_ITEM_SETS,
+  bundledItemSetFor,
   LetterSoundsQuestion,
   LetterWritingFromPicturesQuestion,
   ListenAndAnswerStoryQuestion,
@@ -15,6 +15,8 @@ import {
   WriteSentencesFromDictationQuestion,
 } from '../index';
 import { FIXTURE_READ_WORDS_EN } from '../testFixtures';
+import type { LetterSoundsItemSet, ItemSetMeta } from '../index';
+import type { ReadWordsItemSet } from '../questions/ReadWordsQuestion/types';
 import type { QuestionProps } from '../types/QuestionProps';
 import type { Result } from '../types/Result';
 
@@ -41,11 +43,11 @@ describe('item-set resolution', () => {
   });
 
   test('the Afrikaans cards the host passes render: Grid A from l, the word card from die', () => {
-    const letters = render(<LetterSoundsQuestion language="af" itemSet={CURRENT_ITEM_SETS.letter_sounds.af} onComplete={jest.fn()} />);
+    const letters = render(<LetterSoundsQuestion language="af" itemSet={bundledItemSetFor('letter_sounds', '2026.2', 'af')!} onComplete={jest.fn()} />);
     fireEvent.press(letters.getByText('Start'));
     expect(letters.getByLabelText('l, current')).toBeTruthy();
     expect(letters.getByText('Card rows 1–2 · page 1 of 3')).toBeTruthy();
-    const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} onComplete={jest.fn()} />);
+    const words = render(<ReadWordsQuestion language="af" itemSet={bundledItemSetFor('word_reading', '2026.1', 'af')!} onComplete={jest.fn()} />);
     fireEvent.press(words.getByText('Start'));
     expect(words.getByLabelText('die, current')).toBeTruthy();
   });
@@ -55,13 +57,13 @@ describe('item-set resolution', () => {
     afterEach(() => jest.useRealTimers());
 
     test('the word card starts on card rows 1–2, page 1 of 5', () => {
-      const words = render(<ReadWordsQuestion language="af" itemSet={CURRENT_ITEM_SETS.word_reading.af} onComplete={jest.fn()} />);
+      const words = render(<ReadWordsQuestion language="af" itemSet={bundledItemSetFor('word_reading', '2026.1', 'af')!} onComplete={jest.fn()} />);
       fireEvent.press(words.getByText('Start'));
       expect(words.getByText('Card rows 1–2 · page 1 of 5')).toBeTruthy();
     });
 
     test('marking 20 letters Correct moves to card rows 3–4, page 2 of 3', () => {
-      const letters = render(<LetterSoundsQuestion language="af" itemSet={CURRENT_ITEM_SETS.letter_sounds.af} durationSec={60} onComplete={jest.fn()} />);
+      const letters = render(<LetterSoundsQuestion language="af" itemSet={bundledItemSetFor('letter_sounds', '2026.2', 'af')!} durationSec={60} onComplete={jest.fn()} />);
       fireEvent.press(letters.getByText('Start'));
       for (let i = 0; i < 19; i += 1) {
         fireEvent.press(letters.getByRole('button', { name: 'Correct' }));
@@ -72,7 +74,7 @@ describe('item-set resolution', () => {
     });
 
     test('marking every letter Correct completes with all 60 card items', () => {
-      const itemSet = CURRENT_ITEM_SETS.letter_sounds.af;
+      const itemSet = bundledItemSetFor('letter_sounds', '2026.2', 'af')! as unknown as LetterSoundsItemSet;
       const cardLength = itemSet.rows.flat().length;
       expect(cardLength).toBe(60);
       const onComplete = jest.fn<void, [Result]>();
@@ -96,7 +98,7 @@ describe('item-set resolution', () => {
     });
 
     test('marking every word Correct completes with all 50 card items', () => {
-      const itemSet = CURRENT_ITEM_SETS.word_reading.af;
+      const itemSet = bundledItemSetFor('word_reading', '2026.1', 'af')! as unknown as ItemSetMeta & ReadWordsItemSet;
       const cardLength = itemSet.words.length;
       expect(cardLength).toBe(50);
       const onComplete = jest.fn<void, [Result]>();

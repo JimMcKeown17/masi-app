@@ -1,10 +1,25 @@
 import { CURRENT_ITEM_SETS } from '../itemsets/current';
+import { bundledItemSetFor } from '../battery/bundledItemSets';
 import { WELA_PLUS_FULL_2024_1 } from '../battery/wela_plus_full';
 import * as Package from '../index';
 import type { LetterSoundsItemSet, StopRule } from '../index';
+import type { ReadWordsItemSet } from '../questions/ReadWordsQuestion/types';
 
 const LANGUAGES = ['en', 'xh', 'af'] as const;
 const BATTERY_LANGUAGES = ['en', 'xh'] as const;
+// Historical Grid A and placeholder-word contracts stay pinned to their own versions.
+const LEGACY_ITEM_SETS = {
+  letter_sounds: {
+    en: bundledItemSetFor('letter_sounds', '2026.2', 'en')! as unknown as LetterSoundsItemSet,
+    xh: bundledItemSetFor('letter_sounds', '2026.2', 'xh')! as unknown as LetterSoundsItemSet,
+    af: bundledItemSetFor('letter_sounds', '2026.2', 'af')! as unknown as LetterSoundsItemSet,
+  },
+  word_reading: {
+    en: bundledItemSetFor('word_reading', '2026.1', 'en')! as unknown as ReadWordsItemSet,
+    xh: bundledItemSetFor('word_reading', '2026.1', 'xh')! as unknown as ReadWordsItemSet,
+    af: bundledItemSetFor('word_reading', '2026.1', 'af')! as unknown as ReadWordsItemSet,
+  },
+};
 const STOP_RULE: StopRule = { kind: 'consecutive_wrong', stop_at: 10 };
 const GRID_A_ROWS = [
   'l a m E p n L s o e',
@@ -40,14 +55,14 @@ const WORDS = {
 
 describe.each(LANGUAGES)('letter_sounds Grid A content (%s)', (language) => {
   test('every item is a single Unicode letter', () => {
-    const itemSet: LetterSoundsItemSet = CURRENT_ITEM_SETS.letter_sounds[language];
+    const itemSet: LetterSoundsItemSet = LEGACY_ITEM_SETS.letter_sounds[language];
     for (const letter of itemSet.rows.flat()) {
       expect(letter).toMatch(/^\p{L}$/u);
     }
   });
 
   test('has the six printed rows of ten letters', () => {
-    const { rows } = CURRENT_ITEM_SETS.letter_sounds[language];
+    const { rows } = LEGACY_ITEM_SETS.letter_sounds[language];
     expect(rows).toHaveLength(6);
     for (const row of rows) {
       expect(row).toHaveLength(10);
@@ -56,7 +71,7 @@ describe.each(LANGUAGES)('letter_sounds Grid A content (%s)', (language) => {
   });
 
   test('the item-set id matches its code, version, and language', () => {
-    const itemSet = CURRENT_ITEM_SETS.letter_sounds[language];
+    const itemSet = LEGACY_ITEM_SETS.letter_sounds[language];
     expect(itemSet.question_code).toBe('letter_sounds');
     expect(itemSet.question_version).toBe('2026.2');
     expect(itemSet.item_set_id).toBe(
@@ -67,18 +82,18 @@ describe.each(LANGUAGES)('letter_sounds Grid A content (%s)', (language) => {
   });
 
   test('uses the requested supported language code', () => {
-    const itemSet = CURRENT_ITEM_SETS.letter_sounds[language];
+    const itemSet = LEGACY_ITEM_SETS.letter_sounds[language];
     expect(['en', 'xh', 'zu', 'af']).toContain(itemSet.language);
     expect(itemSet.language).toBe(language);
   });
 
   test('stops after ten consecutive wrong decisions', () => {
-    expect(CURRENT_ITEM_SETS.letter_sounds[language].stop_rule).toEqual(STOP_RULE);
+    expect(LEGACY_ITEM_SETS.letter_sounds[language].stop_rule).toEqual(STOP_RULE);
   });
 });
 
 test.each(BATTERY_LANGUAGES)('the battery Q1 uses the same Question code and version (%s)', (language) => {
-  const itemSet = CURRENT_ITEM_SETS.letter_sounds[language];
+  const itemSet = LEGACY_ITEM_SETS.letter_sounds[language];
   expect(WELA_PLUS_FULL_2024_1.questions[0]).toMatchObject({
     question_code: itemSet.question_code,
     question_version: itemSet.question_version,
@@ -91,14 +106,14 @@ test('the battery languages are exactly en and xh; af is a standalone-only langu
 });
 
 test('English, isiXhosa and Afrikaans use the same Grid A rows and cover all 26 letters case-insensitively', () => {
-  const { en, xh, af } = CURRENT_ITEM_SETS.letter_sounds;
+  const { en, xh, af } = LEGACY_ITEM_SETS.letter_sounds;
   expect(en.rows).toBe(xh.rows);
   expect(en.rows).toBe(af.rows);
   expect(new Set(en.rows.flat().map((letter) => letter.toLowerCase())).size).toBe(26);
 });
 
 test.each(LANGUAGES)('word_reading (%s) preserves all fifty placeholder words in order', (language) => {
-  const itemSet = CURRENT_ITEM_SETS.word_reading[language];
+  const itemSet = LEGACY_ITEM_SETS.word_reading[language];
   expect(itemSet).toMatchObject({
     item_set_id: `word_reading@2026.1.${language}`,
     question_code: 'word_reading',
@@ -113,26 +128,31 @@ test.each(LANGUAGES)('word_reading (%s) preserves all fifty placeholder words in
   expect(itemSet).not.toHaveProperty('stop_rule');
 });
 
-test('the package exports the current registry and old and new versioned sets', () => {
+test('the package exports the shared current registry and historical versioned sets', () => {
   expect(Package.CURRENT_ITEM_SETS).toBe(CURRENT_ITEM_SETS);
   expect(Object.keys(CURRENT_ITEM_SETS)).toEqual(['letter_sounds', 'word_reading']);
-  expect(Object.keys(CURRENT_ITEM_SETS.letter_sounds)).toEqual(['en', 'xh', 'af']);
-  expect(Object.keys(CURRENT_ITEM_SETS.word_reading)).toEqual(['en', 'xh', 'af']);
-  expect(Package.LETTER_SOUNDS_2026_2_EN).toBe(CURRENT_ITEM_SETS.letter_sounds.en);
-  expect(Package.LETTER_SOUNDS_2026_2_XH).toBe(CURRENT_ITEM_SETS.letter_sounds.xh);
-  expect(Package.LETTER_SOUNDS_2026_2_AF).toBe(CURRENT_ITEM_SETS.letter_sounds.af);
+  for (const code of ['letter_sounds', 'word_reading'] as const) {
+    expect(Object.keys(CURRENT_ITEM_SETS[code])).toEqual(['xh', 'en', 'af', 'zu']);
+    expect(CURRENT_ITEM_SETS[code]).toBe(Package.SHARED_READING_SETS[code]);
+  }
+  expect(Object.keys(LEGACY_ITEM_SETS)).toEqual(['letter_sounds', 'word_reading']);
+  expect(Object.keys(LEGACY_ITEM_SETS.letter_sounds)).toEqual(['en', 'xh', 'af']);
+  expect(Object.keys(LEGACY_ITEM_SETS.word_reading)).toEqual(['en', 'xh', 'af']);
+  expect(Package.LETTER_SOUNDS_2026_2_EN).toBe(LEGACY_ITEM_SETS.letter_sounds.en);
+  expect(Package.LETTER_SOUNDS_2026_2_XH).toBe(LEGACY_ITEM_SETS.letter_sounds.xh);
+  expect(Package.LETTER_SOUNDS_2026_2_AF).toBe(LEGACY_ITEM_SETS.letter_sounds.af);
   expect(Package.LETTER_SOUNDS_2026_1_EN.question_version).toBe('2026.1');
   expect(Package.LETTER_SOUNDS_2026_1_XH.question_version).toBe('2026.1');
-  expect(Package.WORD_READING_2026_1_EN).toBe(CURRENT_ITEM_SETS.word_reading.en);
-  expect(Package.WORD_READING_2026_1_XH).toBe(CURRENT_ITEM_SETS.word_reading.xh);
-  expect(Package.WORD_READING_2026_1_AF).toBe(CURRENT_ITEM_SETS.word_reading.af);
+  expect(Package.WORD_READING_2026_1_EN).toBe(LEGACY_ITEM_SETS.word_reading.en);
+  expect(Package.WORD_READING_2026_1_XH).toBe(LEGACY_ITEM_SETS.word_reading.xh);
+  expect(Package.WORD_READING_2026_1_AF).toBe(LEGACY_ITEM_SETS.word_reading.af);
 });
 
 test('the Afrikaans sets are frozen', () => {
-  expect(Object.isFrozen(CURRENT_ITEM_SETS.letter_sounds.af)).toBe(true);
-  expect(Object.isFrozen(CURRENT_ITEM_SETS.word_reading.af)).toBe(true);
-  expect(Object.isFrozen(CURRENT_ITEM_SETS.word_reading.af.words)).toBe(true);
-  for (const word of CURRENT_ITEM_SETS.word_reading.af.words) {
+  expect(Object.isFrozen(LEGACY_ITEM_SETS.letter_sounds.af)).toBe(true);
+  expect(Object.isFrozen(LEGACY_ITEM_SETS.word_reading.af)).toBe(true);
+  expect(Object.isFrozen(LEGACY_ITEM_SETS.word_reading.af.words)).toBe(true);
+  for (const word of LEGACY_ITEM_SETS.word_reading.af.words) {
     expect(Object.isFrozen(word)).toBe(true);
   }
 });

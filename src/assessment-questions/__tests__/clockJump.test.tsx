@@ -11,7 +11,7 @@ import { LetterWritingFromPicturesQuestion } from '../questions/LetterWritingFro
 import { WriteCvcsQuestion } from '../questions/WriteCvcsQuestion';
 import { WriteSentencesFromDictationQuestion } from '../questions/WriteSentencesFromDictationQuestion';
 import { StoryWritingRubricQuestion } from '../questions/StoryWritingRubricQuestion';
-import { CURRENT_ITEM_SETS } from '../itemsets/current';
+import { bundledItemSetFor } from '../battery/bundledItemSets';
 import { validateResult } from '../contractTest/validateResult';
 
 beforeEach(() => {
@@ -25,9 +25,9 @@ afterEach(() => {
 
 const sequentialCases = [
   { name: 'LetterSoundsQuestion', Component: LetterSoundsQuestion,
-    itemSet: CURRENT_ITEM_SETS.letter_sounds.en },
+    itemSet: bundledItemSetFor('letter_sounds', '2026.2', 'en')! },
   { name: 'ReadWordsQuestion sequential', Component: ReadWordsQuestion,
-    itemSet: { ...CURRENT_ITEM_SETS.word_reading.en,
+    itemSet: { ...bundledItemSetFor('word_reading', '2026.1', 'en')!,
       stop_rule: { kind: 'consecutive_wrong' as const, stop_at: 10 } } },
 ];
 
