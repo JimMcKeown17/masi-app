@@ -15,7 +15,7 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, ScrollView, StyleSheet, View } from 'react-native';
 import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
@@ -800,4 +800,34 @@ test.each([
   fireEvent.press(screen.getByRole('button', { name: 'Got it' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Review and finalize' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: /^Start / })).toBeNull();
+});
+
+
+test.each(['backdrop', 'Back'])('%s never acknowledges the skip card; it returns after blur until Got it', async action => {
+  const backSpy = jest.spyOn(BackHandler, 'addEventListener');
+  try {
+    currentRun([wrongFirstRow(), ...firstRowCodes.map(savedAutoSkip)]);
+    const screen = renderOverview();
+    await screen.findByRole('button', { name: 'Got it' });
+    if (action === 'backdrop') fireEvent.press(screen.getByTestId('bottom-sheet-backdrop'));
+    else {
+      const backCall = backSpy.mock.calls.filter(([event]) => event === 'hardwareBackPress').at(-1);
+      let consumed;
+      act(() => { consumed = backCall[1](); });
+      expect(consumed).toBe(true);
+    }
+    expect(hasSeenSkipNotice(ID)).toBe(false);
+    expect(screen.getByRole('button', { name: 'Got it' })).toBeTruthy();
+    act(() => screen.navigationRef.navigate('BatteryQuestion'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull());
+    expect(hasSeenSkipNotice(ID)).toBe(false);
+    act(() => screen.navigationRef.goBack());
+    fireEvent.press(await screen.findByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull());
+    expect(hasSeenSkipNotice(ID)).toBe(true);
+    act(() => screen.navigationRef.navigate('BatteryQuestion'));
+    act(() => screen.navigationRef.goBack());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Listen to a story' })).not.toBeDisabled());
+    expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+  } finally { backSpy.mockRestore(); }
 });

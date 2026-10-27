@@ -12,11 +12,11 @@ function QuestionList({ title, questions }) {
   </View>;
 }
 
-export default function SkipNoticeSheet({ visible, title, body, stillToDo, skipped, onDismiss }) {
+export default function SkipNoticeSheet({ visible, title, body, stillToDo, skipped, onAcknowledge }) {
   return <BottomSheet visible={visible} title={title} panelRole="alertdialog"
-    onDismiss={onDismiss} dismissLabel="Dismiss skip notice" keyboardAvoiding={false}
+    dismissible={false} keyboardAvoiding={false}
     footerStyle={styles.footer}
-    footer={<BrandButton label="Got it" size="lg" onPress={onDismiss} />}>
+    footer={<BrandButton label="Got it" size="lg" onPress={onAcknowledge} />}>
     <Text style={styles.body}>{body}</Text>
     <View style={styles.lists}>
       {stillToDo.length > 0 && <QuestionList title="Still to do" questions={stillToDo} />}

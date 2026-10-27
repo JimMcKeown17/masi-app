@@ -1,5 +1,5 @@
 jest.mock('../src/assessment-questions', () => ({
-  ...jest.requireActual('../src/assessment-questions'), batteryFor: jest.fn(),
+  ...jest.requireActual('../src/assessment-questions'), batteryFor: jest.fn(), batteryForNewRun: jest.fn(),
 }));
 jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
 import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
@@ -19,7 +19,7 @@ import { createNavigationContainerRef, createNavigatorFactory, NavigationContain
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { spacing } from '../src/constants/colors';
-import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
+import { batteryFor, batteryForNewRun, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import ListRow from '../src/components/common/ListRow';
 import SurfaceCard from '../src/components/common/SurfaceCard';
 import { STANDALONE_TESTS } from '../src/utils/assessmentRegistry';
@@ -132,6 +132,7 @@ beforeEach(() => {
   mockGetUnfinishedRuns.mockResolvedValue([]);
   mockGetChildNames.mockResolvedValue({});
   batteryFor.mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
+  batteryForNewRun.mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryForNewRun(...args));
   mockChildren.splice(0);
   mockGate.mockResolvedValue({ hasActiveProgramme: true });
   mockGetLetterResults.mockResolvedValue([]);
@@ -210,24 +211,26 @@ test('coverage uses the assessable roster when delivery contains only one of two
 });
 
 
-test('battery card: title, "All 11 Questions · English or isiXhosa · about 30 min", Start an assessment navigates with code+version', async () => {
+test('cached 2024.1 programme shows the 2026.1 card and starts the resolved Battery', async () => {
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: {
     id: 'programme-1', default_battery_code: BATTERY.battery_code, default_battery_version: BATTERY.battery_version,
   } });
   const navigation = { navigate: jest.fn() };
   const screen = renderTab(navigation);
   await screen.findByText(BATTERY.title);
-  expect(screen.getByText('All 11 Questions · English or isiXhosa · about\u00A030\u00A0min', { normalizer: text => text })).toBeTruthy();
+  expect(screen.getByText('All 12 Questions · English or isiXhosa · about\u00A032\u00A0min', { normalizer: text => text })).toBeTruthy();
   expect(screen.UNSAFE_getAllByType(SurfaceCard)).toHaveLength(2);
-  expect(batteryFor).toHaveBeenCalledWith(BATTERY.battery_code, BATTERY.battery_version);
+  expect(batteryForNewRun).toHaveBeenCalledWith(BATTERY.battery_code, BATTERY.battery_version);
   fireEvent.press(screen.getByLabelText('Start an assessment'));
   expect(navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', {
-    batteryCode: BATTERY.battery_code, batteryVersion: BATTERY.battery_version,
+    batteryCode: BATTERY.battery_code, batteryVersion: '2026.1',
   });
 });
 
 test.each([
   ['no battery on the programme', {}],
+  ['null battery on the programme', { default_battery_code: null }],
+  ['empty battery on the programme', { default_battery_code: '' }],
   ['unknown battery code', { default_battery_code: 'unknown', default_battery_version: BATTERY.battery_version }],
   ['unknown battery version', { default_battery_code: BATTERY.battery_code, default_battery_version: 'unknown' }],
 ])('%s: no battery card, quick rows still shown', async (_label, programme) => {
@@ -237,13 +240,17 @@ test.each([
   expect(screen.queryByText(BATTERY.title)).toBeNull();
   expect(screen.queryByLabelText('Start an assessment')).toBeNull();
   expect(screen.UNSAFE_queryAllByType(SurfaceCard)).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Start a Full EGRA' })).not.toBeDisabled();
+  const updateNote = screen.queryByText('Your programme uses a newer assessment. Update the app to start it.');
+  if (programme.default_battery_code) expect(updateNote).toBeTruthy();
+  else expect(updateNote).toBeNull();
   for (const test of STANDALONE_TESTS) expect(screen.getByText(test.title)).toBeTruthy();
 });
 
 test('fixture battery card uses its own title, question count, duration and fixedLanguage label', async () => {
   const fixture = { ...BATTERY, battery_code: 'fixture', battery_version: '1', title: 'Fixture reading',
     questions: BATTERY.questions.slice(0, 2), aboutMinutes: 7, languages: ['en', 'xh'], fixedLanguage: 'af' };
-  batteryFor.mockReturnValue(fixture);
+  batteryForNewRun.mockReturnValue(fixture);
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: {
     default_battery_code: fixture.battery_code, default_battery_version: fixture.battery_version,
   } });

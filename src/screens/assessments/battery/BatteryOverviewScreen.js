@@ -348,7 +348,7 @@ export default function BatteryOverviewScreen({ navigation, route }) {
     <SkipNoticeSheet visible={Boolean(isFocused && !data.refreshing && notice)}
       title={notice?.title} body={notice?.body}
       stillToDo={notice?.stillToDo ?? []} skipped={notice?.skipped ?? []}
-      onDismiss={() => {
+      onAcknowledge={() => {
         markSkipNoticeSeen(run.id);
         refreshSkipNotice(value => value + 1);
       }} />

@@ -3,6 +3,9 @@ import {
   CURRENT_ITEM_SETS,
   ReadWordsQuestion,
   batteryFor,
+  batteryForNewRun,
+  WELA_PLUS_FULL_2026_1,
+  FULL_EGRA_2026_1,
   bundledItemSetFor,
   skippedResult,
   WELA_PLUS_FULL_2024_1,
@@ -161,4 +164,16 @@ test('the Word Reading quick test uses shared 2026.3 with first-row stops in fou
     if (language === 'zu') expect(old).toBeNull();
     else expect(old).not.toHaveProperty('stop_rule');
   }
+});
+
+
+test('new runs resolve superseded WelaPLUS to 2026.1 while saved runs retain 2024.1', () => {
+  expect(batteryForNewRun('wela_plus_full', '2024.1')).toBe(WELA_PLUS_FULL_2026_1);
+  expect(batteryForNewRun('wela_plus_full', '2026.1')).toBe(WELA_PLUS_FULL_2026_1);
+  expect(batteryForNewRun('egra', '2026.1')).toBe(FULL_EGRA_2026_1);
+  expect(batteryFor('wela_plus_full', '2024.1')).toBe(WELA_PLUS_FULL_2024_1);
+  for (const [code, version] of [
+    ['unknown', '2026.1'], ['wela_plus_full', 'unknown'], [null, null],
+    [undefined, undefined], ['wela_plus_full', null], [null, '2026.1'], ['', ''],
+  ]) expect(batteryForNewRun(code, version)).toBeNull();
 });

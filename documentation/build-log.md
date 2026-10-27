@@ -5936,3 +5936,76 @@ paragraph by paragraph matched in xh/en/af/zu; the side D sentences matched Wela
 en and xh, in order. Result: 14/14 passed.
 
 `documentation/rls-sync-contract-map.md` is unchanged (see Task 8). No code change in this task.
+
+
+### 2026-10-27 — EGRA content and skip rules: branch-review fixes (superseded version, skip card)
+
+New assessments resolve through `batteryForNewRun`, whose private superseded-version map
+moves cached `wela_plus_full@2024.1` to `2026.1`, follows chains, rejects cycles, and returns
+null for an unregistered final identity. `batteryFor` and every Battery object are unchanged:
+unfinished and saved 2024.1 runs still resolve their original 11 Questions. The Assessments tab
+shows the resolved 12-Question, about-32-minute card and navigates with its identity; an unknown
+programme default shows exactly “Your programme uses a newer assessment. Update the app to
+start it.” Empty/null defaults show no note. Quick assessments and Full EGRA remain available.
+Child selection starts and filters completed history with the resolved identity, while the
+unfinished-run sheet still resumes an existing 2024.1 run by id.
+
+`BottomSheet` now accepts `dismissible` (default true). When false, the backdrop has no press
+callback or accessible button/label, and hardware Back is consumed without calling `onDismiss`.
+`SkipNoticeSheet` opts out of dismissal and exposes `onAcknowledge` only on Got it. The overview
+still hides the card while blurred or refreshing, without acknowledging it; Back/backdrop leave
+it unseen, refocus shows it again, and Got it suppresses it for the session.
+
+TDD used the public registry exports and rendered screens/components with real retained
+navigation. Existing coverage was retained and the fixtures now distinguish saved 2024.1 runs
+from new 2026.1 runs. All commands below used
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH` (Node v20.19.4).
+
+| Command | RED | GREEN |
+|---|---|---|
+| `npx jest --runInBand --silent src/assessment-questions/battery/__tests__/registry.test.ts` | 1 failed suite; 1 failed / 89 passed tests (90 total): new export absent | 1 suite / 90 tests passed |
+| `npx jest --runInBand --silent __tests__/AssessmentsScreen.test.js` | 1 failed suite; 4 failed / 32 passed tests (36 total): stale card, missing update notes, new-run fixture wiring | 1 suite / 36 tests passed |
+| `npx jest --runInBand --silent __tests__/AssessmentChildSelectScreen.battery.test.js` | 1 failed suite; 6 failed / 50 passed tests (56 total): stale start/history identity and new-run fixture wiring | 1 suite / 56 tests passed |
+| `npx jest --runInBand --silent __tests__/BottomSheet.test.js` | 1 failed suite; 1 failed / 29 passed tests (30 total): backdrop + Back called onDismiss twice | 1 suite / 30 tests passed |
+| `npx jest --runInBand --silent __tests__/SkipNoticeSheet.test.js __tests__/BatteryOverviewScreen.test.js` | 2 failed suites; 4 failed / 60 passed tests (64 total): Got it callback missing, accessible dismiss button, Back/backdrop marked notice seen | 2 suites / 64 tests passed |
+
+The first BottomSheet test attempt failed to locate React Native's Pressable by component type
+(1 failed / 29 passed); this was a test-query failure, not the behavioral RED. Added a stable
+`bottom-sheet-backdrop` testID and reran before changing dismissal behavior, producing the
+actual two-callback failure recorded above.
+
+| Verification command | Result |
+|---|---|
+| `npx jest --runInBand --silent src/assessment-questions/battery/__tests__/registry.test.ts __tests__/AssessmentsScreen.test.js __tests__/AssessmentChildSelectScreen.battery.test.js __tests__/BottomSheet.test.js __tests__/SkipNoticeSheet.test.js __tests__/BatteryOverviewScreen.test.js __tests__/batteryRun.test.js` | PASS twice: 7 suites / 329 tests / 0 snapshots; final rerun after fixture review |
+| `npx jest --silent` | PASS first attempt: 433 suites / 6,572 tests / 14 snapshots; no FAIL lines; both known load-flake suites passed, so no serial full rerun needed |
+| `npm run test:integration` | PASS: 78 suites / 966 tests / 0 snapshots; includes the real-SQLite WelaPLUS trigger journeys |
+| `npm run test:types` | PASS: strict tsc, exit 0, no errors |
+| `git diff --check` | PASS before and after this append: exit 0, no output |
+
+The non-silent integration run emitted auth/offline/network and SQLite error-path diagnostics;
+all suites passed. No device, hosted migration, printing or release verification was performed.
+No schema, persistence, Battery-definition or saved-run behavior change. Git state was not
+mutated: no branch switch, staging, commit or stash. Concurrent changes appeared in `CONTEXT.md`,
+`documentation/ROADMAP.md` and `documentation/design-system.md` after the initial clean-state
+check; Codex did not make or revert them. The only documentation edit by this task is this
+single appended entry. Orchestrator review and commit remain the handoff.
+
+Built by Codex (gpt-6.1-sol, high); diff reviewed, re-verified and committed by the orchestrator.
+
+Context and orchestrator notes. The whole-branch Codex adversarial review (gpt-6-astra,
+`--base origin/main`) returned **needs-attention** with three findings, all accepted:
+[high] a phone whose cached programme still said `wela_plus_full@2024.1` would start the retired
+instrument offline after upgrading; [medium] Back or a backdrop tap acknowledged the skip card;
+[medium] `CONTEXT.md` still gave the ten-in-a-row stop for the current sets and called Story
+writing Q11. Ruling on the first: follow a declared superseded map to the successor rather than
+block WelaPLUS until the phone is online. Both meet spec §7 ("no longer offered for new
+assessments"; 2024.1 cards are never printed), and following the map keeps an offline EA working.
+Cost if wrong: Head Office cannot start 2024.1 on new builds, which the spec already forbids.
+The update-app note covers the other skew direction for future cut-overs (a peer session found
+that main-built apps silently do nothing once the server names a version they lack). The orchestrator fixed
+the docs: `CONTEXT.md` (stop-rule decision; writing Questions named, with 2024.1 and 2026.1
+numbers), `ROADMAP.md` (Story writing, not Q11) and `design-system.md` (`dismissible`,
+`onAcknowledge`, version-specific Question numbers). The review's read-only probes passed: types,
+the 13 adapter hashes, 16 shared item-set identities, every trigger and non-trigger, and no new
+first-row skips in the 14 old Batteries. Orchestrator re-run: the seven focused suites passed 7
+suites / 329 tests; types clean.

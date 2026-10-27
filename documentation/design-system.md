@@ -452,10 +452,12 @@ gap above the meta row so GroupChip's negative margins cannot overlap the result
 
 ### Sheets
 
-**`BottomSheet`** — `visible, onDismiss, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
+**`BottomSheet`** — `visible, onDismiss, dismissible=true, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
 scrollable=true, keyboardAvoiding=true, maxHeight='80%', bodyContentStyle, scrollViewProps={},
 panelRole, children`. Uses Paper `Portal`, flexbox bottom anchoring, a scrim and explicit Android-back
-dismissal while visible. Supply a meaningful backdrop `dismissLabel`. Title is
+dismissal while visible. Supply a meaningful backdrop `dismissLabel`. `dismissible={false}` is for a
+sheet that must be answered: the backdrop takes no press and is not an accessible button, and Android
+Back is consumed and does nothing (the capture stop card's contract); only the sheet's own buttons close it. Title is
 `displaySheetTitle`, subtitle `textParagraph`, radius 22, grabber 36×4/control, `shadows.sheet`,
 sides 24 and keyboard-down bottom padding `max(insets.bottom, 24)`. The footer has a divider;
 `footerStyle` merges last onto its View, allowing a caller to remove the divider or change padding.
@@ -498,13 +500,14 @@ clocking in”, then ink tertiary “Cancel”. It keeps its existing warning co
 opts out of scrolling/keyboard avoidance. Other domain sheets compose `BottomSheet` rather than
 introducing another overlay host.
 
-**`assessments/SkipNoticeSheet`** — `visible, title, body, stillToDo, skipped, onDismiss`
+**`assessments/SkipNoticeSheet`** — `visible, title, body, stillToDo, skipped, onAcknowledge`
 ([source](../src/components/assessments/SkipNoticeSheet.js); 2026-10-26 spec §4.3, mockup option A
 in `design/mockups-2026-10-skip-rules/skip-card.html`). The one-off skip card on a Battery's question
 list after a first-row trigger. `panelRole="alertdialog"`; the body is `textParagraph` in
 `textSecondary`; two side-by-side lists on `background` with `borderRadius.md`, headed **Still to
 do** (omitted when empty) and **Skipped** in `textSectionLabel`, titles in `textSmall`; one primary
-lg **Got it** in the footer, which has no rule and 16dp top padding. Copy never uses a pronoun for
+lg **Got it** in the footer, which has no rule and 16dp top padding. `dismissible={false}`: a backdrop
+tap or Android Back never acknowledges it; only **Got it** calls `onAcknowledge`. Copy never uses a pronoun for
 the child. The overview shows it only while focused and settled (`skipNoticeFor` in
 `src/utils/batteryRun.js`) and remembers **Got it** for the app session only
 (`src/utils/skipNoticeSeen.js`).
@@ -974,7 +977,7 @@ leave letters aligned
 `src/assessment-questions/itemsets/wela_plus_letter_writing.xh.ts:39`,
 `src/assessment-questions/questions/LetterWritingFromPicturesQuestion/index.tsx:48`,
 `src/assessment-questions/__tests__/itemSetIntegrity.test.tsx:119`). Sentence, passage and
-dictation items wrap in groups; Q9 uses 52dp letter tiles
+dictation items wrap in groups; CVC writing (Q9 in WelaPLUS 2024.1, Q10 in 2026.1) uses 52dp letter tiles
 (`src/assessment-questions/ui/TileGroup.tsx`,
 `src/assessment-questions/questions/WriteCvcsQuestion/index.tsx`).
 
@@ -991,7 +994,7 @@ or fewer. The timer row has `flexShrink: 0`, so long passages cannot squash the 
 
 `DecisionBar` owns one `BottomBar`: Correct/Incorrect side by side (Finish in review),
 full-width Back, then a wrapping row of the optional Skip question link and destructive End
-question / End test link while marking. Q11's `ToggleBar` owns its `BottomBar` too, with an
+question / End test link while marking. Story writing's `ToggleBar` (Q11 in WelaPLUS 2024.1, Q12 in 2026.1) owns its `BottomBar` too, with an
 ink Finish primary, Skip question as a link and the rubric total in its header. Never wrap
 either bar in another `BottomBar`
 ([ActionBar](../src/assessment-questions/ui/ActionBar.tsx)). The white panel

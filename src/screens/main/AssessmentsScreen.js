@@ -16,7 +16,7 @@ import { getAssessmentsTabStats } from '../../utils/dashboardStats';
 import StatBar from '../../components/dashboard/StatBar';
 import { getActiveProgrammeGate } from '../../services/activeProgrammeGate';
 import NoActiveProgrammeNotice from '../../components/common/NoActiveProgrammeNotice';
-import { batteryFor, FULL_EGRA_2026_1 } from '../../assessment-questions';
+import { batteryFor, batteryForNewRun, FULL_EGRA_2026_1 } from '../../assessment-questions';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import SectionHeader from '../../components/common/SectionHeader';
 import ListGroup from '../../components/common/ListGroup';
@@ -126,7 +126,7 @@ export default function AssessmentsScreen({ navigation }) {
   }
 
   const programme = programmeGate.programme;
-  const battery = batteryFor(programme?.default_battery_code, programme?.default_battery_version);
+  const battery = batteryForNewRun(programme?.default_battery_code, programme?.default_battery_version);
   const languages = battery ? languageList(battery.fixedLanguage ? [battery.fixedLanguage] : battery.languages) : '';
   const egra = FULL_EGRA_2026_1;
 
@@ -153,6 +153,9 @@ export default function AssessmentsScreen({ navigation }) {
             batteryCode: battery.battery_code, batteryVersion: battery.battery_version,
           })} />
       </SurfaceCard>}
+      {!battery && Boolean(programme?.default_battery_code) && <InlineNote>
+        Your programme uses a newer assessment. Update the app to start it.
+      </InlineNote>}
 
       <SurfaceCard style={styles.card}>
         <Text accessibilityRole="header" style={styles.cardTitle}>{egra.title}</Text>

@@ -19,3 +19,24 @@ export function batteryFor(
   return BATTERIES.find(battery =>
     battery.battery_code === code && battery.battery_version === version) ?? null;
 }
+
+// New runs use the current instrument; saved runs keep their original identity.
+const SUPERSEDED_VERSIONS = new Map<string, string>([
+  ['wela_plus_full@2024.1', 'wela_plus_full@2026.1'],
+]);
+
+export function batteryForNewRun(
+  code: string | null | undefined,
+  version: string | null | undefined,
+): BatteryConfig | null {
+  if (!code || !version) return null;
+  let identity = `${code}@${version}`;
+  const visited = new Set<string>();
+  while (SUPERSEDED_VERSIONS.has(identity)) {
+    if (visited.has(identity)) return null;
+    visited.add(identity);
+    identity = SUPERSEDED_VERSIONS.get(identity)!;
+  }
+  return BATTERIES.find(battery =>
+    `${battery.battery_code}@${battery.battery_version}` === identity) ?? null;
+}

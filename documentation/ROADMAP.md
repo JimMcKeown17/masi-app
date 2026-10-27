@@ -856,7 +856,7 @@ rules with a one-off skip card, one Reading Card per language, and the literacy 
 the Release 1 host it runs in.
 
 **The Release 1 Battery Run host is merged** (Plan 3, PR #101, on whole-class access, PR #100;
-2026-10-25), pending the rest of its device gate. Every Question except the Q11 rubric is marked
+2026-10-25), pending the rest of its device gate. Every Question except the Story writing rubric is marked
 step by step (2026-10-26). Plan 3 adds the
 Assessments card and unfinished runs, whole-class child selection, create/resume/abandon,
 Question capture and skips, atomic saves, review/finalize and History-to-summary navigation.
@@ -868,7 +868,7 @@ and a missing language opens a picker limited to the battery's languages. Generi
 The package's 11 Questions, 2024.1 bilingual content, evaluator and shared capture primitives
 are built. WelaPLUS Q1 shares `letter_sounds@2026.2` with standalone capture. Assessment Results
 Plan 1 supplies the stored-result/upload foundation, family/run-header RPCs and ADR-0007
-identity contract; the literal-UUID test pins `assessmentItemDomainId` (Q11 HQ positions 5–8
+identity contract; the literal-UUID test pins `assessmentItemDomainId` (Story writing HQ positions 5–8
 remain distinct from the EA's 1–4). `npm run test:types` checks the package in CI. These are
 WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evidence and scope:
 [build log](./build-log.md), [Release 1 design and dated amendments](../docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md).
@@ -931,7 +931,7 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
 - [ ] Close remaining content approvals: XH Q5 g/n/z picture choices and clock artwork, plus a
   first-language spelling review before the pilot (Release 1 §4.3; #34). The bilingual item
   sets/scripts and Q6/Q8 60-second durations are built; do not reopen them as missing content.
-- [ ] Settle Q11's final rubric anchors/isiXhosa labels, future prerequisite thresholds and
+- [ ] Settle Story writing's (Q12 in 2026.1) final rubric anchors/isiXhosa labels, future prerequisite thresholds and
   score bands. WelaPLUS 2026.1 has first-row skip rules and a Story comprehension
   prerequisite; 2024.1 has none. Manual skips and generic evaluator support are built.
 - [ ] Build the HQ rubric/calibration path and dashboard consumption.
