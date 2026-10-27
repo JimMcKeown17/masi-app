@@ -36,7 +36,7 @@ submitting the wrong artifact when preview and pilot builds coexist.
 
 ---
 
-## SQLite Pilot (1.3.0): Keep It Away From the Field Cohort
+## SQLite Pilot (1.3.0 and later): Keep It Away From the Field Cohort
 
 The field cohort still runs the legacy AsyncStorage app, delivered through the
 **Play internal testing track** and the **existing TestFlight group**. Depending
@@ -48,7 +48,7 @@ backends.
 
 Rules while the pilot and the field cohort coexist:
 
-- **Never** upload the 1.3.0 SQLite build to the Play **internal testing**
+- **Never** upload a SQLite build (1.3.0 or later) to the Play **internal testing**
   track, and never build or submit the SQLite pilot with `--profile production`.
 - Android pilot: build with `--profile pilot` (AAB, preview/SQLite environment),
   then upload **manually** in Play Console to a **new closed testing track**
@@ -59,8 +59,8 @@ Rules while the pilot and the field cohort coexist:
   does not automatically receive new builds.
 - OTA isolation: pilot builds are on update channel `preview`
   (`eas update --channel preview --environment preview`). The field cohort's
-  channel `production` at runtime 1.1.x/1.2.x is untouched; runtime `1.3.0`
-  cannot land on legacy binaries either way.
+  channel `production` at runtime 1.1.x/1.2.x is untouched; SQLite runtimes
+  (`1.3.0` and later) cannot land on legacy binaries either way.
 - Preview content: never set `MASI_PREVIEW_CONTENT` in an EAS environment.
   Pilot and production builds refuse `MASI_PREVIEW_CONTENT=1`. Phones on field
   update channels (`preview` and `production`) ignore it even if an OTA carries
@@ -93,7 +93,7 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 
 - `expo-updates` is installed and configured in `app.json`
 - The production build profile in `eas.json` has `channel: "production"`
-- The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.3.0` on the field-pilot release branch)
+- The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.4.0` on `main`)
 - Updates are checked on app launch and applied on the *next* launch (users don't see a loading screen)
 
 ### Pushing an OTA Update
@@ -257,7 +257,7 @@ settings.
 
 ### What you control
 
-- **Marketing version** (`expo.version` in `app.config.js`): Currently `1.3.0` on the field-pilot release branch. Bump this when you want users to see a new version number.
+- **Marketing version** (`expo.version` in `app.config.js`): Currently `1.4.0` on `main`. Bump this when you want users to see a new version number, and always when native code changes (see below).
 
 ```bash
 # Check current remote versions
@@ -269,6 +269,7 @@ npx eas-cli@latest build:version:get
 - Adding a significant feature (e.g., new tab, new assessment type) → bump minor: `1.1.0` → `1.2.0`
 - Bug fixes and small improvements → keep the same version or bump patch: `1.1.0` → `1.1.1`
 - Breaking changes or major redesign → bump major: `1.1.0` → `2.0.0`
+- **Any native change** (adding, removing or upgrading a native package, a config plugin, or native config such as icons or permissions) → bump at least minor before the next store build. This one is required, not a judgement call: the version is the OTA runtime boundary, so two binaries with different native code must never share it. Example: 1.4.0 followed the July 1.3.0 pilot after `expo-font`, `expo-splash-screen`, the iOS icon and the Android backup plugin landed.
 
 ---
 
@@ -331,16 +332,16 @@ Any child a tester "deleted" on a pre-fix build still exists in Supabase with no
 
 ---
 
-## Current State (as of July 2026)
+## Current State (as of July 2026; pilot version updated 2026-10-27)
 
 | Audience | App | Version | Backend | Distribution |
 |---|---|---|---|---|
 | Field cohort | Legacy AsyncStorage app | 1.2.x | `masi-app` (legacy) | TestFlight group + Play internal track (do not touch) |
-| SQLite pilot cohort | SQLite app (`release/1.3.0-preview`) | 1.3.0 | `masi-app-sqlite` | `pilot` profile → new closed Play track + new TestFlight group |
+| SQLite pilot cohort | SQLite app (`main`) | 1.4.0 (July 2026 pilot: 1.3.0 from `release/1.3.0-preview`) | `masi-app-sqlite` | `pilot` profile → new closed Play track + new TestFlight group |
 
 OTA updates are live per channel: `production` serves the legacy field builds,
 `preview` serves the SQLite pilot store builds. Runtime versions (1.2.x vs
-1.3.0) prevent cross-delivery even on a mistaken channel.
+1.3.0 and later) prevent cross-delivery even on a mistaken channel.
 
 ---
 
