@@ -147,7 +147,7 @@ The `READING_LEVELS` ladder in `src/constants/literacyConstants.js` (Cannot blen
 The EA's current statement of where each child is: **Letter mastery** and **Current reading level**. This is the app's central output. It is how Head Office learns what every child knows and what level they are at. It is current child state, not history: a later update replaces the earlier statement, while sessions and assessments keep the historical record.
 
 **Letter mastery**:
-The letters an EA is sure a child has mastered. A letter is mastered if **either** source says so (settled 2026-09-23). **Assessment evidence**: each letter takes its status from the newest non-skipped Letter result **from the current academic year** in the selected language that reached that letter, whether standalone, WelaPLUS Q1 or Full EGRA, and whoever recorded it. A letter the chart does not ask, or the child does not reach in time, keeps its earlier evidence (Jim, 2026-10-27; DBE English HL 3 never asks q, v, x or z). The active year's start and end dates are inclusive; with no active year there is no assessment evidence, while EA confirmations still count (lesson-plan C23, Assessment Results Plan 3 Task 10). Read the stored item prompts, correctness and `metadata.reached`; case-fold both prompts and the pedagogical order. In that result, a letter in that order is mastered when every reached occurrence is correct. This evidence is computed when shown, never stored as a confirmation, and an EA cannot un-mark it; a new result is how it changes. **EA confirmation**: an EA taps that they are sure the child has mastered the letter, stored in `letter_mastery`. Letter mastery is part of **What the child knows**, so it is current state, not academic-year history. The stored confirmation is **one current record per child, letter and language code**, with the last writer in `changed_by`; `letter_mastery.language` holds `en`/`xh`/`af`/`zu`. Any current deliverer's confirmation counts, whoever recorded it and in any Programme. A refused (terminal) correction never counts. Built in Assessment Results Plan 2; hosted application and device checks remain Task 7. A confirmation made in the session tracker keeps the language of the tracker it was tapped in; saving never re-derives it. An unknown class language supplies no assessment evidence or English fallback; the tracker shows “No letter set for this class language.”
+The letters an EA is sure a child has mastered. A letter is mastered if **either** source says so (settled 2026-09-23). **Assessment evidence**: each letter takes its status from the newest non-skipped Letter result **from the current academic year** in the selected language that reached that letter, whether standalone, WelaPLUS Q1 or Full EGRA, and whoever recorded it. A letter the chart does not ask, or the child does not reach in time, keeps its earlier evidence (Jim, 2026-10-27; DBE English HL 3 never asks q, v, x or z). The active year's start and end dates are inclusive; with no active year there is no assessment evidence, while EA confirmations still count (lesson-plan C23, Assessment Results Plan 3 Task 10). Read the stored item prompts, correctness and `metadata.reached`; case-fold both prompts and the language's 26 tracker letters. In that result, a letter in that set is mastered when every reached occurrence is correct. This evidence is computed when shown, never stored as a confirmation, and an EA cannot un-mark it; a new result is how it changes. **EA confirmation**: an EA taps that they are sure the child has mastered the letter, stored in `letter_mastery`. Letter mastery is part of **What the child knows**, so it is current state, not academic-year history. The stored confirmation is **one current record per child, letter and language code**, with the last writer in `changed_by`; `letter_mastery.language` holds `en`/`xh`/`af`/`zu`. Any current deliverer's confirmation counts, whoever recorded it and in any Programme. A refused (terminal) correction never counts. Built in Assessment Results Plan 2; hosted application and device checks remain Task 7. A confirmation made in the session tracker keeps the language of the tracker it was tapped in; saving never re-derives it. An unknown class language supplies no assessment evidence or English fallback; the tracker shows “No letter set for this class language.”
 _Avoid_: "taught letters", "coach-taught", "ticks". The retired `letter_mastery.source = 'taught'` value and some older docs use "taught", which is misleading: teaching is recorded as **Letters focused**, not as mastery.
 
 **Letters focused**:
@@ -179,15 +179,22 @@ Not set give 2-letter; 3 and 4 Letter Blends give 3- and 4-letter; Word, Sentenc
 Reading give words. Labels are the ladder's own (`2 Letter Blends`, `3 Letter Blends`,
 `4 Letter Blends`, `Word Reading`). A lesson defaults to the lowest present child's tier.
 
+**Letter order**:
+A language's teaching sequence, arranged in steps and defined in the letter order registry.
+It determines which letters come next, not which letters a child has mastered.
+
+**Letter order edition**:
+A set of letter orders, one per language. Each class records one edition, set by the server and
+never changed. The class's edition and language together identify its teaching order.
+
 **Content pack**:
-The teaching content for one language at one version: the letter order in steps, per-step
-syllables (blends) and headline words, the word bank, and the early readers. It is one immutable
-JSON file, produced by the early reader books project (the same file Zazi reads), bundled in the
-app and read through `getPack(languageCode)`. Inside the file the language is the shared
-catalogue's name (`isixhosa`); the app keys packs by its language code (`xh`). A **release** pack
-holds only reviewed content and is the only kind a field build loads; a **preview** pack
-(unreviewed candidates) loads only in developer builds. Until a language's real pack is released,
-an app-made **interim letters-only pack** supplies its letter order.
+The immutable teaching content for one language at one version, produced by the early reader
+books project (the same file Zazi reads) and bundled in the app: letter steps, per-step syllables
+(blends) and headline words, the word bank, and early readers. A pack names its `letter_order`
+and is chosen by the class's letter order. A **release** pack holds only reviewed content and is
+the only kind a field build loads; a **preview** pack holds unreviewed candidates and is available
+only in developer builds. An **interim letters-only pack** supplies the letter steps until a
+reviewed pack with blends and readers is available.
 _Avoid_: "curriculum" or "sequence file" for the whole pack; confusing it with an **Item set**
 (assessment content); editing a pack in place (a change is a new version).
 

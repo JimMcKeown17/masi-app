@@ -5202,6 +5202,112 @@ force-quit offline; the Notes keyboard; "+ Record" resume; and an offline save t
 confirmed on the server. Device gates V3, V5, V6, V7 and V8 record it, and the roadmap entry is
 updated.
 
+### 2026-10-27 — Letter order editions
+
+**Scope and base.** Letter orders sits on the lesson-flow branch after its conflict-free rebase
+onto main `1401b6d` (#108). Tasks 1–7 are committed through `546bbd9`; Task 8 (the commit that adds
+this section) adds the agreement and leftovers guards and the standing-document updates. The server owns each
+class's edition (`2026-10-23`), the phone accepts its authoritative value without uploading it,
+and all teaching surfaces resolve edition plus language through the unchanged books registry.
+Packs are selected by order id. Mastery counts still use each language's 26 tracker letters;
+drafts and saved sessions keep tap order while Wrap up and the receipt display class order.
+Decision and trade-offs: [ADR-0011](../docs/adr/0011-letter-order-edition-per-class-set-by-server.md).
+
+**Check first, supplied historical result.** On 2026-10-26 at `04de20a`, all nine comparisons in
+the plan's Task 1 Step 1 matched: the three legacy constants equalled their `*-order-legacy`
+entries; each v1 release pack's steps equalled its mapped order, and the isiXhosa preview v1's
+sounds equalled the 2026-10-18 order's; every order covered `a`–`z` once. Dependencies were
+already installed by the orchestrator, so Task 1 skipped `npm ci`.
+
+**Committed task gates, supplied by the orchestrator.** These are the results on the named
+commits, not new executions on those historical revisions. Every Jest and harness command used
+Node 20.19.4 (`PATH=/Users/jimmckeown/.nvm/versions/node/v20.19.4/bin:$PATH`).
+
+| Task | Commit | Gate and result | Evidence owner / notes |
+| --- | --- | --- | --- |
+| 1 — Vendored registry and resolver | `9560a7a` | `npm test -- __tests__/letterOrders.test.js`: 14 tests passed. | Supplied orchestrator record. Registry is deep-frozen and pinned byte for byte. |
+| 2 — Server column, check and trigger | `451ccfb` | `npm test -- __tests__/letterOrderMigration.test.js`: 5 tests passed. `npm run verify:letter-order:postgres`: all 10 checks passed on local PostgreSQL 17, 2026-10-27. | Orchestrator verified the PostgreSQL gate. Removing the trigger's UPDATE rule made `app-update-cannot-change` fail, proving that case is not vacuous. |
+| 3 — Phone storage, pull and upload | `937ad4b` | Full `npm test`: 449 suites / 6,898 tests passed. `npm run test:integration`: 86 suites / 1,175 tests passed. | Codex; focused orchestrator reruns passed. |
+| 4 — Packs carry their order | `f393cfe` | Full `npm test`: 449 suites / 6,937 tests passed. Six pack and engine suites: 258 tests passed. | Full run: Codex. Six-suite focused run: orchestrator. |
+| 5 — Lesson flow reads the class's order | `8520893` | Full `npm test`: 449 suites / 6,941 tests passed. `npm run test:integration`: 86 suites / 1,196 tests passed. | Orchestrator, after the picker wrapping fix below. |
+| 6 — Trackers and the 26-letter set | `99535ac` | Full `npm test`: 449 suites / 6,956 tests passed. `npm run test:integration`: 86 suites / 1,200 tests passed. | Codex; focused orchestrator reruns passed. The source leftovers check excludes the vendored registry's provenance strings. |
+| 7 — Session complete receipt | `546bbd9` | Full `npm test`: 449 suites / 6,959 tests passed. `npm run test:integration`: 86 suites / 1,200 tests passed. | Codex. Orchestrator hardened `sortLettersByOrder`: a missing order is treated as no order. |
+
+**Migration number correction.** The plan originally chose `20261026120000`; main's #108 used
+it for `20261026120000_welaplus_2026_1_default.sql`. The letter order migration therefore moved
+to `20261027120000_class_letter_order_edition.sql`. The disposable PostgreSQL harness replays
+every lower-version migration, including the WelaPLUS migration, before applying it. No hosted
+migration or Supabase action ran in Task 8.
+
+**Preview hash correction.** An earlier preview hash table described intermediate bytes that
+were never committed. The correct pin is books `6cd5e64`; the three working-tree exports were
+copied unchanged, with the following SHA-256 values. Task 8 rechecked all four files with
+`shasum -a 256` and matched the plan's Global Constraints:
+
+| File | SHA-256 |
+| --- | --- |
+| `src/constants/contracts/letter-orders-v1.json` (books `9cd66f8`) | `33af38be2ceeb45051660ff790774e5aa55299fce8091c60ed055e166cfd2490` |
+| `src/lessonPlan/packs/isixhosa-candidates-preview-v2.json` | `7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366` |
+| `src/lessonPlan/packs/english-candidates-preview-v1.json` | `e430d4887104a04db6295bfd407891c3b0a4911c6ba99ab1d243684613364abd` |
+| `src/lessonPlan/packs/afrikaans-candidates-preview-v1.json` | `76d4aec38b0bd8748bd9bdfd9e9aaa0df3bbaae3c3671d0c4086977cbe800ba7` |
+
+**Orchestrator fix to Task 5.** The plan's `lessonRowDetail` used
+`joinDetail([seen, UPDATE_APP_LETTERS_MESSAGE])`. `joinDetail` turns every space into a
+non-breaking space, so the 45-character update message could not wrap in a picker row at 360 dp.
+`lessonRowDetail` now binds only the dot to the message. Tests in `lessonDates.test.js` and
+`LessonPickerScreen.test.js` compare the raw text: `getByText` treats non-breaking spaces as
+spaces, so a plain text match cannot detect this. Task 8 records this supplied fix; it does not
+change the lesson code again.
+
+**Task 8 behavior and test-first evidence, measured on Task 8's tree (on top of `546bbd9`).** The agreement guard uses real SQLite and the public picker loaders,
+`loadLessonParticipants`, `useLessonDraft`, the rendered mastery panel's active-class loader,
+and Wrap up on the test stack through Save and the actual Session complete route params. Each
+language has one class and a two-child group, complete empty history, a first-step suggestion,
+full tracker order and five reverse-tapped letters. It checks the heading and both children's
+chips, receipt display order and preserved tap order in storage. The initial test fixture lacked
+an EA class assignment, so mastery completeness was false for all three cases; adding the real
+assignment corrected the fixture without relaxing the completeness assertions.
+
+The plan's Step 3 expects both new guards to pass immediately because Tasks 1–7 implement the
+behavior. Controlled mutation runs additionally established RED before the final GREEN runs:
+
+- `npm test -- __tests__/letterOrderLeftovers.test.js`: temporary test-only mocks injected
+  `PEDAGOGICAL_ORDER`, word-matched `LETTER_ORDER`, exact `getPack(` and an `en` current-pack key.
+  All 4 checks failed with the injected lines/key named in the assertions (1 failed suite).
+- `npm run test:integration -- __tests__/letterOrderAgreement.test.js`: a temporary test-only
+  mock removed the receipt builder's teaching order. All 3 language cases failed on the actual
+  receipt params, which kept reverse tap order instead of class order (1 failed suite).
+- Both probes were removed, with no production source edits. Final focused GREEN:
+  `npm test -- __tests__/letterOrderLeftovers.test.js`: 1 suite / 4 tests passed;
+  `npm run test:integration -- __tests__/letterOrderAgreement.test.js`: 1 suite / 3 tests passed.
+- `npm run test:integration -- --listTests | grep letterOrderAgreement` printed exactly one line,
+  confirming the real-SQLite suite is registered in the explicit integration `testMatch` list.
+
+All commands above used the Node 20 PATH prefix.
+
+**Full Task 8 gates, measured on Task 8's tree (Codex).**
+Runtime verified as `v20.19.4`. Both commands used
+`PATH=/Users/jimmckeown/.nvm/versions/node/v20.19.4/bin:$PATH`:
+
+| Command | Result |
+| --- | --- |
+| `npm test -- --runInBand` | 451/451 suites, 6,966/6,966 tests and 14/14 snapshots passed; exit 0 (366.677 s). |
+| `npm run test:integration` | 87/87 suites and 1,203/1,203 tests passed; exit 0 (105.359 s). |
+
+`git diff --check` passed, and all five new
+local documentation links resolve. The source checks returned no matches:
+`rg -n 'PEDAGOGICAL_ORDER' src --glob '!letter-orders-v1.json'`,
+`grep -rnw LETTER_ORDER src`, and `rg -n 'getPack\(' src`. The vendored registry's three
+provenance strings remain untouched; its SHA-256 still matches the pin above.
+
+**Remaining gates.** This is local Jest/SQLite evidence. PostgreSQL results above are supplied
+Task 2 evidence, not a Task 8 rerun. Task 9's types, content, PostgreSQL, adversarial review,
+hosted apply, EAS installation and physical device gates remain outside this task. In particular,
+the migration must precede installation, schema 19 prevents downgrade to older builds, and test
+phones must finish or discard old v1 drafts. The roadmap retains the two content follow-ups:
+Masi's second-edition schedule and readers for the new-order previews. No dependencies were
+changed.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

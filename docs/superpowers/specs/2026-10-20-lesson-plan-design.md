@@ -220,6 +220,14 @@ Rules:
 
 ### 4.2 Letter order
 
+**2026-10-27 amendment — letter order editions.** Teaching order is now resolved from the class's
+server-set, immutable edition and the lesson's language, through the shared letter order
+registry. Every Masi class starts on `2026-10-23`. Packs name their order and are selected by
+order id; mastery counts and validation use the language's 26 tracker letters. This supersedes
+the language-only order and resolver described below. See
+[ADR-0011](../../adr/0011-letter-order-edition-per-class-set-by-server.md) and the
+[letter order editions plan](../plans/2026-10-26-letter-order-editions.md).
+
 - There is **one teaching order per language**, read from that language's pack
   (`letter_steps[].new_letters`, concatenated).
 - A single resolver, `getTeachingOrder(languageCode)`, replaces direct reads of `LETTER_ORDER` and
