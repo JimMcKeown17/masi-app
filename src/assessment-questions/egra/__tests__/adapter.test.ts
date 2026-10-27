@@ -2,12 +2,14 @@ import { evaluateBatteryState } from '../../battery/evaluateBatteryState';
 import { egraCatalog } from '../../../../content/egra';
 import { adaptEgraForm, EGRA_FORMS, EGRA_BATTERIES, egraFormFor, listEgraForms, egraItemSetFor, egraBatteryFor, EGRA_LETTER_EXTENSIONS, EGRA_MIN_LETTERS } from '..';
 
-test('every comprehension prompt and answer guide closes the curly quotes it opens', () => {
+// The pack is shared byte-for-byte with Zazi and both websites, so a form is never edited in place.
+// The DBE guide's own stray quote stays until the pack issues a new form id (content/egra/README.md).
+test('only the source-retained isiXhosa EGRA 1 Q4 answer guide has an unmatched curly quote', () => {
   const unbalanced = EGRA_FORMS.flatMap(form => form.comprehension.questions
-    .flatMap(question => [question.text, question.answerText])
-    .filter(text => (text.match(/“/g) ?? []).length !== (text.match(/”/g) ?? []).length)
-    .map(text => `${form.id}: ${text}`));
-  expect(unbalanced).toEqual([]);
+    .flatMap(question => [question.text, question.answerText].map(text => ({ id: `${form.id} Q${question.id}`, text })))
+    .filter(({ text }) => (text.match(/“/g) ?? []).length !== (text.match(/”/g) ?? []).length)
+    .map(({ id }) => id));
+  expect(unbalanced).toEqual(['dbe-egra-xh-hl-1-v1 Q4']);
 });
 
 test('all source forms adapt without changing order, case, repeats or identity', () => {

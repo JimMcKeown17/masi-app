@@ -836,7 +836,10 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 - [ ] **EGRA open decisions (Jim):**
   - **Source notes.** The pack's `sourceNotes` must be resolved before a form is used in the field.
     Each note on a chart in use needs a recorded keep-or-fix decision before printing (for example
-    the isiXhosa story's "nguSidumo Wabona", printed without a full stop).
+    the isiXhosa story's "nguSidumo Wabona", printed without a full stop, and its question 4 answer
+    guide, which ends with an unmatched `”`). A fix is never an in-place edit: the pack is shared
+    byte-for-byte with Zazi and both websites, so its owner issues a new form id (such as
+    `dbe-egra-xh-hl-1-v2`) to all four repos. #111 edited that quote in place; it was restored.
   - **Answer guides to review (EGRA review, 2026-10-27).** isiZulu question 4 ("Umama wamtshela
     ukuthi yini ebalulekile?") expects "Ukusizana kanye nokuhlanzeka", but in the story Usisi says
     that and Umama says everyone must wash dishes, so a careful child is marked wrong; it needs an
