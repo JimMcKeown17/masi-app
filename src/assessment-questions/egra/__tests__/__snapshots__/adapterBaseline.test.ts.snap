@@ -18,7 +18,7 @@ exports[`dbe-egra-en-hl-2-v1 adapts exactly as before the shared-content refacto
 
 exports[`dbe-egra-en-hl-3-v1 adapts exactly as before the shared-content refactor 1`] = `"c554f7a3937939c91d4d64acc27d1fb0b4c7aa0291fbc0cd43976587bb60e09c"`;
 
-exports[`dbe-egra-xh-hl-1-v1 adapts exactly as before the shared-content refactor 1`] = `"891b89bb44dec343928d6c2a18148f6d2b728df3a3abfcee2013d8533bce35da"`;
+exports[`dbe-egra-xh-hl-1-v1 adapts exactly as before the shared-content refactor 1`] = `"d57d1d0a016e14abb4cde00d63057fe5967b314dddb5403a256e5b51d7fb97e1"`;
 
 exports[`dbe-egra-xh-hl-2-v1 adapts exactly as before the shared-content refactor 1`] = `"9f86d2c68b8e2d6be3e00dea01e88c0661d697f17ac0a7ad8dadcd599014b99d"`;
 

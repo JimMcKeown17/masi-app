@@ -915,7 +915,6 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
   - run it on the iPhone, and listen with TalkBack and VoiceOver: the flip notice should be read
     once, and the spoken answer guides (Q2, Q4, EGRA comprehension) should make sense;
   - Q5 review: the page indicator grows by its arrows and the grid shifts down about 18dp;
-  - isiXhosa EGRA 1 Q4's answer guide ends with a stray `”` (content pack);
   - the Select child list scrolls under the Android navigation bar (pre-existing).
 - [ ] **EA usability check of step-by-step marking on a preview build.** Watch two or three EAs
   mark a real child (or a colleague reading from the cards) through WelaPLUS and Full EGRA.

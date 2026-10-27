@@ -21,8 +21,11 @@ export function batteryFor(
 }
 
 // New runs use the current instrument; saved runs keep their original identity.
+// The 13 old EGRA forms are offered for saved and unfinished assessments only.
+const FULL_EGRA = `${FULL_EGRA_2026_1.battery_code}@${FULL_EGRA_2026_1.battery_version}`;
 const SUPERSEDED_VERSIONS = new Map<string, string>([
   ['wela_plus_full@2024.1', 'wela_plus_full@2026.1'],
+  ...EGRA_BATTERIES.map(battery => [`${battery.battery_code}@${battery.battery_version}`, FULL_EGRA] as [string, string]),
 ]);
 
 export function batteryForNewRun(
