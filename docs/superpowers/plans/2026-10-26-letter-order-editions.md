@@ -180,7 +180,7 @@ test('a language edit keeps the edition and follows the language', () => {
 ### Task 2: Server column, check and trigger
 
 **Files:**
-- Create: `supabase/migrations/20261026120000_class_letter_order_edition.sql`
+- Create: `supabase/migrations/20261027120000_class_letter_order_edition.sql`
 - Create: `scripts/letter-order-postgres-harness.cjs` (model: `scripts/ea-access-postgres-harness.cjs`)
 - Modify: `package.json` (add `"verify:letter-order:postgres": "node scripts/letter-order-postgres-harness.cjs"`),
   `.github/workflows/tests.yml` (a step after `verify:session-group:postgres`),
@@ -240,7 +240,7 @@ edition a class can reach resolves to a release pack.
 - [ ] **Step 2: Run it to verify it fails.** Run `npm test -- __tests__/letterOrderMigration.test.js`. Expected: FAIL (file missing).
 
 - [ ] **Step 3: Write the harness, then the migration.** The harness replays every migration
-  before `20261026120000` into the disposable database, inserts fixture classes with known
+  before `20261027120000` into the disposable database, inserts fixture classes with known
   `updated_at` and `row_version`, applies the new migration, then replays it once more. Labelled
   cases, each recorded `passed` in the summary:
   - `existing-classes-backfilled`: every fixture class is `2026-10-23`, with `updated_at` and
@@ -312,7 +312,7 @@ Phone rules:
   - `saveClass` on the local path strips `letter_order_edition` from the record. A new class takes
     the column default; a re-save keeps the stored value.
   - `updateClass` strips it from the merged record, so `updates` can never change it.
-- **Upload:** `INTENTIONALLY_UNSYNCED.classes.letter_order_edition` = `'Server-owned: the classes trigger sets it (migration 20261026120000); pulls take the server value.'`
+- **Upload:** `INTENTIONALLY_UNSYNCED.classes.letter_order_edition` = `'Server-owned: the classes trigger sets it (migration 20261027120000); pulls take the server value.'`
 
 - [ ] **Step 1: Write the failing tests.**
   - Migration test (real SQLite): a v18 database holding a class migrates to 19, and the class
@@ -783,13 +783,13 @@ tests that switch breaks (Step 1, last group).
   - `npm run sqlite:staging:check`. Expected: `project_ref=segygjzpujphwvrubusm`.
   - `npm run sqlite:staging:link`. This writes `supabase/.temp/`, which is gitignored.
   - `npm run sqlite:staging:migrations`. Every remote migration appears locally, and
-    `20261026120000` is the only local one not yet applied.
+    `20261027120000` is the only local one not yet applied.
   - `npm run sqlite:staging:query -- "select coalesce(home_language,'(none)') as language, count(*) filter (where archived_at is null) as active, count(*) as total from public.classes group by 1 order by 2 desc;"`,
     plus `select max(updated_at), sum(row_version) from public.classes;` for Step 4's comparison.
 
   Report the results to Jim.
 - [ ] **Step 4: Hosted apply, only after Jim's yes.** Run `npm run sqlite:staging:dry-run`. It must
-  list exactly `20261026120000_class_letter_order_edition.sql`; if anything else is pending, stop
+  list exactly `20261027120000_class_letter_order_edition.sql`; if anything else is pending, stop
   and report to Jim. Then run `npm run sqlite:staging:push` and verify read-only:
   - every class is `2026-10-23`;
   - `max(updated_at)` and `sum(row_version)` over `classes` are unchanged from before the apply;
