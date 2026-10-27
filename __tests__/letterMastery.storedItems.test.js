@@ -1,5 +1,5 @@
 import { computeLetterMastery } from '../src/utils/letterMastery';
-import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
+import { TRACKER_LETTERS } from '../src/utils/assessmentRegistry';
 
 // One result on its own: every reached occurrence decides its letter.
 const computeAssessmentMastery = (result, order) => computeLetterMastery([result], order);
@@ -7,17 +7,17 @@ const computeAssessmentMastery = (result, order) => computeLetterMastery([result
 const item = (prompt, is_correct, reached = true) => ({ prompt, is_correct, metadata: { reached } });
 
 describe('mastery from the recorded prompts and reached occurrences', () => {
-  test('A correct and a correct master lowercase a, case-folding the order too', () => {
+  test('A correct and a correct master lowercase a, case-folding the tracker letters too', () => {
     expect(computeAssessmentMastery({ items: [item('A', true), item('a', true)] }, ['A', 'B']))
       .toEqual(new Set(['a']));
   });
 
   test('mixed-case E and e contribute to one lowercase letter on the 26-letter tracker', () => {
-    expect(PEDAGOGICAL_ORDERS.en).toHaveLength(26);
-    expect(new Set(PEDAGOGICAL_ORDERS.en.map(letter => letter.toLowerCase())).size).toBe(26);
+    expect(TRACKER_LETTERS.en).toHaveLength(26);
+    expect(new Set(TRACKER_LETTERS.en.map(letter => letter.toLowerCase())).size).toBe(26);
     expect(computeAssessmentMastery(
       { items: [item('E', true), item('e', true)] },
-      PEDAGOGICAL_ORDERS.en,
+      TRACKER_LETTERS.en,
     )).toEqual(new Set(['e']));
   });
 
@@ -32,7 +32,7 @@ describe('mastery from the recorded prompts and reached occurrences', () => {
     ] }, ['a', 'B'])).toEqual(new Set(['a']));
   });
 
-  test('letters outside the pedagogical order and prompt-less items do not count', () => {
+  test('letters outside the tracker set and prompt-less items do not count', () => {
     expect(computeAssessmentMastery({ items: [
       item('a', true), item('z', true), item('ch', true), item(null, true),
     ] }, ['A', 'b'])).toEqual(new Set(['a']));

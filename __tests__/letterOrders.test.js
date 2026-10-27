@@ -6,6 +6,7 @@ const {
   resolveTeachingOrder,
   MASI_LETTER_ORDER_EDITIONS,
   getTeachingOrder,
+  sortLettersByOrder,
 } = require('../src/utils/letterOrders');
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -53,4 +54,23 @@ test('a language edit keeps the edition and follows the language', () => {
   const row = { letter_order_edition: '2026-10-23' };
   expect(getTeachingOrder(row, 'xh').id).toBe('isixhosa-order-2026-10-23');
   expect(getTeachingOrder(row, 'af').id).toBe('afrikaans-order-2026-10-23');
+});
+
+
+test.each([
+  ['en', ['d', 's', 'n', 'a'], ['s', 'a', 'n', 'd']],
+  ['xh', ['a', 'o'], ['o', 'a']],
+  ['en', ['?', 'd', '!', 's', '?'], ['s', 'd', '?', '!', '?']],
+])('sortLettersByOrder follows the %s order and keeps unknown letters stable', (code, letters, expected) => {
+  const original = [...letters];
+  const order = resolveTeachingOrder('2026-10-23', code).letters;
+  expect(sortLettersByOrder(Object.freeze(letters), order)).toEqual(expected);
+  expect(letters).toEqual(original);
+});
+
+test('sortLettersByOrder with no order returns a copy in the given order', () => {
+  const letters = ['d', 's', 'n', 'a'];
+  const result = sortLettersByOrder(letters, null);
+  expect(result).toEqual(letters);
+  expect(result).not.toBe(letters);
 });

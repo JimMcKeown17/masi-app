@@ -1,9 +1,9 @@
-import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
+import { TRACKER_LETTERS } from '../../utils/assessmentRegistry';
 import { eligibleLetterResults, computeLetterMastery } from '../../utils/letterMastery';
 
 export const loadKnownLetters = async ({ repositories, userId, childIds, languageCode, programmeId, academicYear }) => {
-  const order = PEDAGOGICAL_ORDERS[languageCode];
-  if (!Array.isArray(order) || childIds.length === 0) return Object.fromEntries(childIds.map(id => [id, []]));
+  const trackerLetters = TRACKER_LETTERS[languageCode];
+  if (!Array.isArray(trackerLetters) || childIds.length === 0) return Object.fromEntries(childIds.map(id => [id, []]));
   const [results, marks] = await Promise.all([
     repositories.assessments.getLetterEvidenceResults({ userId, childIds,
       ...(programmeId === undefined ? {} : { programmeId }),
@@ -26,8 +26,8 @@ export const loadKnownLetters = async ({ repositories, userId, childIds, languag
   return Object.fromEntries(childIds.map(id => {
     // One rule with the tracker (C23): each letter takes the newest result that reached it.
     const letterResults = eligibleLetterResults(resultsByChild.get(id) ?? [], { childId: id, languageCode });
-    const known = computeLetterMastery(letterResults, order);
+    const known = computeLetterMastery(letterResults, trackerLetters);
     for (const letter of marksByChild.get(id) ?? []) known.add(letter);
-    return [id, order.map(letter => letter.toLowerCase()).filter(letter => known.has(letter))];
+    return [id, trackerLetters.map(letter => letter.toLowerCase()).filter(letter => known.has(letter))];
   }));
 };

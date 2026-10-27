@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getConnectionActor } from '../../session/signedInHandle';
-import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
+import { TRACKER_LETTERS } from '../../utils/assessmentRegistry';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import {
   enqueueDomainOutbox,
@@ -99,9 +99,9 @@ export const createMasteryRepository = ({ database } = {}) => {
     if (typeof childId !== 'string' || childId.trim().length === 0) {
       throw new TypeError('childId must be a non-empty string');
     }
-    const order = PEDAGOGICAL_ORDERS[language];
-    if (!Array.isArray(order)) throw new TypeError('language must have a pedagogical order');
-    if (!order.includes(letter)) throw new TypeError('letter must be in the language pedagogical order');
+    const trackerLetters = TRACKER_LETTERS[language];
+    if (!Array.isArray(trackerLetters)) throw new TypeError('language must have a tracker letter set');
+    if (!trackerLetters.includes(letter)) throw new TypeError('letter must be in the language tracker letter set');
     if (typeof confirmed !== 'boolean') throw new TypeError('confirmed must be a boolean');
     if (changedAt !== undefined && (typeof changedAt !== 'string' || !Number.isFinite(Date.parse(changedAt)))) {
       throw new TypeError('changedAt must be a valid date string');

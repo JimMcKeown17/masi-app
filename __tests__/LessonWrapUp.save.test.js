@@ -337,3 +337,33 @@ for (const [languageCode, language, packId] of [
   const outbox = await (await handle.getReader()).getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
   expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([languageCode]);
 });
+
+
+testSave('Wrap up displays letters in the class order and preserves tap order in the draft and save', async () => {
+  const tapped = ['d', 's', 'n', 'a'];
+  await handle.repositories.lessonDrafts.discard(draft.id);
+  draft = await handle.repositories.lessonDrafts.create(draftStart({
+    pack_id: 'english-interim-letters-v2', ticks: { letters: tapped, blends: [], books: [] },
+    tracker_changes: { c1: Object.fromEntries(tapped.map(letter => [letter, {
+      mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z',
+    }])) },
+  }));
+  const view = mount(); await ready(view);
+  expect(await view.findByRole('header', { name: 'Who knows s a n d without help?' })).toBeTruthy();
+  expect(view.getByText('Who knows s a n d without help?')).toBeTruthy();
+  const rows = view.getAllByTestId('wrap-up-letter-chips');
+  expect(rows).toHaveLength(2);
+  for (const chips of rows) expect(within(chips).getAllByRole('button')
+    .map(tile => tile.props.accessibilityLabel.split(',')[0])).toEqual(['s', 'a', 'n', 'd']);
+  fireEvent.press(within(view.getByTestId('wrap-up-child-c1')).getByRole('button', { name: /letter tracker/ }));
+  await view.findByRole('button', { name: 's, taught, added this session' });
+  expect(view.getAllByRole('button', { name: /^[a-z], / }).map(tile => tile.props.accessibilityLabel.split(',')[0]).slice(0, 4))
+    .toEqual(['s', 'a', 'n', 'd']);
+  fireEvent.press(view.getByRole('button', { name: 'Done' }));
+  const stored = await handle.repositories.lessonDrafts.getActive();
+  expect(stored.ticks.letters).toEqual(['d', 's', 'n', 'a']);
+  expect(Object.keys(stored.tracker_changes.c1)).toEqual(['d', 's', 'n', 'a']);
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await view.findByText('Session complete route');
+  expect((await sessions())[0].activities.letters_focused).toEqual(['d', 's', 'n', 'a']);
+});

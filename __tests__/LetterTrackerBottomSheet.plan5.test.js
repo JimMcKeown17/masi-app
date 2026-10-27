@@ -2,6 +2,7 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: tru
 
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import { getTeachingOrder } from '../src/utils/letterOrders';
 import { typeRoles } from '../src/constants/typography';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
@@ -39,6 +40,7 @@ const renderSheet = (props = {}) => render(
       child={{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' }}
       userId="user-1"
       languageCode="en"
+      teachingOrder={getTeachingOrder({ letter_order_edition: '2026-10-23' }, props.languageCode === undefined ? 'en' : props.languageCode)}
       pendingChanges={{}}
       onChangesUpdate={jest.fn()}
       {...props}

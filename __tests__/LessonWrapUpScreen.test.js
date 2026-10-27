@@ -6,6 +6,8 @@ import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { draftStart, deferred } from '../test-support/lessonDraftTestUtils';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
+import { getTeachingOrder } from '../src/utils/letterOrders';
+import { ActivityIndicator } from 'react-native-paper';
 import { colors } from '../src/constants/colors';
 import { saveLesson, LessonSaveError } from '../src/services/lessonSave';
 
@@ -38,12 +40,12 @@ const mockHandle = { userId: 'ea', isCurrent: () => true, repositories: { childr
   getChildrenByIds: jest.fn(async () => mockChildren),
   getWriteAuthority: jest.fn(async () => ({ c1: { attend: true, deliver: true, level: true }, c2: { attend: true, deliver: true, level: true } })),
 } } };
-let mockInitial, mockDraft, mockApply, mockBeginSave, mockEndSave;
+let mockInitial, mockDraft, mockApply, mockBeginSave, mockEndSave, mockOrderLoading;
 function mockUseLessonDraft() {
   const [draft, setDraft] = React.useState(mockInitial);
   mockDraft = draft;
   mockApply = jest.fn(async (transition, ...args) => setDraft(row => ({ ...row, ...transition(row, ...args) })));
-  return { draft, status: 'ready', apply: mockApply, beginSave: mockBeginSave, endSave: mockEndSave };
+  return { draft, teachingOrder: mockOrderLoading ? null : getTeachingOrder({ letter_order_edition: '2026-10-23' }, draft.language_code), status: 'ready', apply: mockApply, beginSave: mockBeginSave, endSave: mockEndSave };
 }
 const navigation = { replace: jest.fn(), popTo: jest.fn(), setOptions: jest.fn() };
 const mount = () => renderWithProviders(<LessonWrapUpScreen navigation={navigation} route={{ params: { draftId: 'draft-1' } }} />);
@@ -51,6 +53,7 @@ const ready = view => view.findByText('Amahle');
 const row = (view, id = 'c1') => within(view.getByTestId(`wrap-up-child-${id}`));
 beforeEach(() => {
   jest.clearAllMocks();
+  mockOrderLoading = false;
   mockInitial = draftStart({ id: 'draft-1', session_id: 'session-1', ticks: { letters: ['a', 'm'] } });
   mockBeginSave = jest.fn(async () => mockDraft);
   mockEndSave = jest.fn();
@@ -338,4 +341,15 @@ test('the Save action stays outside the scroll and scrolling updates the navigat
   expect(navigation.setOptions).toHaveBeenLastCalledWith({ headerScrolled: true });
   fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 0 } } });
   expect(navigation.setOptions).toHaveBeenLastCalledWith({ headerScrolled: false });
+});
+
+
+test('opening the tracker before the teaching order loads keeps its loading state', async () => {
+  mockOrderLoading = true;
+  const view = mount(); await ready(view);
+  fireEvent.press(row(view).getByRole('button', { name: /letter tracker/ }));
+  await act(async () => {});
+  expect(view.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  expect(view.queryByText('No letter set for this class language.')).toBeNull();
+  expect(view.queryByRole('button', { name: 'z, not mastered' })).toBeNull();
 });

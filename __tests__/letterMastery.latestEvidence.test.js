@@ -1,5 +1,5 @@
 import { computeLetterMastery, eligibleLetterResults } from '../src/utils/letterMastery';
-import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
+import { TRACKER_LETTERS } from '../src/utils/assessmentRegistry';
 import { getEgraAssessment } from '../content/egra';
 
 const item = (prompt, isCorrect, reached = true) => ({ prompt, is_correct: isCorrect, metadata: { reached } });
@@ -8,10 +8,10 @@ const result = (date, items) => ({
   stopped_reason: 'completed', assessment_date: date, created_at: `${date}T09:00:00.000Z`, items,
 });
 const mastered = results => computeLetterMastery(
-  eligibleLetterResults(results, { childId: 'child-1', languageCode: 'en' }), PEDAGOGICAL_ORDERS.en,
+  eligibleLetterResults(results, { childId: 'child-1', languageCode: 'en' }), TRACKER_LETTERS.en,
 );
 const chart = id => getEgraAssessment(id).letters.items.map(letter => letter.text);
-const allLettersCorrect = date => result(date, PEDAGOGICAL_ORDERS.en.map(letter => item(letter, true)));
+const allLettersCorrect = date => result(date, TRACKER_LETTERS.en.map(letter => item(letter, true)));
 
 describe('each letter keeps its most recent evidence', () => {
   test('a child with all 26 letters, then assessed on English HL 3 (no q, v, x or z), still has 26', () => {
@@ -60,6 +60,6 @@ describe('each letter keeps its most recent evidence', () => {
   });
 
   test('no results give no letters', () => {
-    expect(computeLetterMastery([], PEDAGOGICAL_ORDERS.en)).toEqual(new Set());
+    expect(computeLetterMastery([], TRACKER_LETTERS.en)).toEqual(new Set());
   });
 });

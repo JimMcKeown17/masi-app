@@ -117,6 +117,10 @@ test.each([true, false])('mastery confirmation follows delivery context (%s) and
     route={{ params: { child, classItem: { id: 'stale-class', home_language: 'English' } } }} /></PaperProvider>);
   await screen.findByText('MASTERY_PANEL');
   expect(screen.UNSAFE_getByType(LetterMasteryPanel).props).toMatchObject({
-    isDelivery, classItem: { id: 'membership-class', grade: '2', home_language: 'Afrikaans' },
+    isDelivery, child,
+  });
+  fireEvent.press(screen.getAllByRole('button', { name: 'Assess now' })[0]);
+  expect(navigation.navigate).toHaveBeenCalledWith('StandaloneTest', {
+    testCode: 'letter_sounds', child, languageCode: 'af',
   });
 });

@@ -15,7 +15,8 @@ import { saveLesson } from '../../services/lessonSave';
 import * as transitions from '../../lessonPlan/lessonDraftState';
 import { deriveSessionReadingLevel } from '../../lessonPlan/engine';
 import { loadMasteryState } from '../../utils/masteryState';
-import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
+import { TRACKER_LETTERS } from '../../utils/assessmentRegistry';
+import { sortLettersByOrder } from '../../utils/letterOrders';
 import { startedLabel } from '../../utils/lessonDates';
 import { buildSessionCompleteParams } from '../../utils/sessionCompleteView';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
@@ -81,7 +82,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   useEffect(() => () => { active.current = false; }, []);
   const childKey = JSON.stringify(draft ? presentChildIds(draft.attendance) : []);
   const languageCode = draft?.language_code;
-  const languageOrder = PEDAGOGICAL_ORDERS[languageCode];
+  const trackerLetters = TRACKER_LETTERS[languageCode];
   useFocusEffect(useCallback(() => {
     let current = true;
     if (!draft) return undefined;
@@ -92,7 +93,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         repositories.children.getWriteAuthority({ userId: handle.userId, childIds }),
       ]);
       const mastery = Object.fromEntries(await Promise.all(childIds.map(async id => [id,
-        authority[id]?.deliver && languageOrder
+        authority[id]?.deliver && trackerLetters
           ? await loadMasteryState({ repositories, userId: handle.userId, childId: id, languageCode }) : null,
       ])));
       if (current && handle.isCurrent()) setMetadata({ children, authority, mastery });
@@ -103,7 +104,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     return () => { current = false; };
     // Tick and note edits do not reload the child's stored mastery or reading level.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handle, repositories, draft?.id, childKey, languageCode, languageOrder]));
+  }, [handle, repositories, draft?.id, childKey, languageCode, trackerLetters]));
 
   // endSave has published empty before this committed render, releasing Lesson's leave guard.
   useEffect(() => {
@@ -179,7 +180,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     } catch (caught) { if (active.current && !isStaleActorError(caught)) setError({ message: errorMessage(caught, []) }); }
   };
   const ids = JSON.parse(childKey);
-  const letters = draft?.ticks.letters ?? [];
+  const letters = sortLettersByOrder(draft?.ticks.letters ?? [],
+    lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null);
   const askSave = () => {
     if (!draft || ids.length === 0 || savingRef.current) return;
     if (!letters.length && !draft.ticks.blends?.length && !draft.ticks.books?.length) setEmptyConfirm(true);
@@ -196,7 +198,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         <Text style={styles.note}>Teaching it today doesn't count.</Text>
       </View> : null}
       {draft && metadata ? ids.map(id => metadata.children[id] ? <WrapUpChildRow key={id}
-        child={metadata.children[id]} letters={letters} languageOrder={languageOrder}
+        child={metadata.children[id]} letters={letters} trackerLetters={trackerLetters}
         authority={metadata.authority[id] ?? {}} mastery={metadata.mastery[id]}
         changes={draft.tracker_changes[id] ?? {}} noOneNew={draft.ticks.noOneNew?.includes(id)}
         readingLevel={draft.reading_level_changes[id] ?? metadata.children[id].reading_level}
@@ -227,7 +229,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     <SelectSheet visible={levelId !== null} title="Reading level" cancelLabel="Cancel" options={READING_LEVEL_OPTIONS}
       selectedKey={draft?.reading_level_changes[levelId] ?? metadata?.children[levelId]?.reading_level}
       onDismiss={() => setLevelId(null)} onSelect={value => edit(transitions.setReadingLevel, levelId, value, metadata?.children[levelId]?.reading_level)} />
-    <LetterTrackerBottomSheet visible={trackerId !== null} onDismiss={() => setTrackerId(null)}
+    <LetterTrackerBottomSheet teachingOrder={lesson.teachingOrder} visible={trackerId !== null} onDismiss={() => setTrackerId(null)}
       child={metadata?.children[trackerId] ?? null} userId={handle.userId} languageCode={languageCode}
       pendingChanges={draft?.tracker_changes[trackerId] ?? {}}
       onChangesUpdate={changes => edit(transitions.setTrackerChanges, trackerId, changes)} />

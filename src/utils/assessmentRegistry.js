@@ -1,5 +1,4 @@
 import { sharedInstructionsFor } from '../assessment-questions';
-import { ENGLISH_PEDAGOGICAL_ORDER, ISIXHOSA_PEDAGOGICAL_ORDER, AFRIKAANS_PEDAGOGICAL_ORDER } from '../constants/egraConstants';
 
 export const LETTER_EVIDENCE_CODES = ['letter_sounds'];
 
@@ -24,11 +23,11 @@ export function languageCodeForHomeLanguage(text) {
   }
 }
 
-export const PEDAGOGICAL_ORDERS = {
-  en: ENGLISH_PEDAGOGICAL_ORDER,
-  xh: ISIXHOSA_PEDAGOGICAL_ORDER,
-  af: AFRIKAANS_PEDAGOGICAL_ORDER,
-};
+export const TRACKER_LETTERS = Object.freeze({
+  en: Object.freeze([...'abcdefghijklmnopqrstuvwxyz']),
+  xh: Object.freeze([...'abcdefghijklmnopqrstuvwxyz']),
+  af: Object.freeze([...'abcdefghijklmnopqrstuvwxyz']),
+});
 
 function instructionsFor(code) {
   return Object.fromEntries(['xh', 'en', 'af', 'zu'].map(language => {

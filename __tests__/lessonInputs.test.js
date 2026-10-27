@@ -143,7 +143,7 @@ test('known letters come from current-year results and confirmations', async () 
   const mastery = jest.spyOn(repositories.mastery, 'getLetterMastery');
   expect(await loadKnownLetters({ repositories, userId: handle.userId, childIds: ['c1', 'c2'], languageCode: 'xh' }))
     // c1 keeps February's k: March never reached it. Last year's s does not count.
-    .toEqual({ c1: ['a', 'o', 'l', 'm', 'k'], c2: ['o', 'm'] });
+    .toEqual({ c1: ['a', 'k', 'l', 'm', 'o'], c2: ['m', 'o'] });
   expect(assessments).toHaveBeenCalledTimes(1);
   expect(assessments).toHaveBeenCalledWith({ userId: USER, childIds: ['c1', 'c2'] });
   expect(mastery).toHaveBeenCalledTimes(1);

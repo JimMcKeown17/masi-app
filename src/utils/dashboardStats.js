@@ -9,7 +9,7 @@ import { computeLetterMastery, eligibleLetterResults } from './letterMastery';
 import {
   languageCodeForHomeLanguage,
   LETTER_EVIDENCE_CODES,
-  PEDAGOGICAL_ORDERS,
+  TRACKER_LETTERS,
 } from './assessmentRegistry';
 import { toLocalDateString } from './localDate';
 import { getScoreBand } from './scoreBands';
@@ -185,9 +185,9 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
     // Determine language from class
     const cls = classes.find(c => c.id === child.class_id);
     const languageCode = languageCodeForHomeLanguage(cls?.home_language);
-    const pedOrder = languageCode ? PEDAGOGICAL_ORDERS[languageCode] : null;
+    const trackerLetters = languageCode ? TRACKER_LETTERS[languageCode] : null;
 
-    if (!pedOrder) {
+    if (!trackerLetters) {
       // Keep the ranking's display scale without choosing a language or its evidence.
       rankings.push({ child, masteredCount: 0, total: 26, percent: 0 });
       continue;
@@ -196,7 +196,7 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
     // Stored letter results count regardless of recorder or battery membership.
     // Each letter takes the newest result that reached it, as on the tracker.
     const letterResults = eligibleLetterResults(assessments, { childId: child.id, languageCode });
-    const assessmentMastered = computeLetterMastery(letterResults, pedOrder);
+    const assessmentMastered = computeLetterMastery(letterResults, trackerLetters);
 
     // Confirmed letters in the child's class language, regardless of recorder or programme.
     const taughtLetters = new Set();
@@ -208,8 +208,8 @@ export function getLetterMasteryRanking(children, assessments, letterMastery, cl
 
     // Union — don't double-count letters that are both assessed-mastered and taught
     const allMastered = new Set([...assessmentMastered, ...taughtLetters]);
-    const masteredCount = allMastered.size;
-    const total = pedOrder.length; // 26
+    const masteredCount = trackerLetters.filter(letter => allMastered.has(letter)).length;
+    const total = trackerLetters.length; // 26
 
     rankings.push({
       child,

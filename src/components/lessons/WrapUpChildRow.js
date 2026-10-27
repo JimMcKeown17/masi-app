@@ -8,15 +8,15 @@ import BrandButton from '../common/BrandButton';
 import ToggleChip from '../common/ToggleChip';
 import SelectField from '../common/SelectField';
 
-export default function WrapUpChildRow({ child, letters, languageOrder, authority, mastery, changes,
+export default function WrapUpChildRow({ child, letters, trackerLetters, authority, mastery, changes,
   readingLevel, noOneNew, onLetter, onNoOneNew, onOpenTracker, onOpenLevel }) {
   const assessmentMastered = mastery?.assessmentMastered ?? new Set();
   const taughtLetters = new Set(mastery?.taughtRecords.map(row => row.letter) ?? []);
-  const count = languageOrder ? countMastered({ assessmentMastered, taughtLetters,
-    pendingChanges: changes, pedagogicalOrder: languageOrder }) : 0;
+  const count = trackerLetters ? countMastered({ assessmentMastered, taughtLetters,
+    pendingChanges: changes, trackerLetters }) : 0;
   return <View testID={`wrap-up-child-${child.id}`} style={styles.row}>
     <Text style={styles.name}>{child.first_name}</Text>
-    {authority.deliver ? languageOrder ? <>
+    {authority.deliver ? trackerLetters ? <>
       {/* No letters, no chip row: an empty row would still take the row's gap on both sides. */}
       {letters.length > 0 ? <><View testID="wrap-up-letter-chips" style={styles.chips}>{letters.map(letter => {
         const locked = assessmentMastered.has(letter);

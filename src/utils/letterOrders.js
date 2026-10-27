@@ -76,3 +76,10 @@ export function getTeachingOrder(classRow, languageCode) {
     throw error;
   }
 }
+
+export function sortLettersByOrder(letters, orderLetters) {
+  if (orderLetters === null) return [...letters];
+  const positions = new Map(orderLetters.map((letter, index) => [letter, index]));
+  return [...letters].sort((a, b) => (positions.get(a) ?? orderLetters.length)
+    - (positions.get(b) ?? orderLetters.length));
+}
