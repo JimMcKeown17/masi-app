@@ -807,7 +807,7 @@ tests that switch breaks (Step 1, last group).
     - the Wrap up tracker sheet;
     - the mastery panel (Children → class → child → Letter tracker);
     - the Session complete receipt.
-  - Check 1.0× and 1.3× text.
+  - Check at default text size only (Jim, 2026-10-27: device gates never check 1.3× text).
   - Restore phone settings, and tell Jim when the phone is free.
 - [ ] **Step 7: PR** stacked on #97. The body states what field builds teach. Merging waits for
   PR #97 to merge and for Jim.
