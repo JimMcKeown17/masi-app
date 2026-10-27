@@ -75,7 +75,21 @@ test.each([
   expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'ChildSelect']);
 });
 
-test.each(EGRA_BATTERIES)('$title starts in the form language instead of the class language, with no language sheet', async battery => {
+test.each(EGRA_BATTERIES)('an old EGRA form in the route starts Full EGRA 2026.1 in the class language ($title)', async battery => {
+  const child = { ...CHILD, home_language: battery.fixedLanguage === 'xh' ? 'af' : 'xh' };
+  mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
+  const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: battery.battery_version }));
+  fireEvent.press(screen.getByRole('button', { name: 'Select Lwazi Mbeki for assessment' }));
+  await waitFor(() => expect(screen.routes().map(route => route.name)).toEqual(['Entry', 'BatteryOverview']));
+  expect(repositories.batteryRuns.startRun).toHaveBeenCalledWith({
+    id: expect.any(String), userId: 'ea-1', childId: CHILD.id, classId: CHILD.class_id,
+    batteryCode: 'egra', batteryVersion: '2026.1', language: child.home_language,
+  });
+});
+
+// The old forms are the real fixed-language batteries, so they still pin that generic path.
+test.each(EGRA_BATTERIES)('a fixed-language battery ($title) starts in its own language instead of the class language, with no language sheet', async battery => {
+  batteryForNewRun.mockReturnValue(battery);
   const child = { ...CHILD, home_language: battery.fixedLanguage === 'xh' ? 'en' : 'xh' };
   mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
   const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: battery.battery_version }));
@@ -90,7 +104,8 @@ test.each(EGRA_BATTERIES)('$title starts in the form language instead of the cla
 });
 
 
-test('an EGRA form names its own language in the header, not the class language', async () => {
+test('a fixed-language battery names its own language in the header, not the class language', async () => {
+  batteryForNewRun.mockReturnValue(EGRA_BATTERIES.find(battery => battery.battery_version === 'dbe-egra-en-fal-2-v1'));
   const screen = await ready(renderSelect({ batteryCode: 'egra', batteryVersion: 'dbe-egra-en-fal-2-v1' }));
   expect(screen.getByText('English FAL EGRA 2 · in English')).toBeTruthy();
   expect(screen.queryByText("English FAL EGRA 2 · in the child's class language")).toBeNull();

@@ -167,6 +167,14 @@ test('the Word Reading quick test uses shared 2026.3 with first-row stops in fou
 });
 
 
+test.each(EGRA_BATTERIES.map(battery => [battery.battery_version, battery]))(
+  'new runs resolve the old EGRA form %s to Full EGRA 2026.1 while saved runs keep the form',
+  (version, battery) => {
+    expect(batteryForNewRun('egra', version)).toBe(FULL_EGRA_2026_1);
+    expect(batteryFor('egra', version)).toBe(battery);
+  },
+);
+
 test('new runs resolve superseded WelaPLUS to 2026.1 while saved runs retain 2024.1', () => {
   expect(batteryForNewRun('wela_plus_full', '2024.1')).toBe(WELA_PLUS_FULL_2026_1);
   expect(batteryForNewRun('wela_plus_full', '2026.1')).toBe(WELA_PLUS_FULL_2026_1);

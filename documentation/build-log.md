@@ -6174,3 +6174,33 @@ Gates on `fa79053` (Node 20): `jest --silent` 433 suites / 6,578 tests / 14 snap
 (gpt-6-astra, base `a9d4141`): approve, no findings; it confirmed from Yoga's source that the gap
 counts when deciding where to wrap (two columns need 280dp at 100% and 361.6dp at 130% of the 312dp
 available).
+
+
+### 2026-10-27 — Old EGRA forms never start new assessments; isiXhosa answer-guide quote
+
+Two findings from the EGRA session's review of PR #108, both verified on main `826a309`; Jim chose
+to fix both without a device build.
+
+1. `batteryForNewRun` mapped only WelaPLUS 2024.1 to its successor. A programme whose default named
+   one of the 13 old EGRA forms would have started new assessments on the old content (60-letter
+   cards). Not live: on staging, literacy defaults to `wela_plus_full@2026.1` and every other
+   programme has no default. `SUPERSEDED_VERSIONS` in `src/assessment-questions/battery/registry.ts`
+   now maps every `egra@<form id>` (built from `EGRA_BATTERIES`) to `egra@2026.1`. `batteryFor` is
+   unchanged, so saved and unfinished old-form assessments still open on their own form.
+2. isiXhosa EGRA 1's Story comprehension question 4 answer guide ended with a stray `”` in
+   `content/egra/egra-assessments.json`. Since #108 the shared isiXhosa set carries it into WelaPLUS
+   2026.1 Q9 and Full EGRA isiXhosa. Removed. The adapter baseline hash for `dbe-egra-xh-hl-1-v1`
+   changes accordingly (the only one of 13 that moves); answer guides are EA-facing text and are not
+   stored in results.
+
+TDD. RED: the new `registry.test.ts` cases (13 forms → Full EGRA 2026.1 for new runs, same form for
+saved runs) and a new `adapter.test.ts` check that every comprehension prompt and answer guide closes
+the curly quotes it opens (it found exactly this one string across the 13 forms). GREEN after the
+two changes. `AssessmentChildSelectScreen.battery.test.js` had used old forms as the route battery
+for new runs; those 13 cases now prove an old form in the route starts Full EGRA 2026.1 in the class
+language, and the fixed-language cases pass the old form in directly as the battery being started,
+so the generic `fixedLanguage` path stays covered. Docs: the stray-quote item leaves `ROADMAP.md`;
+`CONTEXT.md` now shows "No story words read" beside the Skipped chip (a leftover from `a9d4141`).
+
+Gates (Node 20): `jest --silent` 433 suites / 6,605 tests / 14 snapshots, exit 0 (+27 cases);
+`tsc --noEmit -p tsconfig.assessment-questions.json` clean.

@@ -2,6 +2,14 @@ import { evaluateBatteryState } from '../../battery/evaluateBatteryState';
 import { egraCatalog } from '../../../../content/egra';
 import { adaptEgraForm, EGRA_FORMS, EGRA_BATTERIES, egraFormFor, listEgraForms, egraItemSetFor, egraBatteryFor, EGRA_LETTER_EXTENSIONS, EGRA_MIN_LETTERS } from '..';
 
+test('every comprehension prompt and answer guide closes the curly quotes it opens', () => {
+  const unbalanced = EGRA_FORMS.flatMap(form => form.comprehension.questions
+    .flatMap(question => [question.text, question.answerText])
+    .filter(text => (text.match(/“/g) ?? []).length !== (text.match(/”/g) ?? []).length)
+    .map(text => `${form.id}: ${text}`));
+  expect(unbalanced).toEqual([]);
+});
+
 test('all source forms adapt without changing order, case, repeats or identity', () => {
   expect(EGRA_FORMS).toEqual(egraCatalog.assessments);
   expect(EGRA_BATTERIES).toHaveLength(13);
