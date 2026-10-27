@@ -57,7 +57,7 @@ lay items out differently within those rows; the paper is not a facsimile of the
 **Practice items** (shown under each side below) are read before the timed test and are never
 scored. Print them apart from the grid, clearly labelled as practice, as the DBE learner chart
 does on the source page cited for each side. Some practice prompts also appear inside the
-scored grid (for example English letters `m` and `y`); keep both.
+scored grid (for example English letters `d`, `h` and `v`); keep both.
 
 Every printed footer must be one of these exact strings. The middle dot, spaces, version,
 language code and lower-case `side` are intentional. Print the text itself, without a
@@ -129,20 +129,20 @@ Esikolweni waboniswa utitshalakazi wakhe. Utitshalakazi wabalisa ibali likaSidum
 
 ### English (EN)
 
-**Side A — letters** (100 letters, 10 rows of 10; source `dbe-egra-en-hl-3-v1`, PDF page 15). Practice items, printed apart from the grid: `m y`.
+**Side A — letters** (100 letters, 10 rows of 10; source `dbe-egra-en-fal-3-v1`, PDF page 15 of the DBE English First Additional Language Teacher Guide, `egra-efal-guide.pdf`; Jim 2026-10-27: Home Language 3 never asks q, v, x or z). Practice items, printed apart from the grid: `d h v`.
 
 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|---|---|---|
-| K | y | r | m | S | I | w | W | U | h |
-| l | n | f | b | O | d | R | f | w | B |
-| s | F | j | T | P | D | G | I | K | E |
-| E | n | C | r | p | a | K | u | t | g |
-| G | c | m | P | B | e | h | B | H | A |
-| t | Y | P | N | M | u | r | M | j | p |
-| i | l | S | o | m | o | F | s | M | F |
-| t | N | p | A | s | L | g | L | Y | R |
-| s | R | E | j | b | k | c | D | d | T |
-| a | g | W | h | l | D | S | y | n | y |
+| B | n | l | j | v | o | S | h | g | d |
+| e | T | k | y | I | c | r | w | o | F |
+| v | q | U | p | a | m | z | G | y | a |
+| x | r | t | f | W | n | d | v | m | z |
+| A | p | g | E | h | j | b | e | J | r |
+| f | o | w | r | C | i | y | u | t | e |
+| h | K | t | i | p | n | c | l | A | s |
+| d | f | M | k | o | v | D | t | u | c |
+| g | k | b | s | a | L | e | n | H | p |
+| j | t | u | v | x | Y | i | q | m | l |
 
 **Side B — words** (80 words, 10 rows of 8; source `dbe-egra-en-hl-1-v1`, PDF page 16). Practice items, printed apart from the grid: `pot bell`.
 

@@ -2,12 +2,16 @@
 
 **Purpose:** This file is *progressive disclosure* for any agent picking up the WelaPLUS Assessment Battery work mid-stream. Read this once and you should have enough context to continue grilling, design, or implementation without re-reading the full conversation that produced the decisions.
 
-**Current status, verified 2026-10-09:** PRD design is complete and Codex-reviewed four times. The
-11 Question components and tests are on `main` under `src/assessment-questions/`, merged from
-`feature/wela-plus-battery-merge`. They are unwired: nothing in `src/` or `App.js` imports them.
-Host schema, sync, Run lifecycle, package publication, content, and field validation remain open.
-Start with `documentation/ROADMAP.md` section 8 before using the historical sequence later in this
-briefing.
+**Current status, updated 2026-10-27:** the Question components are wired into the app. The Battery
+Run host (PR #101), Full EGRA (#104), step-by-step marking (#107) and WelaPLUS 2026.1 with skip rules
+(#108) are on `main`. The live code is `src/assessment-questions/battery/` (registry, evaluator,
+`skipRules.ts`), `src/assessment-questions/egra/sharedReading.ts` (the 2026.3 reading content) and
+`src/screens/assessments/battery/`. Package publication, printed materials, calibration and field
+validation remain open. Start with `documentation/ROADMAP.md` §7–8 and the
+[2026-10-26 spec](../superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md).
+Everything below this paragraph is the 2026-10-09 briefing and is historical in places: there is
+no `markingPolarity` prop (marking is step by step), and some files it names have since moved or
+been deleted.
 
 Four Codex adversarial reviews on 2026-05-29 surfaced 35 findings total — 18 in the first pass (`documentation/archive/wela-plus-battery-prd-2026-review.md`: 8 critical, 6 high-priority, 4 medium-priority), 8 in the second pass (3 high-priority, 5 medium-priority), 5 in the third pass (2 high-priority, 2 medium-priority, 1 low-priority), and 4 in the fourth pass (2 high-priority, 1 medium-priority, 1 low-priority). **All 35 are addressed** in the current PRD; see all four *Codex review revisions* tables in the PRD's *Implementation handoff* section. Fourth-pass headline changes: Storage path parsing corrected per Supabase's actual data model — `storage.objects.bucket_id` carries the bucket, `name` is the inside-bucket path, so the parse index is `[1]` not `[2]` and the CHECK constraint drops the `'battery-run-photos/'` prefix; authenticated DELETE policy removed (photos are write-once; cleanup is service-role only); `photo_upload_queue.artifact_id` made a real `references battery_run_artifacts(id) on delete cascade` FK; last stale "*To Be Continued*" reference in this briefing cleaned up.
 

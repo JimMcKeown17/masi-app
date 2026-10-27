@@ -68,7 +68,14 @@ stop and the practice items), used word for word by WelaPLUS, Full EGRA and the 
 | Language | Letters | Words, story, story questions |
 |---|---|---|
 | isiXhosa | `dbe-egra-xh-hl-3-v1`: 100 letters, 10 per row | `dbe-egra-xh-hl-1-v1`: 80 words, 8 per row; 53-word story; 5 questions |
-| English | `dbe-egra-en-hl-3-v1`: 100 letters, 10 per row | `dbe-egra-en-hl-1-v1` (**Home Language**): 80 words, 8 per row; 111-word story; 5 questions |
+| English | `dbe-egra-en-fal-3-v1`: 100 letters, 10 per row (amended 2026-10-27, below) | `dbe-egra-en-hl-1-v1` (**Home Language**): 80 words, 8 per row; 111-word story; 5 questions |
+
+> **Amended 2026-10-27 (Jim, after the EGRA session's review):** English letters use DBE English
+> **FAL** Assessment 3, not Home Language 3. HL 3 never asks q, v, x or z, and Letter mastery reads
+> the latest letter result, so an English child's tracker would have dropped to 22 of 26. FAL 3 has
+> all 26 in 100 letters, rows of 10, with practice items `d h v`. isiZulu's SMRS chart has no `r`
+> (rare in isiZulu) and stays as printed. Changed in place at 2026.3: nothing was printed and no
+> field results existed.
 | Afrikaans | `dbe-egra-af-hl-3-v1`: 100 letters, 10 per row | `dbe-egra-af-hl-1-v1`: 80 words, 8 per row; 64-word story; 5 questions |
 | isiZulu | `smrs-egra-zu-1-v1`: 110 letters, 10 per row | `smrs-egra-zu-1-v1`: 50 words, 5 per row; 43-word story; 5 questions |
 
@@ -213,7 +220,9 @@ A run resumed later shows the same row labels.
 - **The 13 forms** stop being offered for new assessments. Unfinished ones can still be resumed and
   finalized, and saved results stay readable with their own versions, including `-masi60` letter
   sets. `letterExtensions.ts` stays only as long as reading those old results needs it; the EGRA
-  session decides how to retire it.
+  session decides how to retire it. *Corrected 2026-10-27 (EGRA review):* saved results keep their
+  own letter prompts and read without it; only finishing an unfinished old Grade 1 assessment
+  needs it. *Amended 2026-10-27:* new runs now resolve any old form to `egra@2026.1` in code (#111).
 
 ## 6. The quick tests
 

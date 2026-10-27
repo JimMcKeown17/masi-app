@@ -291,11 +291,13 @@ is correct.
   membership in an active-Programme assigned class, not a delivery assignment or child Programme
   enrollment. Assessing never adds a child to delivery lists or counts.
 - Language comes from the chosen membership's class `home_language`: English (`en`),
-  isiXhosa (`xh`) or Afrikaans (`af`). When missing or unsupported, the EA picks from the languages
+  isiXhosa (`xh`), Afrikaans (`af`) or isiZulu (`zu`) for the quick tests and Full EGRA; WelaPLUS
+  2026.1 offers English and isiXhosa. When missing or unsupported, the EA picks from the languages
   that have an item set, with nothing preselected and never English by default.
-- Step-by-step capture only; the stop rule comes from the item set.
-- Preserve wall-clock-accurate timing, background pause/resume, hard stop, and last-attempted
-  confirmation.
+- Step-by-step capture only; the stop rule comes from the item set (the whole first row wrong on
+  the 2026.3 reading content). The position the EA reached is the last attempted item; there is
+  no separate confirmation.
+- Preserve wall-clock-accurate timing, background pause/resume and hard stop.
 - Store parent assessment and item evidence atomically before navigation.
 - Hydrate authorized current-academic-year class results, including co-EA results, for child
   results and assessment coverage. Assessment History's list retains its signed-in-EA recorder
@@ -380,9 +382,11 @@ cross-layer architecture change, not a UI-only port.
 
 The active PRD is
 [`documentation/wela-plus-battery-prd-2026.md`](documentation/wela-plus-battery-prd-2026.md).
-Question components are on `main` under `src/assessment-questions/` but are not yet wired into the
-app. Host schema, sync, Run lifecycle, package publication, content, calibration, and field
-validation remain open.
+The Question components under `src/assessment-questions/` are wired into the app: the Battery Run
+host (PR #101), Full EGRA (#104), step-by-step marking (#107), and WelaPLUS 2026.1 on the shared
+reading content with skip rules (#108). Host schema, sync and the Run lifecycle are built. Device
+acceptance on the iPhone, package publication, printed materials, calibration and field validation
+remain open (`documentation/ROADMAP.md` §8).
 
 ### 7.4 Head Office importer
 

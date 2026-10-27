@@ -10,13 +10,26 @@ import { colors, spacing, shadows } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { STANDALONE_TESTS } from '../../utils/assessmentRegistry';
+import { getScoreBand } from '../../utils/scoreBands';
+import { bundledItemSetFor } from '../../assessment-questions';
 
-function getFeedback(accuracy) {
-  if (accuracy >= 90) return { message: 'Excellent work!', color: colors.success };
-  if (accuracy >= 75) return { message: 'Great job!', color: colors.success };
-  if (accuracy >= 60) return { message: 'Good effort!', color: colors.primary };
-  if (accuracy >= 40) return { message: 'Nice try!', color: colors.accent };
-  return { message: 'Keep practicing!', color: colors.primary, graphicColor: colors.emphasis };
+// Praise follows the pedagogy score band for how many the child read correctly, not
+// accuracy over the few items read: one word right in 60 seconds is not "Excellent".
+// A test or grade with no configured band gets no praise, like its neutral ranking.
+const FEEDBACK = {
+  great: { message: 'Excellent work!', color: colors.success },
+  good: { message: 'Great job!', color: colors.success },
+  okay: { message: 'Good effort!', color: colors.primary },
+  needs_work: { message: 'Keep practicing!', color: colors.primary, graphicColor: colors.emphasis },
+  unknown: { message: null, color: colors.text },
+};
+
+function stopReasonText(assessment) {
+  const set = bundledItemSetFor(assessment.question_code, assessment.question_version, assessment.language);
+  const rule = set?.stop_rule;
+  if (rule?.kind === 'first_row_all_wrong') return 'Stopped: the whole first row was wrong';
+  if (rule?.kind === 'consecutive_wrong') return `Stopped: ${rule.stop_at} in a row wrong`;
+  return 'Stopped early';
 }
 
 export default function AssessmentResultsScreen({ navigation, route }) {
@@ -60,7 +73,9 @@ export default function AssessmentResultsScreen({ navigation, route }) {
   const attempted = assessment.derived.total_attempted ?? assessment.items.filter(item => item.metadata?.reached !== false).length;
   const accuracy = assessment.derived.percent ?? (attempted ? assessment.score / attempted * 100 : 0);
   const incorrect = attempted - assessment.score;
-  const feedback = getFeedback(accuracy);
+  const feedback = FEEDBACK[getScoreBand({
+    toolCode: assessment.question_code, grade: child.grade, language: assessment.language, rawScore: assessment.score,
+  })];
   const testTitle = STANDALONE_TESTS.find(test => test.code === testCode)?.title;
 
   return (
@@ -84,14 +99,16 @@ export default function AssessmentResultsScreen({ navigation, route }) {
               {assessment.score} / {assessment.total_items}
             </Text>
           </View>
-          <Text variant="headlineSmall" style={[styles.feedbackText, { color: feedback.color }]}>
-            {feedback.message}
-          </Text>
+          {feedback.message && (
+            <Text variant="headlineSmall" style={[styles.feedbackText, { color: feedback.color }]}>
+              {feedback.message}
+            </Text>
+          )}
           <Text variant="bodyMedium" style={styles.accuracyText}>
-            {Math.round(accuracy)}% correct
+            {Math.round(accuracy)}% of attempted correct
           </Text>
           {assessment.stopped_reason === 'stop_rule' && (
-            <Text variant="bodyMedium" style={styles.stopReason}>Stopped: 10 in a row wrong</Text>
+            <Text variant="bodyMedium" style={styles.stopReason}>{stopReasonText(assessment)}</Text>
           )}
           <Text variant="bodyMedium" style={styles.timeText}>
             Completed in {Math.round((assessment.duration_ms ?? 0) / 1000)}s

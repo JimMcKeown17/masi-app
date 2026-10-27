@@ -1,5 +1,10 @@
 # Device Gates: SQLite Backend (Sprints 1 to 4)
 
+> **Status 2026-10-27:** some checks below describe the app as it was in July. Letter Sounds is now
+> a 100-letter chart (110 in isiZulu) that stops when the whole first row is wrong, so D1 and P2
+> mean "a full Letter Sounds test", not 60 letters. Capture is step by step only, so D4's grid
+> versus sequential choice no longer exists. Device gates run at default text size (Jim, 2026-10-27).
+
 **For:** Jim, on a real device (ideally one low-end Android plus one iPhone).
 **Why:** Sprints 1 to 4 rewrote the local storage layer, the pull path, and the sync scheduler. Everything is green in tests, but tests cannot model two SQLite connections, a real network, a real GPS chip, or a force-quit. This is the list that turns "tests pass" into "it works."
 **Time:** about 45 minutes for the core list, plus one two-device scenario.
