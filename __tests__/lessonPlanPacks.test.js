@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { BUNDLED_PACKS, CURRENT_PACK_IDS, PACK_LANGUAGE_CODES, getPack, getPackById, lintMasiPack, createPackRegistry }
+import { BUNDLED_PACKS, CURRENT_PACK_IDS, PACK_LANGUAGE_CODES, getPack, getPackById, getPackForOrder, packLetterOrderId, lintMasiPack, createPackRegistry }
   from '../src/lessonPlan/packs';
-import { LANGUAGE_LABELS, PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../src/utils/assessmentRegistry';
+import { LANGUAGE_LABELS, languageCodeForHomeLanguage } from '../src/utils/assessmentRegistry';
+
+import { resolveTeachingOrder, MASI_LETTER_ORDER_EDITIONS } from '../src/utils/letterOrders';
 
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const order = pack => pack.letter_steps.flatMap(s => s.new_letters).join(' ');
@@ -15,6 +17,9 @@ const RELEASE_PACK_SHA256 = {
   'isixhosa-interim-letters-v1': 'caec3389cfed036043ca9421d6980642305bff2df5c9e36a7a11e871ffc379d7',
   'english-interim-letters-v1': '1888157690b4df907d572484a2bbb469e11812cddb8b99b838e8f61a51b8dfc2',
   'afrikaans-interim-letters-v1': '453c0e2b4954496b78e137b4f945f56666fa7f41e5427c145a94a00129383cda',
+  'isixhosa-interim-letters-v2': '45e0d71f045124572058e24d6d065e26754cacd6baa370220f9d6851fd4980c7',
+  'english-interim-letters-v2': '54a73d3ccc783136565db39eb6baae4274db991debf694b907faa35eaaf3ae49',
+  'afrikaans-interim-letters-v2': '92d837fde5fd89c7703fb65980fe05aab2af8dbbda23b47938200779213b3b16',
 };
 
 test.each([
@@ -35,12 +40,111 @@ test.each([
   expect([pack.word_bank, pack.readers, pack.reader_details, pack.sound_steps]).toEqual([[], {}, {}, []]);
 });
 
-test('current release ids', () => {
-  expect(CURRENT_PACK_IDS.release).toEqual({ xh: 'isixhosa-interim-letters-v1', en: 'english-interim-letters-v1', af: 'afrikaans-interim-letters-v1' });
+const PREVIEW_PACK_SHA256 = {
+  'isixhosa-candidates-preview-v2': '7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366',
+  'english-candidates-preview-v1': 'e430d4887104a04db6295bfd407891c3b0a4911c6ba99ab1d243684613364abd',
+  'afrikaans-candidates-preview-v1': '76d4aec38b0bd8748bd9bdfd9e9aaa0df3bbaae3c3671d0c4086977cbe800ba7',
+};
+
+test('current packs are selected by letter order', () => {
+  expect(CURRENT_PACK_IDS).toEqual({
+    release: {
+      'isixhosa-order-2026-10-23': 'isixhosa-interim-letters-v2',
+      'english-order-2026-10-23': 'english-interim-letters-v2',
+      'afrikaans-order-2026-10-23': 'afrikaans-interim-letters-v2',
+    },
+    preview: {
+      'isixhosa-order-2026-10-23': 'isixhosa-candidates-preview-v2',
+      'english-order-2026-10-23': 'english-candidates-preview-v1',
+      'afrikaans-order-2026-10-23': 'afrikaans-candidates-preview-v1',
+    },
+  });
+});
+
+test.each([['xh', 'isixhosa'], ['en', 'english'], ['af', 'afrikaans']])(
+  'the %s v2 release pack teaches the new edition order, letters only', (code, name) => {
+    const teachingOrder = resolveTeachingOrder('2026-10-23', code);
+    const pack = getPackById(`${name}-interim-letters-v2`);
+    expect(pack).toMatchObject({ language: name, channel: 'release', letter_order: teachingOrder.id });
+    expect(order(pack)).toBe(teachingOrder.letters.join(' '));
+    expect(pack.sound_inventory).toEqual([...'abcdefghijklmnopqrstuvwxyz']);
+    expect(pack.letter_steps.map(step => step.step)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(pack.letter_steps.map(step => step.new_letters.length)).toEqual([4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]);
+    for (const step of pack.letter_steps) {
+      expect([step.blends, step.words, step.readers]).toEqual([[], [], []]);
+      expect(has(step, 'size_exception')).toBe(false);
+    }
+    expect([pack.sound_steps, pack.readers, pack.word_bank, pack.reader_details]).toEqual([[], {}, [], {}]);
+  }
+);
+
+test.each(Object.entries(PREVIEW_PACK_SHA256))('preview %s matches the books export byte for byte', (id, hash) => {
+  // books 6cd5e64 exports/app-preview
+  const bytes = fs.readFileSync(path.join(packsFolder, `${id}.json`));
+  expect(crypto.createHash('sha256').update(bytes).digest('hex')).toBe(hash);
+});
+
+test('every Masi edition and supported language has a matching release pack', () => {
+  for (const edition of MASI_LETTER_ORDER_EDITIONS) for (const code of ['xh', 'en', 'af']) {
+    const teachingOrder = resolveTeachingOrder(edition, code);
+    const pack = getPackForOrder(teachingOrder.id);
+    expect(pack).not.toBeNull();
+    expect(pack.channel).toBe('release');
+    expect(packLetterOrderId(pack)).toBe(teachingOrder.id);
+  }
+});
+
+test.each(['isixhosa-interim-letters-v1', 'english-interim-letters-v1', 'afrikaans-interim-letters-v1',
+  'isixhosa-candidates-preview-v1'])('retained pack %s still resolves by id', id => {
+  expect(getPackById(id, { allowPreview: true })).toMatchObject({ id });
+});
+
+test('a legacy order has no current pack', () => {
+  expect(getPackForOrder('english-order-legacy')).toBeNull();
+});
+
+test.each([['isixhosa', 2], ['english', 1], ['afrikaans', 1]])(
+  '%s previews require explicit permission on order and id lookups', (name, version) => {
+    const orderId = `${name}-order-2026-10-23`;
+    const previewId = `${name}-candidates-preview-v${version}`;
+    const release = getPackById(`${name}-interim-letters-v2`);
+    for (const options of [undefined, null, { allowPreview: false }, { allowPreview: 'yes' }, { allowPreview: 1 }]) {
+      expect(getPackForOrder(orderId, options)).toBe(release);
+      expect(getPackById(previewId, options)).toBeNull();
+    }
+    expect(getPackForOrder(orderId, { allowPreview: true })).toBe(getPackById(previewId, { allowPreview: true }));
+    expect(getPackForOrder(orderId, { allowPreview: true })).toMatchObject({ id: previewId, channel: 'preview' });
+  }
+);
+
+test('pack letter order ids use the explicit field before the frozen legacy mapping', () => {
+  const { LEGACY_PACK_LETTER_ORDERS } = require('../src/lessonPlan/packs/packLetterOrder');
+  expect(LEGACY_PACK_LETTER_ORDERS).toEqual({
+    'isixhosa-interim-letters-v1': 'isixhosa-order-2026-10-18',
+    'isixhosa-candidates-preview-v1': 'isixhosa-order-2026-10-18',
+    'english-interim-letters-v1': 'english-order-legacy',
+    'afrikaans-interim-letters-v1': 'afrikaans-order-legacy',
+  });
+  expect(Object.isFrozen(LEGACY_PACK_LETTER_ORDERS)).toBe(true);
+  expect(packLetterOrderId({ id: 'english-interim-letters-v1' })).toBe('english-order-legacy');
+  expect(packLetterOrderId({ id: 'english-interim-letters-v1', letter_order: 'english-order-2026-10-23' }))
+    .toBe('english-order-2026-10-23');
+  for (const pack of [null, undefined, {}, { id: 'constructor' }, { id: '__proto__' }]) {
+    expect(packLetterOrderId(pack)).toBeNull();
+  }
+});
+
+test('registry construction rejects a current pack mapped under another order', () => {
+  const pack = getPackById('english-interim-letters-v1');
+  expect(() => createPackRegistry([pack], { release: { 'isixhosa-order-2026-10-23': pack.id }, preview: {} }))
+    .toThrow();
+});
+
+test.each([null, undefined, '', 'xh', 'constructor', '__proto__', 7, {}])('getPackForOrder(%p) is null', id => {
+  expect(getPackForOrder(id)).toBeNull();
 });
 
 test('isiXhosa preview pack: developer builds only, same letter order as the release pack', () => {
-  expect(CURRENT_PACK_IDS.preview).toEqual({ xh: 'isixhosa-candidates-preview-v1' });
   expect(getPack('xh').id).toBe('isixhosa-interim-letters-v1');
   expect(getPack('xh', { allowPreview: true }).id).toBe('isixhosa-candidates-preview-v1');
   expect(getPackById('isixhosa-candidates-preview-v1')).toBeNull();
@@ -56,13 +160,6 @@ test('pack language names resolve like class languages in the assessment registr
   // 'afrikaans' resolves to null until track AF adds 'af' to the registry, and then it must resolve to 'af'.
   for (const [name, code] of Object.entries(PACK_LANGUAGE_CODES)) {
     expect(languageCodeForHomeLanguage(name)).toBe(has(LANGUAGE_LABELS, code) ? code : null);
-  }
-});
-
-test("every registry tracker order except isiXhosa's is its interim pack's order", () => {
-  // isiXhosa moves to the books' order (J1) when A2 switches the tracker to packs.
-  for (const [code, letters] of Object.entries(PEDAGOGICAL_ORDERS).filter(([c]) => c !== 'xh')) {
-    expect(getPack(code)?.letter_steps.flatMap(s => s.new_letters)).toEqual([...letters]);
   }
 });
 
@@ -89,12 +186,12 @@ test('released packs are immutable and never removed', () => {
   }
 });
 
-test('every current id resolves to a bundled pack of that code and channel', () => {
+test('every current id resolves to a bundled pack of that order and channel', () => {
   for (const [channel, ids] of Object.entries(CURRENT_PACK_IDS)) {
-    for (const [code, id] of Object.entries(ids)) {
+    for (const [orderId, id] of Object.entries(ids)) {
       const pack = getPackById(id, { allowPreview: true });
       expect(BUNDLED_PACKS).toContain(pack);
-      expect(PACK_LANGUAGE_CODES[pack.language]).toBe(code);
+      expect(packLetterOrderId(pack)).toBe(orderId);
       expect(pack.channel).toBe(channel);
       if (channel === 'release') expect(getPackById(id)).toBe(pack);
     }
@@ -129,21 +226,21 @@ test('getPackById resolves every bundled release pack', () => {
   }
 });
 
-test('getPack resolves the explicitly current release id for each language', () => {
-  for (const [code, id] of Object.entries(CURRENT_PACK_IDS.release)) {
+test('getPack keeps the language selections used by existing lessons', () => {
+  for (const [code, id] of Object.entries({ xh: 'isixhosa-interim-letters-v1', en: 'english-interim-letters-v1', af: 'afrikaans-interim-letters-v1' })) {
     expect(getPack(code)).toBe(getPackById(id));
   }
 });
 
 test('a new current release keeps the old release resolvable and both versions frozen and unchanged', () => {
   const oldPack = JSON.parse(JSON.stringify(getPack('en')));
-  const newPack = { ...JSON.parse(JSON.stringify(oldPack)), id: 'english-interim-letters-v2' };
+  const newPack = { ...JSON.parse(JSON.stringify(oldPack)), id: 'english-interim-letters-v2', letter_order: 'english-order-legacy' };
   const before = JSON.parse(JSON.stringify([newPack, oldPack]));
   const registry = createPackRegistry([newPack, oldPack], {
-    release: { en: newPack.id }, preview: {},
+    release: { [newPack.letter_order]: newPack.id }, preview: {},
   });
 
-  expect(registry.getPack('en')).toBe(newPack);
+  expect(registry.getPackForOrder(newPack.letter_order)).toBe(newPack);
   expect(registry.getPackById(newPack.id)).toBe(newPack);
   expect(registry.getPackById(oldPack.id)).toBe(oldPack);
   expect(registry.BUNDLED_PACKS).toEqual([newPack, oldPack]);
@@ -154,7 +251,7 @@ test('a new current release keeps the old release resolvable and both versions f
     expect(() => pack.word_bank.push({ text: 'am', step: 1 })).toThrow(TypeError);
   }
   expect(registry.BUNDLED_PACKS).toEqual(before);
-  expect(registry.getPack('en')).toBe(newPack);
+  expect(registry.getPackForOrder(newPack.letter_order)).toBe(newPack);
   expect(registry.getPackById(oldPack.id)).toBe(oldPack);
 });
 
