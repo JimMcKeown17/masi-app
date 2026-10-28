@@ -30,6 +30,7 @@ function useTimeTrackingState() {
   const activeEntryRef = useRef(activeEntry);
   const userRef = useRef(user);
   const clockActionInFlight = useRef(false);
+  const signInRun = useRef(null);
   userRef.current = user;
 
   const setSignedInState = useCallback((value) => {
@@ -153,11 +154,11 @@ function useTimeTrackingState() {
     });
   }, []);
 
-  const handleSignIn = useCallback(async () => {
-    if (clockActionInFlight.current) return;
+  const signIn = useCallback(async () => {
+    if (clockActionInFlight.current) return false; // a clock-out is running
     if (isSignedInRef.current) {
       notify('Already clocked in. Please clock out first.', 'neutral');
-      return;
+      return true;
     }
 
     clockActionInFlight.current = true;
@@ -166,7 +167,7 @@ function useTimeTrackingState() {
       const locationResult = await getCurrentPosition();
       if (locationResult.cancelled) {
         notify('Return from Settings and tap Clock In again, or continue without location.', 'neutral');
-        return;
+        return false;
       }
 
       const { latitude = null, longitude = null } = locationResult.coords || {};
@@ -193,15 +194,17 @@ function useTimeTrackingState() {
       notify(locationStatus === 'fix'
         ? `Clocked in at ${formatTime(timeEntry.sign_in_time)}`
         : `Clocked in without location (${reasons[locationStatus]}).`, locationStatus === 'fix' ? 'success' : 'neutral');
+      return true;
     } catch (error) {
-      if (isStaleActorError(error)) return;
+      if (isStaleActorError(error)) return false;
       if (error?.code === OPEN_TIME_ENTRY_EXISTS) {
         await loadActiveEntry();
         notify('Already clocked in. Please clock out first.', 'neutral');
-        return;
+        return isSignedInRef.current;
       }
       console.error('Error signing in:', error);
       notify('Failed to clock in. Please try again.', 'error');
+      return false;
     } finally {
       clockActionInFlight.current = false;
       setLoadingLocation(false);
@@ -210,6 +213,16 @@ function useTimeTrackingState() {
     timeEntriesRepository, refreshSyncStatus, triggerBackgroundSync, notify, formatTime,
     loadActiveEntry, setActiveEntryState, setSignedInState,
   ]);
+
+  // Resolves true when an open shift exists after the call; false when clock-in did not complete.
+  // A tap while a clock-in is still running joins it and gets its result, so "still running" is
+  // never reported as "did not clock in".
+  const handleSignIn = useCallback(() => {
+    if (!signInRun.current) {
+      signInRun.current = signIn().finally(() => { signInRun.current = null; });
+    }
+    return signInRun.current;
+  }, [signIn]);
 
   // Resolves true whenever no open shift remains, including a close by the watchdog
   // or another path. False means clock-out did not complete (busy, cancelled, or failed).

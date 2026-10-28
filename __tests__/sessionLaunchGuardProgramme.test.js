@@ -4,6 +4,9 @@ import { useSessionLaunchGuard } from '../src/hooks/useSessionLaunchGuard';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
 import { getClockInStatusForUser, CLOCK_IN_STATUS } from '../src/utils/timeEntryStatus';
 
+const mockHandleSignIn = jest.fn();
+jest.mock('../src/context/TimeTrackingContext', () => ({ useTimeTracking: () => ({ handleSignIn: mockHandleSignIn }) }));
+
 jest.mock('../src/services/activeProgrammeGate', () => ({
   getActiveProgrammeGate: jest.fn(),
 }));
@@ -50,4 +53,26 @@ describe('useSessionLaunchGuard — programme gate (covers every launch entry po
     expect(navigate).toHaveBeenCalledWith('SessionForm');
     expect(alertSpy).not.toHaveBeenCalled();
   });
+});
+
+test('clock-in captures the requested params and ignores a competing continue-anyway call', async () => {
+  const navigate = jest.fn();
+  let resolveClockIn;
+  mockHandleSignIn.mockReturnValue(new Promise(resolve => { resolveClockIn = resolve; }));
+  getActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: true });
+  getClockInStatusForUser.mockResolvedValue(CLOCK_IN_STATUS.NOT_CLOCKED_IN);
+  const { result } = renderHook(() => useSessionLaunchGuard({ navigation: { navigate }, userId: 'ea-1' }));
+  const params = { groupId: 'group-1' };
+  await act(async () => { await result.current.requestSessionLaunch(params); });
+  let first, duplicate;
+  act(() => {
+    first = result.current.clockInNow();
+    duplicate = result.current.clockInNow();
+    result.current.continueAnyway();
+  });
+  expect(mockHandleSignIn).toHaveBeenCalledTimes(1);
+  expect(navigate).not.toHaveBeenCalled();
+  await act(async () => { resolveClockIn(true); await Promise.all([first, duplicate]); });
+  expect(navigate).toHaveBeenCalledTimes(1);
+  expect(navigate).toHaveBeenCalledWith('SessionForm', params);
 });

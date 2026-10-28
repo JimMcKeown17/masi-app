@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native-paper';
 
-export function formatElapsedTime(milliseconds, { showSeconds = true } = {}) {
+export function formatElapsedTime(milliseconds) {
   const hours = Math.floor(milliseconds / (1000 * 60 * 60));
   const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
   const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
-  return showSeconds ? `${hours}h ${minutes}m ${seconds}s` : `${hours}h ${minutes}m`;
+  return `${hours}h ${minutes}m ${seconds}s`;
 }
 
 /**
@@ -13,7 +13,7 @@ export function formatElapsedTime(milliseconds, { showSeconds = true } = {}) {
  * the time-tracking context and every screen consuming it stays still while
  * the EA is clocked in all day.
  */
-export default function ElapsedTime({ signInTime, style, variant, showSeconds = true, maxFontSizeMultiplier }) {
+export default function ElapsedTime({ signInTime, style, variant, maxFontSizeMultiplier }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function ElapsedTime({ signInTime, style, variant, showSeconds = 
   const elapsed = Math.max(0, now - new Date(signInTime).getTime());
   return (
     <Text variant={variant} style={style} maxFontSizeMultiplier={maxFontSizeMultiplier}>
-      {formatElapsedTime(elapsed, { showSeconds })}
+      {formatElapsedTime(elapsed)}
     </Text>
   );
 }

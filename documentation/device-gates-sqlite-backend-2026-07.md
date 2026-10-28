@@ -30,7 +30,7 @@
 - [ ] **B1. Clock in indoors** (concrete building, poor GPS). The button must **not** spin forever. Within about 10 seconds it either records a location or records the entry **without** a location. *(Sprint 1: the "10s GPS timeout" previously did not exist.)*
 - [ ] **B2. Clock out** in the same conditions. Same expectation. The shift must close.
 - [ ] **B3. Deny location permission permanently**, then clock in. You should get a path to Settings, not a repeating alert loop.
-- [ ] **B4. Clock in via the centre Record action > "Clock in now"**, then go back to Home. Home must show "On the clock" with a running elapsed time, and there must be exactly one open entry.
+- [ ] **B4. Clock in via the centre Record action > "Clock in now".** The button shows "Clocking in…", then Record's first screen opens directly ("Who are you teaching?" for literacy), including after a GPS timeout. There must be exactly one open entry. On returning to Home, the row shows "On the clock" + "Since HH:MM".
 
 ## C. Session capture (the highest-traffic flow)
 
@@ -200,7 +200,7 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 
 ## K. Record-without-clock-in decision sheet
 
-- [ ] **K1.** Without clocking in, tap the centre Record action from Home and from one other tab. A bottom sheet must say "You are not clocked in.", offer "Clock in now", explain that recording without clocking in means the hours will not be counted, offer "Record without clocking in", and allow Cancel/backdrop dismissal. The escape hatch stays live because GPS can fail in the field.
+- [ ] **K1.** Without clocking in, tap the centre Record action from Home and from one other tab. A bottom sheet must say "You are not clocked in.", offer primary "Clock in now", plain secondary "Record without clocking in", and ink tertiary Cancel, with no cost warning note. "Clock in now" shows "Clocking in…" and disables the escape hatch, then opens Record's first screen on success (the same screen as Record when already clocked in). An incomplete clock-in leaves the sheet open for retry. Cancel, backdrop, and Android back stay usable while clocking in; a later success still clocks in and toasts, but must not navigate or reopen the sheet.
 
 ## L. Assessment capture chrome
 
@@ -212,7 +212,7 @@ Open each one, confirm it looks like a sheet, has the same options, and produces
 ## S. Locked Home and five-slot navigation (2026-07-22)
 
 - [ ] **S1. Home, clocked out.** Compare against `design/mockups-2026-07-c/04-locked/preview.png`. Confirm the charcoal status hero, greeting, Programme and school, full sync label, "Not clocked in" pill, 0/target half gauge, and "Clock in to start your day." fit without clipping.
-- [ ] **S2. Home, clocked in.** Confirm the pill changes to "On the clock" with a live elapsed time and Clock Out. The R3 half gauge and status copy must remain aligned at 0, 1, target, and above ceiling.
+- [ ] **S2. Home, clocked in.** Confirm the clock row shows "On the clock" + "Since HH:MM" and Clock Out. The row remains 64dp at normal text sizes and stacks above font scale 1.3. The R3 half gauge and status copy must remain aligned at 0, 1, target, and above ceiling.
 - [ ] **S3. Body truth.** Confirm Home shows at most three "Who to see next" children, Monday to Friday counts, current-month assessment coverage, and the two newest signed-in-EA sessions. "View all" opens Session History and the coverage row opens Assess.
 - [ ] **S4. Navigation geometry.** On iPhone and low-end Android, confirm exactly five visual slots in this order: Home, Children, Record, Insights, Assess. The centre Record button must sit above the bar without clipping or colliding with the home indicator. It is a command, never a selected destination.
 - [ ] **S5. Insights.** Open all three cards and confirm Letter Mastery, Assessment Scores, and Session Count reach their existing ranking screens. Back navigation must return to Insights with the bottom bar intact.

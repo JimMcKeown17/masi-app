@@ -65,6 +65,7 @@ module.exports = {
     '<rootDir>/__tests__/homeAttentionStore.integration.test.js',
     '<rootDir>/__tests__/useTimeTracking.integration.test.js',
     '<rootDir>/__tests__/locationUnavailableClock.integration.test.js',
+    '<rootDir>/__tests__/oneTapClockIn.integration.test.js',
     '<rootDir>/__tests__/timeEntryLocationMigration.test.js',
     '<rootDir>/__tests__/sessionGroupHistoryReferenceMigration.test.js',
     '<rootDir>/__tests__/referenceDataRepository.test.js',

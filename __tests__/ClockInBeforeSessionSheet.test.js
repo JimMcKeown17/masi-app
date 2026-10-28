@@ -1,12 +1,11 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { colors, tints } from '../src/constants/colors';
-import InlineNote from '../src/components/common/InlineNote';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import ClockInBeforeSessionSheet from '../src/components/sessions/ClockInBeforeSessionSheet';
 
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 
 describe('ClockInBeforeSessionSheet', () => {
   test('presents the locked clock-in warning as a bottom sheet with both escape paths', () => {
@@ -24,10 +23,7 @@ describe('ClockInBeforeSessionSheet', () => {
     );
 
     expect(screen.getByText('You are not clocked in.')).toBeTruthy();
-    expect(screen.getByText(
-      'If you record without clocking in, your hours for this session will not be counted. '
-      + 'Only do this if your GPS will not lock.'
-    )).toBeTruthy();
+    expect(screen.queryByText(/If you record without clocking in/)).toBeNull();
     fireEvent.press(screen.getByText('Clock in now'));
     fireEvent.press(screen.getByText('Record without clocking in'));
     expect(onClockInNow).toHaveBeenCalledTimes(1);
@@ -35,13 +31,26 @@ describe('ClockInBeforeSessionSheet', () => {
   });
 });
 
-test('Cancel dismisses and the D8 warning uses the shared note and warning button', () => {
+test('Cancel dismisses and the escape hatch is a plain secondary button', () => {
   const onDismiss = jest.fn();
   const sheet = render(<PaperProvider><ClockInBeforeSessionSheet visible onDismiss={onDismiss} /></PaperProvider>);
   fireEvent.press(sheet.getByRole('button', { name: 'Cancel' }));
   expect(onDismiss).toHaveBeenCalledTimes(1);
-  const note = sheet.UNSAFE_getByType(InlineNote);
-  expect(note.props).toMatchObject({ tone: 'warning', size: 'md' });
-  expect(note.findAllByType(View).some((node) => StyleSheet.flatten(node.props.style)?.backgroundColor === colors.warningBg)).toBe(true);
-  expect(StyleSheet.flatten(sheet.getByRole('button', { name: 'Record without clocking in' }).props.style)).toMatchObject({ backgroundColor: colors.warningBg, borderColor: tints.warningControl, borderWidth: 1.5 });
+  expect(sheet.queryByText(/If you record without clocking in/)).toBeNull();
+  expect(sheet.UNSAFE_queryAllByType('Ionicons').some(node => node.props.name === 'warning-outline')).toBe(false);
+  expect(StyleSheet.flatten(sheet.getByRole('button', { name: 'Record without clocking in' }).props.style)).toMatchObject({ backgroundColor: colors.surface, borderColor: tints.control, borderWidth: 1.5 });
+});
+
+test('clocking in reports busy, disables the escape hatch, and keeps Cancel enabled', () => {
+  const onDismiss = jest.fn();
+  const onContinueAnyway = jest.fn();
+  const sheet = render(<PaperProvider><ClockInBeforeSessionSheet visible clockingIn onDismiss={onDismiss} onContinueAnyway={onContinueAnyway} /></PaperProvider>);
+  expect(sheet.getByRole('button', { name: 'Clocking in…' }).props.accessibilityState).toEqual({ busy: true, disabled: true });
+  const escape = sheet.getByRole('button', { name: 'Record without clocking in' });
+  expect(escape.props.accessibilityState.disabled).toBe(true);
+  fireEvent.press(escape);
+  expect(onContinueAnyway).not.toHaveBeenCalled();
+  expect(sheet.getByRole('button', { name: 'Cancel' }).props.accessibilityState.disabled).toBe(false);
+  fireEvent.press(sheet.getByRole('button', { name: 'Cancel' }));
+  expect(onDismiss).toHaveBeenCalledTimes(1);
 });

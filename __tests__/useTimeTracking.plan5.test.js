@@ -76,7 +76,7 @@ describe('useTimeTracking Plan 5 behavior', () => {
     await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledWith('user-1'));
 
     await act(async () => {
-      await result.current.handleSignIn();
+      expect(await result.current.handleSignIn()).toBe(true);
     });
 
     expect(timeEntriesRepository.createOpenTimeEntry).toHaveBeenCalledWith(expect.objectContaining({
@@ -131,11 +131,90 @@ describe('useTimeTracking Plan 5 behavior', () => {
     await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      await result.current.handleSignIn();
+      expect(await result.current.handleSignIn()).toBe(true);
     });
 
     expect(result.current.isSignedIn).toBe(true);
     expect(result.current.activeEntry?.id).toBe('existing-entry');
+  });
+
+  test.each([
+    ['timeout', { status: 'timeout', coords: null }, true],
+    ['Settings hand-off', { cancelled: true }, false],
+  ])('clock-in resolves its completion result for %s', async (_reason, location, expected) => {
+    getCurrentPosition.mockResolvedValue(location);
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+    await act(async () => { expect(await result.current.handleSignIn()).toBe(expected); });
+    expect(result.current.isSignedIn).toBe(expected);
+    if (!expected) expect(timeEntriesRepository.createOpenTimeEntry).not.toHaveBeenCalled();
+  });
+
+  test('clock-in resolves false on a generic persistence failure', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    timeEntriesRepository.createOpenTimeEntry.mockRejectedValueOnce(new Error('write failed'));
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+    try {
+      await act(async () => { expect(await result.current.handleSignIn()).toBe(false); });
+      expect(result.current.isSignedIn).toBe(false);
+    } finally { errorSpy.mockRestore(); }
+  });
+
+  test('clock-in resolves true when already clocked in without another location capture', async () => {
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+    await act(async () => { expect(await result.current.handleSignIn()).toBe(true); });
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(timeEntriesRepository.createOpenTimeEntry).not.toHaveBeenCalled();
+  });
+
+  test('a tap while clock-in is still running joins it instead of reporting failure', async () => {
+    let resolveLocation;
+    getCurrentPosition.mockReturnValue(new Promise(resolve => { resolveLocation = resolve; }));
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+    let first;
+    let second;
+    act(() => {
+      first = result.current.handleSignIn();
+      second = result.current.handleSignIn();
+    });
+    await act(async () => {
+      resolveLocation({ status: 'fix', coords: { latitude: -34.1, longitude: 18.4 } });
+      expect(await first).toBe(true);
+      expect(await second).toBe(true);
+    });
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+    expect(timeEntriesRepository.createOpenTimeEntry).toHaveBeenCalledTimes(1);
+  });
+
+  test('clock-in started while a clock-out is running resolves false without capturing location', async () => {
+    timeEntriesRepository.getActiveTimeEntry.mockResolvedValue(openEntry);
+    let resolveLocation;
+    getCurrentPosition.mockReturnValue(new Promise(resolve => { resolveLocation = resolve; }));
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(result.current.isSignedIn).toBe(true));
+    let clockOut;
+    act(() => { clockOut = result.current.handleSignOut(); });
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalledTimes(1));
+    await act(async () => { expect(await result.current.handleSignIn()).toBe(false); });
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveLocation({ status: 'fix', coords: { latitude: -34.1, longitude: 18.4 } });
+      await clockOut;
+    });
+  });
+
+  test('clock-in resolves false for a stale actor', async () => {
+    const stale = new Error('signed out');
+    stale.name = 'StaleActorError';
+    timeEntriesRepository.createOpenTimeEntry.mockRejectedValueOnce(stale);
+    const { result } = renderHook(() => useTimeTracking(), { wrapper });
+    await waitFor(() => expect(timeEntriesRepository.getActiveTimeEntry).toHaveBeenCalledTimes(1));
+    await act(async () => { expect(await result.current.handleSignIn()).toBe(false); });
+    expect(result.current.isSignedIn).toBe(false);
   });
 
   test('clock-out with no open entry resets state without writing', async () => {

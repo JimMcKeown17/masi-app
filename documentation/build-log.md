@@ -7347,3 +7347,74 @@ exercised what the unit tests mock: "Back to Assess" selecting the Assess tab th
 write the Jest cache, so it ran those probes with caching off; the suites above ran normally here.
 Open: the native smoke check (Writing Sheet tick, rapid Finalize taps, Back from the summary,
 both footer buttons) on the next build.
+
+### 2026-10-25 — One-tap clock-in from the Record sheet (`fix/one-tap-clock-in`)
+
+Jim's field report: tapping Record while clocked out showed "You are not clocked in.", and
+"Clock in now" opened the Time tracking screen. The EA then had to tap Clock in, tap back, and
+tap Record again. Built by Codex (gpt-6.1-sol, high) from a Claude spec; Claude reviewed, fixed the
+review finding, and ran the device pass.
+
+#### Decision Register
+
+| Decision | Why |
+|---|---|
+| "Clock in now" clocks in on the sheet, shows "Clocking in…", then continues into Record: the same route as when already clocked in, so literacy EAs land on "Who are you teaching?" since #97 (Jim's choice) | The EA tapped Record to record. Zero extra taps. |
+| The amber cost note is gone; "Record without clocking in" stays, as a plain secondary button (Jim's choice) | Clock-in no longer waits on GPS (#65), so "only if your GPS will not lock" is obsolete. The escape hatch stays for recording after clocking out without opening a false shift. |
+| Home clocked-in row: "On the clock" headline (same style as "Not clocked in") + small "Since HH:MM" (Jim's choice) | Replaces the running elapsed time; the visible text now matches the row's existing accessibility label. |
+| `handleSignIn` resolves a boolean: true when a shift is open afterwards (with or without GPS), false when clock-in did not complete (Settings hand-off, failure, stale actor, clock-out running) | The sheet must tell a finished clock-in from a Settings hand-off. Mirrors `handleSignOut`. |
+| `handleSignIn` is single-flight: a call while a clock-in is running returns the same promise | Round-1 review (below). "Still running" must never be reported as "did not clock in". |
+| Cancel/backdrop/back/unmount during clock-in end the sheet's permission to navigate (attempt generation, as in `useSignOutFlow`); the clock-in itself still completes and toasts | The shift really started; only the jump to Record is withdrawn. |
+| `ElapsedTime`'s `showSeconds` option removed | Home was its only caller. |
+
+#### Review findings, dead ends and surprises
+
+- **Codex adversarial review round 1 (gpt-6-astra): needs-attention, one medium finding, accepted.**
+  Clock in now → Cancel → Record → Clock in now while GPS is still searching: the second call got
+  `false` (provider busy), the first attempt was no longer allowed to navigate, so the EA was
+  clocked in but left on "You are not clocked in." Root cause: `false` meant both "did not clock
+  in" and "a clock-in is running". Fix: single-flight `handleSignIn` (joins the running sign-in;
+  a running clock-out still resolves false). RED: new real-SQLite regression failed with no
+  navigation; GREEN after the fix. **Round 2: approve, no material findings.**
+- Unit test counts drift by exactly 2 between identical runs (Codex 5,697 vs Claude 5,695; after
+  the rebase, 7,101 vs 7,099). Cause, pre-existing on main: `productionBindingStatic.test.js`
+  writes a temporary `src/__binding_probe__.js`, and `designSystemGuard` / `noLegacyHues` each
+  generate one test per `src/` file at load time. When a parallel worker lists `src/` while the
+  probe exists, both suites gain a test. The same race could fail them if the probe is deleted
+  between listing and reading. Fix belongs in that test (write the probe to a temp dir).
+- After the rebase, one full unit run failed `LessonWrapUp.save.test.js` (new from #97, no
+  clock-in code). It passed alone (17/17) and on the next full run. Recorded as a load flake.
+- Device pass gotchas: Maestro needs Java 17 (`JAVA_HOME=/opt/homebrew/opt/openjdk@17/...`);
+  `takeScreenshot` writes under `~/.maestro/tests/<run>/`, not the cwd; iOS hides a Pressable's
+  inner text behind its `accessibilityLabel`, so selectors need the full label
+  (`"Not clocked in.*"`); point taps take integer percentages only. Metro does not serve a
+  `node_modules` symlinked from a sibling worktree; an APFS clone (`cp -cR`) works.
+- Changing the iOS text size while the app runs leaves stale text measurements (clipped
+  "On the clo", "Clock o"). After a relaunch both XXL (inline) and XXXL (stacked) render cleanly.
+  This matches the Android note in the capture-style entry above: host-wide, not this change.
+- Expo Go adds its own per-experience location prompt ("Experience needs permissions"); a real
+  build shows only the iOS prompt.
+
+#### Verification Register
+
+| Gate | Command / evidence | Result |
+|---|---|---|
+| Focused suites | 13 clock/guard/Home suites incl. new `oneTapClockIn.integration.test.js` (Node 20.19.4) | PASS |
+| Full unit (before rebase) | `npx jest --silent` | PASS 406 suites / 5,697 tests |
+| Integration (before rebase) | `npm run test:integration -- --silent` | PASS 77 suites / 941 tests |
+| Full unit, rebased on `dffe22c` | `npx jest --silent` | PASS 454 suites / 7,099 tests (one earlier run: 1 load flake, above) |
+| Integration, rebased on `dffe22c` | `npm run test:integration -- --silent` | PASS 88 suites / 1,219 tests |
+| Whitespace | `git diff --check` | clean |
+| iPhone 17 Pro simulator, Expo Go, SQLite staging, TEST_USER (Maestro) | Assess tab → Record → sheet (no warning note, plain escape hatch) → Clock in now → "Clocking in…" → New session + "Clocked in at 7:31 AM" toast; Home "On the clock" + "Since 07:31" | PASS |
+| Same, location permission revoked | Clock in now → app's Location Permission alert over the sheet → Continue without location → New session + "Clocked in without location (permission denied)." | PASS |
+| Same, simulated location cleared | Clock in now → Cancel → Record → Clock in now: the sheet reopened (first clock-in still running), the retry landed on New session with one success toast | PASS |
+| Home large text | XXL (≈1.24, inline) and XXXL (≈1.35, stacked) after relaunch | PASS, nothing clipped |
+| Simulator, rebased on `dffe22c` (2026-10-28) | Children tab → Record → sheet → Clock in now → "Who are you teaching?" + "Clocked in at 4:27 PM" toast. (Cold start after 3 days: a dev-only red banner from a pre-existing `AuthUnavailableError` in the reference-data refresh covered the tab bar until dismissed.) | PASS |
+| Physical devices (A03s, iPhone) | — | OPEN |
+
+#### Open hand-offs
+
+- Time format mismatch (pre-existing): toasts and the Time tracking screen use 12-hour
+  `formatTime` ("7:31 AM"); Home uses 24-hour `formatDisplayTime` ("07:31"). Now visible
+  back-to-back. Needs one app-wide choice.
+- No RLS, sync, schema or outbox change; `documentation/rls-sync-contract-map.md` untouched.

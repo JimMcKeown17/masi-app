@@ -2,7 +2,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import ElapsedTime from '../common/ElapsedTime';
 import { colors } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { formatDisplayTime } from '../../utils/localDate';
@@ -41,11 +40,11 @@ export default function HomeClockRow({
       >
         {tile}
         <View style={styles.statusCopy}>
-          <View style={styles.labelRow}>
-            <Text style={styles.label}>On the clock</Text>
-            <Ionicons name="chevron-forward" size={14} color={colors.red50} />
+          <View style={styles.headlineRow}>
+            <Text style={styles.statusStrong}>On the clock</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.red50} />
           </View>
-          <ElapsedTime signInTime={signInTime} showSeconds={false} style={styles.elapsed} />
+          <Text style={styles.since}>Since {formatDisplayTime(signInTime)}</Text>
         </View>
       </Pressable>
     );
@@ -108,9 +107,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.onDark, borderWidth: 2.5, borderColor: colors.red700,
   },
   statusCopy: { flexShrink: 1 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  label: { ...typeRoles.textLabel, color: colors.red50 },
-  elapsed: { ...typeRoles.displayCount, color: colors.onDark, fontVariant: ['tabular-nums'] },
+  headlineRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  since: { ...typeRoles.textCaption, color: colors.red50, fontVariant: ['tabular-nums'] },
   statusStrong: { ...typeRoles.textOptionSelected, color: colors.onDark, flexShrink: 1 },
   action: {
     minHeight: 44, minWidth: 106, paddingHorizontal: 18, borderRadius: 999,
