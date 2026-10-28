@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { v4 as uuid } from 'uuid';
 import { batteryFor, bundledItemSetFor, questionComponentFor } from '../../../assessment-questions';
 import MaterialsBlock from '../../../components/assessments/MaterialsBlock';
 import TestFrame from '../../../components/assessments/TestFrame';
+import TestSheet from '../../../components/assessments/TestSheet';
 import BrandButton from '../../../components/common/BrandButton';
-import BottomSheet from '../../../components/common/BottomSheet';
-import ConfirmSheet from '../../../components/common/ConfirmSheet';
 import InlineNote from '../../../components/common/InlineNote';
 import { colors, spacing } from '../../../constants/colors';
-import { typeRoles } from '../../../constants/typography';
 import { useAuth } from '../../../context/AuthContext';
 import { useOffline } from '../../../context/OfflineContext';
 import { useSignedInEA } from '../../../context/SignedInEAContext';
@@ -127,26 +125,26 @@ function QuestionHost({ data, navigation }) {
           childName={childName} allowSkip onStart={onStart} onComplete={onComplete} />
       </View>
     </>}
-    <BottomSheet visible={closed} title="This assessment is closed" dismissLabel="Dismiss closed assessment" onDismiss={close}
-      footer={<BrandButton label="Back to assessment" size="lg" onPress={close} />}>
-      <Text style={styles.body}>This answer can't be saved because the assessment is no longer open.</Text>
-    </BottomSheet>
-    <BottomSheet visible={!closed && guarded.saveError && !guarded.leaveSheet.visible}
-      title="Couldn't save — try again" dismissLabel="Dismiss save error" onDismiss={guarded.dismissSaveError}
-      footer={<BrandButton label="Try again" size="lg" onPress={guarded.retry} />}>
-      <Text style={styles.body}>Your result is still here. Try saving it again.</Text>
-    </BottomSheet>
-    <ConfirmSheet visible={guarded.leaveSheet.visible}
-      title={guarded.leaveSheet.hasResult ? "This result isn't saved yet." : 'End the test?'}
-      body={guarded.leaveSheet.hasResult ? 'Discard this result and leave the test?' : 'Leave without saving a result?'}
-      confirmLabel="Discard" cancelLabel={guarded.leaveSheet.hasResult ? 'Keep result' : 'Keep testing'}
+    <TestSheet visible={closed} testID="assessment-closed" title="This assessment is closed"
+      message="This answer can't be saved because the assessment is no longer open."
+      confirmLabel="Back to assessment" confirmTone="ink" onConfirm={close} onCancel={close} />
+    <TestSheet visible={!closed && guarded.saveError && !guarded.leaveSheet.visible} testID="save-error"
+      title="Couldn't save — try again" message="Your result is still here. Try saving it again."
+      confirmLabel="Try again" confirmTone="ink" onConfirm={guarded.retry}
+      cancelLabel="Not now" onCancel={guarded.dismissSaveError} />
+    <TestSheet visible={guarded.leaveSheet.visible} testID="leave-confirmation"
+      title="Leave without saving?"
+      message={guarded.leaveSheet.hasResult
+        ? `${firstName ? `${firstName}'s result` : 'This result'} isn't saved yet. If you leave now, it will be lost.`
+        : `${firstName ? `${firstName}'s answers` : 'The answers'} on this question won't be saved. Finished questions stay saved.`}
+      confirmLabel={guarded.leaveSheet.hasResult ? 'Discard result' : 'Discard answers'}
+      confirmTone="danger" cancelLabel={guarded.leaveSheet.hasResult ? 'Keep result' : 'Keep marking'}
       onConfirm={guarded.leaveSheet.onConfirm} onCancel={guarded.leaveSheet.onCancel} />
   </TestFrame>;
 }
 
 const styles = StyleSheet.create({
   question: { flex: 1 },
-  body: { ...typeRoles.textParagraph, color: colors.textSecondary },
   center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   message: { flex: 1, backgroundColor: colors.background, padding: spacing.md, gap: spacing.md },
 });

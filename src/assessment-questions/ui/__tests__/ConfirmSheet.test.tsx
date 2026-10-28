@@ -3,7 +3,8 @@ import { Modal, Platform, StyleSheet, View, type StyleProp, type ViewStyle } fro
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { tokens } from '../../theme/tokens';
-import { ConfirmSheet } from '../ConfirmSheet';
+import { ConfirmPanel, ConfirmSheet } from '../ConfirmSheet';
+import { ConfirmPanel as PublicConfirmPanel } from '../..';
 import { TextLink } from '../Button';
 import { UiText } from '../Text';
 
@@ -87,4 +88,25 @@ test('hardware Back on a stop card without onCancel does nothing', () => {
   act(() => r.UNSAFE_getByType(Modal).props.onRequestClose());
   expect(onConfirm).not.toHaveBeenCalled();
   expect(r.getByTestId('stop-card')).toBeTruthy();
+});
+
+test('ConfirmPanel is exported from the package root', () => { expect(PublicConfirmPanel).toBeDefined(); expect(PublicConfirmPanel).toBe(ConfirmPanel); });
+
+test.each(['ink', 'danger'] as const)('ConfirmPanel shares the native sheet panel, including %s tone and title ref', tone => {
+  const titleRef = React.createRef<import('react-native').Text>();
+  const props = { title: 'Finish?', message: 'One marked.', confirmLabel: 'Save', cancelLabel: 'Cancel', onConfirm: jest.fn(), onCancel: jest.fn(), confirmTone: tone };
+  const wrap = (child: React.ReactNode) => <SafeAreaInsetsContext.Provider value={{ top: 0, left: 0, right: 0, bottom: 34 }}>{child}</SafeAreaInsetsContext.Provider>;
+  const sheet = render(wrap(<ConfirmSheet testID="sheet" {...props}><TextLink label="Undo" onPress={jest.fn()} /></ConfirmSheet>));
+  expect(sheet.UNSAFE_getByType(ConfirmPanel)).toBeTruthy();
+  const panel = render(wrap(<ConfirmPanel {...props} titleRef={titleRef}><TextLink label="Undo" onPress={jest.fn()} /></ConfirmPanel>), { createNodeMock: () => ({}) });
+  expect(panel.UNSAFE_queryAllByType(Modal)).toHaveLength(0);
+  expect(panel.getByRole('header', { name: 'Finish?' })).toBeTruthy();
+  expect(panel.getByText('One marked.')).toHaveStyle({ color: tokens.color.ink });
+  expect(panel.getByRole('button', { name: 'Save' })).toHaveStyle({ backgroundColor: tone === 'danger' ? tokens.color.primary : tokens.color.ink });
+  expect(JSON.stringify(panel.toJSON())).toEqual(JSON.stringify(sheet.toJSON()?.children?.[0]?.children?.[0]));
+  expect(titleRef.current).not.toBeNull();
+  fireEvent.press(panel.getByText('Save'));
+  fireEvent.press(panel.getByText('Cancel'));
+  expect(props.onConfirm).toHaveBeenCalledTimes(1);
+  expect(props.onCancel).toHaveBeenCalledTimes(1);
 });

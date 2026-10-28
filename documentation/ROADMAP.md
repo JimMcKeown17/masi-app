@@ -967,8 +967,6 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
     360dp (`ListRow` subtitles wrap greedily; Android's `textBreakStrategy="balanced"` would fix it);
   - the create-class form offers no isiZulu home language (`HOME_LANGUAGES` lists isiXhosa,
     English and Afrikaans), so isiZulu classes need a data fix today;
-  - quick tests: "End this test?" saves while Back/✕ "End the test?" discards, one word apart
-    (issue #102, still open after #107);
   - rankings: bar width is score ÷ that result's own item count but rows sort by raw score, so
     mixing 60-, 100- and 110-letter cards (or 50- and 80-word cards) puts bars out of order;
   - the dev/preview Question Gallery still lists only the 13 old forms and WelaPLUS 2024.1.

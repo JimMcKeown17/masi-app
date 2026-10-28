@@ -18,14 +18,14 @@ export function toneColor(tone: Tone): string {
   }[tone];
 }
 
-export function UiText({ variant = 'body', tone = 'ink', align = 'left', style, ...props }: TextProps & {
+export const UiText = React.forwardRef<Text, TextProps & {
   variant?: Exclude<TextRole, 'content'>;
   tone?: Tone;
   align?: 'left' | 'center';
-}) {
+}>(function UiText({ variant = 'body', tone = 'ink', align = 'left', style, ...props }, ref) {
   const fonts = useAssessmentFonts();
-  return <Text {...props} style={[{ ...textStyle(variant, fonts), color: toneColor(tone), textAlign: align }, style]} />;
-}
+  return <Text ref={ref} {...props} style={[{ ...textStyle(variant, fonts), color: toneColor(tone), textAlign: align }, style]} />;
+});
 
 export function ContentText({ size, tone = 'ink', fit = false, style, ...props }: TextProps & {
   size: 'tileLetter' | 'tileWord' | 'promptCard' | 'markingWord' | 'story';

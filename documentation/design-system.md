@@ -945,14 +945,29 @@ with `noun` set to letter, word or question by
   **`All ${N} marked`**` · ${C} correct. Tap any ${noun} to change it.`
   Every marked item can still flip; grid page arrows browse all pages. Finish saves
   `completed`; Back clears the last mark and resumes marking. Timed review freezes reading
-  time at the last mark, and Back resumes the time remaining. Timer expiry saves immediately
-  with no review; a stop card retains Save result / Undo last mark.
+  time at the last mark, and Back resumes the time remaining. Timer expiry emits the result immediately
+  with no review (the host defers saving while a leave decision is open); a stop card retains Save result / Undo last mark.
 - **End sheet.** End question opens a bottom confirmation sheet titled **End this question?**.
   Its message is `${M} marked. The ${U} not marked won't count towards the score.` Confirm is
   **End question** in danger tone; cancel is **Keep marking**. Confirm saves `ea_ended` with
   the unmarked tail not reached and excluded from the score. In a Battery and in the gallery
   the link and confirm say **End question**; standalone quick tests say **End test**, with
   **End this test?** as the title. The sheet appears when the EA chooses to end early.
+- **Leave sheet.** Back, the iOS back gesture or ✕ during capture opens **Leave without saving?**.
+  Before a result exists, the message is `${firstName}'s answers on this question won't be saved.
+  Finished questions stay saved.` in a Battery, or `${firstName}'s answers on this test won't be
+  saved.` in a quick test. With no first name, start with `The answers on this …`.
+  Confirm is **Discard answers** in filled danger tone; cancel is **Keep marking**.
+  When a result exists but is unsaved, keep the same title and say `${firstName}'s result isn't
+  saved yet. If you leave now, it will be lost.` (no first name: `This result isn't saved yet.
+  If you leave now, it will be lost.`). Confirm is **Discard result** in filled danger tone;
+  cancel is **Keep result**. The End sheet saves and the leave sheet discards, so they must
+  never share a title. The leave decision comes first: if a Question completes (including
+  timer expiry) while this sheet is open, retain its first result without saving. **Keep result**
+  starts that save; **Discard result** leaves with no SQLite or outbox write. Back / ✕ / the iOS
+  back gesture during an in-flight save stays prevented without opening leave; success navigates,
+  and failure offers the save-error sheet. The native removal guard stays active until commit or
+  discard.
 
 The Story Writing rubric keeps its dimension chips and `ToggleBar`; it is the sole exception.
 
@@ -1015,14 +1030,30 @@ has a 1dp top border; bottom padding is `max(insets.bottom + 11, 16)` on Android
 `max(insets.bottom, 16)` on iOS. The host `TestFrame` owns only the top inset
 (`src/assessment-questions/ui/BottomBar.tsx:6`, `src/components/assessments/TestFrame.js:11`).
 
-Use the shared intro, bottom confirmation sheets and full-screen sheets. FullScreenSheet owns
-the modal top inset. `ConfirmSheet` uses a transparent, fading React Native `Modal` while
-mounted, with a status-bar-translucent scrim that covers the host header. Hardware Back invokes
-`onCancel` when supplied; on the stop card it does nothing. Keep the covered Question's
-pointer-event and accessibility hiding in place. The panel's bottom padding is
-`max(useBottomInset(), 24dp)` on both platforms: under Expo SDK 54 the Modal draws edge-to-edge,
-including under Android's navigation bar (device-verified on the A03s, build 30, where an
-inset-free panel put Cancel under the 3-button bar). The old last-word selection sheet is removed; progress comes from the marked prefix
+Use the shared intro, bottom confirmation sheets and full-screen sheets. Sheets over a Question
+share one white panel: the package `ConfirmPanel`, exported from the package root. The package's
+own End, stop, rubric and skip sheets wrap it in a native Modal (`ConfirmSheet`). The host's leave,
+save-error and closed sheets wrap it in `TestSheet` (react-native-paper Portal, no native Modal).
+iOS cannot present one native modal while another is dismissing; the package and host sheets can
+hand over in the same moment, including an immediate save failure after End. Sharing the panel
+preserves the same heading, body, buttons, tone, radius, spacing and bottom inset without requiring
+a second native presentation or a timeout.
+
+Host `TestSheet` renders only when visible, registers with sheet accessibility to hide the
+background, moves accessibility focus to its title on the next animation frame, and fades in
+using the app motion tokens (no fade at `still`). It carries the app assessment fonts across
+Paper's Portal boundary so typography matches the package sheet. Closing unmounts immediately. Save errors offer
+**Try again** (ink) and **Not now**; closed assessments offer **Back to assessment** (ink), with
+hardware Back also closing them. Android Back calls `onCancel` when supplied and is swallowed
+otherwise. Host screens outside a test keep the host `BottomSheet` / `ConfirmSheet`.
+
+FullScreenSheet owns the modal top inset. Package `ConfirmSheet` retains its transparent, fading
+native Modal and status-bar-translucent scrim. Hardware Back invokes `onCancel` when supplied;
+on the stop card it does nothing. Keep the covered Question's pointer-event and accessibility
+hiding in place. The shared panel's bottom padding is `max(useBottomInset(), 24dp)` on both
+platforms: under Expo SDK 54 the Modal draws edge-to-edge, including under Android's navigation
+bar (device-verified on the A03s, build 30, where an inset-free panel put Cancel under the 3-button
+bar). The old last-word selection sheet is removed; progress comes from the marked prefix
 ([QuestionIntro](../src/assessment-questions/ui/QuestionIntro.tsx),
 [ConfirmSheet](../src/assessment-questions/ui/ConfirmSheet.tsx),
 [FullScreenSheet](../src/assessment-questions/ui/FullScreenSheet.tsx)).
