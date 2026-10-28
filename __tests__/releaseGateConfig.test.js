@@ -75,7 +75,7 @@ describe('Plan 6 release gate configuration', () => {
     expect(previewEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY).toEqual(expect.stringMatching(/^sb_publishable_/));
   });
 
-  test('pilot store builds are isolated from the legacy field submission path', () => {
+  test('pilot store builds use the SQLite backend and submit to TestFlight and Play internal testing', () => {
     const pilotBuild = easConfig.build.pilot;
 
     expect(pilotBuild).toEqual(expect.objectContaining({
@@ -99,7 +99,12 @@ describe('Plan 6 release gate configuration', () => {
       ascAppId: '6760048185',
       appleId: 'mckeown.james@gmail.com',
     });
-    expect(easConfig.submit.pilot.android).toBeUndefined();
+    // Jim (2026-10-28): every pilot build goes straight to Play internal testing.
+    // The Play key lives on EAS servers, never in the repository.
+    expect(easConfig.submit.pilot.android).toEqual({
+      track: 'internal',
+      releaseStatus: 'completed',
+    });
     expect(easConfig.submit.production).toBeUndefined();
   });
 
