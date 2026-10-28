@@ -103,10 +103,10 @@ describe('Plan 6 release gate configuration', () => {
     expect(easConfig.submit.production).toBeUndefined();
   });
 
-  test('release 1.3.0 advances the app-version runtime boundary', () => {
+  test('release 1.4.0 advances the app-version runtime boundary', () => {
     const config = require('../app.config')().expo;
 
-    expect(config.version).toBe('1.3.0');
+    expect(config.version).toBe('1.4.0');
     expect(config.runtimeVersion).toEqual({ policy: 'appVersion' });
   });
 
