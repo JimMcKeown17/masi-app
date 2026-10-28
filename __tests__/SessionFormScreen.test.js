@@ -9,9 +9,9 @@ import BrandButton from '../src/components/common/BrandButton';
 
 const mockUseAuth = jest.fn();
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => mockUseAuth() }));
-jest.mock('../src/screens/sessions/LiteracySessionForm', () => {
+jest.mock('../src/screens/lessons/LessonPickerScreen', () => {
   const { View } = require('react-native');
-  return ({ navigation }) => <View testID="literacy-form-stub" navigation={navigation} />;
+  return ({ navigation }) => <View testID="lesson-picker-stub" navigation={navigation} />;
 });
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => ({ __esModule: true, default: () => null }), { virtual: true });
@@ -39,9 +39,9 @@ test('unsupported roles keep the coming-soon message without a second title', ()
   expectMessageFrame(screen, 'Session forms for Tutor are coming soon.');
 });
 
-test('the literacy coach code renders the form with navigation', () => {
+test('the literacy coach code renders the picker with navigation', () => {
   mockUseAuth.mockReturnValue({ profile: { jobTitleCode: JOB_TITLE_CODES.LITERACY_COACH } });
   const navigation = { goBack: jest.fn() };
   const screen = render(<SessionFormScreen navigation={navigation} />);
-  expect(screen.getByTestId('literacy-form-stub').props.navigation).toBe(navigation);
+  expect(screen.getByTestId('lesson-picker-stub').props.navigation).toBe(navigation);
 });

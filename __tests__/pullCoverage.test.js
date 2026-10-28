@@ -2,7 +2,12 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
-import { isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete } from '../src/services/pullCoverage';
+import {
+  isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete,
+  sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
+} from '../src/services/pullCoverage';
+import * as syncStateRepositories from '../src/db/repositories/syncStateRepository';
+import * as assessmentHistoryPull from '../src/services/assessmentHistoryPull';
 import { runMigrations } from '../src/db/migrations';
 import { runSessionHistoryPull, createSessionHistoryState } from '../src/services/sessionHistoryPull';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
@@ -64,9 +69,76 @@ describe('isSessionHistoryComplete', () => {
     await addDeliveryChild('child-b');
     await db.runAsync("insert into children (id, first_name, last_name, class_id, sync_status) values ('child-g', 'Group', 'Only', 'class-1', 'synced')");
   });
-  afterEach(async () => { await db.closeAsync(); });
+  afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
 
   const complete = (childIds) => isSessionHistoryComplete({ database: db, userId: 'user-1', childIds });
+
+  test('covered child ids are null until the window is complete, then contain only walked children', async () => {
+    const options = { database: db, userId: 'user-1', programmeId: 'programme-a', academicYearStart: '2026-01-15' };
+    expect(await sessionHistoryCoveredChildIds(options)).toBeNull();
+    await pull(emptyServer);
+    expect(await sessionHistoryCoveredChildIds(options)).toEqual(new Set(['child-a', 'child-b']));
+    expect(await sessionHistoryCoveredChildIds({ ...options, academicYearStart: '2027-01-13' })).toBeNull();
+    await pull(failingServer);
+    expect(await sessionHistoryCoveredChildIds(options)).toBeNull();
+  });
+
+  test('per-child history answers match the single-child predicate', async () => {
+    await pull(emptyServer);
+    await addDeliveryChild('child-c');
+    const childIds = ['child-a', 'child-b', 'child-c'];
+    const before = await db.getAllAsync('select * from sync_state');
+    const byChild = await sessionHistoryCompletenessByChild({ database: db, userId: 'user-1', childIds });
+    expect(byChild).toEqual({ 'child-a': true, 'child-b': true, 'child-c': false });
+    for (const id of childIds) expect(byChild[id]).toBe(await complete([id]));
+    expect(await db.getAllAsync('select * from sync_state')).toEqual(before);
+    expect(await sessionHistoryCompletenessByChild({ database: db, userId: 'user-1', childIds: [] })).toEqual({});
+  });
+
+  test('last year\'s window and a failure since both answer false for every child', async () => {
+    const options = { database: db, userId: 'user-1', childIds: ['child-a', 'child-b'] };
+    const incomplete = { 'child-a': false, 'child-b': false };
+    expect(await sessionHistoryCompletenessByChild(options)).toEqual(incomplete);
+    await pull(emptyServer);
+    expect(await sessionHistoryCompletenessByChild({ ...options, academicYearStart: '2027-01-13' })).toEqual(incomplete);
+    expect(await sessionHistoryCompletenessByChild({ ...options, academicYearStart: '2026-01-15' }))
+      .toEqual({ 'child-a': true, 'child-b': true });
+    await pull(failingServer);
+    expect(await sessionHistoryCompletenessByChild(options)).toEqual(incomplete);
+    await pull(emptyServer);
+    await db.runAsync('update academic_years set is_active = 0');
+    await db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+      values ('year-2027', '2027', '2027-01-13', '2027-12-10', 1)`);
+    expect(await sessionHistoryCompletenessByChild(options)).toEqual(incomplete);
+  });
+
+  test('reads the session cursor once for any number of children', async () => {
+    const childIds = Array.from({ length: 30 }, (_, i) => `budget-child-${i}`);
+    for (const id of childIds) await addDeliveryChild(id);
+    await pull(emptyServer);
+    const create = syncStateRepositories.createSyncStateRepository;
+    const getPullState = jest.fn(create({ database: db }).getPullState);
+    jest.spyOn(syncStateRepositories, 'createSyncStateRepository').mockImplementation(options => ({
+      ...create(options), getPullState,
+    }));
+    expect(await sessionHistoryCompletenessByChild({ database: db, userId: 'user-1', childIds }))
+      .toEqual(Object.fromEntries(childIds.map(id => [id, true])));
+    expect(getPullState).toHaveBeenCalledTimes(1);
+    expect(getPullState).toHaveBeenCalledWith('session_history_pull:user-1:programme-a');
+  });
+
+  test('per-child history keeps every requested id false when dependencies are missing', async () => {
+    await pull(emptyServer);
+    const options = { database: db, userId: 'user-1', childIds: ['child-a', 'child-b'] };
+    const incomplete = { 'child-a': false, 'child-b': false };
+    for (const patch of [{ userId: null }, { programmeId: null }, { programmeId: 'programme-b' }, { academicYearStart: null }]) {
+      expect(await sessionHistoryCompletenessByChild({ ...options, ...patch })).toEqual(incomplete);
+    }
+    await db.runAsync("update staff_programme_assignments set ended_at = '2026-10-20T08:00:00Z'");
+    expect(await sessionHistoryCompletenessByChild(options)).toEqual(incomplete);
+    await db.runAsync('update academic_years set is_active = 0');
+    expect(await sessionHistoryCompletenessByChild({ ...options, programmeId: 'programme-a' })).toEqual(incomplete);
+  });
 
   test('before any walk, history is incomplete', async () => {
     expect(await complete(['child-a'])).toBe(false);
@@ -169,7 +241,80 @@ describe('isMasteryInputsComplete through real walks', () => {
     server = createHistoryServer();
     wall = Date.parse('2026-09-01T09:00:00Z');
   });
-  afterEach(async () => { await db.closeAsync(); });
+  afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
+
+  test('per-child mastery answers match isMasteryInputsComplete, including a child in an unheld class', async () => {
+    await both();
+    await addChild('child-c');
+    const childIds = ['child-a', 'child-b', 'child-g', 'child-c'];
+    const options = { database: db, userId: 'user-1', childIds };
+    const check = async expected => {
+      const before = await db.getAllAsync('select * from sync_state order by scope');
+      server.calls.length = 0;
+      const byChild = await masteryCompletenessByChild(options);
+      expect(byChild).toEqual(expected);
+      for (const id of childIds) expect(byChild[id]).toBe(await complete([id]));
+      expect(await db.getAllAsync('select * from sync_state order by scope')).toEqual(before);
+      expect(server.calls).toEqual([]);
+    };
+    await check({ 'child-a': true, 'child-b': true, 'child-g': false, 'child-c': false });
+    await db.runAsync("update child_ea_assignments set unassigned_at = '2026-09-01T09:01:00Z' where child_id = 'child-a'");
+    await check({ 'child-a': false, 'child-b': true, 'child-g': false, 'child-c': false });
+    await db.runAsync("update class_ea_assignments set unassigned_at = '2026-09-01T09:01:00Z'");
+    await check({ 'child-a': false, 'child-b': false, 'child-g': false, 'child-c': false });
+  });
+
+  test('per-child mastery reads each cursor and current scope once for 30 children', async () => {
+    const childIds = Array.from({ length: 30 }, (_, i) => `budget-child-${i}`);
+    for (const id of childIds) await addChild(id);
+    await both();
+    const create = syncStateRepositories.createSyncStateRepository;
+    const getPullState = jest.fn(create({ database: db }).getPullState);
+    jest.spyOn(syncStateRepositories, 'createSyncStateRepository').mockImplementation(options => ({
+      ...create(options), getPullState,
+    }));
+    const assessmentScope = jest.spyOn(assessmentHistoryPull, 'readAssessmentScope');
+    const masteryScope = jest.spyOn(assessmentHistoryPull, 'readMasteryScope');
+    expect(await masteryCompletenessByChild({ database: db, userId: 'user-1', childIds }))
+      .toEqual(Object.fromEntries(childIds.map(id => [id, true])));
+    expect(getPullState.mock.calls).toEqual([
+      ['assessment_history_pull:user-1:programme-a'], ['letter_mastery_pull:user-1'],
+    ]);
+    expect(assessmentScope).toHaveBeenCalledTimes(1);
+    expect(masteryScope).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['assessment', 'mastery'])('per-child mastery fails closed for a failed or malformed %s cursor', async kind => {
+    await both();
+    const options = { database: db, userId: 'user-1', childIds: ['child-a', 'child-b'] };
+    const incomplete = { 'child-a': false, 'child-b': false };
+    server.disabled.add(kind === 'assessment' ? A : M);
+    expect((await (kind === 'assessment' ? assessments : mastery)({ force: true })).status).toBe('disabled');
+    expect(await masteryCompletenessByChild(options)).toEqual(incomplete);
+    const scope = kind === 'assessment' ? 'assessment_history_pull:user-1:programme-a' : 'letter_mastery_pull:user-1';
+    await db.runAsync("update sync_state set cursor = 'not json' where scope = ?", scope);
+    expect(await masteryCompletenessByChild(options)).toEqual(incomplete);
+  });
+
+  test('per-child mastery keeps every requested id false for missing dependencies or last year', async () => {
+    const options = { database: db, userId: 'user-1', childIds: ['child-a', 'child-b'] };
+    const incomplete = { 'child-a': false, 'child-b': false };
+    expect(await masteryCompletenessByChild(options)).toEqual(incomplete);
+    await assessments();
+    expect(await masteryCompletenessByChild(options)).toEqual(incomplete);
+    await mastery();
+    for (const patch of [{ userId: null }, { programmeId: null }, { programmeId: 'programme-b' }]) {
+      expect(await masteryCompletenessByChild({ ...options, ...patch })).toEqual(incomplete);
+    }
+    expect(await masteryCompletenessByChild({ ...options, childIds: [] })).toEqual({});
+    await db.runAsync("update staff_programme_assignments set ended_at = '2026-09-01T09:01:00Z'");
+    expect(await masteryCompletenessByChild(options)).toEqual(incomplete);
+    await db.runAsync('update academic_years set is_active = 0');
+    expect(await masteryCompletenessByChild({ ...options, programmeId: 'programme-a' })).toEqual(incomplete);
+    await db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
+      values ('year-2027', '2027', '2027-01-13', '2027-12-10', 1)`);
+    expect(await masteryCompletenessByChild({ ...options, programmeId: 'programme-a' })).toEqual(incomplete);
+  });
 
   test('before any walk it is false', async () => {
     expect(await complete()).toBe(false);

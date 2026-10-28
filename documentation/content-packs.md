@@ -28,27 +28,73 @@ The app's Jest runner ports every canonical shared-vector loop except `the in-me
 
 Content packs live in `src/lessonPlan/packs/`. App-made packs use an id of `<name>-<kind>-v<N>` and a matching `<id>.json` filename. Books releases keep their original `integrated-sequence-<name>-v<N>.json` filename. The registry keys every pack by its in-file `id`.
 
-The file's `language` is the shared catalogue name: `isixhosa`, `english` or `afrikaans`. `PACK_LANGUAGE_CODES` maps those names to the Masi codes `xh`, `en` and `af`. Callers use codes with `getPack(languageCode)`; names are not accepted as lookup keys.
+The file's `language` is the shared catalogue name: `isixhosa`, `english` or `afrikaans`.
+`PACK_LANGUAGE_CODES` maps those names to the Masi codes `xh`, `en` and `af`. New packs carry
+`letter_order` immediately after `channel`, naming an order in the unchanged vendored registry
+`src/constants/contracts/letter-orders-v1.json`.
 
-`CURRENT_PACK_IDS` explicitly chooses the current id for each code in its `release` and `preview` maps. Current means the named id, rather than the highest version number: interim and integrated packs are different families. The release map currently names these three interim letters-only packs; the preview map names `isixhosa-candidates-preview-v1` for `xh` only:
+`lintMasiPack` runs the shared checker first and appends the Masi checks. The letter order must
+exist (`pack_letter_order`), belong to the pack's language (`pack_letter_order_language`), and
+have exactly the same letter steps (`pack_letter_order_letters`). Steps are compared in numeric
+step order without mutating the pack. Non-empty sound steps, sorted by step and flattened, must
+match the order's sounds (`pack_letter_order_sounds`); empty sound steps are valid for a
+letters-only pack.
 
-| Code | Current release id | Source of the letter order |
-|---|---|---|
-| `xh` | `isixhosa-interim-letters-v1` | Books order from lesson-plan J1 |
-| `en` | `english-interim-letters-v1` | Masi's `ENGLISH_PEDAGOGICAL_ORDER` in `src/constants/egraConstants.js` |
-| `af` | `afrikaans-interim-letters-v1` | Zazi's provisional `AFRIKAANS_PEDAGOGICAL_ORDER`, also specified by lesson-plan C10 |
+`CURRENT_PACK_IDS` explicitly chooses the release and preview pack for each **order id**. It
+never chooses the highest version. `getPackForOrder(orderId, options)` reads these mappings, and
+registry construction refuses a current pack whose resolved letter order differs from its key.
+The current edition is `2026-10-23`:
 
-Each interim file has the alphabetical 26-letter sound inventory and 12 letter steps: four letters in step 1, then pairs. Every step's blends, words and readers are empty. There are no sound steps, word-bank entries, readers or reader details. The packs supply letter advice until the books project releases real content for each language. The isiXhosa tracker still uses its existing order until A2 switches it to packs; the pack already carries J1's order. Afrikaans pack lookup works independently of the separate AF assessment-registry change.
+| Code | Letter order | Current release | Current preview |
+|---|---|---|---|
+| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-interim-letters-v2` | `isixhosa-candidates-preview-v2` |
+| `en` | `english-order-2026-10-23` | `english-interim-letters-v2` | `english-candidates-preview-v1` |
+| `af` | `afrikaans-order-2026-10-23` | `afrikaans-interim-letters-v2` | `afrikaans-candidates-preview-v1` |
 
-The registry imports JSON files statically. `BUNDLED_PACKS` is a frozen array, every pack is deep-frozen once at module load, and lookup functions return those same objects. Every bundled pack must pass `lintMasiPack` in Jest. Released packs are append-only: they are never edited or removed, and their file bytes are SHA-256-pinned in `__tests__/lessonPlanPacks.test.js`. Old release versions stay bundled for drafts and saved sessions that reference them.
+Each v2 release uses the v1 JSON format and key order with `letter_order` added after `channel`.
+It has the alphabetical 26-letter sound inventory and 12 letter steps from the named order:
+four letters in step 1, then pairs. Every step has empty blends, words and readers, with no
+`size_exception`. Sound steps, word bank, readers and reader details are empty.
 
-`getPack` and `getPackById` return `null` for unknown or missing keys rather than throwing, and they check own properties only. `getPackById` resolves any bundled release version, including one that is no longer current. A preview pack is available only with `{ allowPreview: true }`; other values do not opt in. `getPack` falls back to the current release pack when no preview pack exists for the code. Options may be omitted or `null`.
+The three v1 releases and `isixhosa-candidates-preview-v1` keep their original bytes and remain
+bundled for saved drafts and sessions. These files predate the `letter_order` field, so the frozen
+`LEGACY_PACK_LETTER_ORDERS` table resolves their order:
+
+| Retained pack id | Letter order |
+|---|---|
+| `isixhosa-interim-letters-v1` | `isixhosa-order-2026-10-18` |
+| `isixhosa-candidates-preview-v1` | `isixhosa-order-2026-10-18` |
+| `english-interim-letters-v1` | `english-order-legacy` |
+| `afrikaans-interim-letters-v1` | `afrikaans-order-legacy` |
+
+`packLetterOrderId(pack)` uses the pack's explicit field when present, otherwise its entry in
+that table, otherwise `null`. A retained pack's availability by id does not make its order current;
+for example, `getPackForOrder('english-order-legacy')` returns `null`.
+
+Lessons choose a pack by the class's teaching order, never by language. `lessonOrderAndPack`
+(`src/lessonPlan/inputs/lessonInputs.js`) resolves the class's edition and language to an order,
+then takes `getPackForOrder(order.id, options)` for a new lesson or `getPackById(draft.pack_id,
+options)` for a resumed one. It keeps the pack only when `packLetterOrderId(pack)` equals the
+order, so a 2026-10-23 class is never taught from a v1 pack. Diagnostics report the current
+edition's packs through `getPackForOrder`.
+
+The registry imports JSON files statically. `BUNDLED_PACKS` is a frozen array, every pack is
+deep-frozen once at module load, and lookup functions return those same objects. Every bundled
+pack must pass `lintMasiPack` in Jest. Released packs are append-only: never edit or remove one.
+Their file bytes are SHA-256-pinned in `RELEASE_PACK_SHA256` in
+`__tests__/lessonPlanPacks.test.js`.
+
+All lookup functions return `null` for unknown or missing keys and check own mapping properties.
+`getPackById` resolves retained versions as well as current packs. Preview packs are hidden on
+both order and id lookups unless `{ allowPreview: true }` is passed; other values do not opt in.
+The order lookup falls back to its release when no preview is mapped. Options may be omitted or
+`null`.
 
 ## Release and preview
 
 Preview content may contain unreviewed candidate words, so it is off by default. Only the literal environment value `MASI_PREVIEW_CONTENT=1` enables the setting; `app.config.js` exposes the result as the boolean `extra.previewContent`. Never set `MASI_PREVIEW_CONTENT` in an EAS environment. Use a local developer shell or the dedicated `preview-content` build profile instead.
 
-Two checks enforce lesson-plan C12. At build time, `resolvePreviewContentBuildConfig` refuses the setting when `EAS_BUILD_PROFILE` is `pilot` or `production`. At runtime, `isPreviewContentEnabled()` requires `Constants.expoConfig.extra.previewContent === true` and rejects native `Updates.channel` values `preview` and `production`. It returns `false` if reading runtime configuration fails. Callers pass `{ allowPreview: isPreviewContentEnabled() }` to `getPack` and `getPackById`.
+Two checks enforce lesson-plan C12. At build time, `resolvePreviewContentBuildConfig` refuses the setting when `EAS_BUILD_PROFILE` is `pilot` or `production`. At runtime, `isPreviewContentEnabled()` requires `Constants.expoConfig.extra.previewContent === true` and rejects native `Updates.channel` values `preview` and `production`. It returns `false` if reading runtime configuration fails. Callers pass `{ allowPreview: isPreviewContentEnabled() }` to `getPackForOrder` and `getPackById`.
 
 Both checks are needed because an OTA evaluates app config without the build server's `EAS_BUILD_PROFILE`. An OTA published from a shell with the setting could therefore carry `extra.previewContent: true`. The runtime check still rejects it on field-channel phones: `Updates.channel` comes from the native build, and an OTA cannot change it. In particular, pilot builds use the `preview` channel and must keep release content only. A missing, null or empty channel does not opt in by itself; the boolean setting must also be true.
 
@@ -58,11 +104,26 @@ Candidate-word cloud test builds use `--profile preview-content`. This profile u
 npx eas-cli@latest build -p android --profile preview-content
 ```
 
-## isiXhosa test pack
+## Preview exports
+
+The three current previews are copied unchanged from the books repository's
+`exports/app-preview/` at commit `6cd5e64`. Their bytes are pinned by `PREVIEW_PACK_SHA256` in
+`__tests__/lessonPlanPacks.test.js`; `generated_from` describes the export's source inputs, while
+this commit and the SHA-256 pins identify the adopted export files. Do not edit them in Masi.
+
+These exports contain candidate word banks and sound steps for the `2026-10-23` orders. They
+have no readers, so developer builds show no book (**Molo, Lolo!** is gone) until books adds
+readers. The retained isiXhosa preview v1 still holds that reader for saved drafts and sessions.
+
+To adopt another export, add a new version, copy it unchanged, verify its hash, bundle it, and
+update the appropriate order mapping and provenance pin. Retain versions referenced by saved
+sessions and drafts.
+
+## Retained isiXhosa preview generator
 
 `isixhosa-candidates-preview-v1.json` is a preview-only test pack (lesson-plan J17), not a reviewed books release. It was generated from `early-reader-books` commit `1c301cfddcee061d5d5f915e991d7470a4ba7f37`. Its 3,328 word-bank entries are all candidates; it has 12 letter steps, 11 sound steps and one draft reader, `xh-int-v1-r01`. Decodability checks are not native-speaker review or approval for field use.
 
-The generator reads `languages/xh/pack.yaml`, `languages/xh/wordbank.csv`, `cast/cast.yaml` and every `books/*/book.yaml` with `series: isixhosa-integrated`. YAML is parsed with YAML 1.2 (`yaml@2.8.2`), keeping `y` and `n` as letters. CSV uses the existing shared parser. To regenerate from a clean books checkout:
+The generator only reproduces the retained `2026-10-18` preview v1 and refuses other letter orders. It reads `languages/xh/pack.yaml`, `languages/xh/wordbank.csv`, `cast/cast.yaml` and every `books/*/book.yaml` with `series: isixhosa-integrated`. YAML is parsed with YAML 1.2 (`yaml@2.8.2`), keeping `y` and `n` as letters. CSV uses the existing shared parser. To regenerate from a clean books checkout:
 
 ```bash
 PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run content:xh-test-pack -- \
@@ -72,7 +133,7 @@ PATH="$HOME/.nvm/versions/node/v20.19.4/bin:$PATH" npm run content:xh-test-pack 
 
 The script records the books HEAD in `generated_from` and refuses uncommitted changes under `languages/xh`, `books` or `cast` before reading source files. The CLI requires all three flags, rejects unknown or duplicate flags, and requires a positive integer version. Its pure builder applies these rules:
 
-- Refuse a language code other than `xh` or a letter order different from the interim isiXhosa pack's J1 order. Copy the letter steps, including `sizeException` as `size_exception`; append the sound steps in step order to the tracker-letter inventory.
+- Refuse a language code other than `xh` or a letter order different from the retained interim isiXhosa pack's `2026-10-18` order. Copy the letter steps, including `sizeException` as `size_exception`; append the sound steps in step order to the tracker-letter inventory.
 - Keep every word-bank row except `status: rejected`. Compute its first decodable step with the vendored checker; refuse with a list of all words whose step is missing or disagrees with the CSV. Sort by step, then text in code-unit order. Store missing or blank syllables as `null`.
 - For each letter step, generate known consonant + vowel blends with at least one newly taught letter. Consonants are the outer loop and vowels the inner loop, both in teaching order. Step 1 is `mo, ma, lo, la`; step 2 is `mu, lu, ko, ka, ku`.
 - For every letter or sound step, take up to 12 words first decodable at that step with at least three letters, ranked by descending `corpus_2024_count`, then code-unit text order. Use syllables with their hyphens, falling back to the word's text.
@@ -82,10 +143,10 @@ The CLI writes deterministic two-space JSON with a final newline only after the 
 
 The preview JSON is statically bundled in every binary, but lookup resolves it only with `{ allowPreview: true }` (decision 8). Normal lookup still returns the interim release pack; callers must use the C12 developer-build gate described above to opt in. Bundling is not permission to display candidate content to field users.
 
-Preview packs are deliberately not hash-pinned. For a new regeneration, bump `--version`, replace the old preview JSON and static import, and update `CURRENT_PACK_IDS.preview.xh`. A developer draft or session pinned to a replaced preview id resolves to `null` and displays the C10 "no content yet" state; it is not lost. Keeping all preview versions would grow every field binary for a developer-only case. Release packs remain append-only and hash-pinned, with old versions retained.
+The generator does not produce the current books exports. Keep the retained preview v1 bytes and id so saved drafts continue to resolve; the legacy order table lets that unchanged output pass the order lint.
 
 ## Adopting a books release
 
-For track D, copy `integrated-sequence-<name>-v<N>.json` unchanged into `src/lessonPlan/packs/`. Add its static import to `index.js` and include the imported pack in the list used to build `BUNDLED_PACKS`. Point `CURRENT_PACK_IDS.release[code]` at its in-file id, keeping older release packs bundled. Compute the new file's SHA-256 and append its id and hash to `RELEASE_PACK_SHA256` in `__tests__/lessonPlanPacks.test.js`.
+To adopt a release, copy `integrated-sequence-<name>-v<N>.json` unchanged into `src/lessonPlan/packs/`. Add its static import to `index.js` and include the imported pack in the list used to build `BUNDLED_PACKS`. Point `CURRENT_PACK_IDS.release[orderId]` at its in-file id, keeping older release packs bundled. Compute the new file's SHA-256 and append its id and hash to `RELEASE_PACK_SHA256` in `__tests__/lessonPlanPacks.test.js`.
 
 Run `__tests__/lessonPlanPacks.test.js`, `__tests__/lintMasiPack.test.js` and `__tests__/decodability.test.js` under Jest. A failing lint sends the file back to the books project for correction and a new release; the file is never fixed in the Masi app. The shared contract is lesson-plan spec §4.1 in `docs/superpowers/specs/2026-10-20-lesson-plan-design.md`.

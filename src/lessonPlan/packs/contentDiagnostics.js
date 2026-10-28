@@ -1,4 +1,5 @@
-import { getPack, BUNDLED_PACKS, PACK_LANGUAGE_CODES } from './index';
+import { getPackForOrder, BUNDLED_PACKS, PACK_LANGUAGE_CODES } from './index';
+import { resolveTeachingOrder, NEW_CLASS_LETTER_ORDER_EDITION } from '../../utils/letterOrders';
 import { isPreviewContentEnabled } from './previewContent';
 import { analyzeToken, normalizeToken } from '../../utils/decodability/index.js';
 import vectors from '../../constants/contracts/decodability-v1.json';
@@ -20,7 +21,9 @@ export function getContentDiagnostics(options = {}) {
     return {
       previewContentAllowed: allowPreview === true,
       currentPacks: Object.fromEntries(Object.values(PACK_LANGUAGE_CODES)
-        .map(code => [code, getPack(code, { allowPreview })?.id ?? null])),
+        .map(code => [code, getPackForOrder(
+          resolveTeachingOrder(NEW_CLASS_LETTER_ORDER_EDITION, code).id, { allowPreview }
+        )?.id ?? null])),
       bundledPackIds: BUNDLED_PACKS.map(pack => pack.id),
       decodabilitySelfCheck: { vectorVersion: vectors.version, passed, failed },
     };

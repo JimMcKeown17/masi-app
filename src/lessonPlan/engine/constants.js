@@ -1,6 +1,6 @@
 import { READING_LEVELS } from '../../constants/literacyConstants';
 
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 
 export const BLEND_TIERS = Object.freeze(READING_LEVELS.slice(1, 5));
 

@@ -18,6 +18,7 @@ export const logoType = {
 };
 
 export const typeRoles = {
+  lessonItem: { fontFamily: fontFamilies.content, fontSize: 20, lineHeight: 26, letterSpacing: 0 },
   displayXL: { fontFamily: fontFamilies.display, fontSize: 32, lineHeight: 36, letterSpacing: -0.8 },
   displayNumeral: { fontFamily: fontFamilies.display, fontSize: 48, lineHeight: 48 },
   displayM: { fontFamily: fontFamilies.display, fontSize: 20, lineHeight: 26, letterSpacing: -0.4 },

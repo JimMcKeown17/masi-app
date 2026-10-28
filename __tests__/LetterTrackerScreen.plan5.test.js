@@ -6,6 +6,7 @@ import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import LetterTrackerScreen from '../src/screens/assessments/LetterTrackerScreen';
+import { classesRepository } from '../src/db/repositories/classesRepository';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
 import { useAuth } from '../src/context/AuthContext';
@@ -42,6 +43,11 @@ jest.mock('../src/db/repositories/masteryRepository', () => ({
   },
 }));
 
+jest.mock('../src/db/repositories/classesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classesRepository'),
+  classesRepository: { getActiveClassForChild: jest.fn() },
+}));
+
 describe('LetterTrackerScreen Plan 5 behavior', () => {
   const refreshSyncStatus = jest.fn();
   const triggerBackgroundSync = jest.fn();
@@ -58,6 +64,7 @@ describe('LetterTrackerScreen Plan 5 behavior', () => {
       refreshSyncStatus,
       triggerBackgroundSync,
     });
+    classesRepository.getActiveClassForChild.mockResolvedValue({ id: 'class-1', home_language: 'English', letter_order_edition: '2026-10-23' });
     assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
     let storedRecords = [];
     masteryRepository.getLetterMastery.mockImplementation(async () => storedRecords);
@@ -98,6 +105,7 @@ test('a class-only route uses membership language and shows no confirmation cont
   useChildren.mockReturnValue({ children: [] });
   useAuth.mockReturnValue({ user: { id: 'user-1' } });
   useOffline.mockReturnValue({ refreshSyncStatus: jest.fn() });
+  classesRepository.getActiveClassForChild.mockResolvedValue({ id: 'membership-class', home_language: 'Afrikaans', letter_order_edition: '2026-10-23' });
   assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
   masteryRepository.getLetterMastery.mockResolvedValue([]);
   const child = { id: 'control', first_name: 'Control', last_name: 'Child',

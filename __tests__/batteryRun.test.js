@@ -381,7 +381,7 @@ test.each([
     markedResult(trigger, length), ...codes.map(savedSkip),
   ]);
   expect(skipNoticeFor({ battery: WELA_PLUS_FULL_2026_1, view: state, firstName: 'Lwazi' })).toEqual({
-    trigger, title, body: `${body} ${stillToDo.length ? 'Carry on with the next Question.' : 'Tap Review and finalize to finish.'}`,
+    trigger, title, body: `${body} ${stillToDo.length ? 'Carry on with the next Question.' : 'Tap Finalize assessment to finish.'}`,
     stillToDo, skipped: WELA_PLUS_FULL_2026_1.questions.filter(question => codes.includes(question.question_code)).map(question => question.title),
   });
 });

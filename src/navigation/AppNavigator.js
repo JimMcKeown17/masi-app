@@ -36,6 +36,8 @@ import ClassOnboardingScreen from '../screens/onboarding/ClassOnboardingScreen';
 import ChildOnboardingScreen from '../screens/onboarding/ChildOnboardingScreen';
 
 // Session screens
+import LessonScreen from '../screens/lessons/LessonScreen';
+import LessonWrapUpScreen from '../screens/lessons/LessonWrapUpScreen';
 import SessionFormScreen from '../screens/sessions/SessionFormScreen';
 import SessionCompleteScreen from '../screens/sessions/SessionCompleteScreen';
 import SessionHistoryScreen from '../screens/sessions/SessionHistoryScreen';
@@ -246,9 +248,19 @@ export function MainNavigator() {
         name="SessionForm"
         component={SessionFormScreen}
         options={{
-          title: 'New session',
+          title: 'Who are you teaching?',
           headerLeftIcon: 'close',
         }}
+      />
+      <Stack.Screen
+        name="Lesson"
+        component={LessonScreen}
+        options={{ title: '', headerLeftIcon: 'back' }}
+      />
+      <Stack.Screen
+        name="LessonWrapUp"
+        component={LessonWrapUpScreen}
+        options={{ title: 'Wrap up', headerLeftIcon: 'back' }}
       />
       <Stack.Screen
         name="SessionComplete"
@@ -288,7 +300,7 @@ export function MainNavigator() {
       />
       <Stack.Screen name="BatteryOverview" component={BatteryOverviewScreen} options={{ title: '' }} />
       <Stack.Screen name="BatteryQuestion" component={BatteryQuestionScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="BatteryRunSummary" component={BatteryRunSummaryScreen} options={{ title: 'Review assessment' }} />
+      <Stack.Screen name="BatteryRunSummary" component={BatteryRunSummaryScreen} options={{ title: 'Assessment summary' }} />
       <Stack.Screen
         name="AssessmentHistory"
         component={AssessmentHistoryScreen}

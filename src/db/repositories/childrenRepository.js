@@ -348,6 +348,50 @@ export const createChildrenRepository = ({ database } = {}) => {
     }]));
   };
 
+  const getChildrenByIds = async (ids = []) => {
+    if (!ids.length) return {};
+    const db = await resolveDatabase(database);
+    const rows = [];
+    for (const batch of chunkArray([...new Set(ids)])) {
+      rows.push(...await db.getAllAsync(
+        `select id, first_name, last_name, reading_level, class_id, history_reference, hidden_at
+         from children where id in (${sqlPlaceholders(batch.length)})`,
+        ...batch
+      ));
+    }
+    return Object.fromEntries(rows.map(row => [row.id, row]));
+  };
+
+  const getWriteAuthority = async ({ userId, childIds, transaction }) => {
+    if (!childIds.length) return {};
+    const db = transaction || await resolveDatabase(database);
+    const rows = await db.getAllAsync(`
+      select requested.value as id, child.created_by = ? as creator,
+        exists (
+          select 1 from child_ea_assignments a
+          where a.child_id = requested.value and a.user_id = ? and a.unassigned_at is null
+        ) as deliver,
+        (exists (
+          select 1 from class_ea_assignments a
+          join child_class_memberships m on m.class_id = a.class_id and m.exited_at is null
+          where m.child_id = requested.value and a.ea_user_id = ? and a.unassigned_at is null
+        ) or exists (
+          select 1 from group_ea_assignments a
+          join child_group_memberships m on m.group_id = a.group_id and m.removed_at is null
+          where m.child_id = requested.value and a.ea_user_id = ? and a.unassigned_at is null
+        )) as indirect
+      from json_each(?) requested
+      left join children child on child.id = requested.value
+    `, userId, userId, userId, userId, JSON.stringify([...new Set(childIds)]));
+    // Class or group access lets a child attend but is not child-edit authority (ADR-0005);
+    // `level` mirrors assertDeliveryChild, the guard updateChild applies.
+    return Object.fromEntries(rows.map(row => {
+      const deliver = Boolean(row.deliver);
+      const attend = deliver || Boolean(row.indirect);
+      return [row.id, { attend, deliver, level: Boolean(row.creator) || deliver }];
+    }));
+  };
+
   const getChildren = async () => {
     const db = await resolveDatabase(database);
     const rows = await db.getAllAsync(
@@ -993,6 +1037,8 @@ export const createChildrenRepository = ({ database } = {}) => {
   return {
     getChildren,
     getChildNamesByIds,
+    getChildrenByIds,
+    getWriteAuthority,
     getMyChildren,
     buildClassMembershipReconcile,
     buildClassRosterMembershipReconcile,

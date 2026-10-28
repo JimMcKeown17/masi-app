@@ -9,6 +9,59 @@ This document chronicles the architectural decisions, engineering patterns, and 
 
 ---
 
+## One lesson draft needs one writer, even across two screens (2026-10-22)
+
+A lesson feels like one activity to the EA, but its edits come from two screens: teaching on
+Lesson and confirming knowledge on Wrap up. Both edit the same SQLite row. Its JSON fields are
+replaced whole, so two independent screen copies are dangerous: Lesson can save a new letter tick,
+then Wrap up can replace `ticks` using an older copy and erase it. A SQLite transaction around each
+write prevents partial writes; it cannot make an old copy current.
+
+The ownership boundary is therefore the signed-in EA handle, not either screen. It creates one
+`lessonDraft` controller (`src/session/handleServices.js:99`). Every screen subscribes to that
+controller through `useLessonDraft`. The controller has one serial queue; each operation stores a
+transition and captured arguments, then computes its patch **at write time from the last confirmed
+row** (`src/services/lessonDraftController.js:114`). Pending transitions give an optimistic view,
+but they are not the persisted baseline. If one write fails, remove only that transition and
+reapply the remaining transitions to the confirmed row. Later edits still land without silently
+smuggling the failed edit back in. A failure barrier makes Save report the lost edit even if a
+later write succeeds (`lessonDraftController.js:151`).
+
+Going to Wrap up and back must **attach, not reload**. Opening the same draft returns the current
+controller view, including queued edits (`lessonDraftController.js:76`). A generation fence stops
+late work from an old load, discarded draft or closed handle from publishing into the current
+lesson (`lessonDraftController.js:28`, `:46`, `:197`). Closing the handle also rejects waiting
+callers. Save first locks out edits and drains that queue, then commits session, attendees,
+corrections, changed levels, outbox work and draft deletion together (`src/services/lessonSave.js:32`).
+The controller is the owner of editing intent; the transaction is the owner of the final commit.
+Neither boundary replaces the other.
+
+One smaller version of this bug appeared in the tracker: the sheet returns a child's **whole**
+pending map, omitting a letter when its mark is undone. Merging the map kept that omitted mark.
+`setTrackerChanges` now replaces that child's map (`src/lessonPlan/lessonDraftState.js:42`);
+`lessonDraftState.test.js:58` proves an undone mark disappears. Representation matters: absence in
+a replacement map means deletion, whereas absence in a patch means leave unchanged.
+
+The repeated review lesson was that a rule kept in two places drifts. The picker and lesson start
+disagreed about hidden or handed-over children; `visibleRosterChildren` now serves ChildrenContext,
+the hook and Add a child (`src/utils/childVisibility.js:3`, `src/hooks/useLessonDraft.js:39`,
+`src/screens/lessons/LessonScreen.js:80`). Last-seen calculations now share the pure recency helpers:
+`rankGroups` and the exported `groupLastSeenOn` use `attendedBy`/`newestDate`, with an agreement test
+(`src/lessonPlan/engine/groups.js:18`, `__tests__/lessonPlanGroupLastSeen.test.js:8`). They share the
+calculation rather than merely matching formatting. An untouched screen crossing midnight also
+needs the plan and lesson date to agree: `datedOnFirstChange` is used for every first-change path,
+including Wrap up and Save (`src/hooks/useLessonDraft.js:15`, `:142`, `:150`, `:157`, `:167`).
+Once persisted, the date stays the lesson's date. Reuse the rule itself, then test the consumers'
+agreement; two separately correct-looking implementations are not a durable contract.
+
+The vanished-blend-tier correction illustrates where automatic repair belongs. The screen may show
+the default while the chosen tier's child is absent, preserving that choice if the child returns.
+At Save, `beginSave` settles the vanished tier through the same queue and failure barrier; a failed
+correction stops Save (`src/hooks/useLessonDraft.js:169`, `__tests__/LessonScreen.test.js:434`).
+Doing that write in a render-driven effect caused repeated writes on persistent failure. The final
+boundary needs no background repair loop. These local regressions prove storage/navigation rules;
+native iOS swipe, force-quit and A03s timing still need device section V.
+
 ## Retrying an insert must not ask for edit rights
 
 A network failure cannot tell the phone whether the server committed a request. In B2's session
@@ -2090,6 +2143,10 @@ on Expo SQLite is still a device gate. C1 supplies storage; C3 supplies the user
 
 ## A foreign key states the present; a session's group is history
 
+**2026-10-22 status note:** after the wave-1 integration rebase, the migration described below is
+SQLite **v18**, not the original v16. Current source: `src/db/migrations.js:895`; current capture
+is described in [the lesson draft chapter](#one-lesson-draft-needs-one-writer-even-across-two-screens-2026-10-22).
+
 A session records a past group block, while the phone's group roster records the EA's current
 assignments. Those sets need not match. After a handover, an incoming EA can read a child's old
 sessions without ever holding the old group. An ended assignment or a deleted group can also
@@ -2181,3 +2238,90 @@ production excluded and hides the gallery after an OTA even on preview
 (`src/utils/questionGallery.js:6`, `app.config.js:4`, `eas.json:54`, `eas.json:69`). Shared
 primitives, guard tests, behaviour tests and device inspection each cover a different failure
 mode. None substitutes for the other three.
+
+## Leave decisions precede immutable assessment writes (#102, 2026-10-28)
+
+An assessment result cannot be edited or deleted by the EA (ADR-0007), so navigation flags cannot
+undo a save once the SQLite transaction has started. The host must choose before that boundary:
+if the EA is deciding whether to leave, capture a timer's completed result in memory and wait.
+Keep result starts persistence; Discard result leaves without writing. Conversely, once a save is
+in flight, hold Back without offering Discard until it settles. A failed transaction leaves a
+retained result that can truthfully be retried or discarded. Refs record the decision synchronously,
+so callbacks queued before React renders cannot replace the first result or cross that boundary.
+
+Sharing an appearance does not require sharing a native presentation. iOS owns the lifecycle of
+React Native Modals and refuses overlapping presentation/dismissal transitions. A package End
+sheet can close in the same moment an immediate save failure opens the host's error sheet. The
+shared `ConfirmPanel` owns the drawing; the package `ConfirmSheet` owns native presentation, while
+the host `TestSheet` uses Paper's Portal in the existing window. This removes the presentation race
+without delays, while keeping accessibility focus, background hiding and hardware Back explicit.
+Paper forwards its own theme through its Portal, but custom app contexts need to be carried
+explicitly: `TestSheet` forwards assessment fonts so sharing the panel also preserves typography.
+
+## A screen that redirects on focus must not sit under its own destination (lesson flow, 2026-10-23)
+
+The Galaxy A03s run found that the first **Leave lesson** on a lesson started from "Who are you
+teaching?" bounced straight back into the lesson. Each piece was right on its own. The picker
+opened the lesson with `navigate`, so the picker stayed in the stack underneath. The picker
+also had a rule for fresh opens: if a lesson is in progress, replace yourself with it (so
+"+ Record" resumes instead of starting a second lesson). Leaving popped the lesson, the picker
+came back into focus, saw the kept draft and replaced itself with the lesson again. Resumed
+lessons have no picker underneath, which is why every replay from Home passed and why screen
+tests that mount one screen at a time could not see it.
+
+The fix follows the lesson's own copy, "You can finish it later from Home": once the lesson
+is real (it has a draft), the Lesson screen removes the picker directly below it with one
+`CommonActions.reset` that keeps every other route and key. Before the first change nothing
+is removed, so Back still undoes a wrong group (`src/screens/lessons/LessonScreen.js:54`). The
+test that would have caught it mounts a real `NavigationContainer` and native stack with the
+real picker and Lesson screens (`__tests__/LessonFlowNavigation.test.js`). The general rule:
+a focus effect that navigates is a loop waiting for its destination to pop back to it.
+
+The same run found a second, quieter design error: **a load keyed on something the data does
+not depend on**. The lesson hook keyed its database read on the present children, so every
+absent/present tap threw away the loaded input and blanked the plan until a fresh read
+finished (330 ms, or 3.2 s with the blends pack). But attendance does not change any child's
+facts; it only selects which loaded facts count today. The hook now loads facts for everyone
+in the lesson's attendance and projects the present children in the same render as the chip
+(`src/lessonPlan/inputs/lessonInputs.js`, `presentLessonInput`). Only adding a child changes
+what must be read. Ask of every load key: if this value changes, does the stored data I read
+actually change? If not, it belongs in a projection, not in the key.
+
+The 3.2 s also had a CPU half. The pure engine re-tokenised all 3,328 pack words on every call.
+The engine may hold no state (`__tests__/lessonPlanEnginePurity.test.js`), so the cache lives
+one layer out: a pure `indexPack` in the engine, memoised per frozen pack object in the inputs
+layer (`src/lessonPlan/inputs/packIndexCache.js`). Purity and speed did not conflict; they only
+needed the cache to live where state is allowed.
+
+## Two writers of one record need a rule that runs out (lesson flow, 2026-10-23)
+
+The Lesson screen stays mounted under Wrap up, and both run `useLessonDraft`. They share one draft
+through a controller, but each loads its own facts about the children, at its own moment. So the
+two can disagree: one loaded before "what children know" finished downloading, the other after.
+
+The first version of "refresh the plan when history arrives" said: *if my base was refreshed,
+recompute the plan and save it if it differs from the stored one.* Each screen obeyed that rule
+with its own facts, so each one's write made the other's plan "differ", and they traded writes
+forever. Nothing was wrong in either screen alone; the loop lived between them.
+
+The way out is to compare against the **shared** record and only ever move it one way. The stored
+plan carries `history_complete` and `mastery_complete`. A screen may replace it only with a plan
+that is at least as complete on both and more complete on one. Every write raises the stored
+plan, and there are only two flags to raise, so after at most two writes no screen has anything
+better to offer, whatever facts each one holds. A screen whose facts are *worse* (a download
+failed since) never writes at all.
+
+Two habits to take from this:
+
+- When two components can write the same record, ask "what stops them?" A rule that only says
+  "write when we disagree" never stops if they keep disagreeing. A rule that only lets the record
+  improve in a fixed order stops by construction. (The attendance rule already worked this way:
+  the stored plan records who was present, so one write settles it for both screens.)
+- Count what you mean to count. The draft controller runs a transition to check it, again to show
+  it at once, and again to save it, so a spy on the transition saw 6 calls for 2 writes. The test
+  counts calls to `controller.apply`, which is one per write.
+- A failed write is a writer too. "Every write raises the stored plan" holds only if writes land.
+  When one fails, the controller puts the old plan back, the screen sees the same gap, and it
+  tries again, for as long as the disk stays full. An automatic write must not retry on its own
+  schedule: here it waits while the controller shows "Couldn't save your last change", which
+  only a successful write clears, so the next change the EA makes is the retry.

@@ -30,49 +30,27 @@ export const rotationOffset = (groupId, today, count) => {
   return Number.isFinite(offset) ? offset : 0;
 };
 
-const blendItems = (pack) => {
-  const tiers = BLEND_TIERS.map(() => []);
-  const seen = new Set();
-  const add = (text, display, isSyllable) => {
-    if (typeof text !== 'string') return;
-    const count = letterCount(text);
-    if (isSyllable ? count !== 2 : count < 3) return;
-    const normalized = normalizeToken(text);
-    if (seen.has(normalized)) return;
-    seen.add(normalized);
-    const tier = tierForLetterCount(count);
-    tiers[BLEND_TIERS.indexOf(tier)].push({ text, display: display || text, tier });
-  };
-  const steps = Array.isArray(pack.letter_steps) ? pack.letter_steps : [];
-  [...steps].sort((a, b) => (a?.step ?? 0) - (b?.step ?? 0)).forEach((step) => {
-    (Array.isArray(step?.blends) ? step.blends : []).forEach((text) => add(text, text, true));
-  });
-  (Array.isArray(pack.word_bank) ? pack.word_bank : []).forEach((entry) => {
-    add(entry?.text, entry?.syllables, false);
-  });
-  return tiers;
-};
+const publicItem = ({ text, display, tier }) => ({ text, display, tier });
 
 export const blendChoices = ({
-  pack, children, childSessions, suggestedLetters, unlockedLetters, groupId, today, plan, soundsFor,
+  index: packIndex, children, childSessions, suggestedLetters, unlockedLetters, groupId, today, plan,
 }) => {
-  const items = blendItems(pack);
   const unlocked = new Set(unlockedLetters);
   const suggested = new Set(suggestedLetters);
   const recent = new Set(children.flatMap((child) => (
     childSessions(child.id).slice(0, BLEND_RECENT_SESSIONS).flatMap(lessonBlends)
   )));
-  const ranked = items.map((tierItems) => {
+  const ranked = packIndex.blendTiers.map((tierItems) => {
     const usable = tierItems.filter((item) => {
-      const sounds = soundsFor(item.text);
+      const { sounds } = item;
       return sounds !== null && sounds.length > 0 && sounds.every((sound) => unlocked.has(sound));
     });
     const offset = rotationOffset(groupId, today, usable.length);
     const buckets = [[], [], [], []];
     usable.forEach((_, i) => {
       const item = usable[(offset + i) % usable.length];
-      const containsSuggested = soundsFor(item.text).some((sound) => suggested.has(sound));
-      const bucket = (containsSuggested ? 0 : 2) + (recent.has(normalizeToken(item.text)) ? 1 : 0);
+      const containsSuggested = item.sounds.some((sound) => suggested.has(sound));
+      const bucket = (containsSuggested ? 0 : 2) + (recent.has(item.normalized) ? 1 : 0);
       buckets[bucket].push(item);
     });
     return buckets.flat();
@@ -94,16 +72,17 @@ export const blendChoices = ({
       index === defaultIndex ? childTiers[i] <= index : childTiers[i] === index
     )).map((child) => child.id);
     if (index === frozenIndex) {
-      const catalogue = new Map(items.flat().map((item) => [normalizeToken(item.text), item]));
       const frozen = (Array.isArray(plan.suggested_blends) ? plan.suggested_blends : [])
         .filter((text) => typeof text === 'string')
-        .map((text) => catalogue.get(normalizeToken(text)))
+        .map((text) => packIndex.blendByNormalized.get(normalizeToken(text)))
         .filter(Boolean);
-      const frozenTexts = new Set(frozen.map((item) => normalizeToken(item.text)));
+      const frozenTexts = new Set(frozen.map((item) => item.normalized));
       return [{ tier, childIds, suggested: frozen, pool: [
-        ...frozen, ...pool.filter((item) => !frozenTexts.has(normalizeToken(item.text))),
+        ...frozen, ...pool.filter((item) => !frozenTexts.has(item.normalized)),
       ] }];
     }
     return [{ tier, childIds, suggested: pool.slice(0, BLEND_SUGGESTION_COUNT), pool }];
-  });
+  }).map(choice => ({ ...choice,
+    suggested: choice.suggested.map(publicItem), pool: choice.pool.map(publicItem),
+  }));
 };

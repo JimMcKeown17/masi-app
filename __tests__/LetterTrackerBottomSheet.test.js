@@ -10,7 +10,8 @@ import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { masteryRepository } from '../src/db/repositories/masteryRepository';
 import { MotionProvider } from '../src/context/MotionContext';
-import { PEDAGOGICAL_ORDERS } from '../src/utils/assessmentRegistry';
+import { getTeachingOrder, resolveTeachingOrder } from '../src/utils/letterOrders';
+const teachingOrder = code => getTeachingOrder({ letter_order_edition: '2026-10-23' }, code);
 import LetterTrackerBottomSheet from '../src/components/session/LetterTrackerBottomSheet';
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -42,6 +43,7 @@ const stored = (letter) => ({ id: `mastery-${letter}`, child_id: child.id, lette
 const renderSheet = (props = {}) => render(<PaperProvider settings={{ icon: () => null }}>
   <MotionProvider value={{ motionLevel: 'still', reduceMotion: true, tier: 'static' }}>
     <LetterTrackerBottomSheet visible child={child} userId="user-1" languageCode="en"
+      teachingOrder={teachingOrder(props.languageCode === undefined ? 'en' : props.languageCode)}
       pendingChanges={{}} onChangesUpdate={jest.fn()} onDismiss={jest.fn()} {...props} />
   </MotionProvider>
 </PaperProvider>);
@@ -83,7 +85,7 @@ describe('LetterTrackerBottomSheet', () => {
     expect(await screen.findByLabelText('a, taught by coach')).toBeTruthy();
     expect(masteryRepository.getLetterMastery).toHaveBeenCalledWith({ childId: child.id, language: 'af' });
     expect(screen.getByLabelText('s, not mastered')).toBeTruthy();
-    expect(screen.getAllByText(/^[a-z]$/).map(node => node.props.children)).toEqual(PEDAGOGICAL_ORDERS.af);
+    expect(screen.getAllByText(/^[a-z]$/).map(node => node.props.children)).toEqual(resolveTeachingOrder('2026-10-23', 'af').letters);
     expect(screen.getByText('Amahle Dlamini · 1/26 letters')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('m, not mastered'));
     expect(onChangesUpdate).toHaveBeenCalledWith({ m: { mastered: true, languageCode: 'af', madeAt: NOW } });
@@ -135,7 +137,7 @@ describe('LetterTrackerBottomSheet', () => {
       const [pending, setPending] = React.useState({});
       return <SignedInEAContext.Provider value={value}><PaperProvider settings={{ icon: () => null }}>
         <MotionProvider value={{ motionLevel: 'still', reduceMotion: true, tier: 'static' }}>
-          <LetterTrackerBottomSheet visible={visible} child={child} userId="user-1" languageCode="en"
+          <LetterTrackerBottomSheet visible={visible} child={child} userId="user-1" languageCode="en" teachingOrder={teachingOrder('en')}
             pendingChanges={pending} onChangesUpdate={setPending} onDismiss={jest.fn()} />
         </MotionProvider>
       </PaperProvider></SignedInEAContext.Provider>;
@@ -169,6 +171,7 @@ describe('LetterTrackerBottomSheet', () => {
           child={{ id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' }}
           userId="user-1"
           languageCode="en"
+          teachingOrder={teachingOrder('en')}
           pendingChanges={{}}
           onChangesUpdate={jest.fn()}
         />
@@ -179,4 +182,36 @@ describe('LetterTrackerBottomSheet', () => {
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+});
+
+
+test.each([
+  ['xh', ['o', 'm', 'l', 'a']],
+  ['en', ['s', 'a', 'n', 'd']],
+  ['af', ['a', 'e', 'k', 'n']],
+])('the %s tracker grid follows the class order', async (languageCode, first) => {
+  const screen = renderSheet({ languageCode });
+  await screen.findByLabelText(`${first[0]}, not mastered`);
+  const letters = screen.getAllByText(/^[a-z]$/).map(node => node.props.children);
+  expect(letters).toHaveLength(26);
+  expect(letters.slice(0, 4)).toEqual(first);
+});
+
+test('a null teaching order keeps the loading state after mastery has loaded', async () => {
+  const screen = renderSheet({ teachingOrder: null });
+  await act(async () => {});
+  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  expect(screen.queryByText('No letter set for this class language.')).toBeNull();
+  expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
+  expect(screen.queryByText('Taught')).toBeNull();
+});
+
+test.each([
+  [{ kind: 'none' }, 'No letter set for this class language.'],
+  [{ kind: 'update' }, "Update the app to teach this class's letters."],
+])('teaching order %p shows its message without a grid', async (order, message) => {
+  const screen = renderSheet({ teachingOrder: order });
+  expect(await screen.findByText(message)).toBeTruthy();
+  expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
+  expect(screen.queryByText('Taught')).toBeNull();
 });

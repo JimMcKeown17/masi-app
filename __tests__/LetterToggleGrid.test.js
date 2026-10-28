@@ -3,11 +3,11 @@ import { Animated, StyleSheet } from 'react-native';
 import { fireEvent, render, within } from '@testing-library/react-native';
 import LetterToggleGrid, { letterTileSize } from '../src/components/sessions/LetterToggleGrid';
 import LetterToggleTile from '../src/components/sessions/LetterToggleTile';
-import { LETTER_ORDER } from '../src/constants/literacyConstants';
 import { MotionProvider } from '../src/context/MotionContext';
 import { colors } from '../src/constants/colors';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
+const letters = ['a', 'e', 'i', 'o', 'u', 'm', 'l', 'n', 's', 'd', 'k', 't', 'f', 'g', 'y', 'w', 'b', 'p', 'c', 'x', 'j', 'h', 'v', 'z', 'q', 'r'];
 const flat = (node) => StyleSheet.flatten(node.props.style);
 const tileFor = (letter) => ({ tone: 'rest', accessibilityLabel: `${letter.toUpperCase()}, not selected`, accessibilityState: { selected: false } });
 
@@ -16,25 +16,25 @@ test.each([[342, 50], [312, 45], [363, 53], [304, 44]])('tile width at %s is %s'
 });
 
 test('the grid stays six columns when its tiles reach their maximum size', () => {
-  const screen = render(<LetterToggleGrid letters={LETTER_ORDER} tileFor={tileFor} onPressLetter={jest.fn()} />);
+  const screen = render(<LetterToggleGrid letters={letters} tileFor={tileFor} onPressLetter={jest.fn()} />);
   const gridStyle = flat(screen.getByTestId('letter-toggle-grid'));
   expect(letterTileSize(700)).toBe(56);
   expect(gridStyle.maxWidth).toBe(6 * 56 + 5 * 8);
 });
 
 test('grid keeps the 26-letter teaching order, lowercase and capped text', () => {
-  const screen = render(<LetterToggleGrid letters={LETTER_ORDER} tileFor={tileFor} onPressLetter={jest.fn()} />);
+  const screen = render(<LetterToggleGrid letters={letters} tileFor={tileFor} onPressLetter={jest.fn()} />);
   const tiles = screen.getAllByRole('button');
   expect(tiles).toHaveLength(26);
   expect(tiles.slice(0, 6).map((tile) => within(tile).getByText(/^[a-z]$/).props.children)).toEqual(['a', 'e', 'i', 'o', 'u', 'm']);
   tiles.forEach((tile, index) => {
-    expect(within(tile).getByText(LETTER_ORDER[index].toLowerCase()).props.maxFontSizeMultiplier).toBe(1.2);
+    expect(within(tile).getByText(letters[index].toLowerCase()).props.maxFontSizeMultiplier).toBe(1.2);
   });
 });
 
 test('measured grid width sets all tile sizes and presses return the original letter', () => {
   const onPressLetter = jest.fn();
-  const screen = render(<LetterToggleGrid letters={LETTER_ORDER} tileFor={tileFor} onPressLetter={onPressLetter} />);
+  const screen = render(<LetterToggleGrid letters={letters} tileFor={tileFor} onPressLetter={onPressLetter} />);
   fireEvent(screen.getByTestId('letter-toggle-grid'), 'layout', { nativeEvent: { layout: { width: 312, height: 0, x: 0, y: 0 } } });
   screen.getAllByRole('button').forEach((tile) => expect(flat(tile)).toMatchObject({ width: 45, height: 45 }));
   fireEvent.press(screen.getByLabelText('M, not selected'));

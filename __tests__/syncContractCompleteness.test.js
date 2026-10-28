@@ -3,13 +3,27 @@ jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { runMigrations } from '../src/db/migrations';
-import { __contract, createOutboxSyncEngine } from '../src/services/offlineSync';
+import { __contract, createOutboxSyncEngine, _testBuildSyncPayload } from '../src/services/offlineSync';
 import { createAssessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { bindTestActor } from '../test-support/actorTestUtils';
 
 // These child rows travel only inside their parent family payload and acknowledgement.
 // They still require complete server/local column classification.
 const FAMILY_MEMBER_TABLES = ['assessment_items'];
+
+it('the class edition is explicitly server-owned and excluded from server columns', () => {
+  expect(__contract.SERVER_COLUMNS.classes).not.toContain('letter_order_edition');
+  expect(__contract.INTENTIONALLY_UNSYNCED.classes?.letter_order_edition)
+    .toBe('Server-owned: the classes trigger sets it (migration 20261027120000); pulls take the server value.');
+});
+
+it.each(['insert', 'update'])('a class %s payload never sends its stored edition', operation => {
+  const payload = _testBuildSyncPayload('classes', {
+    id: 'class-1', name: 'Renamed class', letter_order_edition: '2099-01-01',
+  }, operation);
+  expect(payload).toMatchObject({ name: 'Renamed class' });
+  expect(payload).not.toHaveProperty('letter_order_edition');
+});
 
 let db;
 beforeAll(async () => { db = createBetterSqliteTestDatabase(':memory:'); await runMigrations(db); });

@@ -10,13 +10,14 @@ jest.mock('../src/assessment-questions', () => ({
 }));
 
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { act, configure, fireEvent, waitFor } from '@testing-library/react-native';
+import { BackHandler, Modal, Pressable, Text, View } from 'react-native';
+import { act, configure, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { usePreventRemoveContext } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
-import { bundledItemSetFor, questionComponentFor, skippedResult,
+import { bundledItemSetFor, questionComponentFor, skippedResult, tokens,
   WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import BatteryQuestionScreen from '../src/screens/assessments/battery/BatteryQuestionScreen';
 import { EGRA_BATTERIES, egraItemSetFor } from '../src/assessment-questions/egra';
@@ -113,9 +114,10 @@ function MockQuestion(props) {
 }
 function EmptyScreen() { return null; }
 function renderHost(params = { runId: ID, questionCode: QUESTION.question_code }) {
-  let navigation, rerenderHost;
+  let navigation, rerenderHost, nativeGuards;
   function Host(props) {
     navigation = props.navigation;
+    nativeGuards = usePreventRemoveContext().preventedRoutes;
     const [, force] = React.useReducer(value => value + 1, 0);
     rerenderHost = force;
     return <BatteryQuestionScreen {...props} />;
@@ -129,7 +131,7 @@ function renderHost(params = { runId: ID, questionCode: QUESTION.question_code }
     motion: { motionLevel: 'still', reduceMotion: true, tier: 'high' },
     routes: [{ name: 'BatteryOverview', component: EmptyScreen },
       { name: 'BatteryQuestion', component: Host, params }] });
-  return { ...screen, get navigation() { return navigation; }, refresh: () => act(() => rerenderHost()) };
+  return { ...screen, nativeGuard: () => nativeGuards[screen.navigationRef.getRootState().routes.find(route => route.name === 'BatteryQuestion')?.key], get navigation() { return navigation; }, refresh: () => act(() => rerenderHost()) };
 }
 async function ready(screen) {
   await screen.findByRole('button', { name: 'Start test' });
@@ -213,7 +215,7 @@ test('real ReadWordsQuestion in a real stack: Start hides the materials block an
   expect(screen.queryByText('Hand Lwazi')).toBeNull();
   act(() => screen.navigationRef.goBack());
   expect(screen.routeNames()).toEqual(['BatteryOverview', 'BatteryQuestion']);
-  expect(screen.getByText('End the test?')).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
   expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
 });
 
@@ -254,13 +256,13 @@ test('leaving mid-capture shows the discard sheet and saves nothing', async () =
   const screen = await ready(renderHost());
   fireEvent.press(screen.getByRole('button', { name: 'Start test' }));
   fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
-  expect(screen.getByText('End the test?')).toBeTruthy();
-  expect(screen.getByText('Leave without saving a result?')).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
+  expect(screen.getByText("Lwazi's answers on this question won't be saved. Finished questions stay saved.")).toBeTruthy();
   expect(screen.routeNames()).toEqual(['BatteryOverview', 'BatteryQuestion']);
-  fireEvent.press(screen.getByRole('button', { name: 'Keep testing' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
   act(() => screen.navigationRef.goBack());
-  expect(screen.getByText('End the test?')).toBeTruthy();
-  fireEvent.press(screen.getByRole('button', { name: 'Discard' }));
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Discard answers' }));
   expect(screen.routeNames()).toEqual(['BatteryOverview']);
   expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
 });
@@ -286,6 +288,10 @@ test.each(['RUN_NOT_WRITABLE', 'QUESTION_ALREADY_DECIDED'])(
     const complete = mockQuestionProps.onComplete;
     fireEvent.press(screen.getByRole('button', { name: 'Finish test' }));
     await screen.findByText('This assessment is closed');
+    expect(screen.getByTestId('assessment-closed')).toBeTruthy();
+    expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+    expect(within(screen.getByTestId('assessment-closed')).getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Back to assessment' })).toHaveStyle({ backgroundColor: tokens.color.ink });
     expect(screen.getByText("This answer can't be saved because the assessment is no longer open.")).toBeTruthy();
     expect(screen.queryByText("Couldn't save — try again")).toBeNull();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
@@ -372,7 +378,7 @@ test('roster reload during capture preserves the current presentation and its hi
   expect(screen.queryByText('Hand Lwazi')).toBeNull();
   expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
   act(() => screen.navigationRef.goBack());
-  expect(screen.getByText('End the test?')).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
 });
 
 test('a load failure can be retried without presenting capture early', async () => {
@@ -404,4 +410,160 @@ test('a stale handle cannot navigate or trigger sync after a late save', async (
   await act(async () => pending.resolve({ id: 'saved' }));
   expect(screen.routeNames()).toEqual(['BatteryOverview', 'BatteryQuestion']);
   expect(mockSync).not.toHaveBeenCalled();
+});
+
+
+test.each(['Close test', 'navigation Back'].flatMap(via => ['Lwazi', ''].map(name => [via, name])))(
+  'real Battery Question %s distinguishes saving End from discarding answers (%p first name)', async (via, firstName) => {
+    const child = { ...CHILD, first_name: firstName };
+    mockRoster = { ...mockRoster, all: [child], restOfClass: [child] };
+    questionComponentFor.mockImplementation(jest.requireActual('../src/assessment-questions').questionComponentFor);
+    const screen = renderHost();
+    const leave = () => via === 'Close test'
+      ? fireEvent.press(screen.getByRole('button', { name: 'Close test' }))
+      : act(() => screen.navigationRef.goBack());
+    fireEvent.press(await screen.findByRole('button', { name: 'Start' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+    fireEvent.press(screen.getByRole('button', { name: 'End question' }));
+    const endTitle = screen.getByRole('header').props.children;
+    expect(endTitle).toBe('End this question?');
+    expect(screen.getByRole('button', { name: 'End question' })).toHaveStyle({ backgroundColor: tokens.color.primary });
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+    leave();
+    expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Leave without saving?' }).props.children).not.toBe(endTitle);
+    expect(screen.getByText(`${firstName ? `${firstName}'s answers` : 'The answers'} on this question won't be saved. Finished questions stay saved.`)).toBeTruthy();
+    expect(screen.queryByText('End the test?')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Discard answers' })).toHaveStyle({ backgroundColor: tokens.color.primary });
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+    expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+    fireEvent.press(screen.getByRole('button', { name: 'End question' }));
+    expect(screen.getByText(/^2 marked\./)).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+    leave();
+    fireEvent.press(screen.getByRole('button', { name: 'Discard answers' }));
+    expect(screen.routeNames()).toEqual(['BatteryOverview']);
+    expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  },
+);
+
+
+test.each(['Lwazi', ''])('Battery save error offers Not now and keeps the unsaved result (%p first name)', async firstName => {
+  const child = { ...CHILD, first_name: firstName };
+  mockRoster = { ...mockRoster, all: [child], restOfClass: [child] };
+  repositories.assessments.saveQuestionResult.mockRejectedValueOnce(new Error('disk full'));
+  const screen = await ready(renderHost());
+  fireEvent.press(screen.getByRole('button', { name: 'Finish test' }));
+  await screen.findByText("Couldn't save — try again");
+  expect(screen.getByTestId('save-error')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.getByText('Your result is still here. Try saving it again.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toHaveStyle({ backgroundColor: tokens.color.ink });
+  fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+  expect(screen.queryByTestId('save-error')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.getByRole('header', { name: 'Leave without saving?' })).toBeTruthy();
+  expect(screen.getByText(`${firstName ? `${firstName}'s result` : 'This result'} isn't saved yet. If you leave now, it will be lost.`)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Discard result' })).toHaveStyle({ backgroundColor: tokens.color.primary });
+  expect(screen.queryByTestId('save-error')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Keep result' }));
+  expect(screen.getByTestId('save-error')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(2);
+  expect(repositories.assessments.saveQuestionResult.mock.calls[1][0])
+    .toEqual(repositories.assessments.saveQuestionResult.mock.calls[0][0]);
+});
+
+
+test('closed assessment host sheet routes hardware Back to the overview', async () => {
+  const back = jest.spyOn(BackHandler, 'addEventListener');
+  repositories.assessments.saveQuestionResult.mockRejectedValueOnce(Object.assign(new Error('refused'), { code: 'RUN_NOT_WRITABLE' }));
+  const screen = await ready(renderHost());
+  fireEvent.press(screen.getByRole('button', { name: 'Finish test' }));
+  await screen.findByText('This assessment is closed');
+  expect(screen.getByTestId('assessment-closed')).toBeTruthy();
+  expect(screen.queryByTestId('save-error')).toBeNull();
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+  act(() => back.mock.calls.filter(([event]) => event === 'hardwareBackPress').at(-1)[1]());
+  back.mockRestore();
+  expect(screen.routeNames()).toEqual(['BatteryOverview']);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+  expect(mockSync).not.toHaveBeenCalled();
+});
+
+async function renderRealQuestion() {
+  questionComponentFor.mockImplementation(jest.requireActual('../src/assessment-questions').questionComponentFor);
+  const screen = renderHost();
+  fireEvent.press(await screen.findByRole('button', { name: 'Start' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+  return screen;
+}
+function endRealQuestion(screen) {
+  fireEvent.press(screen.getByRole('button', { name: 'End question' }));
+  fireEvent.press(screen.getByRole('button', { name: 'End question' }));
+}
+
+test('real Battery End to immediate save failure, then leave to Keep result, uses only host sheets', async () => {
+  repositories.assessments.saveQuestionResult.mockRejectedValueOnce(new Error('disk full'));
+  const screen = await renderRealQuestion();
+  endRealQuestion(screen);
+  await screen.findByTestId('save-error');
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  fireEvent.press(screen.getByRole('button', { name: 'Keep result' }));
+  expect(screen.getByTestId('save-error')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+});
+
+test.each(['Discard result', 'Keep result'])('real Battery timer expiry during leave waits for %s', async decision => {
+  const screen = await renderRealQuestion();
+  expect(screen.nativeGuard()?.preventRemove).toBe(true);
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+  await act(async () => jest.advanceTimersByTime(61000));
+  expect(screen.getByText("Lwazi's result isn't saved yet. If you leave now, it will be lost.")).toBeTruthy();
+  expect(repositories.assessments.saveQuestionResult).not.toHaveBeenCalled();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.nativeGuard()?.preventRemove).toBe(true);
+  fireEvent.press(screen.getByRole('button', { name: decision }));
+  await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(decision === 'Discard result' ? 0 : 1);
+  if (decision === 'Keep result') expect(repositories.assessments.saveQuestionResult.mock.calls[0][0].result).toMatchObject({
+    stopped_reason: 'timer', derived: { total_correct: 1, total_attempted: 1 },
+    items: expect.arrayContaining([expect.objectContaining({ position: 0, is_correct: true })]),
+  });
+});
+
+test.each(['resolve', 'reject'])('real Battery Close and navigation Back during pending save wait for %s', async outcome => {
+  const pending = deferred();
+  repositories.assessments.saveQuestionResult.mockReturnValueOnce(pending.promise);
+  const screen = await renderRealQuestion();
+  endRealQuestion(screen);
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  act(() => screen.navigationRef.goBack());
+  expect(screen.routeNames()).toEqual(['BatteryOverview', 'BatteryQuestion']);
+  expect(screen.nativeGuard()?.preventRemove).toBe(true);
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+  await act(async () => pending[outcome](outcome === 'reject' ? new Error('disk full') : { id: 'saved' }));
+  if (outcome === 'resolve') expect(screen.routeNames()).toEqual(['BatteryOverview']);
+  else {
+    expect(screen.getByTestId('save-error')).toBeTruthy();
+    expect(screen.nativeGuard()?.preventRemove).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+    expect(screen.getByRole('button', { name: 'Discard result' })).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Discard result' }));
+    expect(screen.routeNames()).toEqual(['BatteryOverview']);
+  }
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
 });

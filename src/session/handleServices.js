@@ -25,8 +25,11 @@ import { createSessionHistoryState } from '../services/sessionHistoryPull';
 import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
 import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
 import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
-import { isMasteryInputsComplete } from '../services/pullCoverage';
+import {
+  isMasteryInputsComplete, sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
+} from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
+import { createLessonDraftController } from '../services/lessonDraftController';
 import { StaleActorError } from './staleActor';
 
 // Construct once, before publication. Every closure captures this handle, never the registry.
@@ -93,6 +96,7 @@ export const createHandleServices = (handle) => {
   handle.onClose(() => { store.reset(); assessmentStore.reset(); });
   return {
     repositories,
+    lessonDraft: createLessonDraftController({ repositories, onClose: handle.onClose }),
     homeAttention: createHomeAttentionStore({ database: handle, localState: repositories.localState }),
     syncEngine: createOutboxSyncEngine({
       ...options, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
@@ -123,12 +127,24 @@ export const createHandleServices = (handle) => {
       return data || [];
     },
     fetchAndCacheSchools: () => fetchAndCacheSchools(referenceOptions),
-    sessionHistory: { start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }), store },
+    sessionHistory: {
+      start: ({ force = false } = {}) => store.start({ userId: handle.userId, force }),
+      store,
+      coveredChildIds: ({ programmeId, academicYearStart } = {}) => sessionHistoryCoveredChildIds({
+        database: handle, userId: handle.userId, programmeId, academicYearStart,
+      }),
+      completenessByChild: ({ childIds, programmeId, academicYearStart } = {}) => sessionHistoryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds, programmeId, academicYearStart,
+      }),
+    },
     assessmentHistory: {
       start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }),
       store: assessmentStore,
       masteryInputsComplete: ({ childIds } = {}) => isMasteryInputsComplete({
         database: handle, userId: handle.userId, childIds,
+      }),
+      masteryCompletenessByChild: ({ childIds, programmeId, academicYear } = {}) => masteryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds, programmeId, academicYear,
       }),
     },
     deviceProfile: {

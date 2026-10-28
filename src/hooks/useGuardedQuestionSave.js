@@ -11,6 +11,8 @@ export function useGuardedQuestionSave({ navigation, persist, onSaved, fatalCode
   const mounted = useRef(true);
   const capturedResult = useRef(null);
   const pendingNavigation = useRef(null);
+  const leaveDecision = useRef(null);
+  const attemptedSave = useRef(false);
   const [preventLeave, setPreventLeave] = useState(false);
   const [result, setResult] = useState(null);
   const [saveError, setSaveError] = useState(false);
@@ -22,7 +24,10 @@ export function useGuardedQuestionSave({ navigation, persist, onSaved, fatalCode
     return () => { mounted.current = false; };
   }, []);
   usePreventRemove(preventLeave, ({ data }) => {
-    if (allowLeave.current) return;
+    // usePreventRemove already blocked the removal. A started transaction cannot
+    // be discarded; wait for its outcome before offering a leave decision.
+    if (allowLeave.current || inFlight.current) return;
+    leaveDecision.current = data.action;
     setSaveError(false);
     setLeaveAction(data.action);
   });
@@ -41,7 +46,8 @@ export function useGuardedQuestionSave({ navigation, persist, onSaved, fatalCode
   }, [preventLeave, navigation, onSaved]);
 
   const save = useCallback(async nextResult => {
-    if (inFlight.current || saved.current || discarded.current || allowLeave.current) return;
+    if (leaveDecision.current || inFlight.current || saved.current || discarded.current || allowLeave.current) return;
+    attemptedSave.current = true;
     inFlight.current = true;
     setSaveError(false);
     try {
@@ -75,10 +81,15 @@ export function useGuardedQuestionSave({ navigation, persist, onSaved, fatalCode
     if (capturedResult.current || allowLeave.current) return;
     capturedResult.current = nextResult;
     setResult(nextResult);
-    void save(nextResult);
+    // A timer can finish while the EA is deciding whether to leave. Capture
+    // first, but never write an immutable result before that decision.
+    if (!leaveDecision.current) void save(nextResult);
   }, [save]);
 
   const onStart = useCallback(() => {
+    // After a save, a discard or a fatal refusal the screen is leaving. A queued completion
+    // (the Battery host calls onStart first) must not re-arm the guard and block that exit.
+    if (allowLeave.current) return;
     setPreventLeave(true);
   }, []);
 
@@ -87,15 +98,23 @@ export function useGuardedQuestionSave({ navigation, persist, onSaved, fatalCode
     if (capturedResult.current) return save(capturedResult.current);
   }, [save]);
   const discard = () => {
+    if (!leaveDecision.current || inFlight.current) return;
     discarded.current = true;
     allowLeave.current = true;
-    pendingNavigation.current = { kind: 'discard', action: leaveAction };
+    pendingNavigation.current = { kind: 'discard', action: leaveDecision.current };
+    leaveDecision.current = null;
     setLeaveAction(null);
     setPreventLeave(false);
   };
   const keepTesting = () => {
+    if (!leaveDecision.current) return;
+    leaveDecision.current = null;
     setLeaveAction(null);
-    if (capturedResult.current && !inFlight.current) setSaveError(true);
+    if (capturedResult.current && !inFlight.current) {
+      // Keep result restores a failed attempt, but starts a deferred first save.
+      if (attemptedSave.current) setSaveError(true);
+      else void save(capturedResult.current);
+    }
   };
 
   return {

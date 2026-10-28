@@ -17,3 +17,11 @@ test.each([true, false])('checkbox exposes checked=%s and uses ink selection', (
   fireEvent.press(chip);
   expect(onPress).toHaveBeenCalledTimes(1);
 });
+
+test('the screen reader label can override the visible label and defaults to it', () => {
+  const view = render(<ToggleChip label="None of these yet" accessibilityLabel="Amahle, none of these yet" selected={false} />);
+  expect(view.getByRole('checkbox', { name: 'Amahle, none of these yet' })).toBeTruthy();
+  expect(view.getByText('None of these yet')).toBeTruthy();
+  view.rerender(<ToggleChip label="Extra practice" selected={false} />);
+  expect(view.getByRole('checkbox', { name: 'Extra practice' })).toBeTruthy();
+});

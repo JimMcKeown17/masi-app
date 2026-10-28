@@ -5,7 +5,7 @@ import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import BrandButton from '../../components/common/BrandButton';
 import { JOB_TITLE_CODES } from '../../constants/jobTitles';
-import LiteracySessionForm from './LiteracySessionForm';
+import LessonPickerScreen from '../lessons/LessonPickerScreen';
 
 export default function SessionFormScreen({ navigation }) {
   const { profile, refreshProfile } = useAuth();
@@ -20,7 +20,7 @@ export default function SessionFormScreen({ navigation }) {
   }
 
   if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH) {
-    return <LiteracySessionForm navigation={navigation} />;
+    return <LessonPickerScreen navigation={navigation} />;
   }
 
   return (

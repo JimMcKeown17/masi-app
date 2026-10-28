@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "about": "Every teaching letter order, and the editions that group them. A class records an edition; its order is the edition's order for the class's language. Entries are append-only: never edit or remove an order or an edition; a change is a new entry with a new id. Content files (word banks, books) name the order they were built for. Design: docs/design/2026-10-23-letter-order-versions.md",
+  "orders": [
+    {
+      "id": "isixhosa-order-legacy",
+      "language": "isixhosa",
+      "status": "legacy",
+      "letter_steps": [["a","e","i","o"],["u","b"],["l","m"],["k","p"],["s","h"],["z","n"],["d","y"],["f","w"],["v","x"],["g","t"],["q","r"],["c","j"]],
+      "sound_steps": [],
+      "source": "ISIXHOSA_PEDAGOGICAL_ORDER in the Zazi app (origin/main src/constants/egraConstants.js) and the Masi app; also zz-integrated-django api/letter_constants.py.",
+      "notes": "Vowels first. Taught in the Zazi app since launch (unchanged since 2026-06-09). New Zazi classes move to the 2026-10-23 edition at the switch planned for the start of the 2027 school year. The live programme suggests letters two at a time from the flat order, so this step grouping (4, then 2s) is nominal."
+    },
+    {
+      "id": "isixhosa-order-2026-10-18",
+      "language": "isixhosa",
+      "status": "superseded",
+      "letter_steps": [["o","m","l","a"],["k","u"],["e","n"],["i","t"],["s","d"],["f","b"],["y","c"],["z","p"],["q","w"],["v","g"],["x","h"],["j","r"]],
+      "sound_steps": ["th","ph","kh","ny","hl","bh","nc","dl","ty","sh","tsh"],
+      "source": "Programme team order with the i<->u and s<->n swaps (docs/research/2026-10-18-letter-order-swaps.md). Masi pack isixhosa-interim-letters-v1.",
+      "notes": "Never taught to children in the field. Kept so packs and drafts that reference it still resolve."
+    },
+    {
+      "id": "isixhosa-order-2026-10-23",
+      "language": "isixhosa",
+      "status": "current",
+      "letter_steps": [["o","m","l","a"],["k","u"],["e","n"],["i","z"],["s","t"],["f","b"],["y","d"],["c","p"],["q","w"],["v","g"],["x","h"],["j","r"]],
+      "sound_steps": ["th","ph","kh","ny","hl","bh","nc","dl","ty","sh","tsh"],
+      "source": "docs/research/2026-10-23-letter-orders-and-word-banks.md. Adopted by Jim 2026-10-23.",
+      "notes": "The 2026-10-18 order with z at step 4, t at step 5, d at step 7 and c at step 8. Never worse at any step."
+    },
+    {
+      "id": "english-order-legacy",
+      "language": "english",
+      "status": "legacy",
+      "letter_steps": [["a","m","s","t"],["n","i"],["p","c"],["f","d"],["h","o"],["r","b"],["l","k"],["e","g"],["w","v"],["u","j"],["y","z"],["q","x"]],
+      "sound_steps": [],
+      "source": "ENGLISH_PEDAGOGICAL_ORDER in the Zazi and Masi apps (src/constants/egraConstants.js). Masi pack english-interim-letters-v1.",
+      "notes": "Letters only; no sound steps."
+    },
+    {
+      "id": "english-order-2026-10-23",
+      "language": "english",
+      "status": "current",
+      "letter_steps": [["s","a","n","d"],["i","t"],["p","e"],["l","o"],["c","k"],["m","u"],["r","h"],["b","f"],["g","j"],["v","w"],["x","y"],["z","q"]],
+      "sound_steps": ["ng","er","ee","oo","ar","th","sh","ai","or","ow","ch","igh","oa","ear","ur","oi","air"],
+      "source": "docs/research/2026-10-23-letter-orders-and-word-banks.md. Adopted by Jim 2026-10-23.",
+      "notes": "The Letters and Sounds start (s a t p i n), regrouped so step 1 reads 'and'. is/his/has/as are tricky words."
+    },
+    {
+      "id": "afrikaans-order-legacy",
+      "language": "afrikaans",
+      "status": "legacy",
+      "letter_steps": [["a","s","m","e"],["k","i"],["r","o"],["n","t"],["d","l"],["p","u"],["b","g"],["h","v"],["w","y"],["f","j"],["c","z"],["x","q"]],
+      "sound_steps": [],
+      "source": "AFRIKAANS_PEDAGOGICAL_ORDER (provisional) in the Zazi and Masi apps. Masi pack afrikaans-interim-letters-v1.",
+      "notes": "Letters only; no sound steps."
+    },
+    {
+      "id": "afrikaans-order-2026-10-23",
+      "language": "afrikaans",
+      "status": "current",
+      "letter_steps": [["a","e","k","n"],["o","s"],["p","t"],["d","l"],["r","h"],["i","m"],["g","y"],["v","w"],["b","u"],["f","j"],["c","z"],["q","x"]],
+      "sound_steps": ["aa","ie","ee","oo","oe","ui","ng","ou","ei","eu","uu","ê"],
+      "source": "docs/research/2026-10-23-letter-orders-and-word-banks.md. Adopted by Jim 2026-10-23.",
+      "notes": "Codex's 2026-10-22 order with r to step 5, g to step 7 and u to step 9. Words ending in b or d said p/t are tricky words."
+    }
+  ],
+  "editions": [
+    {
+      "id": "legacy",
+      "status": "legacy",
+      "orders": {"isixhosa": "isixhosa-order-legacy", "english": "english-order-legacy", "afrikaans": "afrikaans-order-legacy"},
+      "notes": "What the Zazi app teaches every class created before the switch to the 2026-10-23 edition (planned for the start of the 2027 school year). The app's orders were unchanged from 2026-06-09. Jim, 2026-10-24: whatever the app had in Aug/Sept 2026 was the correct order at that time. Every class that exists before the switch has this edition."
+    },
+    {
+      "id": "2026-10-23",
+      "status": "current",
+      "orders": {"isixhosa": "isixhosa-order-2026-10-23", "english": "english-order-2026-10-23", "afrikaans": "afrikaans-order-2026-10-23"},
+      "notes": "The orders Jim adopted on 2026-10-23 (docs/research/2026-10-23-letter-orders-and-word-banks.md). Classes created after the switch get this edition."
+    }
+  ]
+}

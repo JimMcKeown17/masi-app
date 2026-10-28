@@ -1,4 +1,6 @@
 import { lintSequence, analyzeToken, normalizeToken, tokenizeText } from '../../utils/decodability/index.js';
+import { getLetterOrder } from '../../utils/letterOrders';
+import { packLetterOrderId } from './packLetterOrder';
 
 export const PACK_LANGUAGE_CODES = Object.freeze({ isixhosa: 'xh', english: 'en', afrikaans: 'af' });
 export const PACK_CHANNELS = Object.freeze(['release', 'preview']);
@@ -149,6 +151,25 @@ function lintReadablePack(pack, errors) {
       const length = [...normalizeToken(item)].length;
       if (length !== 2) {
         errors.push(`step_blend_length: Step ${entry.step} blend "${item}" has ${length} letters; letter-step blends must have exactly 2.`);
+      }
+    }
+  }
+  const order = getLetterOrder(packLetterOrderId(source));
+  if (!order) {
+    errors.push('pack_letter_order: pack must name a known letter order.');
+  } else {
+    if (order.language !== source.language) {
+      errors.push('pack_letter_order_language: letter order language must match the pack language.');
+    }
+    const sequence = sanitizedSequence(source);
+    const letterSteps = sequence.letter_steps.sort((a, b) => a.step - b.step).map(step => step.new_letters);
+    if (JSON.stringify(letterSteps) !== JSON.stringify(order.letter_steps)) {
+      errors.push('pack_letter_order_letters: letter steps must match the named letter order.');
+    }
+    if (Array.isArray(source.sound_steps) && source.sound_steps.length > 0) {
+      const sounds = sequence.sound_steps.sort((a, b) => a.step - b.step).flatMap(step => step.new_sounds);
+      if (JSON.stringify(sounds) !== JSON.stringify(order.sound_steps)) {
+        errors.push('pack_letter_order_sounds: sound steps must match the named letter order.');
       }
     }
   }

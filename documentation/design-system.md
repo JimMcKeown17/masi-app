@@ -127,7 +127,7 @@ All x offsets are zero. Shared `SurfaceCard` and `ListGroup` have no shadow. The
 
 Import `{ fontFamilies, typeRoles }` from `src/constants/typography`. The legacy `typography`
 export is retired. `App.js` loads Bricolage Grotesque 700/800 and Figtree 500/600/700/800 while the
-splash is held; it also loads Andika Regular for assessment content. A load error is logged and
+splash is held; it also loads Andika Regular for assessment content and lesson blends. A load error is logged and
 releases the splash with system-font fallback (`App.js:138`, `App.js:139`, `App.js:153`,
 `App.js:170`).
 
@@ -139,21 +139,22 @@ releases the splash with system-font fallback (`App.js:138`, `App.js:139`, `App.
 | `textSemi` | `Figtree_600SemiBold` |
 | `textBold` | `Figtree_700Bold` |
 | `textHeavy` | `Figtree_800ExtraBold` |
-| `content` | `Andika_400Regular` (assessment test content; `src/constants/typography.js:5`, `src/constants/assessmentFonts.js:4`) |
+| `content` | `Andika_400Regular` (assessment test content and lesson blends; `src/constants/typography.js:5`, `src/constants/assessmentFonts.js:4`) |
 
 Choose the face for the weight; never add `fontWeight` to a custom-family style, because Android
 can fall back to the system font. Bricolage is for display headings/numerals at 18 or above;
-Figtree carries UI copy and row data; Andika Regular carries assessment test content
+Figtree carries UI copy and row data; Andika Regular carries assessment test content and lesson blends
 (`src/constants/assessmentFonts.js:3`, `src/assessment-questions/ui/Text.tsx:30`). Roles carry
 geometry/family, not colour: add a semantic `color` at the call site. The eight original Home roles remain unchanged.
 
-The table lists all 45 roles. A dash means tracking is not set in the role (Paper explicitly uses
+The table lists all 46 roles. A dash means tracking is not set in the role (Paper explicitly uses
 zero). **Addition** marks the seven shared-look plan additions beyond the overview's role table;
 Children adds three initials roles. Each captures Home or board geometry so no extra raw-size
 exemption is necessary.
 
 | Role | Family key | Size / line | Tracking | Use / extra |
 |---|---|---|---|---|
+| `lessonItem` | content | 20 / 26 | 0 | Lesson blend/word tiles; syllable display, scaling capped at 1.3 |
 | `displayXL` | display | 32 / 36 | −0.8 | Original Home greeting; Paper displaySmall/headlineLarge |
 | `displayNumeral` | display | 48 / 48 | — | Original Home gauge numeral |
 | `displayM` | display | 20 / 26 | −0.4 | Original Home display; Paper titleLarge |
@@ -388,8 +389,9 @@ cannot reopen Reset. Recovery and Reset's native D10 gate are tracked in
 
 The [ChecklistRow](../src/components/assessments/ChecklistRow.js) label comes from the run code
 and child's first name: “Write assessment code {code} and {firstName}'s name on the Writing Sheet”.
-The summary shows this one check for an eligible writable run when `view.hasWritingSheet`; until
-checked, Finalize stays disabled with “Tick the box to finalize”. Do not add a filing check.
+The overview shows this one check after the Question list for an eligible writable run when
+`view.hasWritingSheet`; until checked, Finalize stays disabled with “Tick the box to finalize”.
+Do not add a filing check.
 The row does not own persistence or finalization.
 
 The [MaterialsBlock](../src/components/assessments/MaterialsBlock.js) belongs above the package's
@@ -454,6 +456,32 @@ signed-in EA settles; later refreshes keep the current rows mounted and visible.
 `useHeaderHairline(navigation)` above its early returns.
 Child-row results, group, letter-tracker and edit actions are separate controls: retain the 8dp
 gap above the meta row so GroupChip's negative margins cannot overlap the results target.
+
+### Lesson capture components (C2–C3, 2026-10-22)
+
+The stack uses its standard white header: **Who are you teaching?**, the children's names on
+**Lesson**, and **Wrap up**. Controls compose the existing Bold Red primitives; no separate modal
+or dialog system is introduced. The Save/Wrap-up footer is a sibling after the scroll, and Wrap
+up's footer hides for the notes keyboard. Native visual acceptance is [device section V](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10),
+including 360 dp and 1.0x/1.3x text (`src/screens/lessons/LessonWrapUpScreen.js:189`).
+
+| Piece (`src/components/lessons/`) | Contract |
+|---|---|
+| `UpNextCard`, `GroupLessonRow` | Receive `row, today, onStart`; render group colour, members, last seen and optional letters. `lessonRowDetail` avoids a dangling "letters" when there are none (`src/utils/lessonDates.js:19`). |
+| `MakeGroupSheet`, `PutInGroupSheet` | Bottom-sheet group actions with inline errors. Creation receives only ungrouped children; the signed-in handle fences completion. |
+| `AttendanceChips`, `AddChildSheet` | Here/absent state, explicit removal for revoked access, and additions for today. The offered roster uses the shared visibility rule; attendance never edits membership. |
+| `LessonChoiceSheet`, `InProgressSheet` | Explicit class/language choice; Resume/Discard when another draft exists. |
+| `LessonLettersSection`, `OtherLetterSheet` | Suggested/review letters through `LetterToggleGrid`/tiles, plus the other-letter sheet. Selection records teaching, not mastery. |
+| `BlendTile`, `LessonBlendSection`, `BlendPoolSheet` | `BlendTile({ text, display, tone='rest', onPress, accessibilityLabel })`; min-height 56, selected ink, motion disabled under Reduce Motion, text capped at 1.3x. Suggested display may use hyphens; saved `text` is the pack item. All ticked blends remain visible and correctable when attendance removes a tier (`BlendTile.js:8`, `LessonBlendSection.js:18`). |
+| `LessonBookSection` | Hidden for ECD; a selectable printed-book Read row, or the language's no-books message. Reader links belong to C4 (`LessonBookSection.js:9`). |
+| `WrapUpChildRow` | Letter chips distinguish locked assessment evidence from pending corrections; No one new yet, full tracker and changed reading-level controls respect separate delivery/level authority (`WrapUpChildRow.js:10`). |
+
+`typeRoles.lessonItem` uses the content face **Andika 400**, 20/26, zero tracking, for blend text.
+Use the role rather than raw sizes (`src/constants/typography.js:21`). Tier labels are **2-letter**,
+**3-letter**, **4-letter**, **words**. The old literacy Record form is retired. Until A2 aligns
+teaching order, the Wrap-up tracker retains its existing order while the lesson uses the pack's;
+both plans must merge before a field build. Static guards remain the automated token/purity gate,
+not proof of iOS swipe behaviour or A03s timing.
 
 ### Sheets
 
@@ -570,6 +598,15 @@ affect readiness. Submit remains enabled until a save is in flight.
 | [`MonthCalendar`](../src/components/common/MonthCalendar.js) | `selectedKey, todayKey, onSelect`. Calendar keys only; opens on the selected month, Sunday first. Seven equal columns have no horizontal gaps, with centred 44dp day targets and 4dp row gaps. Future days and navigation beyond today's month are disabled. The caller closes the enclosing BottomSheet on selection or Cancel. |
 | [`LetterToggleGrid`](../src/components/sessions/LetterToggleGrid.js) | `letters, tileFor, onPressLetter`. Six columns, 8dp gaps; tileFor(letter) supplies each tile's tone, disabled flag and accessibility props. Named export letterTileSize(w) is min(56, floor((w − 40) / 6)). Measured content width replaces the initial window-width-minus-48 fallback. The grid itself is capped at 376dp (six 56dp tiles + five 8dp gaps), preventing a seventh column on wider screens. |
 | [`LetterToggleTile`](../src/components/sessions/LetterToggleTile.js) | `letter, tone, size, onPress, disabled=false, accessibilityLabel, accessibilityState`. Tones: rest, selected, taught, taughtNew, locked. Lowercase textLetter capped at 1.2 scaling, radius 14; selected focus letters are ink/white. Focus-grid labels keep capitals (“M, selected”); tracker/panel labels keep lowercase (“m, not mastered”). Press motion follows the contract below. |
+| [`BlendTile`](../src/components/lessons/BlendTile.js) | `text, display, tone='rest', onPress, accessibilityLabel`. Rest and selected follow LetterToggleTile's palette, pressed fill and reduced-motion rules. Andika `lessonItem` displays syllable hyphens, caps scaling at 1.3 and wraps without a fixed width or height; min height 56dp. Spoken labels remove hyphens and say “ticked” or “not ticked”; presses retain the pack's original text. |
+
+The Lesson screen places blending and pair reading after its letters section, above the existing
+sibling Wrap up footer. `LessonBlendSection` shows six engine suggestions when available, retains
+ticked pool items, and opens `BlendPoolSheet` with ticked items first. Tier switches persist
+`ticks.blendTierShown`. `LessonBookSection` shows the suggested book's title and step with a
+`SelectableRow` Read tick, stored as printed. The lesson's class grade hides pair reading for ECD,
+including when a resumed draft pins an archived class. Letters-only packs show the language's
+“No blends … yet.” and “No books … yet.” notes. The in-app reader and Other book are separate work.
 
 [`rosterRowHeight(fontScale)`](../src/utils/sessionFormLayout.js) is
 `max(64, ceil(20 + 2 + (22 + 18) * fontScale))`: 64dp at 1.0 and 74dp at 1.3. Every roster row
@@ -944,14 +981,29 @@ with `noun` set to letter, word or question by
   **`All ${N} marked`**` · ${C} correct. Tap any ${noun} to change it.`
   Every marked item can still flip; grid page arrows browse all pages. Finish saves
   `completed`; Back clears the last mark and resumes marking. Timed review freezes reading
-  time at the last mark, and Back resumes the time remaining. Timer expiry saves immediately
-  with no review; a stop card retains Save result / Undo last mark.
+  time at the last mark, and Back resumes the time remaining. Timer expiry emits the result immediately
+  with no review (the host defers saving while a leave decision is open); a stop card retains Save result / Undo last mark.
 - **End sheet.** End question opens a bottom confirmation sheet titled **End this question?**.
   Its message is `${M} marked. The ${U} not marked won't count towards the score.` Confirm is
   **End question** in danger tone; cancel is **Keep marking**. Confirm saves `ea_ended` with
   the unmarked tail not reached and excluded from the score. In a Battery and in the gallery
   the link and confirm say **End question**; standalone quick tests say **End test**, with
   **End this test?** as the title. The sheet appears when the EA chooses to end early.
+- **Leave sheet.** Back, the iOS back gesture or ✕ during capture opens **Leave without saving?**.
+  Before a result exists, the message is `${firstName}'s answers on this question won't be saved.
+  Finished questions stay saved.` in a Battery, or `${firstName}'s answers on this test won't be
+  saved.` in a quick test. With no first name, start with `The answers on this …`.
+  Confirm is **Discard answers** in filled danger tone; cancel is **Keep marking**.
+  When a result exists but is unsaved, keep the same title and say `${firstName}'s result isn't
+  saved yet. If you leave now, it will be lost.` (no first name: `This result isn't saved yet.
+  If you leave now, it will be lost.`). Confirm is **Discard result** in filled danger tone;
+  cancel is **Keep result**. The End sheet saves and the leave sheet discards, so they must
+  never share a title. The leave decision comes first: if a Question completes (including
+  timer expiry) while this sheet is open, retain its first result without saving. **Keep result**
+  starts that save; **Discard result** leaves with no SQLite or outbox write. Back / ✕ / the iOS
+  back gesture during an in-flight save stays prevented without opening leave; success navigates,
+  and failure offers the save-error sheet. The native removal guard stays active until commit or
+  discard.
 
 The Story Writing rubric keeps its dimension chips and `ToggleBar`; it is the sole exception.
 
@@ -1014,14 +1066,30 @@ has a 1dp top border; bottom padding is `max(insets.bottom + 11, 16)` on Android
 `max(insets.bottom, 16)` on iOS. The host `TestFrame` owns only the top inset
 (`src/assessment-questions/ui/BottomBar.tsx:6`, `src/components/assessments/TestFrame.js:11`).
 
-Use the shared intro, bottom confirmation sheets and full-screen sheets. FullScreenSheet owns
-the modal top inset. `ConfirmSheet` uses a transparent, fading React Native `Modal` while
-mounted, with a status-bar-translucent scrim that covers the host header. Hardware Back invokes
-`onCancel` when supplied; on the stop card it does nothing. Keep the covered Question's
-pointer-event and accessibility hiding in place. The panel's bottom padding is
-`max(useBottomInset(), 24dp)` on both platforms: under Expo SDK 54 the Modal draws edge-to-edge,
-including under Android's navigation bar (device-verified on the A03s, build 30, where an
-inset-free panel put Cancel under the 3-button bar). The old last-word selection sheet is removed; progress comes from the marked prefix
+Use the shared intro, bottom confirmation sheets and full-screen sheets. Sheets over a Question
+share one white panel: the package `ConfirmPanel`, exported from the package root. The package's
+own End, stop, rubric and skip sheets wrap it in a native Modal (`ConfirmSheet`). The host's leave,
+save-error and closed sheets wrap it in `TestSheet` (react-native-paper Portal, no native Modal).
+iOS cannot present one native modal while another is dismissing; the package and host sheets can
+hand over in the same moment, including an immediate save failure after End. Sharing the panel
+preserves the same heading, body, buttons, tone, radius, spacing and bottom inset without requiring
+a second native presentation or a timeout.
+
+Host `TestSheet` renders only when visible, registers with sheet accessibility to hide the
+background, moves accessibility focus to its title on the next animation frame, and fades in
+using the app motion tokens (no fade at `still`). It carries the app assessment fonts across
+Paper's Portal boundary so typography matches the package sheet. Closing unmounts immediately. Save errors offer
+**Try again** (ink) and **Not now**; closed assessments offer **Back to assessment** (ink), with
+hardware Back also closing them. Android Back calls `onCancel` when supplied and is swallowed
+otherwise. Host screens outside a test keep the host `BottomSheet` / `ConfirmSheet`.
+
+FullScreenSheet owns the modal top inset. Package `ConfirmSheet` retains its transparent, fading
+native Modal and status-bar-translucent scrim. Hardware Back invokes `onCancel` when supplied;
+on the stop card it does nothing. Keep the covered Question's pointer-event and accessibility
+hiding in place. The shared panel's bottom padding is `max(useBottomInset(), 24dp)` on both
+platforms: under Expo SDK 54 the Modal draws edge-to-edge, including under Android's navigation
+bar (device-verified on the A03s, build 30, where an inset-free panel put Cancel under the 3-button
+bar). The old last-word selection sheet is removed; progress comes from the marked prefix
 ([QuestionIntro](../src/assessment-questions/ui/QuestionIntro.tsx),
 [ConfirmSheet](../src/assessment-questions/ui/ConfirmSheet.tsx),
 [FullScreenSheet](../src/assessment-questions/ui/FullScreenSheet.tsx)).
@@ -1099,6 +1167,10 @@ explicitly requires it to stay empty, and every scanned file now meets the same 
 rules without per-screen allowances.
 
 ## Remaining delivery boundaries
+
+**2026-10-22 status note:** the following is the earlier Bold Red delivery record. C2–C3 now
+retires LiteracySessionForm and ChildSelector (`de32276`); current lesson components are described
+above, and their native acceptance is device section V. LetterTrackerBottomSheet remains in Wrap up.
 
 Children list and Class detail are built on `feat/bold-red-children`; Record Tasks 1–12 are built
 on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBottomSheet and

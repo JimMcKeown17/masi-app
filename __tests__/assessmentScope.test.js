@@ -31,7 +31,7 @@ jest.mock('../src/context/ChildrenContext', () => ({ useChildren: () => mockChil
 jest.mock('../src/context/ClassesContext', () => ({ useClasses: () => mockClassesState }));
 
 import React from 'react';
-import { act, cleanup, configure, fireEvent } from '@testing-library/react-native';
+import { act, cleanup, configure, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
@@ -41,13 +41,15 @@ import { createAssessmentsRepository } from '../src/db/repositories/assessmentsR
 import { createReferenceDataRepository } from '../src/db/repositories/referenceDataRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createChildClassMembershipsRepository } from '../src/db/repositories/childClassMembershipsRepository';
+import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createBatteryRunsRepository } from '../src/db/repositories/batteryRunsRepository';
 import AssessmentsScreen from '../src/screens/main/AssessmentsScreen';
 import HomeScreen from '../src/screens/main/HomeScreen';
 import ChildrenListScreen from '../src/screens/main/ChildrenListScreen';
 import AssessmentRankingScreen from '../src/screens/insights/AssessmentRankingScreen';
-import ChildSelector from '../src/components/children/ChildSelector';
+import AddChildSheet from '../src/components/lessons/AddChildSheet';
+import { visibleRosterChildren } from '../src/utils/childVisibility';
 import GroupPickerBottomSheet from '../src/components/children/GroupPickerBottomSheet';
 import ClassDetailScreen from '../src/screens/children/ClassDetailScreen';
 import SessionCountRankingScreen from '../src/screens/insights/SessionCountRankingScreen';
@@ -83,7 +85,7 @@ beforeEach(async () => {
   await db.runAsync(`insert into child_group_memberships (id, group_id, child_id, created_by, sync_status)
     values ('delivery-group-member', 'delivery-group', 'delivery', 'user-1', 'synced')`);
   await db.runAsync('delete from sync_outbox');
-  repositories = { children, assessments: createAssessmentsRepository({ database: db }),
+  repositories = { children, classes: createClassesRepository({ database: db }), assessments: createAssessmentsRepository({ database: db }),
     academicYears: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
     programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
     sessions: createSessionsRepository({ database: db }),
@@ -191,15 +193,18 @@ test('an empty Your children section is omitted when a class-only EA opens the p
   expect(screen.queryByRole('header', { name: 'Your children' })).toBeNull();
 });
 
-test('My Children and the session attendee picker stay delivery-scoped even though assessment scope has both children', async () => {
+test('My Children and the lesson Add child list stay delivery-scoped even though assessment scope has both children', async () => {
   expect(delivery.map(child => child.id)).toEqual(['delivery']);
   expect(assessable.map(child => child.id).sort()).toEqual(['control', 'delivery']);
-  const selection = jest.fn();
-  const screen = renderScreen(<ChildSelector selectedChildren={[]} onSelectionChange={selection} />);
-  expect(await screen.findByRole('checkbox', { name: 'Dina Delivery, Class 1' })).toBeTruthy();
+  // The Lesson screen offers exactly this list in Add child; the picker reads the same rows through ChildrenContext.
+  const roster = visibleRosterChildren(await repositories.children.getMyChildren('user-1'));
+  const onAdd = jest.fn(async () => {});
+  const screen = renderScreen(<AddChildSheet visible onDismiss={jest.fn()} children={roster}
+    classes={[{ id: 'class-1', name: 'Class 1' }]} onAdd={onAdd} />);
+  expect(screen.getAllByRole('radio').map(row => row.props.accessibilityLabel)).toEqual(['Dina Delivery, Class 1']);
   expect(screen.queryByText('Cora Control')).toBeNull();
-  fireEvent.press(screen.getByRole('checkbox', { name: 'Dina Delivery, Class 1' }));
-  expect(selection).toHaveBeenCalledWith([expect.objectContaining({ id: 'delivery' })]);
+  fireEvent.press(screen.getByRole('radio', { name: 'Dina Delivery, Class 1' }));
+  await waitFor(() => expect(onAdd).toHaveBeenCalledWith('delivery'));
 });
 
 test('group picker membership counts stay delivery-scoped', async () => {

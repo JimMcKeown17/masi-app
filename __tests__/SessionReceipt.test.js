@@ -9,7 +9,7 @@ import { borderRadius, colors, tints } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
 
 const rows = buildReceiptRows({
-  childNames: ['Anelisa', 'Athenkosi'], letters: ['s', 'm', 'n', 'l'], readingLevel: '3 Letter Blends',
+  childNames: ['Anelisa', 'Athenkosi'], letters: ['s', 'a', 'n', 'd'], readingLevel: '3 Letter Blends',
 });
 const style = node => StyleSheet.flatten(node.props.style);
 
@@ -54,7 +54,7 @@ test('each row is one accessible phrase in order', () => {
   const screen = render(<SessionReceipt rows={rows} />);
   const phrases = screen.getAllByLabelText(/^(Children|Letters|Reading level):/);
   expect(phrases.map(node => node.props.accessibilityLabel)).toEqual([
-    'Children: Anelisa and Athenkosi', 'Letters: M, L, N, S', 'Reading level: 3 Letter Blends',
+    'Children: Anelisa and Athenkosi', 'Letters: S, A, N, D', 'Reading level: 3 Letter Blends',
   ]);
   phrases.forEach(node => expect(node.props.accessible).toBe(true));
   expect(screen.getByText('Children').props.accessible).toBe(false);
@@ -64,8 +64,8 @@ test('each row is one accessible phrase in order', () => {
 
 test('tiles draw lowercase in teaching order without shrinking or separate announcements', () => {
   const screen = render(<SessionReceipt rows={rows} />);
-  expect(screen.UNSAFE_getAllByType(LetterReceiptTile).map(node => node.props.letter)).toEqual(['m', 'l', 'n', 's']);
-  for (const letter of ['m', 'l', 'n', 's']) {
+  expect(screen.UNSAFE_getAllByType(LetterReceiptTile).map(node => node.props.letter)).toEqual(['s', 'a', 'n', 'd']);
+  for (const letter of ['s', 'a', 'n', 'd']) {
     const text = screen.getByText(letter);
     expect(text.props.maxFontSizeMultiplier).toBe(1.2);
     expect(text.props.accessible).toBe(false);

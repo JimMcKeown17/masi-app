@@ -125,7 +125,7 @@ describe('readers share stored standalone and battery Question evidence', () => 
     fireEvent.press(screen.getByText('B Child'));
     fireEvent.press(screen.getByText('C Child'));
     expect(navigation.navigate).toHaveBeenNthCalledWith(1, 'BatteryRunSummary', { runId: ids.runB });
-    expect(navigation.navigate).toHaveBeenNthCalledWith(2, 'BatteryRunSummary', { runId: ids.runC });
+    expect(navigation.navigate).toHaveBeenNthCalledWith(2, 'BatteryOverview', { runId: ids.runC });
     fireEvent.press(screen.getByText('A Child'));
     expect(navigation.navigate).toHaveBeenCalledWith('AssessmentDetail', {
       assessmentId: ids.a, childName: 'A Child',

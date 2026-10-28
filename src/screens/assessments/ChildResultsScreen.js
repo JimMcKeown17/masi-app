@@ -150,7 +150,7 @@ export default function ChildResultsScreen({ navigation, route }) {
         <Text variant="bodySmall" style={styles.cardDescription}>
           Tap letters to mark them as taught
         </Text>
-        <LetterMasteryPanel child={child} classItem={classItem} isDelivery={isDelivery} />
+        <LetterMasteryPanel child={child} isDelivery={isDelivery} />
       </SurfaceCard>
     </ScrollView>
   );

@@ -527,12 +527,16 @@ the current-state model better than Zazi's per-session carry-forward.
   phone `unassigned_at` (`childrenRepository.js:154`) against a microsecond server `assigned_at`
   under the `unassigned_at >= assigned_at` CHECKs, which `classifyError` treats as terminal
   ([Z14](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- [ ] **Finish the durable lesson start/resume flow (§4, C2–C3).** C1 storage already refuses a
-  second start: one lesson in progress per EA (C7), stricter than one per group. The
-  finish-or-discard ask and Home "Lesson in progress" resume action ship with C2–C3; keep this
-  item open until C3. v1 has no session timer (lesson-plan spec §8). Zazi's overwritten unfinished
-  session (ZZ-BUG-20260922-001) and unbounded 1,140-minute session (ZZ-BUG-20260924-001) remain the
-  motivating evidence ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] **Lesson flow: phone checks left after merge.** The flow merged as #97 on 2026-10-28, with
+  Jim's acceptance of the product choices P1–P12 that day; letter orders merged right after it.
+  ADR 0010 records "advice from the children, record with the group".
+  [Device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10): the A03
+  passed all eight, and Jim's iPhone pass on build 24 passed V3's swipe, V5's keyboard, V6, V7 and
+  V8. Still to check on the 1.4.0 pilot build: Wrap up's "None of these yet" and header date
+  button, and lesson advice after the known-letters fix (both postdate build 24); iPhone V1, V2
+  and V4; ECD (no ECD class on staging). v1 has no timer. C4/C5 reader/receipt work remains
+  separate; release packs are letters-only (P11). The build log holds implementation and review
+  evidence.
 
 ### Upload contract (before pilot; priority item 5)
 
@@ -735,6 +739,23 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 
 ## 5. Product and UX
 
+- [ ] **Masi's second letter order edition:** add the edition schedule in the same migration that
+  widens the class edition check constraint. The first edition, `2026-10-23`, needs no schedule
+  ([ADR-0011](../docs/adr/0011-letter-order-edition-per-class-set-by-server.md)).
+- [ ] **Readers for the books v2 previews:** add readers to the new-order preview packs in the
+  early-reader-books project. They currently supply candidate word banks without readers.
+- [ ] **One "current class" rule for delivery lists (deferred 2026-10-28).** The letter tracker
+  and the Letter mastery ranking take a child's class from the active class membership. Class
+  lists and Child Results' "Assess now" still use `children.class_id`. They agree today: on
+  staging, 0 of 46 children differ, and phone writes change both together. Revive when anything
+  other than the app can write memberships without `children.class_id`, such as a head-office
+  tool or a new-year rollover seed (build log, 2026-10-28, letter orders review round 2).
+- [ ] **Lesson clock (Jim, 2026-10-28: wanted later, not in this release).** The lesson flow has no
+  timer by design (lesson-plan spec §8; `group-session-workflow.md`), and main's old Record form
+  had none either. Zazi's session clock is the model: a countdown to the target length with
+  Pause, saving the active teaching time, capped at 60 minutes. Masi's lesson sections already
+  carry times (Letters 15, Blending 15, Pair reading 5 min). `sessions.started_at` and `ended_at`
+  exist, but nothing fills them yet.
 - [ ] **Lesson plan (spec 2026-10-20): A1 content packs built; the Android Hermes check (T1) passed on 2026-10-22; the iOS check (A1 Task 7, T2) remains open.** Record: build log, "Lesson plan A1: content packs".
 - [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Shared look built
   on `feat/bold-red-app` (2026-10-19), following Home (#70). Design source: the Design Round 4
@@ -967,8 +988,6 @@ WelaPLUS release-plan numbers, distinct from the Assessment Results plans. Evide
     360dp (`ListRow` subtitles wrap greedily; Android's `textBreakStrategy="balanced"` would fix it);
   - the create-class form offers no isiZulu home language (`HOME_LANGUAGES` lists isiXhosa,
     English and Afrikaans), so isiZulu classes need a data fix today;
-  - quick tests: "End this test?" saves while Back/✕ "End the test?" discards, one word apart
-    (issue #102, still open after #107);
   - rankings: bar width is score ÷ that result's own item count but rows sort by raw score, so
     mixing 60-, 100- and 110-letter cards (or 50- and 80-word cards) puts bars out of order;
   - the dev/preview Question Gallery still lists only the 13 old forms and WelaPLUS 2024.1.

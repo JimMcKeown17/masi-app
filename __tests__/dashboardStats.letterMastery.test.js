@@ -22,6 +22,29 @@ const result = (overrides = {}) => ({
 });
 
 describe('getLetterMasteryRanking — stored question items', () => {
+  test('uses the active isiXhosa class despite a stale English children.class_id', () => {
+    const staleChild = { ...child, class_id: 'english-class' };
+    const activeClassByChildId = new Map([[child.id, xhosaClass]]);
+    const assessments = [
+      result({ language: 'en', items: [item('z', true)] }),
+      result({ id: 'xhosa', items: [item('a', true), item('b', true)] }),
+    ];
+    const confirmations = [
+      { child_id: child.id, language: 'xh', letter: 'c', confirmed: true },
+      { child_id: child.id, language: 'en', letter: 'd', confirmed: true },
+    ];
+    expect(getLetterMasteryRanking([staleChild], assessments, confirmations, activeClassByChildId))
+      .toEqual([{ child: staleChild, masteredCount: 3, total: 26, percent: 12 }]);
+  });
+
+  test('an absent active class has no language even with English evidence and confirmations', () => {
+    const confirmations = [{ child_id: child.id, language: 'en', letter: 'b', confirmed: true }];
+    for (const activeClassByChildId of [new Map(), undefined]) {
+      expect(getLetterMasteryRanking([child], [result({ language: 'en' })], confirmations, activeClassByChildId))
+        .toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
+    }
+  });
+
   test('unions another EA’s battery evidence with confirmations stored under the language code', () => {
     const assessment = result({
       battery_run_id: 'run-1',
@@ -42,7 +65,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
       { child_id: child.id, language: 'xh', letter: 'e', confirmed: false },
     ];
 
-    expect(getLetterMasteryRanking([child], [assessment], confirmations, [xhosaClass]))
+    expect(getLetterMasteryRanking([child], [assessment], confirmations, new Map([[child.id, xhosaClass]])))
       .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
   });
 
@@ -51,7 +74,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
       { child_id: child.id, language: 'xh', letter: 'a', confirmed: false },
       { child_id: child.id, language: 'xh', letter: 'b', confirmed: true },
     ];
-    expect(getLetterMasteryRanking([child], [], confirmations, [xhosaClass]))
+    expect(getLetterMasteryRanking([child], [], confirmations, new Map([[child.id, xhosaClass]])))
       .toEqual([{ child, masteredCount: 1, total: 26, percent: 4 }]);
   });
 
@@ -70,7 +93,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
 
     expect(pickLatestLetterResult(assessments, { childId: child.id, languageCode: 'xh' }).id).toBe('latest');
     // b and c from the latest; a from the older results, because the latest did not ask it.
-    expect(getLetterMasteryRanking([child], assessments, [], [xhosaClass]))
+    expect(getLetterMasteryRanking([child], assessments, [], new Map([[child.id, xhosaClass]])))
       .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
   });
 
@@ -93,7 +116,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
     };
     const untypedResult = result({ question_code: undefined });
 
-    expect(getLetterMasteryRanking([child], [legacyAssessment, untypedResult], [], [xhosaClass]))
+    expect(getLetterMasteryRanking([child], [legacyAssessment, untypedResult], [], new Map([[child.id, xhosaClass]])))
       .toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
   });
 
@@ -102,7 +125,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
     const afResult = result({ language: 'af', items: [item('L', true), item('a', true), item('m', false)] });
     const newerEnglish = result({ id: 'assessment-2', language: 'en', assessment_date: '2026-10-21', items: [item('z', true)] });
     const confirmations = [{ child_id: child.id, language: 'af', letter: 'k', confirmed: true }, { child_id: child.id, language: 'en', letter: 's', confirmed: true }];
-    expect(getLetterMasteryRanking([child], [afResult, newerEnglish], confirmations, [afClass]))
+    expect(getLetterMasteryRanking([child], [afResult, newerEnglish], confirmations, new Map([[child.id, afClass]])))
       .toEqual([{ child, masteredCount: 3, total: 26, percent: 12 }]);
   });
 
@@ -116,13 +139,13 @@ describe('getLetterMasteryRanking — stored question items', () => {
         [child],
         [englishAssessment],
         [englishConfirmation],
-        [{ id: child.class_id, home_language: homeLanguage }],
+        new Map([[child.id, { id: child.class_id, home_language: homeLanguage }]]),
       )).toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
     },
   );
 
   test('a missing class gives no evidence instead of choosing English', () => {
-    expect(getLetterMasteryRanking([child], [result({ language: 'en' })], [], []))
+    expect(getLetterMasteryRanking([child], [result({ language: 'en' })], [], new Map()))
       .toEqual([{ child, masteredCount: 0, total: 26, percent: 0 }]);
   });
 
@@ -132,12 +155,12 @@ describe('getLetterMasteryRanking — stored question items', () => {
     });
     const expected = [{ child, masteredCount: 1, total: 26, percent: 4 }];
 
-    expect(getLetterMasteryRanking([child], [assessment], [], [xhosaClass])).toEqual(expected);
+    expect(getLetterMasteryRanking([child], [assessment], [], new Map([[child.id, xhosaClass]]))).toEqual(expected);
     expect(getLetterMasteryRanking(
       [child],
       [{ ...assessment, items: [...assessment.items].reverse() }],
       [],
-      [xhosaClass],
+      new Map([[child.id, xhosaClass]]),
     )).toEqual(expected);
   });
 
@@ -148,7 +171,7 @@ describe('getLetterMasteryRanking — stored question items', () => {
       result({ child_id: anotherChild.id, items: [item('b', true), item('c', true)] }),
     ];
 
-    expect(getLetterMasteryRanking([child, anotherChild], assessments, [], [xhosaClass]))
+    expect(getLetterMasteryRanking([child, anotherChild], assessments, [], new Map([[child.id, xhosaClass], [anotherChild.id, xhosaClass]])))
       .toEqual([
         { child: anotherChild, masteredCount: 2, total: 26, percent: 8 },
         { child, masteredCount: 1, total: 26, percent: 4 },

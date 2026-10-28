@@ -37,3 +37,4 @@ export * as testFixtures from './testFixtures';
 export * from './egra';
 export { ReadingComprehensionQuestion } from './questions/ReadingComprehensionQuestion';
 export type { ReadingComprehensionItemSet } from './questions/ReadingComprehensionQuestion/types';
+export { ConfirmPanel } from './ui/ConfirmSheet';

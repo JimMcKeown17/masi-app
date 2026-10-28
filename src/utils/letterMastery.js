@@ -33,7 +33,8 @@ export function pickLatestLetterResult(results, options) {
 
 /**
  * Per letter in one result: true when every reached occurrence was correct.
- * Letters the result never reached are absent. Prompts compare case-insensitively.
+ * Letters the result never reached are absent. Prompts and the tracker letters compare
+ * case-insensitively.
  */
 function reachedLetterOutcomes(result, eligibleLetters) {
   const outcomes = new Map();
@@ -51,12 +52,12 @@ function reachedLetterOutcomes(result, eligibleLetters) {
  * Letters mastered by assessment evidence. Each letter is decided by the newest result that
  * reached it: mastered when every reached occurrence there was correct.
  * @param {Object[]} results - Eligible letter results, newest first (see eligibleLetterResults)
- * @param {string[]} pedagogicalOrder - The 26-letter tracker order
+ * @param {string[]} trackerLetters - The 26-letter tracker set
  * @returns {Set<string>} Lowercase letters mastered by assessment evidence
  */
-export function computeLetterMastery(results, pedagogicalOrder) {
-  if (!Array.isArray(results) || !Array.isArray(pedagogicalOrder)) return new Set();
-  const eligibleLetters = new Set(pedagogicalOrder.map(letter => letter.toLowerCase()));
+export function computeLetterMastery(results, trackerLetters) {
+  if (!Array.isArray(results) || !Array.isArray(trackerLetters)) return new Set();
+  const eligibleLetters = new Set(trackerLetters.map(letter => letter.toLowerCase()));
   const decided = new Map();
   for (const result of results) {
     for (const [letter, correct] of reachedLetterOutcomes(result, eligibleLetters)) {

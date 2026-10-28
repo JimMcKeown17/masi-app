@@ -16,7 +16,6 @@ jest.mock('@react-navigation/native', () => ({
 }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/ChildrenContext', () => ({ useChildren: jest.fn() }));
-jest.mock('../src/context/ClassesContext', () => ({ useClasses: jest.fn() }));
 jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {},
 }));
@@ -28,11 +27,12 @@ import { v4 as uuid } from 'uuid';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { createFamilySyncFixture, questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 import { bindTestActor } from '../test-support/actorTestUtils';
+import { createClassesRepository } from '../src/db/repositories/classesRepository';
+import * as dashboardStats from '../src/utils/dashboardStats';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useChildren } from '../src/context/ChildrenContext';
-import { useClasses } from '../src/context/ClassesContext';
 import LetterMasteryRankingScreen from '../src/screens/insights/LetterMasteryRankingScreen';
 import StatBar from '../src/components/dashboard/StatBar';
 import RankedBarRow from '../src/components/dashboard/RankedBarRow';
@@ -47,14 +47,21 @@ beforeEach(async () => {
   await fixture.db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active)
     values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)`);
   repositories = {
+    classes: createClassesRepository({ database: fixture.db }),
     assessments: fixture.assessments,
     mastery: createMasteryRepository({ database: fixture.db }),
   };
+  await fixture.db.runAsync(`insert into schools (id, name) values ('school-1', 'School')`);
+  await fixture.db.runAsync(`insert into classes (id, school_id, name, grade, home_language, academic_year_id)
+    values ('active-class', 'school-1', 'Active class', '1', 'isiXhosa', 'year-2026'),
+      ('class-1', 'school-1', 'Stale class', '1', 'English', 'year-2026')`);
+  await fixture.db.runAsync(`insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at)
+    values ('membership', ?, 'active-class', 'year-2026', '2026-01-15')`, fixture.childId);
+  await fixture.db.runAsync("update children set class_id = 'class-1' where id = ?", fixture.childId);
   useAuth.mockReturnValue({ user: { id: fixture.userId } });
   useChildren.mockReturnValue({ children: [{
     id: fixture.childId, first_name: 'Amahle', last_name: 'Dlamini', class_id: 'class-1',
   }] });
-  useClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: 'isiXhosa' }] });
 });
 afterEach(async () => {
   cleanup();
@@ -64,11 +71,40 @@ afterEach(async () => {
   jest.useRealTimers();
 });
 
-const renderRanking = () => renderWithProviders(
+const renderRanking = (navigate = jest.fn()) => renderWithProviders(
   <SignedInEAContext.Provider value={{ repositories }}>
-    <LetterMasteryRankingScreen navigation={{ navigate: jest.fn() }} />
+    <LetterMasteryRankingScreen navigation={{ navigate }} />
   </SignedInEAContext.Provider>,
 );
+
+test('loads the active class map for ranking and opens that class in the tracker', async () => {
+  const classesRead = jest.spyOn(repositories.classes, 'getActiveClassesForChildren');
+  const rank = jest.spyOn(dashboardStats, 'getLetterMasteryRanking');
+  await repositories.mastery.setLetterMastery({ childId: fixture.childId, language: 'xh', letter: 'a', confirmed: true });
+  await repositories.mastery.setLetterMastery({ childId: fixture.childId, language: 'en', letter: 'b', confirmed: true });
+  await repositories.mastery.setLetterMastery({ childId: fixture.childId, language: 'en', letter: 'c', confirmed: true });
+  const navigate = jest.fn();
+  const screen = renderRanking(navigate);
+  const row = await screen.findByLabelText('View details for Amahle D., 1/26');
+  expect(classesRead).toHaveBeenCalledWith([fixture.childId]);
+  const activeClasses = await classesRead.mock.results[0].value;
+  expect(rank.mock.calls[0][3]).toBe(activeClasses);
+  fireEvent.press(row);
+  expect(navigate).toHaveBeenCalledWith('LetterTracker', {
+    child: useChildren().children[0], classItem: activeClasses.get(fixture.childId),
+  });
+  expect(activeClasses.get(fixture.childId)).toMatchObject({ id: 'active-class', home_language: 'isiXhosa' });
+});
+
+test('a child without an active membership has a non-pressable row even when class_id is set', async () => {
+  await fixture.db.runAsync("update child_class_memberships set exited_at = '2026-10-01'");
+  const navigate = jest.fn();
+  const screen = renderRanking(navigate);
+  await screen.findByText('Amahle D.');
+  expect(screen.UNSAFE_getByType(RankedBarRow).props).toMatchObject({ value: 0, maxValue: 26, onPress: undefined });
+  fireEvent.press(screen.getByText('Amahle D.'));
+  expect(navigate).not.toHaveBeenCalled();
+});
 
 test("last year's result does not appear in the ranking", async () => {
   const saved = await fixture.save(1, { result: questionResult(1, {
@@ -115,7 +151,7 @@ test.each(['current EA', 'another EA'])(
 test.each([null, undefined, 'isiZulu'])(
   'a class without a supported order (%p) keeps the 26-letter scale without using English evidence',
   async homeLanguage => {
-    useClasses.mockReturnValue({ classes: [{ id: 'class-1', home_language: homeLanguage }] });
+    await fixture.db.runAsync("update classes set home_language = ? where id = 'active-class'", homeLanguage ?? null);
     await fixture.save(1);
     await repositories.mastery.setLetterMastery({
       childId: fixture.childId, letter: 'b', language: 'en', confirmed: true,
