@@ -204,24 +204,40 @@ shown above against the generated `dist/` directory.
 - **iOS:** the App Store Connect API key is stored on EAS. EAS Submit used it
   without a login prompt on 2026-10-28.
 - **Android: Google Play service account key** (Jim; only the Play Console owner
-  can grant it). Following [Expo's guide](https://expo.fyi/creating-google-service-account):
-  1. Google Cloud Console → **IAM & Admin** → **Service Accounts** →
-     **Create Service Account** (for example `eas-submit`) → **Create and close**.
-     Copy its email address.
-  2. On that account: **Manage keys** → **Add key** → **Create new key** →
-     **JSON**. The key file downloads.
-  3. Enable the **Google Play Android Developer API** for the same Cloud project.
-  4. Play Console → **Users and permissions** → **Invite new users** → the service
-     account's email → **App permissions** → Masi. Grant **View app information
-     (read-only)**, **Release apps to testing tracks**, and **Manage testing
-     tracks and edit tester lists**. Expo's guide also grants production release
-     and store-presence permissions; testing tracks should not need them. If a
-     submission fails with a permission error, add those as well.
-  5. EAS dashboard → `masi-mobile-app` → **Credentials** → **Android** →
-     `org.masinyusane.masi` → **Service credentials** → **Add a Google service
-     account key** → **Upload new key**. Then delete the downloaded JSON file.
-     Never commit it, and never add `serviceAccountKeyPath` to `eas.json`
-     (`releaseGateConfig.test.js` pins the Android submit profile exactly).
+  can grant access). EAS stores these keys per Expo account, not per app, so one
+  key can serve every app on `jimmckeown`, including Zazi iZandi's. On the Masi
+  app the service account needs **View app information (read-only)**, **Release
+  apps to testing tracks**, and **Manage testing tracks and edit tester lists**.
+  Expo's guide also grants production release and store-presence permissions;
+  testing tracks should not need them. If a submission fails with a permission
+  error, add those as well.
+  - **Reuse an existing key (for example the Zazi iZandi one).** Its Cloud
+    project already has the Google Play Android Developer API turned on.
+    1. Play Console → **Users and permissions** → the service account → **App
+       permissions** → **Add app** → Masi, with the three permissions above. If
+       it already has access to all apps, nothing is needed. If Masi is in a
+       different developer account, **Invite new users** there with the service
+       account's email.
+    2. `npx eas-cli@26.0.0 credentials -p android` → any build profile →
+       **Google Service Account** → **Manage your Google Service Account Key for
+       Play Store Submissions** → **Select an existing Google Service Account Key
+       for Play Store Submissions** → the existing key.
+  - **Or create a new key**, following [Expo's guide](https://expo.fyi/creating-google-service-account):
+    1. Google Cloud Console → **IAM & Admin** → **Service Accounts** →
+       **Create Service Account** (for example `eas-submit`) → **Create and
+       close**. Copy its email address.
+    2. On that account: **Manage keys** → **Add key** → **Create new key** →
+       **JSON**. The key file downloads.
+    3. Enable the **Google Play Android Developer API** for the same Cloud
+       project.
+    4. Play Console → **Users and permissions** → **Invite new users** → the
+       service account's email → **App permissions** → Masi, with the three
+       permissions above.
+    5. EAS dashboard → `masi-mobile-app` → **Credentials** → **Android** →
+       `org.masinyusane.masi` → **Service credentials** → **Add a Google service
+       account key** → **Upload new key**. Then delete the downloaded JSON file.
+  - Never commit a key file, and never add `serviceAccountKeyPath` to `eas.json`
+    (`releaseGateConfig.test.js` pins the Android submit profile exactly).
 - **Play testers:** Play Console → **Testing** → **Internal testing** →
   **Testers**. Add the testers' Google accounts (up to 100) and send them the
   opt-in link.
@@ -353,8 +369,8 @@ Check Play Console → **Users and permissions** → the service account → Mas
 needs at least **Release apps to testing tracks** (see One-time setup).
 
 ### "Google Service Account Keys cannot be set up in --non-interactive mode" (Android)
-No Play key is stored on EAS for `org.masinyusane.masi`. Do the one-time
-Android setup above.
+No Play key is assigned on EAS to `org.masinyusane.masi`. Do the one-time
+Android setup above (reusing an existing key is enough).
 
 ### Build succeeds but submit fails
 Rerun the submission against the exact build ID to see the specific error:

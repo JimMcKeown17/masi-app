@@ -5581,6 +5581,13 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
   setup is in DEPLOYMENT.md. Expo's documented `track` values are `internal`, `alpha`, `beta`
   and `production`, so July's custom closed track ("SQLite pilot") cannot be targeted from
   `eas.json`.
+- No second Play key is needed. Jim already made one for Zazi iZandi (`org.masinyusane.zz`, same
+  Expo owner `jimmckeown`). eas-cli 26.0.0 lists keys for the whole Expo account
+  (`getGoogleServiceAccountKeysForAccountAsync` in `SetUpGoogleServiceAccountKeyForSubmissions.js`)
+  and offers "Select an existing Google Service Account Key for Play Store Submissions", so that
+  key can be assigned to Masi. Play Console still has to grant it the Masi app. DEPLOYMENT.md lists
+  reuse first. A separate key would add little isolation: both keys would sit on the same Expo
+  account, so whoever controls that account controls both.
 - On iOS, EAS Submit can add builds only to internal TestFlight groups (Expo's `groups` option),
   plus Apple's automatic distribution for internal groups. External testers' groups still need
   each build added in App Store Connect.
