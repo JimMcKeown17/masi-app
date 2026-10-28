@@ -101,7 +101,7 @@ Both checks are needed because an OTA evaluates app config without the build ser
 Candidate-word cloud test builds use `--profile preview-content`. This profile uses the `preview` environment, internal distribution, automatic build-number increments and an Android APK. Its environment variables equal the regular `preview` profile's variables plus `MASI_PREVIEW_CONTENT=1`, and it has no update channel. For example:
 
 ```bash
-npx eas-cli@latest build -p android --profile preview-content
+npx eas-cli@26.0.0 build -p android --profile preview-content
 ```
 
 ## Preview exports

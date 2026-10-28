@@ -1,66 +1,60 @@
 # Masi App: Deployment Guide
 
-Quick reference for deploying the SQLite pilot to an isolated tester cohort.
+Quick reference for building and distributing the SQLite app.
 
 ---
 
-## Current Release Path: SQLite Pilot Only
+## Current Release Path
 
-Do not use the old `production --submit` workflow while the legacy field cohort
-and SQLite pilot coexist. The `production` submit profile has deliberately been
-removed from `eas.json`, so the repository cannot automatically send an Android
-build to the field cohort's existing Play internal track.
+**No field cohort runs the app today (Jim, 2026-10-28).** The 1.4.0 pilot builds
+(iOS 25, Android 54, from `main` `dffe22c`) are the starting point: every later
+TestFlight build and Play download starts from them. Masi's EAs retest the app
+from November 2026.
 
-Build the two store artifacts without auto-submission:
-
-```bash
-npx eas-cli@latest build -p android --profile pilot
-npx eas-cli@latest build -p ios --profile pilot
-```
-
-Then distribute each exact artifact:
-
-- Android: download the AAB for that build and manually upload it to a new
-  closed Play testing track, such as `SQLite pilot`. Never use the existing
-  internal track.
-- iOS: submit the exact iOS build ID with the pilot submit profile:
+One command builds both store artifacts and submits each one:
 
 ```bash
-npx eas-cli@latest submit -p ios --profile pilot --id <IOS_BUILD_ID>
+npx eas-cli@26.0.0 build --platform all --profile pilot --auto-submit
 ```
 
-Before the iOS upload, confirm the existing field TestFlight group does not
-have automatic distribution enabled. After processing, add the build only to a
-new SQLite pilot group. Do not use `--latest`: selecting the build by ID avoids
-submitting the wrong artifact when preview and pilot builds coexist.
+- **Android:** EAS Submit uploads the AAB to the Play **internal testing** track
+  and releases it at once (`releaseStatus: completed` in `eas.json`), so testers
+  get it within minutes with no Google review. Internal testing allows up to 100
+  testers. It uses the `eas-submit-masi` key stored on EAS (one-time setup
+  below); build 54 was the first automatic submission, on 2026-10-28.
+- **iOS:** EAS Submit uploads the build to App Store Connect with the API key
+  stored on EAS. Once Apple has processed it, the build reaches every TestFlight
+  internal group with automatic distribution switched on. Testers outside the App
+  Store Connect team are external testers: add the build to their group in App
+  Store Connect. The first build of each new version goes through Beta App Review.
+
+To submit a build that already exists, name it by ID. Never use `--latest`: it can
+pick a `preview` or `preview-content` build instead of the store build.
+
+```bash
+npx eas-cli@26.0.0 submit -p android --profile pilot --id <ANDROID_BUILD_ID>
+npx eas-cli@26.0.0 submit -p ios --profile pilot --id <IOS_BUILD_ID>
+```
+
+Pin `eas-cli` to a version published at least 24 hours earlier, per the
+repository's package-age rule (check with `npm view eas-cli time`); `@latest` can
+fetch a version published minutes ago. The 2026-10-28 pilot used 26.0.0.
 
 ---
 
-## SQLite Pilot (1.3.0 and later): Keep It Away From the Field Cohort
+## Release Rules
 
-The field cohort still runs the legacy AsyncStorage app, delivered through the
-**Play internal testing track** and the **existing TestFlight group**. Depending
-on their Play and TestFlight settings, those testers may receive newly released
-builds automatically. Until the deliberate cutover, the SQLite build must never
-be released into either audience. There is no legacy-data migration: a field
-device that updates to the SQLite build loses its unsynced data and switches
-backends.
-
-Rules while the pilot and the field cohort coexist:
-
-- **Never** upload a SQLite build (1.3.0 or later) to the Play **internal testing**
-  track, and never build or submit the SQLite pilot with `--profile production`.
-- Android pilot: build with `--profile pilot` (AAB, preview/SQLite environment),
-  then upload **manually** in Play Console to a **new closed testing track**
-  (for example, "SQLite pilot") whose tester list contains only pilot testers.
-- iOS pilot: build with `--profile pilot` (store-signed), submit the exact build
-  ID with `--profile pilot`, then in App Store Connect add the build **only** to
-  a new pilot TestFlight group. First confirm the field cohort's existing group
-  does not automatically receive new builds.
-- OTA isolation: pilot builds are on update channel `preview`
-  (`eas update --channel preview --environment preview`). The field cohort's
-  channel `production` at runtime 1.1.x/1.2.x is untouched; SQLite runtimes
-  (`1.3.0` and later) cannot land on legacy binaries either way.
+- Store builds use `--profile pilot` until the field launch. The `production`
+  profile is kept for that launch: it has its own update channel and Sentry
+  environment, and no submit profile.
+- A phone that still has the legacy AsyncStorage app (1.2.x, `masi-app` backend)
+  switches backends when it installs the SQLite app; there is no legacy-data
+  migration, so anything it had not synced stays behind. Nobody uses the legacy
+  app today.
+- OTA: store builds are on update channel `preview`
+  (`eas update --channel preview --environment preview`). SQLite runtimes
+  (`1.3.0` and later) cannot land on legacy binaries, which use channel
+  `production` at runtime 1.1.x/1.2.x.
 - Preview content: never set `MASI_PREVIEW_CONTENT` in an EAS environment.
   Pilot and production builds refuse `MASI_PREVIEW_CONTENT=1`. Phones on field
   update channels (`preview` and `production`) ignore it even if an OTA carries
@@ -92,20 +86,21 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 ### How It Works
 
 - `expo-updates` is installed and configured in `app.json`
-- The production build profile in `eas.json` has `channel: "production"`
+- Store builds (`pilot` profile) listen on channel `preview`; the `production` profile's channel `production` is for the field launch
 - The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.4.0` on `main`)
 - Updates are checked on app launch and applied on the *next* launch (users don't see a loading screen)
 
 ### Pushing an OTA Update
 
 ```bash
-npx eas-cli@latest update --channel production --environment production --message "describe what changed"
-npx eas-cli@latest env:exec --environment production 'npm run sentry:sourcemaps'
+npx eas-cli@26.0.0 update --channel preview --environment preview --message "describe what changed"
+npx eas-cli@26.0.0 env:exec --environment preview 'npm run sentry:sourcemaps'
 ```
 
+After the field launch, use `production` for both the channel and the environment.
 The first command leaves the exported bundle in `dist/`. The second uploads the
 matching source maps to Sentry using the sensitive `SENTRY_AUTH_TOKEN` stored in
-the production EAS environment. Do not consider the OTA release complete if the
+the same EAS environment. Do not consider the OTA release complete if the
 source-map upload fails: events would arrive, but production stack traces could
 remain minified and much less actionable.
 
@@ -201,50 +196,70 @@ shown above against the generated `dist/` directory.
 
 ---
 
-## Step-by-Step: Build and Distribute the SQLite Pilot
+## Step-by-Step: Build and Distribute Store Builds
 
-### Prerequisites (one-time setup)
+### One-time setup
+
+- **EAS login:** `npx eas-cli@26.0.0 login` (account `jimmckeown`). Check with
+  `npx eas-cli@26.0.0 whoami`.
+- **iOS:** the App Store Connect API key is stored on EAS. EAS Submit used it
+  without a login prompt on 2026-10-28.
+- **Android: Google Play service account `eas-submit-masi`** (Jim; only the Play
+  Console owner can grant access). Each app gets its own service account, all in
+  the Google Cloud project `masinyusane-play-publishing`, next to Zazi iZandi's
+  `eas-submit-zazi`. Do not reuse another app's account: a service account's
+  email cannot be renamed, so Masi releases would carry the other app's name in
+  Play's records, and revoking it would cut off both apps. That project already
+  has the Google Play Android Developer API turned on (Zazi submits through it).
+  1. Google Cloud Console, project `masinyusane-play-publishing` → **IAM &
+     Admin** → **Service Accounts** → **Create service account**. Name
+     `eas-submit-masi`, description `EAS Submit — Masi Android releases`. Skip
+     the "Grant this service account access to project" step (permissions are
+     granted in Play Console) → **Done**.
+  2. Click `eas-submit-masi` → **Keys** → **Add key** → **Create new key** →
+     **JSON** → **Create**. The file downloads; Google never shows it again.
+  3. Play Console → **Users and permissions** → **Invite new users** →
+     `eas-submit-masi@masinyusane-play-publishing.iam.gserviceaccount.com` →
+     **App permissions** → **Add app** → Masi. Grant the same set as
+     `eas-submit-zazi`: **View app information (read-only)**, **Release apps to
+     testing tracks**, **Manage testing tracks and edit tester lists**, and
+     **Release to production, exclude devices, and use Play App Signing**. Play
+     adds three read-only and policy permissions itself. Nothing account-wide,
+     and no admin, financial or store presence permissions. Production is
+     granted now so the field launch cannot fail on a permission error. It
+     cannot publish by accident: the `pilot` profile pins `internal`, and
+     `eas.json` has no production submit profile. Click **Apply**, then
+     **Invite user**. These are two separate actions; Apply alone sends no
+     invite.
+  4. From the `masi-app` folder (EAS finds the app through `app.config.js`;
+     anywhere else it fails with "Run this command inside a project
+     directory"): `npx eas-cli@26.0.0 credentials -p android` → profile
+     `pilot` → **Google Service Account** → **Manage your Google Service Account
+     Key for Play Store Submissions** → **Set up a Google Service Account Key for
+     Play Store Submissions** → **[Upload a new service account key]** → the
+     JSON file.
+     EAS keeps keys per Expo account, so it also offers **[Choose an existing
+     key]**, which lists Zazi's key; do not pick it. Then delete the downloaded
+     JSON file.
+  - Never commit a key file, and never add `serviceAccountKeyPath` to `eas.json`
+    (`releaseGateConfig.test.js` pins the Android submit profile exactly).
+  - Rotation: Cloud Console → `eas-submit-masi` → **Keys** → delete the old key,
+    create a new one (step 2), upload it (step 4). The Play permissions stay.
+- **Play testers:** Play Console → **Testing** → **Internal testing** →
+  **Testers**. Add the testers' Google accounts (up to 100) and send them the
+  opt-in link.
+
+### Build and submit both platforms
 
 ```bash
-# Install EAS CLI globally
-npm install -g eas-cli
-
-# Log in to your Expo account
-eas login
-
-# Verify credentials are set up
-eas credentials -p ios
-eas credentials -p android
+npx eas-cli@26.0.0 build --platform all --profile pilot --auto-submit
 ```
 
-### iOS: Build and Upload to TestFlight
-
-```bash
-npx eas-cli@latest build -p ios --profile pilot
-npx eas-cli@latest submit -p ios --profile pilot --id <IOS_BUILD_ID>
-```
-
-The pilot submit profile already contains the Apple ID and App Store Connect app
-ID. Selecting the exact build ID is mandatory. After App Store Connect finishes
-processing the build, add it only to the SQLite pilot TestFlight group.
-
-Apple can automatically add uploaded builds to internal groups that have
-automatic distribution enabled. Confirm that the existing field group has that
-setting disabled before uploading this pilot build.
-
-### Android: Build and Manually Upload to a Closed Track
-
-```bash
-npx eas-cli@latest build -p android --profile pilot
-```
-
-Download that build's AAB from EAS. In Play Console, create or select a new
-closed testing track dedicated to the SQLite pilot, verify its tester list, and
-upload the AAB manually. Do not use EAS Submit for Android during the pilot.
-
-There is intentionally no Android submit profile in `eas.json`. This prevents a
-pilot artifact from inheriting the old field cohort's internal-track submission
-settings.
+The submit profile `pilot` holds the App Store Connect app ID and Apple ID for
+iOS, and `track: internal`, `releaseStatus: completed` for Android. Builds and
+submissions can be followed on the EAS dashboard or with `build:list` and
+`submit:list` (below). After Apple processes the iOS build, add it to any
+external TestFlight group that should have it.
 
 ---
 
@@ -261,7 +276,7 @@ settings.
 
 ```bash
 # Check current remote versions
-npx eas-cli@latest build:version:get
+npx eas-cli@26.0.0 build:version:get
 ```
 
 ### When to bump the marketing version
@@ -277,13 +292,13 @@ npx eas-cli@latest build:version:get
 
 ```bash
 # List recent builds
-npx eas-cli@latest build:list
+npx eas-cli@26.0.0 build:list
 
 # Check a specific build's status
-npx eas-cli@latest build:view
+npx eas-cli@26.0.0 build:view
 
 # List submissions
-npx eas-cli@latest submit:list
+npx eas-cli@26.0.0 submit:list
 
 # View logs for a failed build
 # (use the URL printed by eas build:list)
@@ -293,7 +308,7 @@ npx eas-cli@latest submit:list
 
 ## Backwards Compatibility Reminder
 
-Multiple app versions are in the wild. When deploying:
+From the November 2026 EA retest on, several app versions will be in use at once. When deploying:
 
 1. **Database changes**: Add nullable columns first → deploy app → drop old columns only after all users update
 2. **API changes**: Old app versions will keep calling old endpoints/shapes until users update
@@ -332,16 +347,16 @@ Any child a tester "deleted" on a pre-fix build still exists in Supabase with no
 
 ---
 
-## Current State (as of July 2026; pilot version updated 2026-10-27)
+## Current State (as of 2026-10-28)
 
 | Audience | App | Version | Backend | Distribution |
 |---|---|---|---|---|
-| Field cohort | Legacy AsyncStorage app | 1.2.x | `masi-app` (legacy) | TestFlight group + Play internal track (do not touch) |
-| SQLite pilot cohort | SQLite app (`main`) | 1.4.0 (July 2026 pilot: 1.3.0 from `release/1.3.0-preview`) | `masi-app-sqlite` | `pilot` profile → new closed Play track + new TestFlight group |
+| No field cohort today (Jim, 2026-10-28) | Legacy AsyncStorage app, unused | 1.2.x | `masi-app` (legacy) | Nothing new is distributed |
+| Testers now; Masi's EAs from November 2026 | SQLite app (`main`) | 1.4.0: iOS 25, Android 54 from `dffe22c` (July 2026 pilot: 1.3.0) | `masi-app-sqlite` | `pilot` profile → TestFlight + Play internal testing, submitted by EAS |
 
-OTA updates are live per channel: `production` serves the legacy field builds,
-`preview` serves the SQLite pilot store builds. Runtime versions (1.2.x vs
-1.3.0 and later) prevent cross-delivery even on a mistaken channel.
+OTA updates go per channel: `preview` serves the SQLite store builds, and
+`production` served the legacy builds. Runtime versions (1.2.x vs 1.3.0 and
+later) prevent cross-delivery even on a mistaken channel.
 
 ---
 
@@ -351,23 +366,31 @@ OTA updates are live per channel: `production` serves the legacy field builds,
 The app must exist in App Store Connect. Verify bundle ID matches: `org.masinyusane.masi`
 
 ### "The bundle version must be higher" (iOS)
-Should not happen with `autoIncrement: true`. If it does: `npx eas-cli@latest build:version:set -p ios`
+Should not happen with `autoIncrement: true`. If it does: `npx eas-cli@26.0.0 build:version:set -p ios`
 
 ### "App not found" (Android)
 The app must exist in Google Play Console with package `org.masinyusane.masi`.
 
-### "Service account lacks permission" (Android)
-Check Play Console → Setup → API access → verify the service account has "Release to production" or at minimum "Release to testing tracks" permission.
+### "The Google service account cannot submit this app" (Android)
+Also shown as a `403` or a `404` on the package name. Check Play Console →
+**Users and permissions**: `eas-submit-masi` must be listed as **Active**, with
+Masi under App permissions and at least **Release apps to testing tracks**. On
+2026-10-28 it was missing from the list because the invite had stopped at
+**Apply** (see One-time setup, step 3); once it was invited, the resubmission
+succeeded within minutes. If it is listed, a new grant can take up to 24 hours
+to reach Google's API: wait and resubmit the same build ID. A failed submission
+uploads nothing.
+
+### "Google Service Account Keys cannot be set up in --non-interactive mode" (Android)
+No Play key is assigned on EAS to `org.masinyusane.masi`. Do the one-time
+Android setup above.
 
 ### Build succeeds but submit fails
-For iOS, rerun the pilot submission against the exact build ID to see the
-specific error:
+Rerun the submission against the exact build ID to see the specific error:
 ```bash
-npx eas-cli@latest submit -p ios --profile pilot --id <IOS_BUILD_ID>
+npx eas-cli@26.0.0 submit -p android --profile pilot --id <ANDROID_BUILD_ID>
+npx eas-cli@26.0.0 submit -p ios --profile pilot --id <IOS_BUILD_ID>
 ```
-
-Android pilot uploads are manual in Play Console. Do not substitute an EAS
-Submit command.
 
 ### Environment variables missing in build
 Public values (Supabase URL and publishable key) are selected through the pilot

@@ -5542,6 +5542,71 @@ fixed.**
 - Its tree equals the pre-rebase tip `bcdb6e9` (backup `backup/letter-orders-bcdb6e9`), so the
   gates above still hold without a rerun.
 
+### 2026-10-28 — 1.4.0 pilot builds; no field cohort; automatic Android submission
+
+**Merges (Jim's yes for "steps 3–5").**
+- Letter orders: #116, CI 11m4s, squash `f4cea00`; main's tree equals the tested `d909344`.
+- 1.4.0 version bump: #110. Main was merged into its branch with a fast-forward push; only this
+  log conflicted, and both sides were kept. CI passed in 11m21s and it was squashed as `dffe22c`,
+  whose tree equals the tested `3196b94`.
+- Release gate on the pilot code (`63442e6`, the code of main `dffe22c`): see #110's table above.
+
+**Pilot builds (`pilot` profile, `npx eas-cli@26.0.0`, from a clean checkout of main `dffe22c`).**
+- `eas config` before building showed version 1.4.0, runtime policy `appVersion`, target
+  `sqlite-staging` / `segygjzpujphwvrubusm`, `previewContent` and `questionGallery` false, and
+  Sentry configured.
+- iOS 1.4.0 (25), `182f0fb1-a2e1-4ada-9138-28bf436dc73a`, store distribution.
+- Android 1.4.0 (54) AAB, `d6ce0e7a-163a-4054-bc83-452b1b6d2e52`, store distribution.
+- Both builds finished; `build:view` shows commit `dffe22c`, runtime 1.4.0 and update channel
+  `preview`.
+- iOS submission (Jim's yes): `eas submit -p ios --profile pilot --id 182f0fb1…
+  --non-interactive` used the App Store Connect API key stored on EAS and uploaded build 25 with
+  no login prompt (submission `ce60f5f2-eca6-4227-8b54-f50ab2c5c7f1`).
+- Why `@26.0.0`, not `@latest`: the package-age rule. 26.0.0 was published on 2026-10-26.
+
+**No field cohort (Jim, 2026-10-28).** Nobody runs the app today. Masi's EAs retest it from
+November 2026, and every later TestFlight build and Play download starts from these builds.
+DEPLOYMENT.md's "keep it away from the field cohort" rules (a separate closed track, never
+internal testing, no Android submit profile) protected testers who no longer exist. DEPLOYMENT.md,
+AGENTS.md, the roadmap and `cap-004` now say so. The OTA commands now name channel `preview`,
+where the store builds listen; the `preview` EAS environment holds all five Sentry variables
+(`env:list`, names only).
+
+**Automatic Android submission (Jim: Play internal testing).**
+- The `pilot` submit profile gains `android: { track: 'internal', releaseStatus: 'completed' }`.
+- RED: `releaseGateConfig.test.js` expected that object and received `undefined`. GREEN: 8/8.
+- The test matches the object exactly, so a `serviceAccountKeyPath` cannot slip into the
+  repository; the Play key lives on EAS servers.
+- Expo's documented `track` values are `internal`, `alpha`, `beta` and `production`, so July's
+  custom closed track ("SQLite pilot") cannot be targeted from `eas.json`.
+- First automatic submission of build 54, after Jim's one-time setup:
+  - `eas credentials` failed from his home folder with "Run this command inside a project
+    directory". It worked from `masi-app`, and DEPLOYMENT.md now says where to run it.
+  - The first submit (`02b3f668-80a5-4aff-8f07-528906ab505a`) used the right key
+    (`eas-submit-masi`, key source EAS servers). Play refused it with "The Google service account
+    cannot submit this app."
+  - Cause: the account was missing from Play Console's user list, because the invite had stopped
+    at Apply. Jim invited it.
+  - The resubmission (`9094fc1b-ab73-4277-ba47-40c7d02680d2`) succeeded within minutes: "Submitted
+    your app to Google Play Store!", track `internal`, status `COMPLETED`, version code 54.
+  - No manual AAB upload was needed.
+- Play key: one service account per app (Jim's call). Jim asked whether Zazi iZandi's key could
+  serve Masi. It technically can: eas-cli 26.0.0 lists keys for the whole Expo account
+  (`getGoogleServiceAccountKeysForAccountAsync` in `SetUpGoogleServiceAccountKeyForSubmissions.js`),
+  and both apps are on `jimmckeown`. My first answer recommended reuse, and commit `1a8ac43`
+  documented it. Jim then saw the account in Play Console: it is named
+  `eas-submit-zazi@masinyusane-play-publishing.iam.gserviceaccount.com`, and Google service
+  account emails cannot be renamed. Reuse would label every Masi release "zazi" in Play's
+  records, and revoking it would cut off both apps. Reversed: Masi gets `eas-submit-masi` in the
+  same Cloud project, where the Play Android Developer API is already on. It gets the same
+  permission set as Zazi's, taken from Zazi's runbook
+  (`zazi-izandi-app/documentation/runbooks/google-play-service-account.md`, checked against the
+  live console 2026-07-31). In `eas credentials`, Jim must pick "[Upload a new service account
+  key]", not "[Choose an existing key]".
+- On iOS, EAS Submit can add builds only to internal TestFlight groups (Expo's `groups` option),
+  plus Apple's automatic distribution for internal groups. External testers' groups still need
+  each build added in App Store Connect.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -5748,6 +5813,9 @@ fixed.**
 | 2026-10-22 | **Accepted risk A3 stays accepted (Jim).** A letter correction made on a phone whose clock is slow, after it has observed another phone's newer correction, loses to that winner. | Rare: it needs two phones correcting the same child and letter and a clock slow beyond the gap; fast clocks are already clamped. The root fix (a causal base carried in `set_letter_mastery`) changes the approved server contract. | A field report of a tracker mark that reverts after sync, or two EAs routinely co-delivering one child. |
 | 2026-10-22 | **AR3 Gates 3–4 ran with two EAs signed in in turn on one Galaxy A03s (plan call).** ADR 0008 keeps each EA's database across sign-out, so the run exercises the shared-phone path end to end. | It proves visibility, handover delete and rewalk on real hardware, but not two phones writing at the same moment. | Run the same gates on the A03s and the iPhone together, with AR2 G1, G1r and G2, before the field build. |
 | 2026-10-27 | Advance app/runtime to 1.4.0 before the first TestFlight pilot since July, and make "any native change → version bump" an explicit rule in DEPLOYMENT.md. | `expo-font`, `expo-splash-screen`, the iOS icon and the Android backup plugin changed native code after the July 1.3.0 store builds. Under `appVersion`, sharing 1.3.0 would let one OTA reach binaries with different native code. Cost: Beta App Review for the first 1.4.0 build in an external TestFlight group. | The project adopts fingerprint-based runtime versions, which make the native boundary automatic. |
+| 2026-10-28 | **No field cohort runs the app (Jim).** The 1.4.0 pilot builds (iOS 25, Android 54) are the baseline for every later TestFlight build and Play download; Masi's EAs retest from November 2026. | DEPLOYMENT.md's isolation rules protected a legacy cohort that no longer uses the app. | Any legacy-app user turns up, or the November retest group changes. |
+| 2026-10-28 | **Every `pilot` build submits itself: iOS to App Store Connect, Android to Play internal testing with `releaseStatus: completed` (Jim's choice).** The Play key lives on EAS, never in the repository. | Internal testing reaches testers in minutes with no Google review; manual AAB uploads were slow and error-prone. Limit: 100 testers. | The EA retest group exceeds 100 testers (move to closed testing, `alpha`), or production release begins. |
+| 2026-10-28 | **One Google Play service account per app, all in Cloud project `masinyusane-play-publishing` (Jim's call).** Masi uses `eas-submit-masi`, never Zazi iZandi's `eas-submit-zazi`. | Service account emails cannot be renamed, so a shared one names the wrong app in Play's records. Separate accounts can be revoked and rotated one app at a time. EAS would have allowed reuse. | Masinyusane publishes enough apps that per-app accounts become a burden. |
 
 ---
 
