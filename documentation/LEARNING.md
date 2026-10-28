@@ -2181,3 +2181,22 @@ production excluded and hides the gallery after an OTA even on preview
 (`src/utils/questionGallery.js:6`, `app.config.js:4`, `eas.json:54`, `eas.json:69`). Shared
 primitives, guard tests, behaviour tests and device inspection each cover a different failure
 mode. None substitutes for the other three.
+
+## Leave decisions precede immutable assessment writes (#102, 2026-10-28)
+
+An assessment result cannot be edited or deleted by the EA (ADR-0007), so navigation flags cannot
+undo a save once the SQLite transaction has started. The host must choose before that boundary:
+if the EA is deciding whether to leave, capture a timer's completed result in memory and wait.
+Keep result starts persistence; Discard result leaves without writing. Conversely, once a save is
+in flight, hold Back without offering Discard until it settles. A failed transaction leaves a
+retained result that can truthfully be retried or discarded. Refs record the decision synchronously,
+so callbacks queued before React renders cannot replace the first result or cross that boundary.
+
+Sharing an appearance does not require sharing a native presentation. iOS owns the lifecycle of
+React Native Modals and refuses overlapping presentation/dismissal transitions. A package End
+sheet can close in the same moment an immediate save failure opens the host's error sheet. The
+shared `ConfirmPanel` owns the drawing; the package `ConfirmSheet` owns native presentation, while
+the host `TestSheet` uses Paper's Portal in the existing window. This removes the presentation race
+without delays, while keeping accessibility focus, background hiding and hardware Back explicit.
+Paper forwards its own theme through its Portal, but custom app contexts need to be carried
+explicitly: `TestSheet` forwards assessment fonts so sharing the panel also preserves typography.

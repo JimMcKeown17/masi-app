@@ -4553,6 +4553,226 @@ the two App suites failed until the worktree got its own install.)
 | Staging rows for the build 45 run (read-only helper, `project_ref=segygjzpujphwvrubusm`) | After Jim reconnected Wi-Fi the queue drained. All ten converted Questions saved `capture_mode = sequential`; Q11 saved `NULL` (unchanged path), with zero items as a skip. Reached counts equal the marks: Q1 60 items / 15 reached / 5 correct (`ea_ended`, 33,291 ms, `correction_count` 2), Q2 5/5/4, Q3 10/10/10, Q4 8/2/1, Q5 26/26/25, Q6 40/12/10 (`timer`, 60,000 ms), Q7 11/11/10, Q8 45/20/19 (19 WPM), Q9 18/18/17, Q10 `skipped_tired` with no items. Q8 saved `timer`, not `ea_ended`: it was written 68 s after Start, so the timer expired before the scripted End taps landed (uiautomator dumps stall while a countdown animates). Not an app defect; the EGRA pass repeats an early End with direct taps. |
 | A03 pass, build 47 (`a193d6b`), 360dp | Full EGRA isiXhosa EGRA 1: letters stopped at exactly the tenth first-row wrong ("got every item in the first row wrong"), saved 0/60; familiar words (80, 10 pages of 8) flip then early End saved 7/80; story early End via the sheet ("12 marked. The 41 not marked won't count") saved 11/53; story questions 4/5. On device the tile labels now speak the answer guide (`…?, Answer guide: nguLolo, correct. Double-tap to change to incorrect`). All three build-45 layout fixes hold: the review line is centred inside the gutters (native frame 45–675 px, was 0–720 drawn flush-left), the flip notice keeps 8dp above the position line, and the last story-question card keeps its gap above the line. Q6 in the gallery shows 8 words per page, `Card row 1 · page 1 of 5`, and fits at font 1.3. Not fixed: in review the page indicator grows by its Previous/Next arrows and the grid shifts down about 18dp (Q5); a content-pack guide in isiXhosa EGRA 1 Q4 ends with a stray `”`; the Select child list scrolls under the Android navigation bar (pre-existing). TalkBack speech (including whether the flip notice is read once or twice) was not listened to on device; it moves to the iPhone/VoiceOver and listening checklist. Jim (2026-10-26): no rebuild for font-1.3-only fixes. |
 
+### 2026-10-28 — Leave sheet says what it does (#102)
+
+Found in the Galaxy A03 device check on 2026-10-24 (build 39), and confirmed by reading the code
+at `f095385`: the package End sheet saved `ea_ended`, while the host Back/✕ sheet discarded the
+answers. Their titles differed by one word ("End this test?" / "End the test?"). The saving
+sheet had a filled red action and the destructive sheet a quiet outlined action. Root cause:
+two sheet components, one on each side of the package boundary, with near-identical titles
+and inverted button weight.
+
+Branch `fix/leave-sheet-102`, based on `561f668` (#114, the finish-flow change). Codex built
+both rounds; Claude reviewed each diff, reran the focused gates and checked RED by restoring
+the old screens. Round 1 was reviewed adversarially (`gpt-6-astra`, needs-attention, two
+findings); round 2 below fixes both.
+
+Jim chose **words + one look** (2026-10-28). The shared package `ConfirmPanel` is exported
+from the package root. Both Question hosts draw it through the in-window `TestSheet` for leave,
+save-error and closed sheets; package-owned sheets retain the native `ConfirmSheet` wrapper.
+Leave says "Leave without saving?", names the child's answers or unsaved result (with an
+empty-first-name fallback), and uses filled danger "Discard answers" / "Discard result".
+"Keep marking" / "Keep result" cancel without changing the guard. Battery copy reassures that
+finished questions stay saved. Save errors offer ink "Try again" and explicit "Not now";
+closed assessments offer ink "Back to assessment", with hardware Back also closing them.
+
+All original host visibility conditions are retained, including suppressing save errors while
+leave is visible and, for a Battery, while closed. `TestSheet` takes an explicit `visible` prop
+and renders nothing while hidden. The save guard now orders the leave decision before persistence
+(see Review round 1). Package End copy/look, scoring and gallery behavior are preserved. Battery's
+host `BrandButton` remains necessary for load-error retry outside the Question.
+
+Original round 1 RED → GREEN (Node 20.19.4; each focused Jest run used `--runInBand`, tests first;
+the original root export and native-wrapper expectations are superseded below):
+
+| Slice / test-name filter | Failing output before the fix | Passing after |
+| --- | --- | --- |
+| `exported from the package root` | Expected `[Function ConfirmSheet]`, received `undefined` (1 failed) | 1 passed |
+| `real quick-test` (✕ and navigation Back) | `Unable to find an element with testID: leave-confirmation` (2 failed) | 2 passed |
+| `quick-test save error` (Amahle and empty first name) | `Unable to find an element with testID: save-error` (2 failed) | 2 passed |
+| `real Battery Question` (✕ and navigation Back, Lwazi and empty first name) | `Unable to find an element with testID: leave-confirmation` (4 failed) | 4 passed |
+| `Battery save error offers` (Lwazi and empty first name) | `Unable to find an element with testID: save-error` (2 failed) | 2 passed |
+| Closed-sheet fatal-code tests (two existing cases strengthened) and new hardware-Back test | `Unable to find an element with testID: assessment-closed` (3 failed) | 3 passed |
+
+The real Questions in real navigation stacks mark an item, compare End and leave titles and
+filled danger tokens, cancel and mark another item, then discard without persisting. Save-error
+flows exercise dismissal, unsaved-result copy, Keep result restoring the error and retrying the
+retained result. Review round 1 below replaces the native-Modal assertions and in-flight discard
+contract while preserving original-action dispatch, native guards and first-result retention.
+
+Original round 1 verification (every Node command prefixed with
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`; confirmed `node --version` = `v20.19.4`):
+
+| Command | Exact result |
+| --- | --- |
+| `npx jest __tests__/StandaloneTestScreen.test.js __tests__/BatteryQuestionScreen.test.js src/assessment-questions/ui` | 20 suites passed; 327 tests passed; 0 snapshots; 29.925 s; exit 0 |
+| `npx jest` | 434 suites passed; 6,648 tests passed; 14 snapshots passed; 232.077 s; exit 0 |
+| `npm run test:integration` | 78 suites passed; 967 tests passed; 0 snapshots; 185.507 s; exit 0 |
+| `npm run test:types` | `tsc --noEmit -p tsconfig.assessment-questions.json`, no diagnostics; exit 0 |
+| `npm run test:content` | 5 tests passed, 0 failed/cancelled/skipped/todo; exit 0 |
+| `git diff --check` | no output; exit 0 |
+
+No cache override or package installation was needed. No local gate skipped.
+
+Standing-doc search: no old leave-sheet copy found in `CONTEXT.md`, `PRD.md` or
+`docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md`. Design system updated and the
+resolved #102 roadmap bullet removed. Dated plans and the 2026-10-25 code map were not edited.
+
+Original round 1 surprises / limits: before #102, the host used Paper Portal with a handle,
+large title, backdrop dismissal and retained exit animation. Round 1 replaced it with the
+package's fading native Modal; the iOS handover finding below supersedes that choice. "Not now"
+provides an explicit iOS escape from repeated save failures. One first-pass assertion counted
+the underlying Close test button too; it was corrected to count only buttons inside the
+closed sheet (one). An initial targeted gate ran before that correction and reported 2 failed /
+325 passed; the corrected gate is recorded above. Parallel targeted Jest emitted React
+`PreventRemoveProvider` act warnings but passed. Native focus, gestures, modal layering and
+safe-area layout still require the **1.4.0 pilot build gate**; no separate build for this
+copy-and-sheet change, and no device pass claimed here.
+
+#### Review round 1
+
+The adversarial review found two real defects in round 1:
+
+1. **Native modal handover on iOS.** A host native Modal could mount while the package's End or
+   stop Modal was still dismissing, or replace the leave Modal with save-error in one commit.
+   UIKit can refuse that second presentation, leaving a finished Question with no visible retry.
+   Extracted `ConfirmPanel` without changing its drawing or the package's native `ConfirmSheet`
+   behavior. Only `ConfirmPanel` is public. Host `TestSheet` uses Paper Portal, never a native
+   Modal, with the same panel and scrim, sheet-accessibility registration, title focus on an
+   animation frame, consumed hardware Back, and a motion-token entry fade (none at `still`). It
+   unmounts immediately on close. Paper moves children outside the app assessment-font provider,
+   so `TestSheet` captures and forwards that existing font context inside the Portal. No timeouts
+   were added.
+2. **Discard could not stop a started save.** A timer completion during leave immediately started
+   the repository transaction; Discard changed navigation flags but could not undo SQLite/outbox
+   writes. The harm is permanent because EA results are immutable (ADR-0007). The hook now uses
+   refs to make the leave decision and persistence mutually exclusive. Completion during leave
+   retains the first result without persisting; Keep result starts the first save, while Discard
+   writes nothing and ignores late completions. Back / ✕ / iOS back during a started save remains
+   prevented without opening leave. Success navigates normally; failure offers save-error, after
+   which leave/discard is truthful. Keep result after a failed attempt restores save-error rather
+   than silently retrying. Native removal remains guarded until commit or explicit discard.
+
+The initial vertical slices ran tests before the implementation: panel/export (3 failed), absent
+host wrapper (module-not-found), deferred persistence (2 failed), Back during persistence (2 failed),
+and native host Modal count (6 failed). Their green runs passed 14 panel cases, 3 initial host
+cases, 6 hook cases and 6 focused host-screen cases. The expanded regression tests were then
+replayed against round 1's hook/native-wrapper behavior, first together (26 failed / 119 passed),
+then with focused filters in `/tmp/masi-102-red-replay` to avoid failure-reporting cascades. That
+replay used `git show HEAD:src/hooks/useGuardedQuestionSave.js` (the hook was unchanged in round 1)
+and the original native wrapper behavior, without changing the branch. The first
+combined replay temporarily restored sources from in-memory copies in a `finally` block; all
+later replay runs used the isolated directory. Expanded tests added after the vertical slices are
+regression replay evidence, not a claim that every extra assertion was authored before its fix.
+
+Per-case RED → GREEN evidence follows. `No host sheet` checks use equivalent boolean assertions
+and Modal counts use numeric assertions because pretty-printing a React Navigation test instance
+on a failed matcher can itself throw “Couldn't find a navigation context”. `true / false` below
+means the expected absence check failed. All cases below pass in the final targeted gate.
+
+| Test / case | RED output on original behavior | GREEN |
+| --- | --- | --- |
+| Package `ConfirmPanel is exported from the package root` | `Received: undefined` | pass |
+| Package panel parity — ink | `No instances found with node type: "Unknown"` (ConfirmPanel absent) | pass |
+| Package panel parity — danger | `No instances found with node type: "Unknown"` | pass |
+| Host shared panel, no Modal, scrim and background hiding | `Cannot find module '../src/components/assessments/TestSheet'` | pass |
+| Host hardware Back with cancel | same absent-module RED | pass |
+| Host hardware Back without cancel | same absent-module RED | pass |
+| Host full motion / immediate unmount | Wrapper absent in baseline; added coverage after wrapper slice | pass |
+| Host calm motion / immediate unmount | Wrapper absent in baseline; added coverage after wrapper slice | pass |
+| Host still motion / immediate unmount | Wrapper absent in baseline; added coverage after wrapper slice | pass |
+| Host title focus after frame / cancel pending focus on hide | Wrapper absent in baseline; added coverage after wrapper slice | pass |
+| Host Portal retains assessment fonts in title, body and buttons | `toHaveStyle` missing `fontFamily: "Assessment Bold"` before forwarding the context (test-first follow-up) | pass |
+| Standalone double completion / guard until commit | `Expected: true; Received: false` (leave wrongly opened) | pass |
+| Standalone failed save after Back / Keep restores error | `Expected: true; Received: false` | pass |
+| Standalone deferred discard / late completion | `Expected number of calls: 0; Received number of calls: 1` | pass |
+| Standalone real stack blocks Back through commit | `Expected: true; Received: false` | pass |
+| Standalone native guard before Start / during save / retry | `Expected: true; Received: false` | pass |
+| Standalone save error / Amahle | `Expected: 0; Received: 1` (native Modal) | pass |
+| Standalone save error / empty first name | `Expected: 0; Received: 1` | pass |
+| Standalone real End → immediate failure → leave → Keep | `Expected: 0; Received: 1` | pass |
+| Standalone real timer during leave → Discard | `Unable to find an element with text: Amahle's result isn't saved yet. If you leave now, it will be lost.` (already navigated) | pass |
+| Standalone real timer during leave → Keep | same missing-result-copy RED | pass |
+| Standalone real pending save → Back → resolve | `Expected: true; Received: false` | pass |
+| Standalone real pending save → Back → reject → discard | `Expected: true; Received: false` | pass |
+| Battery fatal `RUN_NOT_WRITABLE` / no Modal | `Expected length: 0; Received length: 1` | pass |
+| Battery fatal `QUESTION_ALREADY_DECIDED` / no Modal | `Expected length: 0; Received length: 1` | pass |
+| Battery save error / Lwazi | `Expected length: 0; Received length: 1` | pass |
+| Battery save error / empty first name | `Expected length: 0; Received length: 1` | pass |
+| Battery closed hardware Back | BackHandler replaces Modal.onRequestClose; callback wiring updated with the wrapper slice | pass |
+| Battery real End → immediate failure → leave → Keep | `Expected: 0; Received: 1` | pass |
+| Battery real timer during leave → Discard | `Unable to find an element with text: Lwazi's result isn't saved yet. If you leave now, it will be lost.` (already navigated) | pass |
+| Battery real timer during leave → Keep | same missing-result-copy RED | pass |
+| Battery real pending save → Back → resolve | `Expected: true; Received: false` | pass |
+| Battery real pending save → Back → reject → discard | `Expected: true; Received: false` | pass |
+| Hook fatal refusal after Back while saving | `Expected: true; Received: false` | pass |
+| Hook completion during leave → Discard / first-result identity | `Expected number of calls: 0; Received number of calls: 1` | pass |
+| Hook completion during leave → Keep / first-result identity | `Expected number of calls: 0; Received number of calls: 1` | pass |
+| Hook Back while saving → resolve | `expect(received).toBeNull()` failed on discard sheet; isolated numeric diagnostic: `Expected: true; Received: false` | pass |
+| Hook Back while saving → reject / discard | same unexpected-discard-sheet RED | pass |
+
+Standing-doc search for assessment leave/discard/in-flight-save behavior:
+`CONTEXT.md`'s OSS Question contract names the host's unsaved-result guard and was extended with
+these ordering rules. `PRD.md`, `documentation/rls-sync-contract-map.md`, and
+`docs/superpowers/specs/2026-10-14-welaplus-release-1-design.md`: **none found** (unrelated session
+form/draft and sync in-flight statements retained). Design-system wrapper and guard rules updated;
+`LEARNING.md` explains why an immutable-write boundary must precede Discard. No dated plans or code
+maps changed. Round 1's resolved roadmap deletion is retained.
+
+Round 2 gate results (all Node commands use the Node 20.19.4 PATH prefix above):
+
+| Command | Exact result |
+| --- | --- |
+| `npx jest __tests__/StandaloneTestScreen.test.js __tests__/BatteryQuestionScreen.test.js __tests__/useGuardedQuestionSave.test.js __tests__/TestSheet.test.js src/assessment-questions/ui --runInBand` | 22 suites passed; 353 tests passed; 0 snapshots; 21.909 s; exit 0 |
+| `npx jest --runInBand` | 435 suites passed; 6,674 tests passed; 14 snapshots passed; 363.157 s; exit 0 |
+| `npm run test:integration` | 78 suites passed; 967 tests passed; 0 snapshots; 86.881 s; exit 0 |
+| `npm run test:types` | `tsc --noEmit -p tsconfig.assessment-questions.json`, no diagnostics; exit 0 |
+| `npm run test:content` | 5 tests passed; 0 failed/cancelled/skipped/todo; 74.025625 ms; exit 0 |
+| `npx jest src/assessment-questions/__tests__/styleGuard.test.ts --runInBand` | 1 suite passed; 22 tests passed; 0 snapshots; 2.196 s; exit 0 |
+| `git diff --check` | no output; exit 0 |
+
+Jest ran serially (`--runInBand`) to keep the broad local gates deterministic. All requested
+local gates passed; none skipped. The final targeted and integration runs were repeated after
+forwarding font context through Portal. The complete unit run includes the new font-context test.
+
+Environment / surprises: the pre-existing untracked `node_modules` symlink pointed to the missing
+`../assessment-style/node_modules`. Repointing to the main checkout enabled focused tests but its
+installed tree lacked `@expo-google-fonts/andika/400Regular`: the first integration run had 77
+suites / 961 tests pass and one suite (`signedInTree.test.js`) fail to load, exit 1, 109.88 s.
+An incomplete full-unit attempt was stopped (exit 130) after discovering that environment blocker.
+The symlink now points at `../egra-content-spec/node_modules`; all direct dependency versions were
+checked against this worktree's lockfile, with no missing or mismatched versions. No dependencies
+were installed and no package manifest/lock changed. An optional `.jest-cache` attempt during
+an interrupted early screen run was removed after verification. Early screen runs interrupted
+while the root export had been extracted but hosts still imported it (exit 130); the final
+implementation uses `TestSheet` throughout. React Navigation `PreventRemoveProvider` cleanup act
+warnings remain in the passing screen suite; no warning was suppressed. Final review caught a
+font-context gap in the new Portal wrapper; a new test reproduced missing assessment fonts, then
+passing the existing fonts through a provider inside Portal made all 8 wrapper tests pass.
+
+Device/release limits: local tests prove the host sheets contain zero native Modals and exercise
+real Questions/navigation, timers, retry/discard and registered native-removal guards. They do
+not execute UIKit presentation or native gestures, VoiceOver/TalkBack speech or physical inset
+geometry. Those remain in the existing **1.4.0 pilot build gate**. No device pass, hosted change,
+release or staging operation was performed.
+
+**Review round 2** (Codex `gpt-6-astra`, needs-attention, one finding, high): a completion queued
+behind Discard re-armed the leave guard. `BatteryQuestionScreen` calls `guarded.onStart()` just
+before `guarded.onComplete()` (`BatteryQuestionScreen.js:108`) so a timer completion is always
+guarded, and `onStart` set `preventLeave` unconditionally. If Discard and a queued timer
+completion landed in one batch, Discard scheduled `preventLeave=false`, `onStart` scheduled it
+back to `true`, `onComplete` was ignored (`allowLeave`), and the pending discard navigation never
+dispatched: the EA was left on an empty finished Question with Back and ✕ silently blocked. The
+ordering predates round 2. Fix: `onStart` returns once `allowLeave` is set (saved, discarded or
+fatal), since the screen is leaving in all three. Claude made this one-line fix directly, test
+first: `useGuardedQuestionSave.test.js` "a completion queued behind Discard cannot re-arm the
+leave guard" runs Discard, `onStart` and `onComplete` in one act before React commits (the
+Battery order). RED: route names `['Entry', 'Question']` (stranded); GREEN: `['Entry']`, no
+persist call. Gates after the fix (Node 20.19.4, run by Claude): focused 22 suites / 354 tests;
+`npx jest` 435 suites / 6,675 tests / 14 snapshots; `npm run test:integration` 78 suites / 967
+tests; `npm run test:types` clean; `npm run test:content` 5/5; `git diff --check` clean. The review loop stops
+here: round 2's only catch was a narrow ordering race, now pinned by a test.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

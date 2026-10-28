@@ -1,12 +1,12 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContext, usePreventRemoveContext } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { renderInTestStack } from '../test-support/renderInTestStack';
 import { AuthContext } from '../src/context/AuthContext';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
-import { CURRENT_ITEM_SETS, SHARED_READING_SETS, sharedInstructionsFor } from '../src/assessment-questions';
+import { CURRENT_ITEM_SETS, SHARED_READING_SETS, sharedInstructionsFor, tokens } from '../src/assessment-questions';
 import StandaloneTestScreen from '../src/screens/assessments/StandaloneTestScreen';
 
 let mockQuestionProps;
@@ -135,10 +135,10 @@ test('Close before Start leaves immediately without an end sheet', () => {
   fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
 
   expect(screen.navigation.goBack).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText('End the test?')).toBeNull();
+  expect(screen.queryByText('Leave without saving?')).toBeNull();
 });
 
-test('Close after Start is guarded by the End the test sheet', () => {
+test('Close after Start is guarded by the leave sheet', () => {
   const wrapper = ({ children }) => <AllProviders>{withData(children)}</AllProviders>;
   const screen = renderInTestStack({
     routes: [
@@ -152,7 +152,7 @@ test('Close after Start is guarded by the End the test sheet', () => {
   fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
 
   expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
-  expect(screen.getByText('End the test?')).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
 });
 
 test('double completion before save resolves saves and navigates once; the guard lasts until commit', async () => {
@@ -168,7 +168,7 @@ test('double completion before save resolves saves and navigates once; the guard
   });
   const event = beforeRemove(screen.navigation);
   expect(event.preventDefault).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("This result isn't saved yet.")).toBeTruthy();
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
   expect(screen.navigation.replace).not.toHaveBeenCalled();
   expect(screen.navigation.dispatch).not.toHaveBeenCalled();
   expect(mockOffline.triggerBackgroundSync).not.toHaveBeenCalled();
@@ -209,13 +209,13 @@ test('failed-save leave guard stays active until Discard dispatches the original
   const screen = renderHost();
   fireEvent.press(screen.getByText('Finish test'));
   await screen.findByText("Couldn't save — try again");
-  fireEvent.press(screen.getByLabelText('Dismiss save error'));
+  fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
   const event = beforeRemove(screen.navigation);
   expect(event.preventDefault).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("This result isn't saved yet.")).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
   expect(screen.navigation.replace).not.toHaveBeenCalled();
   expect(screen.navigation.dispatch).not.toHaveBeenCalled();
-  fireEvent.press(screen.getByRole('button', { name: 'Discard' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Discard result' }));
   expect(screen.navigation.dispatch).toHaveBeenCalledTimes(1);
   expect(screen.navigation.dispatch).toHaveBeenCalledWith(event.data.action);
   expect(screen.navigation.goBack).not.toHaveBeenCalled();
@@ -223,28 +223,33 @@ test('failed-save leave guard stays active until Discard dispatches the original
   expect(saveQuestionResult).toHaveBeenCalledTimes(1);
 });
 
-test('a save failure while confirming leave keeps one sheet open and offers retry after Keep result', async () => {
+test('a save failure after Back during save offers retry; Keep result restores that error', async () => {
   const pending = deferred();
   saveQuestionResult.mockReturnValue(pending.promise);
   const screen = renderHost();
   fireEvent.press(screen.getByText('Finish test'));
   beforeRemove(screen.navigation);
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
   await act(async () => { pending.reject(new Error('disk full')); });
-  expect(screen.getByText("This result isn't saved yet.")).toBeTruthy();
-  expect(screen.queryByText("Couldn't save — try again")).toBeNull();
+  expect(screen.getByTestId('save-error')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
   expect(screen.navigation.dispatch).not.toHaveBeenCalled();
+  beforeRemove(screen.navigation);
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
+  expect(screen.queryByTestId('save-error')).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Keep result' }));
   expect(await screen.findByText("Couldn't save — try again")).toBeTruthy();
 });
 
-test('Discard before completion shows End the test? and leaves without saving', () => {
+test('Discard answers before completion shows Leave without saving? and leaves without saving', () => {
   const screen = renderHost();
   act(() => { mockQuestionProps.onStart(); });
   const event = beforeRemove(screen.navigation);
   expect(event.preventDefault).toHaveBeenCalledTimes(1);
-  expect(screen.getByText('End the test?')).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
   expect(screen.navigation.dispatch).not.toHaveBeenCalled();
-  fireEvent.press(screen.getByRole('button', { name: 'Discard' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Discard answers' }));
   expect(screen.navigation.dispatch).toHaveBeenCalledWith(event.data.action);
   expect(saveQuestionResult).not.toHaveBeenCalled();
 });
@@ -253,20 +258,21 @@ test('cancelling discard keeps the leave guard active', () => {
   const screen = renderHost();
   act(() => { mockQuestionProps.onStart(); });
   beforeRemove(screen.navigation);
-  fireEvent.press(screen.getByRole('button', { name: 'Keep testing' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
   expect(screen.navigation.dispatch).not.toHaveBeenCalled();
   expect(beforeRemove(screen.navigation).preventDefault).toHaveBeenCalledTimes(1);
 });
 
-test('discarding an in-flight save prevents a late completion from navigating to results', async () => {
-  const pending = deferred();
-  saveQuestionResult.mockReturnValue(pending.promise);
+test('discarding a deferred result prevents late completion from saving or navigating', async () => {
   const screen = renderHost();
-  fireEvent.press(screen.getByText('Finish test'));
+  const complete = mockQuestionProps.onComplete;
+  act(() => mockQuestionProps.onStart());
   const event = beforeRemove(screen.navigation);
-  fireEvent.press(screen.getByRole('button', { name: 'Discard' }));
+  act(() => complete(mockResult));
+  fireEvent.press(screen.getByRole('button', { name: 'Discard result' }));
   expect(screen.navigation.dispatch).toHaveBeenCalledWith(event.data.action);
-  await act(async () => { pending.resolve({ id: 'saved' }); });
+  act(() => complete(mockResult));
+  expect(saveQuestionResult).not.toHaveBeenCalled();
   expect(screen.navigation.replace).not.toHaveBeenCalled();
 });
 
@@ -304,7 +310,7 @@ test('the real navigation stack blocks back during save and replaces the route o
   fireEvent.press(screen.getByText('Finish test'));
   act(() => { screen.navigationRef.goBack(); });
   expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
-  expect(screen.getByText("This result isn't saved yet.")).toBeTruthy();
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
   await act(async () => { pending.resolve({ id: 'saved' }); });
   expect(screen.routeNames()).toEqual(['Entry', 'AssessmentResults']);
 });
@@ -337,11 +343,16 @@ test('native dismissal is free before Start, then stays prevented through save f
   fireEvent.press(screen.getByText('Start test'));
   expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
   fireEvent.press(screen.getByText('Finish test'));
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  act(() => screen.navigationRef.goBack());
+  expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+  expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
   await act(async () => { firstSave.reject(new Error('disk full')); });
   expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
   act(() => { screen.navigationRef.goBack(); });
   expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
-  expect(screen.getByText("This result isn't saved yet.")).toBeTruthy();
+  expect(screen.getByText('Leave without saving?')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'Keep result' }));
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
   expect(nativeGuards[routeKey]?.preventRemove).toBe(true);
@@ -416,4 +427,162 @@ test.each(['letter_sounds', 'word_reading'].flatMap(code =>
   });
   expect(JSON.stringify(set)).toBe(before);
   expect(Object.isFrozen(set)).toBe(true);
+});
+
+
+test.each(['Close test', 'navigation Back'])(
+  'real quick-test %s distinguishes saving End from discarding answers and keeps marking', leaveVia => {
+    mockUseRealQuestion = true;
+    const wrapper = ({ children }) => <AllProviders>{withData(children)}</AllProviders>;
+    const screen = renderInTestStack({ routes: [
+      { name: 'Entry', component: EmptyScreen },
+      { name: 'StandaloneTest', component: StandaloneTestScreen, params },
+    ], initialIndex: 1, wrapper });
+    const leave = () => leaveVia === 'Close test'
+      ? fireEvent.press(screen.getByRole('button', { name: 'Close test' }))
+      : act(() => screen.navigationRef.goBack());
+    fireEvent.press(screen.getByText('Start'));
+    fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+    fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+    const endTitle = screen.getByRole('header').props.children;
+    expect(endTitle).toBe('End this test?');
+    expect(screen.getByRole('button', { name: 'End test' })).toHaveStyle({ backgroundColor: tokens.color.primary });
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+    leave();
+    expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Leave without saving?' }).props.children).not.toBe(endTitle);
+    expect(screen.getByText("Amahle's answers on this test won't be saved.")).toBeTruthy();
+    expect(screen.queryByText('End the test?')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Discard answers' })).toHaveStyle({ backgroundColor: tokens.color.primary });
+    expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+    expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+    fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+    fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+    expect(screen.getByText(/^2 marked\./)).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+    leave();
+    fireEvent.press(screen.getByRole('button', { name: 'Discard answers' }));
+    expect(screen.routeNames()).toEqual(['Entry']);
+    expect(saveQuestionResult).not.toHaveBeenCalled();
+  },
+);
+
+
+test.each(['Amahle', ''])('quick-test save error can be dismissed and the unsaved result kept (%p first name)', async firstName => {
+  saveQuestionResult.mockRejectedValueOnce(new Error('disk full'));
+  const wrapper = ({ children }) => <AllProviders>{withData(children)}</AllProviders>;
+  const screen = renderInTestStack({ routes: [
+    { name: 'Entry', component: EmptyScreen },
+    { name: 'StandaloneTest', component: StandaloneTestScreen, params: { ...params, child: { ...child, first_name: firstName } } },
+    { name: 'AssessmentResults', component: EmptyScreen },
+  ], initialIndex: 1, wrapper });
+  fireEvent.press(screen.getByText('Start test'));
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  expect(screen.getByText(`${firstName ? `${firstName}'s answers` : 'The answers'} on this test won't be saved.`)).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Keep marking' }));
+  fireEvent.press(screen.getByText('Finish test'));
+  await screen.findByText("Couldn't save — try again");
+  expect(screen.getByTestId('save-error')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.getByText('Your result is still here. Try saving it again.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toHaveStyle({ backgroundColor: tokens.color.ink });
+  fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+  expect(screen.queryByTestId('save-error')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+  expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.getByRole('header', { name: 'Leave without saving?' })).toBeTruthy();
+  expect(screen.getByText(`${firstName ? `${firstName}'s result` : 'This result'} isn't saved yet. If you leave now, it will be lost.`)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Discard result' })).toHaveStyle({ backgroundColor: tokens.color.primary });
+  expect(screen.queryByTestId('save-error')).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Keep result' }));
+  expect(screen.getByTestId('save-error')).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+  expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(screen.routeNames()).toEqual(['Entry', 'AssessmentResults']));
+  expect(saveQuestionResult).toHaveBeenCalledTimes(2);
+  expect(saveQuestionResult.mock.calls[1][0]).toEqual(saveQuestionResult.mock.calls[0][0]);
+});
+
+function renderRealQuestion() {
+  mockUseRealQuestion = true;
+  const wrapper = ({ children }) => <AllProviders>{withData(children)}</AllProviders>;
+  return renderInTestStack({ routes: [
+    { name: 'Entry', component: EmptyScreen },
+    { name: 'StandaloneTest', component: StandaloneTestScreen, params },
+    { name: 'AssessmentResults', component: EmptyScreen },
+  ], initialIndex: 1, wrapper });
+}
+function endRealQuestion(screen) {
+  fireEvent.press(screen.getByRole('button', { name: 'Start' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+  fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+  fireEvent.press(screen.getByRole('button', { name: 'End test' }));
+}
+
+describe('real quick-test save and leave handovers', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(async () => {
+    await act(async () => jest.runOnlyPendingTimers());
+    jest.useRealTimers();
+  });
+
+  test('End to immediate save failure, then leave to Keep result, uses only host sheets', async () => {
+    saveQuestionResult.mockRejectedValueOnce(new Error('disk full'));
+    const screen = renderRealQuestion();
+    endRealQuestion(screen);
+    await screen.findByTestId('save-error');
+    expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+    fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+    expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+    expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+    fireEvent.press(screen.getByRole('button', { name: 'Keep result' }));
+    expect(screen.getByTestId('save-error')).toBeTruthy();
+    expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+    expect(saveQuestionResult).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['Discard result', 'Keep result'])('timer expiry during leave waits for %s', async decision => {
+    const screen = renderRealQuestion();
+    fireEvent.press(screen.getByRole('button', { name: 'Start' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Correct' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+    expect(screen.getByTestId('leave-confirmation')).toBeTruthy();
+    await act(async () => jest.advanceTimersByTime(61000));
+    expect(screen.getByText("Amahle's result isn't saved yet. If you leave now, it will be lost.")).toBeTruthy();
+    expect(saveQuestionResult).not.toHaveBeenCalled();
+    expect(screen.UNSAFE_queryAllByType(Modal).length).toBe(0);
+    fireEvent.press(screen.getByRole('button', { name: decision }));
+    await waitFor(() => expect(screen.routeNames()).toEqual(decision === 'Discard result' ? ['Entry'] : ['Entry', 'AssessmentResults']));
+    expect(saveQuestionResult).toHaveBeenCalledTimes(decision === 'Discard result' ? 0 : 1);
+    if (decision === 'Keep result') expect(saveQuestionResult.mock.calls[0][0].result).toMatchObject({
+      stopped_reason: 'timer', derived: { total_correct: 1, total_attempted: 1 },
+      items: expect.arrayContaining([expect.objectContaining({ position: 0, is_correct: true })]),
+    });
+  });
+
+  test.each(['resolve', 'reject'])('Close and navigation Back during a pending real save wait for %s', async outcome => {
+    const pending = deferred();
+    saveQuestionResult.mockReturnValueOnce(pending.promise);
+    const screen = renderRealQuestion();
+    endRealQuestion(screen);
+    fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+    act(() => screen.navigationRef.goBack());
+    expect(screen.routeNames()).toEqual(['Entry', 'StandaloneTest']);
+    expect(screen.queryByTestId('leave-confirmation') === null).toBe(true);
+    await act(async () => pending[outcome](outcome === 'reject' ? new Error('disk full') : { id: 'saved' }));
+    if (outcome === 'resolve') expect(screen.routeNames()).toEqual(['Entry', 'AssessmentResults']);
+    else {
+      expect(screen.getByTestId('save-error')).toBeTruthy();
+      fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
+      fireEvent.press(screen.getByRole('button', { name: 'Close test' }));
+      expect(screen.getByRole('button', { name: 'Discard result' })).toBeTruthy();
+      fireEvent.press(screen.getByRole('button', { name: 'Discard result' }));
+      expect(screen.routeNames()).toEqual(['Entry']);
+    }
+    expect(saveQuestionResult).toHaveBeenCalledTimes(1);
+  });
 });

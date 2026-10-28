@@ -1,14 +1,10 @@
 import React, { useCallback, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { v4 as uuid } from 'uuid';
 import { CURRENT_ITEM_SETS, LetterSoundsQuestion, ReadWordsQuestion } from '../../assessment-questions';
 import { MissingItemSet } from '../../assessment-questions/progress/MissingItemSet';
-import BottomSheet from '../../components/common/BottomSheet';
-import BrandButton from '../../components/common/BrandButton';
-import ConfirmSheet from '../../components/common/ConfirmSheet';
 import TestFrame from '../../components/assessments/TestFrame';
-import { colors } from '../../constants/colors';
-import { typeRoles } from '../../constants/typography';
+import TestSheet from '../../components/assessments/TestSheet';
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -64,21 +60,25 @@ export default function StandaloneTestScreen({ navigation, route }) {
           />
         ) : <MissingItemSet language={languageCode} />}
       </View>
-      <BottomSheet
-        visible={saveError && !leaveSheet.visible}
+      <TestSheet visible={saveError && !leaveSheet.visible}
+        testID="save-error"
         title="Couldn't save — try again"
-        dismissLabel="Dismiss save error"
-        onDismiss={dismissSaveError}
-        footer={<BrandButton label="Try again" size="lg" onPress={retry} />}
-      >
-        <Text style={styles.message}>Your result is still here. Try saving it again.</Text>
-      </BottomSheet>
-      <ConfirmSheet
-        visible={leaveSheet.visible}
-        title={leaveSheet.hasResult ? "This result isn't saved yet." : 'End the test?'}
-        body={leaveSheet.hasResult ? 'Discard this result and leave the test?' : 'Leave without saving a result?'}
-        confirmLabel="Discard"
-        cancelLabel={leaveSheet.hasResult ? 'Keep result' : 'Keep testing'}
+        message="Your result is still here. Try saving it again."
+        confirmLabel="Try again"
+        confirmTone="ink"
+        onConfirm={retry}
+        cancelLabel="Not now"
+        onCancel={dismissSaveError}
+      />
+      <TestSheet visible={leaveSheet.visible}
+        testID="leave-confirmation"
+        title="Leave without saving?"
+        message={leaveSheet.hasResult
+          ? `${child.first_name ? `${child.first_name}'s result` : 'This result'} isn't saved yet. If you leave now, it will be lost.`
+          : `${child.first_name ? `${child.first_name}'s answers` : 'The answers'} on this test won't be saved.`}
+        confirmLabel={leaveSheet.hasResult ? 'Discard result' : 'Discard answers'}
+        confirmTone="danger"
+        cancelLabel={leaveSheet.hasResult ? 'Keep result' : 'Keep marking'}
         onConfirm={leaveSheet.onConfirm}
         onCancel={leaveSheet.onCancel}
       />
@@ -88,5 +88,4 @@ export default function StandaloneTestScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   question: { flex: 1 },
-  message: { ...typeRoles.textParagraph, color: colors.textSecondary },
 });
