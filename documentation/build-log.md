@@ -5500,6 +5500,17 @@ fixed.**
   lists the same active-membership rule (roadmap). The loop stops here, per Jim's rule on rare
   edge cases.
 
+**Rebased again onto main `2bc6c46` (#115, the assessment leave sheet; Jim's yes, 2026-10-28).**
+- Jim had #115 merged first, so each branch is force-pushed only once.
+- Lesson flow: two of its docs commits conflicted, only where both sides added sections at the end
+  of this log and `LEARNING.md`. Both sides were kept, main's first. Letter orders then replayed
+  with no conflicts.
+- On each branch, the files that changed from the previous tip (backups
+  `backup/lesson-flow-53f1742` and `backup/letter-orders-bd1be0e`) are exactly #115's files, so
+  no lesson or letter code moved.
+- Lesson flow `de75f52` gates: unit 447/6,954; integration 84/1,157; types and content clean.
+- Letter orders `2ae95b2` gates: unit 453/7,080; integration 87/1,215; types and content clean.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
