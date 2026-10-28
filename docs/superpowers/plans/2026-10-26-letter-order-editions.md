@@ -796,8 +796,10 @@ tests that switch breaks (Step 1, last group).
   - the column has no default, and the constraint and trigger exist.
 
   Then remove the symlink with `rm .env.local`, which removes the link, not its target.
-- [ ] **Step 5: EAS builds after the apply.** Android and iOS, `preview-content` only (Jim, 2026-10-28: EAS credits; the release-pack choice is covered by tests).
+- [x] **Step 5: EAS builds after the apply.** Android and iOS, `preview-content` only (Jim, 2026-10-28: EAS credits; the release-pack choice is covered by tests).
+  Built 2026-10-28 from `e4f21d2`: Android 53, iOS 24.
 - [ ] **Step 6: Device run,** on the A03 when the other session frees it, and on Jim's iPhone.
+  A03 passed 2026-10-28 on build 53 (build log); Jim's iPhone pass on iOS build 24 is open.
   - Before installing, finish or discard every open lesson on the phone (Home shows them), so no
     draft pinned to a v1 pack carries over.
   - Use one class per language, creating English and Afrikaans test classes on a test account if

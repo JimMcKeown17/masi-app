@@ -5346,6 +5346,45 @@ cannot execute its function; `20261027120000` is recorded in `schema_migrations`
 `updated_at` and `row_version` is identical to the snapshot, so the backfill rewrote no row. The
 temporary `.env.local` link was removed afterwards.
 
+**EAS builds (2026-10-28), `preview-content` only (Jim: EAS credits).** Both from `e4f21d2`, app
+version 1.3.0: Android build 53 (`88e773d8-c49b-4bfa-afe2-e44b58f6cabd`) and iOS build 24
+(`efe3f6b1-20c7-4593-81dd-9044ea9c9e9d`). Before installing, the APK's bundle was checked for
+`X-Masi-Letter-Order-Editions`, `2026-10-23` and `pack_letter_order`. EAS reported 95% of the
+included build credits used.
+
+**Device run, Galaxy A03s (2026-10-28, build 53, default text size).** Installed over main's build
+52 with `adb install -r`, which kept TestB's data and moved the phone from schema 18 to 19. Home
+showed everything synced and no open lesson before and after. One account, TestB, covers every
+case: isiXhosa 1C, English ZEN, Afrikaans ZAF and isiZulu ZZU. ZEN, ZAF and ZZU had no group, so
+each child was put in a new group from the picker. Lessons were recorded without clocking in. The
+taught letters were tapped out of class order on purpose, plus one letter from further along the
+order.
+
+| Language (class) | Picker | Lesson screen | Wrap up and tracker sheet | Receipt | Mastery panel |
+| --- | --- | --- | --- | --- | --- |
+| isiXhosa (1C, two children) | `o m l a` | `o m l a`; letter sheet in class order | "Who knows o m l a e" (tapped `a l m o e`); sheet `o m l a k u / e n i z s t / …` | `o m l a e` | isiXhosa, 2/26, class order |
+| English (ZEN) | `s a n d` | `s a n d`; "Review: k" (assessed) | "Who knows s a n d e" (tapped `d n s a e`); sheet `s a n d i t / p e l o c k / …`, k locked | `s a n d e` | English, 5/26, class order |
+| Afrikaans (ZAF) | `a e k n` | `a e k n`; "Review: o i y u" (assessed) | "Who knows a e k n d" (tapped `n k e a d`); sheet `a e k n o s / p t d l r h / …`, o i y u locked | `a e k n d` | Afrikaans, 6/26, class order |
+| isiZulu (ZZU) | "Not seen yet", no letters | not run | not run | not run | "No letter set for this class language." |
+
+After the English lesson the picker suggested `i t`, the next two letters Emma did not know
+(`SUGGESTED_LETTER_COUNT` is 2). Preview lessons say "No books for … yet" because the new-order
+previews have no readers, as the plan expected (roadmap follow-up).
+
+Read-only server check afterwards. The three sessions synced with their classes. Each
+`activities.lesson.plan.suggested_letters` holds its first step, and `activities.letters_focused`
+keeps tap order (`d n s a e`, `n k e a d`, `a l m o e`), so class order is display-only as designed.
+`activities.lesson.pack_id` is `english-candidates-preview-v1`, `afrikaans-candidates-preview-v1`
+and `isixhosa-candidates-preview-v2`; each pack declares its language's `2026-10-23` order. A
+per-class snapshot of all 15 classes (`id`, `updated_at`, `row_version`) is identical to the one
+taken after the apply, so the phone rewrote no class. Phone settings were never changed (font 1.0,
+density 280, Wi-Fi on, airplane mode off, automatic time on), and the phone was handed back free.
+
+Found, not caused by this branch: Session complete's sync line cuts off descenders. See the Bug And
+Gap Register, 2026-10-28.
+
+Remaining in Step 6: Jim's iPhone pass on iOS build 24.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -5558,6 +5597,7 @@ temporary `.env.local` link was removed afterwards.
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-28 | **Session complete's sync line cuts off descenders** on the Galaxy A03s (build 53): the "y" and "g" of "Syncing…" and "All saved and synced" lose their tails, and the cloud glyph sits above the text's centre. `SyncStatusLine` puts an 18 px inline View inside a `textNote` Text; that is the likely cause, not yet verified. The component is unchanged from main's #84, so main builds should show it too. | Open; outside letter orders, not fixed on `feat/letter-orders`. GitHub issue pending Jim's OK. | Check descenders in a zoomed screenshot; an inline View inside Text can change the line box on Android. |
 | 2026-10-22 | **The app log loses its last 30 s when Android kills the app.** `logger.js` flushes every 30 s (`FLUSH_INTERVAL`) and on backgrounding only, so a force-stop, crash or low-memory kill drops the buffered lines. On the A03s, two killed runs lost every line, including `Running "main"`. | Open: #93. | Write warnings and errors straight through, flush on a shorter cycle, or persist incrementally, so a killed or crashed run keeps its last lines. |
 | 2026-10-22 | **A brand-new sign-in blocks Record for 35–45 s with "No active programme… contact your supervisor".** The EA's programme simply has not downloaded yet; the copy blames a missing assignment. | Open: #94. | Distinguish "still loading" from "not assigned"; consider loading the staff programme first in the domain pull. |
 | 2026-10-22 | **A Head Office reassignment appeared on the receiving phone only after Sync now** in the Gate 4 run; a cold start and a pull-to-refresh on Children did not bring the moved child in on either EA. | Open: #95; needs a reproduction with logs. | A roster change should reach the phone on its next ordinary pull. |
