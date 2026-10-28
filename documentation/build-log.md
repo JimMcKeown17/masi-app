@@ -5511,6 +5511,14 @@ fixed.**
 - Lesson flow `de75f52` gates: unit 447/6,954; integration 84/1,157; types and content clean.
 - Letter orders `2ae95b2` gates: unit 453/7,080; integration 87/1,215; types and content clean.
 
+**Lesson flow merged; letter orders onto main (Jim's yes, 2026-10-28).**
+- Jim accepted the product choices P1–P12 through his 2026-10-28 iPhone review.
+- #97's CI passed on `de75f52` (9m36s), and it was squash-merged as main `a341535`.
+- Main's tree equals `de75f52`'s tree, so the merge carried exactly what was tested.
+- Letter orders was rebased with `--onto origin/main de75f52`: 27 commits, no conflicts.
+- Its tree equals the pre-rebase tip `bcdb6e9` (backup `backup/letter-orders-bcdb6e9`), so the
+  gates above still hold without a rerun.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

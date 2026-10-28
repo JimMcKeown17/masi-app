@@ -527,18 +527,16 @@ the current-state model better than Zazi's per-session carry-forward.
   phone `unassigned_at` (`childrenRepository.js:154`) against a microsecond server `assigned_at`
   under the `unassigned_at >= assigned_at` CHECKs, which `classifyError` treats as terminal
   ([Z14](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- **Lesson flow C2–C3 acceptance (implementation complete on `feat/lesson-flow`, 2026-10-22).**
-  C7's durable start/resume implementation is closed: one draft per EA; Lesson and Wrap up share
-  the handle's controller; Home resumes it first; leaving asks and keeps it; Discard is separate;
-  Save atomically removes it (`src/services/lessonDraftController.js:76`,
-  `src/services/lessonSave.js:32`, `src/utils/homeAttention.js:21`). Draft PR #97; ADR 0010
-  records "advice from the children, record with the group". [Device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10):
-  A03 passed all eight, and Jim's iPhone pass on build 24 (2026-10-28) passed V3's swipe, V5's
-  keyboard, V6, V7 and V8. Outstanding before merge: Jim's P1–P12 product pass (his 2026-10-28 iPhone notes changed
-  P8's copy and the date control, on the letter orders branch). Jim (2026-10-28): the 1.4.0 pilot
-  waits for this flow and letter orders to merge.
-  v1 has no timer. A2's teaching-order alignment and C4/C5 reader/receipt work remain separate;
-  release packs are letters-only (P11). The build log holds implementation/review evidence.
+- [ ] **Lesson flow: phone checks left after merge.** The flow merged as #97 on 2026-10-28, with
+  Jim's acceptance of the product choices P1–P12 that day; letter orders merged right after it.
+  ADR 0010 records "advice from the children, record with the group".
+  [Device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10): the A03
+  passed all eight, and Jim's iPhone pass on build 24 passed V3's swipe, V5's keyboard, V6, V7 and
+  V8. Still to check on the 1.4.0 pilot build: Wrap up's "None of these yet" and header date
+  button, and lesson advice after the known-letters fix (both postdate build 24); iPhone V1, V2
+  and V4; ECD (no ECD class on staging). v1 has no timer. C4/C5 reader/receipt work remains
+  separate; release packs are letters-only (P11). The build log holds implementation and review
+  evidence.
 
 ### Upload contract (before pilot; priority item 5)
 
