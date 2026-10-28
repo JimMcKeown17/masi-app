@@ -11,6 +11,20 @@ export function getGroupDotColor(index) {
  */
 const NUMBERED_GROUP = /^Group (\d+)$/;
 
+export function groupNumber(group) {
+  return group.display_number ?? (group.name.match(NUMBERED_GROUP) ? Number(group.name.match(NUMBERED_GROUP)[1]) : null);
+}
+
+export function ungroupedChildren({ children, childrenGroups }) {
+  const grouped = new Set(childrenGroups.filter(member => !member.removed_at).map(member => member.child_id));
+  return children.filter(child => !grouped.has(child.id));
+}
+
+export function sharedClassId(children) {
+  const classId = children[0]?.class_id;
+  return classId != null && children.every(child => child.class_id === classId) ? classId : null;
+}
+
 /**
  * Compute the next group number for the "+ Add Group N" button.
  * Returns max(existing numbered) + 1, or 1 if no numbered groups exist.

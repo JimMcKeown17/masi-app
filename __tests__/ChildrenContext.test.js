@@ -7,6 +7,7 @@ resetSessionHistoryStatusForActorChange: jest.fn()
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
+import { StaleActorError } from '../src/session/staleActor';
 import { pullPreloadedChildData } from '../src/services/preloadedChildData';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
@@ -78,6 +79,7 @@ jest.mock('../src/db/repositories/groupsRepository', () => ({
     getGroups: jest.fn(),
     getVisibleChildrenGroups: jest.fn(),
     saveGroup: jest.fn(),
+    createGroupWithMembers: jest.fn(),
     updateGroup: jest.fn(),
     deleteGroup: jest.fn(),
     addChildToGroup: jest.fn(),
@@ -208,6 +210,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
       { id: 'cached-membership', child_id: 'cached-child', group_id: 'cached-group', synced: false },
     ]);
     groupsRepository.saveGroup.mockResolvedValue(true);
+    groupsRepository.createGroupWithMembers.mockReset().mockResolvedValue(true);
     groupsRepository.updateGroup.mockResolvedValue(true);
     groupsRepository.deleteGroup.mockResolvedValue(true);
     groupsRepository.addChildToGroup.mockResolvedValue(true);
@@ -998,6 +1001,71 @@ describe('ChildrenContext Plan 5 hydration', () => {
     }), expect.objectContaining({
       actorUserId: 'user-1',
     }));
+  });
+
+  test('makeGroup names Group 3, records the shared class and republishes groups and memberships from SQLite', async () => {
+    const initialGroups = [{ id: 'g1', name: 'Group 1' }, { id: 'g2', name: 'Group 2' }];
+    const children = [{ id: 'c1', class_id: 'class-1' }, { id: 'c2', class_id: 'class-1' }];
+    const refreshSyncStatus = jest.fn();
+    useOffline.mockReturnValue({ isOnline: false, refreshSyncStatus, isSyncing: false, domainPullNonce: 0 });
+    childrenRepository.getMyChildren.mockResolvedValue(children);
+    groupsRepository.getGroups.mockResolvedValue(initialGroups);
+    groupsRepository.getVisibleChildrenGroups.mockResolvedValue([]);
+    let savedGroups, savedMemberships;
+    groupsRepository.createGroupWithMembers.mockImplementation(async ({ group, childIds }) => {
+      savedGroups = [...initialGroups, { ...group, programme_id: 'programme-a', sync_status: 'pending' }];
+      savedMemberships = childIds.map(id => ({ id: `member-${id}`, child_id: id, group_id: group.id, joined_at: '2026-10-22' }));
+      groupsRepository.getGroups.mockResolvedValue(savedGroups);
+      groupsRepository.getVisibleChildrenGroups.mockResolvedValue(savedMemberships);
+      return true;
+    });
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    refreshSyncStatus.mockClear();
+    let outcome;
+    await act(async () => { outcome = await result.current.makeGroup(['c1', 'c2']); });
+    expect(groupsRepository.createGroupWithMembers).toHaveBeenCalledWith({
+      group: expect.objectContaining({ id: expect.any(String), name: 'Group 3', class_id: 'class-1', created_by: 'user-1' }),
+      childIds: ['c1', 'c2'],
+    });
+    expect(outcome).toEqual({ success: true, group: groupsRepository.createGroupWithMembers.mock.calls[0][0].group });
+    expect(result.current.groups).toEqual(savedGroups);
+    expect(result.current.childrenGroups).toEqual(savedMemberships);
+    expect(refreshSyncStatus).toHaveBeenCalledTimes(1);
+  });
+
+  test('makeGroup records class_id null for children in different classes', async () => {
+    useOffline.mockReturnValue({ isOnline: false, refreshSyncStatus: jest.fn(), isSyncing: false });
+    childrenRepository.getMyChildren.mockResolvedValue([{ id: 'c1', class_id: 'class-1' }, { id: 'c2', class_id: 'class-2' }]);
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => { expect(await result.current.makeGroup(['c1', 'c2'])).toMatchObject({ success: true }); });
+    expect(groupsRepository.createGroupWithMembers).toHaveBeenCalledWith({
+      group: expect.objectContaining({ class_id: null }), childIds: ['c1', 'c2'],
+    });
+  });
+
+  test.each(['refused', 'stale'])('makeGroup keeps the cached state when the repository is %s', async kind => {
+    const refreshSyncStatus = jest.fn();
+    useOffline.mockReturnValue({ isOnline: false, refreshSyncStatus, isSyncing: false });
+    const { result } = renderHook(() => useChildren(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const before = { groups: result.current.groups, childrenGroups: result.current.childrenGroups };
+    const error = kind === 'stale' ? new StaleActorError() : new Error('Child already in one of your groups');
+    groupsRepository.createGroupWithMembers.mockRejectedValueOnce(error);
+    const readsBefore = groupsRepository.getGroups.mock.calls.length;
+    refreshSyncStatus.mockClear();
+    const logger = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await act(async () => {
+        if (kind === 'stale') await expect(result.current.makeGroup(['cached-child'])).rejects.toBe(error);
+        else expect(await result.current.makeGroup(['cached-child'])).toEqual({ success: false, error });
+      });
+      expect(result.current.groups).toEqual(before.groups);
+      expect(result.current.childrenGroups).toEqual(before.childrenGroups);
+      expect(groupsRepository.getGroups).toHaveBeenCalledTimes(readsBefore);
+      expect(refreshSyncStatus).not.toHaveBeenCalled();
+    } finally { logger.mockRestore(); }
   });
 
   test('group and membership CRUD write through the repositories directly', async () => {

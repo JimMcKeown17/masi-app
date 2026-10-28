@@ -17,7 +17,7 @@ const SelectableRow = React.memo(function SelectableRow({ variant, title, subtit
           {selected ? checkbox ? <Ionicons name="checkmark" size={18} color={colors.onDark} /> : <View style={styles.dot} /> : null}
         </View>
       </View>} />
-    {!last ? <View testID="row-divider" pointerEvents="none" style={styles.divider} /> : null}
+    {!last ? <View testID="row-divider" pointerEvents="none" style={[styles.divider, { left: lead ? 68 : 16 }]} /> : null}
   </View>;
 });
 export default SelectableRow;
@@ -30,5 +30,5 @@ const styles = StyleSheet.create({
   selected: { borderColor: colors.text },
   checked: { backgroundColor: colors.text },
   dot: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.text },
-  divider: { position: 'absolute', left: 68, right: 0, bottom: 0, height: 1, backgroundColor: colors.border },
+  divider: { position: 'absolute', right: 0, bottom: 0, height: 1, backgroundColor: colors.border },
 });

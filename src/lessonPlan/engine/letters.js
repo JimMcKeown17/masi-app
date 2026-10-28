@@ -121,7 +121,8 @@ export const planLetters = ({ languageCode, pack, alphabet, children, childSessi
     order,
     known,
     suggested,
-    review: unlocked.filter((letter) => !suggestedSet.has(letter)),
+    review: order.filter((letter) => (knownSet.has(letter) || stepOneLetters.includes(letter))
+      && !suggestedSet.has(letter)),
     unlocked,
     historyComplete,
     masteryComplete,

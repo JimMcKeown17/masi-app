@@ -17,3 +17,5 @@ export const READING_LEVELS = [
   'Sentence Reading',
   'Paragraph Reading',
 ];
+
+export const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: level }));

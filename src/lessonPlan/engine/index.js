@@ -26,6 +26,7 @@
  * @property {string|null} upNextGroupId   rankGroups().upNextGroupId when the picker opened
  * @property {string|null} languageCode    the lesson class's language code (C18): languageCodeForHomeLanguage(class.home_language), 'xh' | 'en' | 'af' (after AF) | 'zu' | null. null = unknown; never defaulted to 'en'.
  * @property {Object|null} pack            spec §4.1 pack: A1's getPack(languageCode, options), or getPackById(draft.pack_id, options) for a resumed draft; null → no_pack
+ * @property {PackIndex|null} [packIndex]  optional precomputed content for this exact pack object
  * @property {string[]|null} alphabet      the language's 26 letters for the manual letter picker: PEDAGOGICAL_ORDERS[languageCode] (src/utils/assessmentRegistry.js:19-22; 'af' arrives with AF), else null. Used only when there is no usable pack.
  * @property {boolean} isEcd               the lesson class's grade === 'ECD' (C8; classes.grade, GRADES in src/constants/options.js:1)
  * @property {ChildInput[]} presentChildren   present only (C1), in screen order, including children added for the day
@@ -33,12 +34,14 @@
  */
 
 /** Plan = spec §6 lesson.plan, keys in exactly this order:
- *  engine_version (1), made_on, reason, history_complete, mastery_complete, present_child_ids,
+ *  engine_version (2), made_on, reason, history_complete, mastery_complete, present_child_ids,
  *  known_letters, suggested_letters, review_letters, unlocked_letters,
  *  blend_tier (BlendTier|null), suggested_blends (string[], at most 6), suggested_book (string|null),
  *  up_next_group_id */
 
 /** @typedef {{ text: string, display: string, tier: BlendTier }} BlendItem   text = pack item text (what blends_done stores); display = word_bank syllables, else text; tier = by the item's own letter count */
+/** @typedef {BlendItem & { normalized: string, sounds: string[]|null }} IndexedBlendItem */
+/** @typedef {{ pack: Object, blendTiers: IndexedBlendItem[][], blendByNormalized: Map<string, IndexedBlendItem>, readers: Object<string, { tricky: Set<string>, tokens: { token: string, sounds: string[]|null }[] }> }} PackIndex */
 /** @typedef {{ tier: BlendTier, childIds: string[], suggested: BlendItem[], pool: BlendItem[] }} TierChoice   LessonChoices.tiers[0] is the default tier; later entries are higher tiers ("show higher"), ascending */
 /** @typedef {{ id: string, title: string, step: number, readable: boolean, suggested: boolean, lastReadOn: string|null }} BookChoice */
 /** @typedef {{ letterChoices: string[], tiers: TierChoice[], books: BookChoice[], contentAvailable: { blends: boolean, books: boolean } }} LessonChoices */
@@ -58,7 +61,8 @@ export {
   SUGGESTED_LETTER_COUNT,
 } from './constants';
 export { teachingOrderFromPack } from './letters';
-export { computeLessonPlan, computeLessonChoices, planForSave, isPlanRecomputable } from './lessonPlan';
-export { rankGroups } from './groups';
+export { computeLessonPlan, computeLessonChoices, planForSave, isPlanRecomputable, isPlanSuperseded } from './lessonPlan';
+export { rankGroups, groupLastSeenOn } from './groups';
 export { resolveLessonClass } from './lessonClass';
 export { blendTierForReadingLevel, deriveSessionReadingLevel } from './blends';
+export { indexPack } from './packIndex';

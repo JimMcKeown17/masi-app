@@ -65,7 +65,7 @@ const TITLES = {
   Profile: 'Profile', TimeTracking: 'Time tracking', TimeEntriesList: 'Work history',
   ClassOnboarding: 'Set up your class', CreateClass: 'Create class', ChildOnboarding: 'Add your children',
   EditClass: 'Edit class', AddChild: 'Add child', EditChild: 'Edit child',
-  SessionForm: 'New session', SessionHistory: 'Session history',
+  SessionForm: 'Who are you teaching?', Lesson: '', LessonWrapUp: 'Wrap up', SessionHistory: 'Session history',
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
   BatteryOverview: '',
@@ -123,9 +123,9 @@ test('the title table covers every visible stack header', () => {
   ].sort());
 });
 
-test('SessionForm configures only the New session title and Close action', () => {
+test('SessionForm configures only the Who are you teaching? title and Close action', () => {
   expect(mockScreens.find(({ name }) => name === 'SessionForm').options).toEqual({
-    title: 'New session', headerLeftIcon: 'close',
+    title: 'Who are you teaching?', headerLeftIcon: 'close',
   });
 });
 

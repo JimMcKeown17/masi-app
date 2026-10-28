@@ -127,7 +127,7 @@ All x offsets are zero. Shared `SurfaceCard` and `ListGroup` have no shadow. The
 
 Import `{ fontFamilies, typeRoles }` from `src/constants/typography`. The legacy `typography`
 export is retired. `App.js` loads Bricolage Grotesque 700/800 and Figtree 500/600/700/800 while the
-splash is held; it also loads Andika Regular for assessment content. A load error is logged and
+splash is held; it also loads Andika Regular for assessment content and lesson blends. A load error is logged and
 releases the splash with system-font fallback (`App.js:138`, `App.js:139`, `App.js:153`,
 `App.js:170`).
 
@@ -139,21 +139,22 @@ releases the splash with system-font fallback (`App.js:138`, `App.js:139`, `App.
 | `textSemi` | `Figtree_600SemiBold` |
 | `textBold` | `Figtree_700Bold` |
 | `textHeavy` | `Figtree_800ExtraBold` |
-| `content` | `Andika_400Regular` (assessment test content; `src/constants/typography.js:5`, `src/constants/assessmentFonts.js:4`) |
+| `content` | `Andika_400Regular` (assessment test content and lesson blends; `src/constants/typography.js:5`, `src/constants/assessmentFonts.js:4`) |
 
 Choose the face for the weight; never add `fontWeight` to a custom-family style, because Android
 can fall back to the system font. Bricolage is for display headings/numerals at 18 or above;
-Figtree carries UI copy and row data; Andika Regular carries assessment test content
+Figtree carries UI copy and row data; Andika Regular carries assessment test content and lesson blends
 (`src/constants/assessmentFonts.js:3`, `src/assessment-questions/ui/Text.tsx:30`). Roles carry
 geometry/family, not colour: add a semantic `color` at the call site. The eight original Home roles remain unchanged.
 
-The table lists all 45 roles. A dash means tracking is not set in the role (Paper explicitly uses
+The table lists all 46 roles. A dash means tracking is not set in the role (Paper explicitly uses
 zero). **Addition** marks the seven shared-look plan additions beyond the overview's role table;
 Children adds three initials roles. Each captures Home or board geometry so no extra raw-size
 exemption is necessary.
 
 | Role | Family key | Size / line | Tracking | Use / extra |
 |---|---|---|---|---|
+| `lessonItem` | content | 20 / 26 | 0 | Lesson blend/word tiles; syllable display, scaling capped at 1.3 |
 | `displayXL` | display | 32 / 36 | −0.8 | Original Home greeting; Paper displaySmall/headlineLarge |
 | `displayNumeral` | display | 48 / 48 | — | Original Home gauge numeral |
 | `displayM` | display | 20 / 26 | −0.4 | Original Home display; Paper titleLarge |
@@ -456,6 +457,32 @@ signed-in EA settles; later refreshes keep the current rows mounted and visible.
 Child-row results, group, letter-tracker and edit actions are separate controls: retain the 8dp
 gap above the meta row so GroupChip's negative margins cannot overlap the results target.
 
+### Lesson capture components (C2–C3, 2026-10-22)
+
+The stack uses its standard white header: **Who are you teaching?**, the children's names on
+**Lesson**, and **Wrap up**. Controls compose the existing Bold Red primitives; no separate modal
+or dialog system is introduced. The Save/Wrap-up footer is a sibling after the scroll, and Wrap
+up's footer hides for the notes keyboard. Native visual acceptance is [device section V](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10),
+including 360 dp and 1.0x/1.3x text (`src/screens/lessons/LessonWrapUpScreen.js:189`).
+
+| Piece (`src/components/lessons/`) | Contract |
+|---|---|
+| `UpNextCard`, `GroupLessonRow` | Receive `row, today, onStart`; render group colour, members, last seen and optional letters. `lessonRowDetail` avoids a dangling "letters" when there are none (`src/utils/lessonDates.js:19`). |
+| `MakeGroupSheet`, `PutInGroupSheet` | Bottom-sheet group actions with inline errors. Creation receives only ungrouped children; the signed-in handle fences completion. |
+| `AttendanceChips`, `AddChildSheet` | Here/absent state, explicit removal for revoked access, and additions for today. The offered roster uses the shared visibility rule; attendance never edits membership. |
+| `LessonChoiceSheet`, `InProgressSheet` | Explicit class/language choice; Resume/Discard when another draft exists. |
+| `LessonLettersSection`, `OtherLetterSheet` | Suggested/review letters through `LetterToggleGrid`/tiles, plus the other-letter sheet. Selection records teaching, not mastery. |
+| `BlendTile`, `LessonBlendSection`, `BlendPoolSheet` | `BlendTile({ text, display, tone='rest', onPress, accessibilityLabel })`; min-height 56, selected ink, motion disabled under Reduce Motion, text capped at 1.3x. Suggested display may use hyphens; saved `text` is the pack item. All ticked blends remain visible and correctable when attendance removes a tier (`BlendTile.js:8`, `LessonBlendSection.js:18`). |
+| `LessonBookSection` | Hidden for ECD; a selectable printed-book Read row, or the language's no-books message. Reader links belong to C4 (`LessonBookSection.js:9`). |
+| `WrapUpChildRow` | Letter chips distinguish locked assessment evidence from pending corrections; No one new yet, full tracker and changed reading-level controls respect separate delivery/level authority (`WrapUpChildRow.js:10`). |
+
+`typeRoles.lessonItem` uses the content face **Andika 400**, 20/26, zero tracking, for blend text.
+Use the role rather than raw sizes (`src/constants/typography.js:21`). Tier labels are **2-letter**,
+**3-letter**, **4-letter**, **words**. The old literacy Record form is retired. Until A2 aligns
+teaching order, the Wrap-up tracker retains its existing order while the lesson uses the pack's;
+both plans must merge before a field build. Static guards remain the automated token/purity gate,
+not proof of iOS swipe behaviour or A03s timing.
+
 ### Sheets
 
 **`BottomSheet`** — `visible, onDismiss, dismissible=true, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,
@@ -571,6 +598,15 @@ affect readiness. Submit remains enabled until a save is in flight.
 | [`MonthCalendar`](../src/components/common/MonthCalendar.js) | `selectedKey, todayKey, onSelect`. Calendar keys only; opens on the selected month, Sunday first. Seven equal columns have no horizontal gaps, with centred 44dp day targets and 4dp row gaps. Future days and navigation beyond today's month are disabled. The caller closes the enclosing BottomSheet on selection or Cancel. |
 | [`LetterToggleGrid`](../src/components/sessions/LetterToggleGrid.js) | `letters, tileFor, onPressLetter`. Six columns, 8dp gaps; tileFor(letter) supplies each tile's tone, disabled flag and accessibility props. Named export letterTileSize(w) is min(56, floor((w − 40) / 6)). Measured content width replaces the initial window-width-minus-48 fallback. The grid itself is capped at 376dp (six 56dp tiles + five 8dp gaps), preventing a seventh column on wider screens. |
 | [`LetterToggleTile`](../src/components/sessions/LetterToggleTile.js) | `letter, tone, size, onPress, disabled=false, accessibilityLabel, accessibilityState`. Tones: rest, selected, taught, taughtNew, locked. Lowercase textLetter capped at 1.2 scaling, radius 14; selected focus letters are ink/white. Focus-grid labels keep capitals (“M, selected”); tracker/panel labels keep lowercase (“m, not mastered”). Press motion follows the contract below. |
+| [`BlendTile`](../src/components/lessons/BlendTile.js) | `text, display, tone='rest', onPress, accessibilityLabel`. Rest and selected follow LetterToggleTile's palette, pressed fill and reduced-motion rules. Andika `lessonItem` displays syllable hyphens, caps scaling at 1.3 and wraps without a fixed width or height; min height 56dp. Spoken labels remove hyphens and say “ticked” or “not ticked”; presses retain the pack's original text. |
+
+The Lesson screen places blending and pair reading after its letters section, above the existing
+sibling Wrap up footer. `LessonBlendSection` shows six engine suggestions when available, retains
+ticked pool items, and opens `BlendPoolSheet` with ticked items first. Tier switches persist
+`ticks.blendTierShown`. `LessonBookSection` shows the suggested book's title and step with a
+`SelectableRow` Read tick, stored as printed. The lesson's class grade hides pair reading for ECD,
+including when a resumed draft pins an archived class. Letters-only packs show the language's
+“No blends … yet.” and “No books … yet.” notes. The in-app reader and Other book are separate work.
 
 [`rosterRowHeight(fontScale)`](../src/utils/sessionFormLayout.js) is
 `max(64, ceil(20 + 2 + (22 + 18) * fontScale))`: 64dp at 1.0 and 74dp at 1.3. Every roster row
@@ -1131,6 +1167,10 @@ explicitly requires it to stay empty, and every scanned file now meets the same 
 rules without per-screen allowances.
 
 ## Remaining delivery boundaries
+
+**2026-10-22 status note:** the following is the earlier Bold Red delivery record. C2–C3 now
+retires LiteracySessionForm and ChildSelector (`de32276`); current lesson components are described
+above, and their native acceptance is device section V. LetterTrackerBottomSheet remains in Wrap up.
 
 Children list and Class detail are built on `feat/bold-red-children`; Record Tasks 1–12 are built
 on `feat/bold-red-record`. LiteracySessionForm, ChildSelector, LetterTrackerBottomSheet and

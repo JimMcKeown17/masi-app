@@ -527,12 +527,18 @@ the current-state model better than Zazi's per-session carry-forward.
   phone `unassigned_at` (`childrenRepository.js:154`) against a microsecond server `assigned_at`
   under the `unassigned_at >= assigned_at` CHECKs, which `classifyError` treats as terminal
   ([Z14](./zazi-sync-lessons-for-masi-2026-10-08.md)).
-- [ ] **Finish the durable lesson start/resume flow (§4, C2–C3).** C1 storage already refuses a
-  second start: one lesson in progress per EA (C7), stricter than one per group. The
-  finish-or-discard ask and Home "Lesson in progress" resume action ship with C2–C3; keep this
-  item open until C3. v1 has no session timer (lesson-plan spec §8). Zazi's overwritten unfinished
-  session (ZZ-BUG-20260922-001) and unbounded 1,140-minute session (ZZ-BUG-20260924-001) remain the
-  motivating evidence ([Z18](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- **Lesson flow C2–C3 acceptance (implementation complete on `feat/lesson-flow`, 2026-10-22).**
+  C7's durable start/resume implementation is closed: one draft per EA; Lesson and Wrap up share
+  the handle's controller; Home resumes it first; leaving asks and keeps it; Discard is separate;
+  Save atomically removes it (`src/services/lessonDraftController.js:76`,
+  `src/services/lessonSave.js:32`, `src/utils/homeAttention.js:21`). Draft PR #97; ADR 0010
+  records "advice from the children, record with the group". [Device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10):
+  A03 passed all eight, and Jim's iPhone pass on build 24 (2026-10-28) passed V3's swipe, V5's
+  keyboard, V6, V7 and V8. Outstanding before merge: Jim's P1–P12 product pass (his 2026-10-28 iPhone notes changed
+  P8's copy and the date control, on the letter orders branch). Jim (2026-10-28): the 1.4.0 pilot
+  waits for this flow and letter orders to merge.
+  v1 has no timer. A2's teaching-order alignment and C4/C5 reader/receipt work remain separate;
+  release packs are letters-only (P11). The build log holds implementation/review evidence.
 
 ### Upload contract (before pilot; priority item 5)
 

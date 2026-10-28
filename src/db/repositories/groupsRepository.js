@@ -18,6 +18,7 @@ import {
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 import { decodeJson, syncStatusFromSynced, timestamp } from './sqliteRepositoryUtils';
+import { v4 as uuidv4 } from 'uuid';
 
 const GROUP_COLUMNS = [
   'id',
@@ -390,6 +391,37 @@ export const createGroupsRepository = ({ database } = {}) => {
     return true;
   });
 
+  const createGroupWithMembers = async ({ group, childIds, joinedAt = new Date().toISOString() }) => (
+    runRepositoryTransaction(database, async (transaction) => {
+      const ids = [...new Set(childIds)];
+      const programmeId = await resolveProgrammeId(transaction, {
+        programmeId: group.programme_id, userId: group.created_by,
+      });
+      // "Grouped" means what getVisibleChildrenGroups shows, so the picker never offers a
+      // child this refuses.
+      const existing = await transaction.getFirstAsync(`
+        select 1 as held
+        from child_group_memberships membership
+        join groups g on g.id = membership.group_id
+          and g.archived_at is null and g.programme_id = ?
+        join group_ea_assignments assignment on assignment.group_id = membership.group_id
+          and assignment.ea_user_id = ? and assignment.programme_id = ?
+          and assignment.unassigned_at is null
+        where membership.child_id in (select value from json_each(?))
+          and membership.removed_at is null
+        limit 1
+      `, programmeId, group.created_by, programmeId, JSON.stringify(ids));
+      if (existing) throw new Error('Child already in one of your groups');
+
+      await saveGroup(group, { transaction });
+      for (const childId of ids) {
+        await addChildToGroup({ id: uuidv4(), child_id: childId, group_id: group.id,
+          created_by: group.created_by, joined_at: joinedAt }, { transaction });
+      }
+      return true;
+    })
+  );
+
   const saveServerGroupRows = async (rows = []) => runBatchWithPerRowFallback({
     database,
     rows,
@@ -500,6 +532,7 @@ export const createGroupsRepository = ({ database } = {}) => {
   return {
     getGroups,
     saveGroup,
+    createGroupWithMembers,
     saveServerGroupRows,
     updateGroup,
     deleteGroup,

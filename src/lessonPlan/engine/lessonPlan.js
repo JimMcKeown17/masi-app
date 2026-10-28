@@ -1,10 +1,9 @@
 import { ENGINE_VERSION } from './constants';
-import { tokenizeText } from '../../utils/decodability';
 import { blendChoices } from './blends';
 import { bookCatalogue, bookChoices } from './books';
 import { sessionsByChild, windowSessions } from './history';
 import { planLetters, teachingOrderFromPack, uniquePresentChildren, usablePack } from './letters';
-import { soundsOf } from './sounds';
+import { indexPack } from './packIndex';
 
 const evaluateLesson = (input, plan = null) => {
   const presentChildren = uniquePresentChildren(input?.presentChildren);
@@ -27,21 +26,12 @@ const evaluateLesson = (input, plan = null) => {
     unlocked: plan.unlocked_letters,
   } : currentLetters;
   const pack = usablePack({ pack: input?.pack, languageCode: input?.languageCode });
-  const soundCache = new Map();
-  const soundsFor = (text) => {
-    if (!soundCache.has(text)) soundCache.set(text, soundsOf(text, pack));
-    return soundCache.get(text);
-  };
-  const pageCache = new Map();
-  const tokensFor = (page) => {
-    if (!pageCache.has(page)) pageCache.set(page, tokenizeText(page));
-    return pageCache.get(page);
-  };
+  const index = pack ? (input.packIndex?.pack === pack ? input.packIndex : indexPack(pack)) : null;
   const catalogue = bookCatalogue(pack);
   const choices = {
     letterChoices: pack ? teachingOrderFromPack(pack) : (input?.alphabet ?? []),
     tiers: pack && presentChildren.length > 0 ? blendChoices({
-      pack,
+      index,
       children: presentChildren,
       childSessions,
       suggestedLetters: letters.suggested,
@@ -49,17 +39,15 @@ const evaluateLesson = (input, plan = null) => {
       groupId: input?.groupId,
       today: plan ? plan.made_on : input?.today,
       plan,
-      soundsFor,
     }) : [],
     books: pack && presentChildren.length > 0 && !input?.isEcd ? bookChoices({
       pack,
       catalogue,
+      index,
       children: presentChildren,
       childSessions,
       unlockedLetters: letters.unlocked,
       plan,
-      tokensFor,
-      soundsFor,
     }) : [],
     contentAvailable: {
       blends: Boolean(pack && (
@@ -107,3 +95,16 @@ export const planForSave = ({ plan, lessonDate }) => {
 export const isPlanRecomputable = ({ lessonDate, today, frozen }) => (
   !frozen && lessonDate === today
 );
+
+// A stored plan gives way only to inputs that are as complete on both counts and more complete on
+// one. Each such write raises the stored plan, so screens holding the same lesson with different
+// inputs stop after at most two writes; inputs that fall (a failed download) never write.
+export const isPlanSuperseded = (plan, input) => {
+  const present = uniquePresentChildren(input?.presentChildren);
+  const history = present.every((child) => child?.historyComplete === true);
+  const mastery = present.every((child) => child?.masteryComplete === true);
+  const storedHistory = plan?.history_complete === true;
+  const storedMastery = plan?.mastery_complete === true;
+  return (history || !storedHistory) && (mastery || !storedMastery)
+    && ((history && !storedHistory) || (mastery && !storedMastery));
+};
