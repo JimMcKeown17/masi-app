@@ -5411,6 +5411,27 @@ Codex's full run: 451/451 suites, 6,970 tests; types clean. After review, the or
 suites were rerun: 72/72 tests passed. The spec §5.3 copy and Date bullet were updated in the
 same change. Device check: next build.
 
+### 2026-10-28 — Jim's iPhone pass on iOS build 24 (letter orders Step 6 done)
+
+Jim ran the five iPhone-only checks on build 24 (`e4f21d2`, before the Wrap up change above), and
+all five passed:
+1. Swiping back from the Lesson screen asks "Leave this lesson?" and keeps the lesson.
+2. Force-quitting mid-lesson, then reopening in airplane mode, shows "Lesson in progress …
+   Resume" first on Home, with the ticks kept.
+3. In Wrap up, the keyboard doesn't cover Notes, and Save stays reachable.
+4. "+ Record" with a lesson open goes straight back into that lesson.
+5. Saving offline, then reconnecting, uploads the lesson.
+
+**Server check for 5 (read-only, staging).** The newest lesson of the day is account Test, class
+1A, Group 5, letters `[o k]`, 3 attendees (Alunamida, Nwabisa, Xola), and one confirmed tracker
+mark (Alunamida, `o`). Phone `created_at` was 14:29:10. Server `updated_at` was 14:29:25, and the
+mark arrived at 14:29:25.8. Earlier online saves that day took 1–3 s, so the 15 s gap fits a save
+made offline and uploaded on reconnect. Jim did not name the group, so the match is inferred from
+timing.
+
+With the A03 run, this completes Step 6. The Wrap up change and the assessment finish flow (#114)
+still need their device smoke on the next build.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
