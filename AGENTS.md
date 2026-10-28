@@ -92,7 +92,7 @@ Prefer behavior/integration-style tests through public repository, context, serv
 
 ## Deployment Status — Multiple App Versions in the Wild
 
-The app launched in early March 2026 and has been in field testing since. Multiple versions are simultaneously deployed across iOS and Android devices. Users do not update immediately.
+The app launched in early March 2026 and was field tested on the legacy backend. **As of 2026-10-28 no field cohort runs the app (Jim).** Masi's EAs retest the SQLite app from November 2026, starting from the 1.4.0 pilot builds (iOS 25, Android 54). From then on, several versions will again be in use across iOS and Android devices, and users do not update immediately. Release steps: `DEPLOYMENT.md`.
 
 **Rule: prefer backwards-compatible changes wherever possible.**
 
@@ -153,8 +153,8 @@ For the SQLite backend, use canonical Supabase CLI migrations under `supabase/mi
 ### Supabase Backends — Keep The CLI On SQLite
 
 Two Supabase projects exist:
-- `masi-app-sqlite` — **current forward backend**, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one). This is the dev/staging + future-production backend for the new SQLite build. **As of 2026-06-09 it has NO field users** — the deployed field app still runs on the legacy backend (below), so `masi-app-sqlite` data is dev/test data you can wipe freely without coordinating with field staff.
-- `masi-app` — **legacy pre-SQLite backend**, ref `jcqrlwetutnpuchjoyyd`. **This is what the deployed field app is still writing to.** Do not use for new mobile work unless the user explicitly asks for legacy-backend maintenance.
+- `masi-app-sqlite` — **current forward backend**, ref `segygjzpujphwvrubusm` (the repo is `supabase link`ed to this one). This is the dev/staging + future-production backend for the new SQLite build. **As of 2026-10-28 it has NO field users**, so its data is dev/test data. That changes when Masi's EAs start retesting on it in November 2026: from then on, treat it as field data and wipe nothing without Jim.
+- `masi-app` — **legacy pre-SQLite backend**, ref `jcqrlwetutnpuchjoyyd`. The legacy field app wrote to it; **no field cohort uses that app today (Jim, 2026-10-28).** Do not use for new mobile work unless the user explicitly asks for legacy-backend maintenance.
 
 **Which backend is which (`segygjzpujphwvrubusm` = sqlite, `jcqrlwetutnpuchjoyyd` = legacy). As of 2026-07-12 every default points at the SQLite backend; verify the ref anyway:**
 - **The app** → `config/supabaseProjectConfig.js` defaults to `sqlite-staging` with committed publishable-key fallbacks, so plain `npm start`, dev builds, and the `eas.json` preview and production profiles all target `masi-app-sqlite`. The legacy backend is reachable only behind an explicit `EXPO_PUBLIC_SUPABASE_TARGET=primary`. A URL that belongs to a different target than the selected one (e.g. a stale `.env.local` override) fails fast at startup with an actionable error instead of silently connecting to the wrong backend.

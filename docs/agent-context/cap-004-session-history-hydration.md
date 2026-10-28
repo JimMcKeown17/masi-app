@@ -51,7 +51,8 @@ reviewed spec.
   `LEGACY_SUPABASE_PROJECT_ID` and comment out the prose at lines 71–73. Until #56 merges, never run
   raw `supabase` commands from the repository root: the CLI auto-loads `.env.local` and honours
   `SUPABASE_PROJECT_ID` over `--linked`, which would target the legacy production project.
-- No field users are on the sqlite backend yet; its data is disposable dev/test data.
+- No field users are on the sqlite backend yet; its data is disposable dev/test data until Masi's
+  EAs start retesting on it in November 2026.
 
 ## Constraints that bind every task
 

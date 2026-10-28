@@ -16,7 +16,9 @@ not status.
 ## Pre-live hardening window
 
 Jim confirmed on 2026-08-27 that no staff are currently using the Masi app, while staff want to go
-live soon. Use this window for root-cause schema, identity, authorization, sync, and operational
+live soon. On 2026-10-28 Jim confirmed there is still no field cohort, and set the next step:
+Masi's EAs retest the SQLite app from November 2026, starting from the 1.4.0 pilot builds. Use
+this window for root-cause schema, identity, authorization, sync, and operational
 changes that would become much more expensive after trusted work accumulates on phones. "No active
 users" does not prove that no old binaries, test records, credentials, or legacy-backend automation
 exist; the first gate is an exact estate and live-contract inventory.
@@ -205,6 +207,16 @@ shape.
 
 - [x] Build iOS and Android preview binaries for app/runtime 1.3.0. Those July artifacts are
   historical evidence; source has moved and the post-hardening pilot will require a new build.
+- [x] **1.4.0 pilot builds (2026-10-28):** iOS 25 and Android 54 (`pilot` profile) from main
+  `dffe22c`, after the lesson flow, letter orders and the version bump merged. iOS 25 was
+  submitted to App Store Connect the same day.
+- [ ] **Automatic Android submission: Play service account key on EAS (Jim).** `eas.json` now
+  sends every `pilot` build to Play internal testing (`--auto-submit`), but EAS needs the key
+  first ([DEPLOYMENT.md](../DEPLOYMENT.md), one-time setup). The first submission is the existing
+  build 54.
+- [ ] **November 2026 EA retest (Jim):** add the EAs' Google accounts to Play internal testing (up
+  to 100) and iOS testers to TestFlight. From the first EA session, `masi-app-sqlite` holds field
+  data, so nothing on it is wiped without Jim.
 - [ ] Confirm the EAS build logs contain successful Sentry source-map uploads.
 - [ ] Pass device gates N1, N2, N4, N6, and N7 for symbolication, structured sync reporting, local
   evidence, and telemetry privacy.
