@@ -6295,3 +6295,38 @@ Review: Codex adversarial review (`gpt-6-astra`, base `origin/main`): approve, n
 ran locally). It noted a consequence to keep in mind when reading the pilot: "Last assessed" is the
 newest letter result, not the date each mastered letter was last seen. A child with all 26 in March
 who gets the whole first row of FAL 3 wrong in October keeps the 16 letters October did not reach.
+
+### 2026-10-28 — Assessment finish: Finalize on the overview, then the next child
+
+**Jim's notes on iOS build 24 (Full EGRA, Anke Afrika, Afrikaans).** "Review and finalize"
+opened a second screen that listed the same Questions again just to show Finalize. After
+Finalize that screen turned read-only ("Assessment summary", Finalized) with no footer, so the
+EA was stuck with only the header back arrow. Both WelaPLUS and Full EGRA use these screens, and
+the 1.4.0 pilot (#110) ships main, so the dead end would have reached pilot testers.
+
+**Jim's choice (2026-10-28): one screen, then the next child.** This restores the WelaPLUS spec's
+original §5.3 intent ("Once every Question is decided, Finalize run is enabled" on the overview).
+- The overview's footer offers **Finalize assessment**. When the battery has a Writing Sheet, the
+  existing check ("Write assessment code … on the Writing Sheet") sits after the Question list, and
+  Finalize stays disabled with "Tick the box to finalize" until it is ticked. Finalize uses the
+  overview's mutation guards, requests sync and replaces the overview with the summary
+  (`{ runId, finalized: true }`) straight after the committed write. `RUN_INCOMPLETE` reloads;
+  other errors show "Couldn't finalize this assessment. Try again."
+- The summary is read-only and always titled "Assessment summary". Opened straight after Finalize
+  it offers **Assess next child** (to the child picker for the same battery, when that battery can
+  still start new runs) and **Back to Assess**. Opened from history it has no footer.
+- History opens unfinished runs (stored `in_progress`; "Open" is only the badge) on the overview,
+  so they can still be finished. Without this, moving Finalize would have stranded them on a
+  read-only summary.
+- The skip card ends "Tap Finalize assessment to finish."
+
+**Build and review.** Codex built it test first. The first run stopped before editing because the
+work order said `status === 'open'`; the stored value is `in_progress`. The order was corrected
+and rerun. RED: 4 suites, 34 failing tests (no Finalize on the overview; history still opening
+the summary; old skip copy), plus the navigator title test. The summary's finalize tests moved to
+the overview, and new ones cover the finish footer, an unavailable form and Back after the
+replace. Gates (Node 20): `npm test` 434 suites / 6,636 tests (Codex); the six affected suites
+(236 tests) and `npm run test:integration` (78 suites / 967 tests) rerun by the orchestrator;
+`npm run test:types` clean; `node --test content/egra/verify.cjs` 5/5. Specs updated in the same
+change: WelaPLUS Release 1 §5.4 (dated note), EGRA content and skip rules (copy), design-system
+(the check now sits on the overview). Device check: next build.

@@ -10,14 +10,14 @@ jest.mock('../src/context/ToastContext', () => ({
   ...jest.requireActual('../src/context/ToastContext'), useToast: () => ({ show: mockToast }),
 }));
 jest.mock('../src/assessment-questions', () => ({
-  ...jest.requireActual('../src/assessment-questions'), batteryFor: jest.fn(),
+  ...jest.requireActual('../src/assessment-questions'), batteryFor: jest.fn(), batteryForNewRun: jest.fn(),
 }));
 
 import React from 'react';
 import { egraBatteryFor } from '../src/assessment-questions/egra';
 
 test.each([[3, 2, 'completed', '2 / 3'], [0, 0, 'ea_ended', '—']])(
-  'EGRA summary names the form, scores comprehension with %i asked and finalizes its four codes', async (asked, score, stoppedReason, scoreText) => {
+  'EGRA summary names the form, scores comprehension with %i asked without finalization controls', async (asked, score, stoppedReason, scoreText) => {
   const battery = egraBatteryFor('egra', 'dbe-egra-en-fal-2-v1');
   run = { ...run, battery_code: 'egra', battery_version: battery.battery_version, language: 'en',
     results: battery.questions.map((question, index) => ({ id: `egra-${index}`, question_code: question.question_code,
@@ -29,26 +29,19 @@ test.each([[3, 2, 'completed', '2 / 3'], [0, 0, 'ea_ended', '—']])(
   expect(screen.getByRole('text', { name: `4. Story comprehension, Done, ${scoreText}` })).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
   expect(screen.queryByText(/Writing Sheet/)).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText('Finalized');
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledWith(ID, {
-    questionCodes: battery.questions.map(question => question.question_code),
-  });
+  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
 });
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { act, configure, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { createNavigationContainerRef, createNavigatorFactory, NavigationContainer,
   StackRouter, useNavigationBuilder } from '@react-navigation/native';
 import { AllProviders } from '../test-support/renderWithProviders';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../src/services/activeProgrammeGate';
-import { batteryFor, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
-import { borderRadius, colors } from '../src/constants/colors';
+import { batteryFor, batteryForNewRun, WELA_PLUS_FULL_2024_1 as BATTERY } from '../src/assessment-questions';
 import ListRow from '../src/components/common/ListRow';
-import { fontFamilies } from '../src/constants/typography';
 import StatusBadge from '../src/components/common/StatusBadge';
 import BatteryRunSummaryScreen from '../src/screens/assessments/battery/BatteryRunSummaryScreen';
-import BatteryOverviewScreen from '../src/screens/assessments/battery/BatteryOverviewScreen';
 
 jest.setTimeout(30000);
 configure({ asyncUtilTimeout: 5000 });
@@ -82,7 +75,7 @@ function RetainedStack({ children }) {
   ))}</NavigationContent>;
 }
 const Stack = createNavigatorFactory(RetainedStack)();
-function renderSummary({ initialRoutes, overviewComponent = EmptyScreen, realRoster = false } = {}) {
+function renderSummary({ initialRoutes, params = {}, realRoster = false } = {}) {
   mockRealRoster = realRoster;
   let navigation, rerenderHost;
   function Host(props) {
@@ -97,12 +90,14 @@ function renderSummary({ initialRoutes, overviewComponent = EmptyScreen, realRos
     </AllProviders>;
   }
   const navigationRef = createNavigationContainerRef();
-  const routes = initialRoutes ?? [{ name: 'BatteryOverview' }, { name: 'BatteryRunSummary', params: { runId: ID } }];
+  const routes = initialRoutes ?? [{ name: 'BatteryOverview' }, { name: 'BatteryRunSummary', params: { runId: ID, ...params } }];
   const screen = render(<Wrapper>
     <NavigationContainer ref={navigationRef} initialState={{ index: routes.length - 1, routes }}>
       <Stack.Navigator>
+        <Stack.Screen name="MainTabs" component={EmptyScreen} />
+        <Stack.Screen name="AssessmentChildSelect" component={EmptyScreen} />
         <Stack.Screen name="Entry" component={EmptyScreen} />
-        <Stack.Screen name="BatteryOverview" component={overviewComponent} />
+        <Stack.Screen name="BatteryOverview" component={EmptyScreen} />
         <Stack.Screen name="BatteryRunSummary" component={Host} />
         <Stack.Screen name="Away" component={EmptyScreen} />
       </Stack.Navigator>
@@ -133,6 +128,7 @@ beforeEach(() => {
     children: { getAssessableChildren: jest.fn(async () => clone(mockRoster.all)), getChildNamesByIds: jest.fn().mockResolvedValue({ [CHILD.id]: { name: 'Lwazi Mbeki', hidden: false } }) },
   };
   getActiveProgrammeGate.mockReset().mockResolvedValue({ hasActiveProgramme: true, programme: { id: 'programme-1' } });
+  batteryForNewRun.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryForNewRun(...args));
   batteryFor.mockReset().mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
 });
 afterEach(async () => {
@@ -159,78 +155,7 @@ test('eligible run: child name, run code, "WelaPLUS · isiXhosa · 11 of 11 deci
   expect(screen.getByText('Letter writing')).toBeTruthy();
 });
 
-test('one checklist row "Write assessment code KWY-2M4 and Lwazi\'s name on the Writing Sheet"; Finalize disabled with "Tick the box to finalize" until ticked', async () => {
-  const screen = await ready(renderSummary());
-  const label = "Write assessment code KWY-2M4 and Lwazi's name on the Writing Sheet";
-  const checkbox = screen.getByRole('checkbox', { name: label });
-  expect(screen.getAllByRole('checkbox')).toHaveLength(1);
-  expect(checkbox).toHaveTextContent(label);
-  expect(StyleSheet.flatten(within(checkbox).getByText('KWY-2M4').props.style).fontFamily).toBe(fontFamilies.textBold);
-  expect(checkbox.props.accessibilityState).toMatchObject({ checked: false });
-  expect(StyleSheet.flatten(checkbox.props.style).minHeight).toBeGreaterThanOrEqual(48);
-  const boxStyle = () => checkbox.findAllByType(View).map(node => StyleSheet.flatten(node.props.style))
-    .find(style => style?.borderWidth === 1);
-  expect(boxStyle()).toMatchObject({ borderRadius: borderRadius.sm, borderColor: colors.fieldEdge });
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).toBeDisabled();
-  expect(screen.getByText('Tick the box to finalize')).toBeTruthy();
-  fireEvent.press(checkbox);
-  expect(screen.getByRole('checkbox', { name: label }).props.accessibilityState).toMatchObject({ checked: true });
-  expect(boxStyle()).toMatchObject({ backgroundColor: colors.primary, borderColor: colors.primary });
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).not.toBeDisabled();
-  expect(screen.queryByText('Tick the box to finalize')).toBeNull();
-  fireEvent.press(screen.getByRole('checkbox', { name: label }));
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).toBeDisabled();
-  expect(repositories.batteryRuns.finalizeRun).not.toHaveBeenCalled();
-});
 
-test('battery without a writing-sheet Question: no checklist, Finalize enabled', async () => {
-  const battery = { ...BATTERY, questions: BATTERY.questions.filter(question => question.materials?.item !== 'writing_sheet') };
-  batteryFor.mockReturnValue(battery);
-  run.results = run.results.filter(result => battery.questions.some(question => question.question_code === result.question_code));
-  const screen = renderSummary();
-  const button = await screen.findByRole('button', { name: 'Finalize assessment' });
-  expect(button).not.toBeDisabled();
-  expect(screen.queryByRole('checkbox')).toBeNull();
-  expect(screen.queryByText('Tick the box to finalize')).toBeNull();
-  expect(screen.getByText(`${BATTERY.title} · isiXhosa · 8 of 8 decided`)).toBeTruthy();
-});
-
-test('Finalize calls finalizeRun with every battery question_code, then shows the read-only summary with a "Finalized" badge', async () => {
-  const pending = deferred();
-  repositories.batteryRuns.finalizeRun.mockImplementationOnce(async () => {
-    await pending.promise;
-    run.status = 'completed';
-    return { id: ID };
-  });
-  const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
-  const button = screen.getByRole('button', { name: 'Finalize assessment' });
-  act(() => { fireEvent.press(button); fireEvent.press(button); });
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledWith(ID, {
-    questionCodes: BATTERY.questions.map(question => question.question_code),
-  });
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).toBeDisabled();
-  expect(mockSync).not.toHaveBeenCalled();
-  await act(async () => pending.resolve());
-  await screen.findByText('Finalized');
-  expect(screen.UNSAFE_getAllByType(StatusBadge).find(badge => badge.props.label === 'Finalized').props.tone).toBe('success');
-  expect(screen.routeNames()).toEqual(['BatteryOverview', 'BatteryRunSummary']);
-  expect(screen.queryByRole('checkbox')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
-  expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
-  expect(mockSync).toHaveBeenCalledTimes(1);
-});
-
-test('RUN_INCOMPLETE on finalize returns to the overview', async () => {
-  repositories.batteryRuns.finalizeRun.mockRejectedValueOnce(Object.assign(new Error('missing decision'), { code: 'RUN_INCOMPLETE' }));
-  const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await waitFor(() => expect(screen.routeNames()).toEqual(['BatteryOverview']));
-  expect(mockSync).not.toHaveBeenCalled();
-  expect(mockToast).not.toHaveBeenCalled();
-});
 
 test.each([['completed', 'Finalized', 'success'], ['abandoned', 'Abandoned', 'neutral']])(
   '%s run: read-only, %s badge, no checklist, no Finalize', async (status, label, tone) => {
@@ -273,9 +198,8 @@ test.each(['child', 'none', 'different'])(
   },
 );
 
-test('refocus refresh keeps the previous expanded rows visible and blocks Finalize until fresh data resolves', async () => {
+test('refocus refresh keeps the previous expanded rows visible and stays read-only until fresh data resolves', async () => {
   const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
   fireEvent.press(screen.getByRole('button', { name: 'Show all 11' }));
   const pending = deferred();
   act(() => screen.navigationRef.navigate('Away'));
@@ -284,14 +208,11 @@ test('refocus refresh keeps the previous expanded rows visible and blocks Finali
   expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
   expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(11);
   expect(screen.queryByLabelText('Loading assessment')).toBeNull();
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).toBeDisabled();
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
+  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
   expect(repositories.batteryRuns.finalizeRun).not.toHaveBeenCalled();
   await act(async () => pending.resolve(clone(run)));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Finalize assessment' })).not.toBeDisabled());
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText('Finalized');
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
+  await ready(screen);
+  expect(repositories.batteryRuns.finalizeRun).not.toHaveBeenCalled();
 });
 
 test('waits for the assessable roster and programme gate on initial load', async () => {
@@ -307,20 +228,18 @@ test('waits for the assessable roster and programme gate on initial load', async
   expect(screen.getByLabelText('Loading assessment')).toBeTruthy();
   await act(async () => pending.resolve({ programme: { id: 'programme-1' } }));
   await ready(screen);
-  expect(screen.getByRole('checkbox')).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
 });
 
 test('roster reload keeps cached summary data without treating an empty loading list as unassigned', async () => {
   const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
   mockRoster = { yourChildren: [], restOfClass: [], all: [], loading: true };
   screen.refresh();
   expect(screen.getByText('Lwazi Mbeki')).toBeTruthy();
   expect(screen.UNSAFE_getAllByType(ListRow)).toHaveLength(4);
   expect(screen.queryByLabelText('Loading assessment')).toBeNull();
   expect(screen.queryByText('This child is no longer assigned to you — you can abandon this assessment.')).toBeNull();
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).toBeDisabled();
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
+  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
   expect(repositories.batteryRuns.finalizeRun).not.toHaveBeenCalled();
   mockRoster = { ...mockRoster, loading: false };
   screen.refresh();
@@ -329,9 +248,8 @@ test('roster reload keeps cached summary data without treating an empty loading 
   expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
 });
 
-test('a refresh that finds a changed programme removes finalization controls', async () => {
+test('a refresh that finds a changed programme keeps the summary read-only', async () => {
   const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
   act(() => screen.navigationRef.navigate('Away'));
   getActiveProgrammeGate.mockResolvedValue({ programme: { id: 'other' } });
   act(() => screen.navigationRef.goBack());
@@ -340,55 +258,7 @@ test('a refresh that finds a changed programme removes finalization controls', a
   expect(repositories.batteryRuns.finalizeRun).not.toHaveBeenCalled();
 });
 
-test('a generic finalize failure shows an error, reloads, and permits a manual retry', async () => {
-  repositories.batteryRuns.finalizeRun.mockRejectedValueOnce(new Error('disk full'));
-  const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await waitFor(() => expect(mockToast).toHaveBeenCalledWith({ tone: 'error',
-    message: "Couldn't finalize this assessment. Try again." }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Finalize assessment' })).not.toBeDisabled());
-  expect(mockSync).not.toHaveBeenCalled();
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText('Finalized');
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(2);
-  expect(mockSync).toHaveBeenCalledTimes(1);
-});
 
-test('a finalize completing while blurred requests sync and is read back as Finalized on return', async () => {
-  const pending = deferred();
-  repositories.batteryRuns.finalizeRun.mockImplementationOnce(async () => {
-    await pending.promise;
-    run.status = 'completed';
-    return { id: ID };
-  });
-  const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  act(() => screen.navigationRef.navigate('Away'));
-  await act(async () => pending.resolve());
-  expect(mockSync).toHaveBeenCalledTimes(1);
-  expect(mockToast).not.toHaveBeenCalled();
-  act(() => screen.navigationRef.goBack());
-  await screen.findByText('Finalized');
-  expect(screen.queryByRole('checkbox')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
-});
-
-test('a stale handle cannot publish a late finalize result, navigate or request sync', async () => {
-  const pending = deferred();
-  repositories.batteryRuns.finalizeRun.mockReturnValue(pending.promise);
-  const screen = await ready(renderSummary());
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  handle.isCurrent.mockReturnValue(false);
-  await act(async () => pending.resolve({ id: ID }));
-  expect(screen.queryByText('Finalized')).toBeNull();
-  expect(screen.routeNames()).toEqual(['BatteryOverview', 'BatteryRunSummary']);
-  expect(mockSync).not.toHaveBeenCalled();
-  expect(mockToast).not.toHaveBeenCalled();
-});
 
 test('a stale handle cannot publish a late initial load', async () => {
   const pending = deferred();
@@ -418,7 +288,7 @@ test('an unavailable battery version is read-only with its run code and exact un
   expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
 });
 
-test('a load failure offers retry, and the checklist preserves the full assessable first_name', async () => {
+test('a load failure offers retry, and preserves the full assessable first_name', async () => {
   repositories.batteryRuns.getRunWithResults.mockRejectedValueOnce(new Error('disk unavailable'));
   const child = { ...CHILD, first_name: 'Lwazi Junior' };
   mockRoster = { yourChildren: [], restOfClass: [child], all: [child], loading: false };
@@ -427,88 +297,15 @@ test('a load failure offers retry, and the checklist preserves the full assessab
   expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
   await ready(screen);
-  expect(screen.getByRole('checkbox', { name: "Write assessment code KWY-2M4 and Lwazi Junior's name on the Writing Sheet" })).toBeTruthy();
+  expect(screen.getByText('Lwazi Junior Mbeki')).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
 });
 
-test('a post-finalize read failure retries the read without finalizing the run twice', async () => {
-  const screen = await ready(renderSummary());
-  repositories.batteryRuns.getRunWithResults.mockRejectedValueOnce(new Error('read unavailable'));
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText("Couldn't load this assessment. Try again.");
-  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
-  await screen.findByText('Finalized');
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
-});
 
-test('finalize removes the closed overview so Back reaches the screen below it without re-pushing the summary', async () => {
-  const screen = await ready(renderSummary({ overviewComponent: BatteryOverviewScreen, initialRoutes: [
-    { name: 'Entry' }, { name: 'BatteryOverview', params: { runId: ID } },
-    { name: 'BatteryRunSummary', params: { runId: ID } },
-  ] }));
-  const summaryKey = screen.navigationRef.getCurrentRoute().key;
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText('Finalized');
-  expect(screen.navigationRef.getCurrentRoute().key).toBe(summaryKey);
-  act(() => screen.navigationRef.goBack());
-  await waitFor(() => expect(screen.routeNames()).toEqual(['Entry']));
-  expect(screen.navigationRef.getCurrentRoute().name).toBe('Entry');
-  expect(screen.queryByText('Finalized')).toBeNull();
-});
 
-test('finalize removes every matching overview beneath the summary and preserves unrelated routes and keys', async () => {
-  const otherId = '8e3c2a10-5b7e-4c1d-8e2f-0123456789ab';
-  const screen = await ready(renderSummary({ initialRoutes: [
-    { name: 'Entry' }, { name: 'BatteryOverview', params: { runId: otherId } },
-    { name: 'BatteryOverview', params: { runId: ID } },
-    { name: 'BatteryOverview', params: { runId: ID } },
-    { name: 'BatteryRunSummary', params: { runId: ID } },
-  ] }));
-  const before = screen.navigationRef.getRootState();
-  const expectedKeys = [before.routes[0].key, before.routes[1].key, before.routes[4].key];
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText('Finalized');
-  await waitFor(() => expect(screen.navigationRef.getRootState().routes.map(route => route.key)).toEqual(expectedKeys));
-  expect(screen.navigationRef.getRootState().index).toBe(2);
-  act(() => screen.navigationRef.goBack());
-  expect(screen.navigationRef.getCurrentRoute().params.runId).toBe(otherId);
-});
-
-test('finalize navigation cleanup waits for a failed read to be retried into the read-only summary', async () => {
-  const screen = await ready(renderSummary({ overviewComponent: BatteryOverviewScreen, initialRoutes: [
-    { name: 'Entry' }, { name: 'BatteryOverview', params: { runId: ID } },
-    { name: 'BatteryRunSummary', params: { runId: ID } },
-  ] }));
-  repositories.batteryRuns.getRunWithResults.mockRejectedValueOnce(new Error('read unavailable'));
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await screen.findByText("Couldn't load this assessment. Try again.");
-  expect(screen.routeNames()).toEqual(['Entry', 'BatteryOverview', 'BatteryRunSummary']);
-  fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
-  await screen.findByText('Finalized');
-  act(() => screen.navigationRef.goBack());
-  await waitFor(() => expect(screen.routeNames()).toEqual(['Entry']));
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
-});
-
-test('RUN_INCOMPLETE preserves the real overview beneath the summary and returns to it', async () => {
-  repositories.batteryRuns.finalizeRun.mockRejectedValueOnce(Object.assign(new Error('missing decision'), { code: 'RUN_INCOMPLETE' }));
-  const screen = await ready(renderSummary({ overviewComponent: BatteryOverviewScreen, initialRoutes: [
-    { name: 'Entry' }, { name: 'BatteryOverview', params: { runId: ID } },
-    { name: 'BatteryRunSummary', params: { runId: ID } },
-  ] }));
-  fireEvent.press(screen.getByRole('checkbox'));
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await waitFor(() => expect(screen.routeNames()).toEqual(['Entry', 'BatteryOverview']));
-  expect(await screen.findByRole('button', { name: 'Review and finalize' })).toBeTruthy();
-  expect(mockSync).not.toHaveBeenCalled();
-});
 
 test.each([
-  ['in_progress', 1, 11, 'Review assessment'],
+  ['in_progress', 1, 11, 'Assessment summary'],
   ['completed', 1, 11, 'Assessment summary'],
   ['abandoned', 1, 11, 'Assessment summary'],
   ['in_progress', 0, 11, 'Assessment summary'],
@@ -522,25 +319,6 @@ test.each([
 });
 
 
-test('a sync roster refetch leaves the Writing Sheet tick checked and Finalize enabled throughout', async () => {
-  const screen = await ready(renderSummary({ realRoster: true }));
-  fireEvent.press(screen.getByRole('checkbox'));
-  // If a roster identity change starts a run read, hold it so transient disabling is observable.
-  const pending = deferred();
-  repositories.batteryRuns.getRunWithResults.mockReturnValueOnce(pending.promise);
-  mockChildrenContext = { ...mockChildrenContext, rosterVersion: 1 };
-  screen.refresh();
-  await waitFor(() => expect(repositories.children.getAssessableChildren).toHaveBeenCalledTimes(2));
-  await act(async () => {});
-  expect(screen.getByRole('checkbox').props.accessibilityState.checked).toBe(true);
-  expect(screen.getByRole('button', { name: 'Finalize assessment' })).not.toBeDisabled();
-  expect(repositories.batteryRuns.getRunWithResults).toHaveBeenCalledTimes(1);
-  fireEvent.press(screen.getByRole('button', { name: 'Finalize assessment' }));
-  await act(async () => pending.resolve(clone(run)));
-  await screen.findByText('Finalized');
-  expect(repositories.batteryRuns.finalizeRun).toHaveBeenCalledTimes(1);
-});
-
 test('an abandoned run summary labels undecided Questions Not started without a Next row', async () => {
   run.status = 'abandoned';
   run.results = [];
@@ -552,4 +330,71 @@ test('an abandoned run summary labels undecided Questions Not started without a 
   expect(screen.getByLabelText('5. Letter writing, Not started')).toBeTruthy();
   expect(screen.queryByText(/^Next(?: ·|$)/)).toBeNull();
   expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
+});
+
+test('an eligible open summary is read-only with no checklist or finish footer', async () => {
+  const screen = await ready(renderSummary({ params: { finalized: true } }));
+  expect(screen.getByRole('header', { name: 'Assessment summary' })).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(screen.queryByText('Before you finish')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Assess next child' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Back to Assess' })).toBeNull();
+});
+
+test('just-finalized summary offers Assess next child using the stored battery identity', async () => {
+  run.status = 'completed';
+  const screen = await ready(renderSummary({ params: { finalized: true } }));
+  expect(screen.getByRole('button', { name: 'Back to Assess' })).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Finalize assessment' })).toBeNull();
+  expect(batteryForNewRun).toHaveBeenCalledWith(run.battery_code, run.battery_version);
+  fireEvent.press(screen.getByRole('button', { name: 'Assess next child' }));
+  expect(screen.navigationRef.getCurrentRoute()).toMatchObject({ name: 'AssessmentChildSelect',
+    params: { batteryCode: run.battery_code, batteryVersion: run.battery_version } });
+  expect(screen.routeNames()).toEqual(['BatteryOverview', 'AssessmentChildSelect']);
+});
+
+test('Back to Assess pops to MainTabs with the Assessments tab selected', async () => {
+  run.status = 'completed';
+  const screen = await ready(renderSummary({ initialRoutes: [
+    { name: 'MainTabs' }, { name: 'Entry' },
+    { name: 'BatteryRunSummary', params: { runId: ID, finalized: true } },
+  ] }));
+  fireEvent.press(screen.getByRole('button', { name: 'Back to Assess' }));
+  expect(screen.routeNames()).toEqual(['MainTabs']);
+  expect(screen.navigationRef.getCurrentRoute().params).toEqual({ screen: 'Assessments' });
+});
+
+test.each([undefined, false, 'true'])('history summary has no finish footer (finalized: %s)', async finalized => {
+  run.status = 'completed';
+  const screen = await ready(renderSummary({ params: { finalized } }));
+  expect(screen.queryByRole('button', { name: 'Assess next child' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Back to Assess' })).toBeNull();
+});
+
+test('a form rejected for new runs offers only Back to Assess after finalization', async () => {
+  run.status = 'completed';
+  batteryForNewRun.mockReturnValue(null);
+  const screen = await ready(renderSummary({ params: { finalized: true } }));
+  expect(batteryForNewRun).toHaveBeenCalledWith(run.battery_code, run.battery_version);
+  expect(screen.queryByRole('button', { name: 'Assess next child' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Back to Assess' })).toBeTruthy();
+});
+
+test('an abandoned summary has no finish footer even with finalized true', async () => {
+  run.status = 'abandoned';
+  const screen = await ready(renderSummary({ params: { finalized: true } }));
+  expect(screen.queryByRole('button', { name: 'Assess next child' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Back to Assess' })).toBeNull();
+});
+
+
+test('an unavailable completed form still offers Back to Assess after finalization', async () => {
+  run.status = 'completed';
+  run.battery_version = '2099.1';
+  const screen = renderSummary({ params: { finalized: true } });
+  await screen.findByText("This assessment isn't available in this version of the app.");
+  expect(screen.queryByRole('button', { name: 'Assess next child' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Back to Assess' })).toBeTruthy();
 });

@@ -173,12 +173,12 @@ skipped rows. The sheet waits for **Got it**. It never names a pronoun for the c
 | Q6 | No more reading or writing today | `{first name}` got every word in the first row wrong. So `{first name}` won't be asked to read sentences or a story, or to write. This is normal. |
 
 The body ends with one more sentence that depends on what is left: **Carry on with the next
-Question.** when any Question is still to do, or **Tap Review and finalize to finish.** when nothing
+Question.** when any Question is still to do, or **Tap Finalize assessment to finish.** when nothing
 is (the usual case after a Q5 or Q6 trigger, since Q2–Q5 normally come first).
 
 Under the body, two short lists: **Still to do** (undecided Questions not skipped; left out when
 empty) and **Skipped** (the Questions this trigger skipped). When nothing is left, the list's main
-button is **Review and finalize**. If a later trigger has nothing left to skip (Q1 already fired),
+button is **Finalize assessment**. If a later trigger has nothing left to skip (Q1 already fired),
 no second card appears.
 
 **When the card shows (amended after the plan review).** The card is worked out from the saved

@@ -288,7 +288,7 @@ export function MainNavigator() {
       />
       <Stack.Screen name="BatteryOverview" component={BatteryOverviewScreen} options={{ title: '' }} />
       <Stack.Screen name="BatteryQuestion" component={BatteryQuestionScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="BatteryRunSummary" component={BatteryRunSummaryScreen} options={{ title: 'Review assessment' }} />
+      <Stack.Screen name="BatteryRunSummary" component={BatteryRunSummaryScreen} options={{ title: 'Assessment summary' }} />
       <Stack.Screen
         name="AssessmentHistory"
         component={AssessmentHistoryScreen}
