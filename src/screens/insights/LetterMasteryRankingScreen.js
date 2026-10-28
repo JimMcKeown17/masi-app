@@ -13,7 +13,6 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { useChildren } from '../../context/ChildrenContext';
-import { useClasses } from '../../context/ClassesContext';
 
 
 import { getLetterMasteryRanking } from '../../utils/dashboardStats';
@@ -26,11 +25,11 @@ export default function LetterMasteryRankingScreen({ navigation }) {
   const onScroll = useHeaderHairline();
   const paddingBottom = useScrollBottomPadding(spacing.xxl);
   const { repositories } = useSignedInEA();
-  const { assessments: assessmentsRepository, mastery: masteryRepository } = repositories;
+  const { assessments: assessmentsRepository, mastery: masteryRepository, classes: classesRepository } = repositories;
 
   const { user } = useAuth();
   const { children: childrenList } = useChildren();
-  const { classes } = useClasses();
+  const [activeClassByChildId, setActiveClassByChildId] = useState(new Map());
   const [ranking, setRanking] = useState([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
@@ -49,17 +48,21 @@ export default function LetterMasteryRankingScreen({ navigation }) {
         setLoadError(false);
         setLoading(true);
         setRanking([]);
+        setActiveClassByChildId(new Map());
       }
       const load = async () => {
         try {
           if (!user?.id) return;
-          const [assessments, letterMastery] = await Promise.all([
+          const childIds = childrenList.map(c => c.id);
+          const [assessments, letterMastery, activeClasses] = await Promise.all([
             assessmentsRepository.getLetterEvidenceResults({ userId: user.id }),
-            masteryRepository.getLetterMastery({ childIds: childrenList.map((c) => c.id) }),
+            masteryRepository.getLetterMastery({ childIds }),
+            classesRepository.getActiveClassesForChildren(childIds),
           ]);
-          const ranked = getLetterMasteryRanking(childrenList, assessments, letterMastery, classes);
+          const ranked = getLetterMasteryRanking(childrenList, assessments, letterMastery, activeClasses);
           if (active) {
             setRanking(ranked);
+            setActiveClassByChildId(activeClasses);
             hasSuccessfulLoad.current = true;
             setLoadError(false);
           }
@@ -78,7 +81,7 @@ export default function LetterMasteryRankingScreen({ navigation }) {
       };
       load();
       return () => { active = false; };
-    }, [assessmentsRepository, masteryRepository, childrenList, classes, user?.id, pageVersion, runVersion, retryVersion, toast])
+    }, [assessmentsRepository, masteryRepository, classesRepository, childrenList, user?.id, pageVersion, runVersion, retryVersion, toast])
   );
 
   if (loading || loadingUserId.current !== user?.id) {
@@ -106,7 +109,7 @@ export default function LetterMasteryRankingScreen({ navigation }) {
   const below40 = ranking.filter(r => r.percent < 40).length;
 
   const renderItem = ({ item, index }) => {
-    const classItem = classes.find(c => c.id === item.child.class_id) || null;
+    const classItem = activeClassByChildId.get(item.child.id) ?? null;
     return (
       <RankedBarRow
         rank={index + 1}

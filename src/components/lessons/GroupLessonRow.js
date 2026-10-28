@@ -7,7 +7,7 @@ import { lastSeenLabel, lessonRowDetail } from '../../utils/lessonDates';
 export default React.memo(function GroupLessonRow({ row, today, onStart, showDivider, index, count }) {
   const start = useCallback(() => onStart(row.groupId), [onStart, row.groupId]);
   return <ListRow title={row.members.map(child => child.firstName).join(' & ')}
-    subtitle={lessonRowDetail(lastSeenLabel(row.lastSeenOn, today), row.nextLetters ?? [])}
+    subtitle={lessonRowDetail(lastSeenLabel(row.lastSeenOn, today), row.nextLetters ?? [], { needsAppUpdate: row.lettersNeedUpdate })}
     lead={<View accessible={false} style={[styles.dot, { backgroundColor: row.dotColor }]} />}
     trailing="chevron" onPress={start} showDivider={showDivider} style={listGroupItemFrame(index, count)} />;
 });

@@ -935,6 +935,13 @@ create table if not exists lesson_drafts (
         where group_id is not null;
     `,
   },
+  {
+    version: 19,
+    name: 'classes_letter_order_edition',
+    sql: `
+      alter table classes add column letter_order_edition text not null default '2026-10-23';
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

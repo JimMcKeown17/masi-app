@@ -7,7 +7,8 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import { letterStateColors } from '../../constants/letterStateColors';
-import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
+import { TRACKER_LETTERS } from '../../utils/assessmentRegistry';
+import { UPDATE_APP_LETTERS_MESSAGE } from '../../utils/letterOrders';
 import { loadMasteryState, countMastered } from '../../utils/masteryState';
 import BottomSheet from '../common/BottomSheet';
 import BrandButton from '../common/BrandButton';
@@ -23,6 +24,7 @@ import { fontFamilies, typeRoles } from '../../constants/typography';
  *   onDismiss       - () => void
  *   child           - child object { id, first_name, last_name }
  *   languageCode    - 'en', 'xh', 'af', 'zu' or null
+ *   teachingOrder   - class order, none, update, or null while loading
  *   pendingChanges  - { [letter]: { mastered: boolean, languageCode: string, madeAt: string } } changes made this session
  *   onChangesUpdate - (changes: { [letter]: { mastered: boolean, languageCode: string, madeAt: string } }) => void
  */
@@ -32,6 +34,7 @@ export default function LetterTrackerBottomSheet({
   child,
   userId,
   languageCode,
+  teachingOrder,
   pendingChanges,
   onChangesUpdate,
 }) {
@@ -41,7 +44,7 @@ export default function LetterTrackerBottomSheet({
   const [existingTaught, setExistingTaught] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
+  const trackerLetters = TRACKER_LETTERS[languageCode];
 
   useEffect(() => {
     if (!visible || !child) return;
@@ -117,8 +120,8 @@ export default function LetterTrackerBottomSheet({
   const childName = child ? `${child.first_name} ${child.last_name}` : '';
 
   // Count total mastered for display
-  const masteredCount = pedagogicalOrder
-    ? countMastered({ assessmentMastered, taughtLetters: existingTaught, pendingChanges, pedagogicalOrder })
+  const masteredCount = trackerLetters
+    ? countMastered({ assessmentMastered, taughtLetters: existingTaught, pendingChanges, trackerLetters })
     : 0;
 
   const tileFor = (letter) => {
@@ -136,7 +139,7 @@ export default function LetterTrackerBottomSheet({
     };
   };
 
-  const legend = loading || !pedagogicalOrder ? null : (
+  const legend = loading || teachingOrder?.kind !== 'order' ? null : (
     <View style={styles.legend}>
       {[
         ['Taught', 'taught'], ['New this session', 'taught'],
@@ -158,21 +161,23 @@ export default function LetterTrackerBottomSheet({
       visible={visible}
       onDismiss={onDismiss}
       title="Letter tracker"
-      subtitle={pedagogicalOrder ? <>{childName} · <Text style={styles.subtitleStrong}>{masteredCount}/26</Text> letters</> : childName}
+      subtitle={trackerLetters ? <>{childName} · <Text style={styles.subtitleStrong}>{masteredCount}/26</Text> letters</> : childName}
       dismissLabel="Dismiss letter tracker"
       headerExtras={legend}
       footer={<BrandButton variant="primary" size="lg" label="Done" onPress={onDismiss} />}
       scrollable={false}
       keyboardAvoiding={false}
     >
-      {loading ? (
+      {loading || teachingOrder === null ? (
         <View style={styles.loadingArea}>
           <ActivityIndicator size="small" color={colors.text} />
         </View>
-      ) : !pedagogicalOrder ? (
+      ) : teachingOrder?.kind === 'update' ? (
+        <Text style={styles.missingSetText}>{UPDATE_APP_LETTERS_MESSAGE}</Text>
+      ) : teachingOrder?.kind !== 'order' ? (
         <Text style={styles.missingSetText}>No letter set for this class language.</Text>
       ) : (
-        <LetterToggleGrid letters={pedagogicalOrder} tileFor={tileFor} onPressLetter={handleCellTap} />
+        <LetterToggleGrid letters={teachingOrder.letters} tileFor={tileFor} onPressLetter={handleCellTap} />
       )}
     </BottomSheet>
   );

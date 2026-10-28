@@ -10,6 +10,7 @@ import { getTestWriter } from '../test-support/testDatabase';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { deferred, draftStart, holdDraftWrite } from '../test-support/lessonDraftTestUtils';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
+import ScreenHeader from '../src/components/common/ScreenHeader';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
 import { loadLessonBase, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
 import BrandButton from '../src/components/common/BrandButton';
@@ -32,10 +33,21 @@ const wrapper = ({ children }) => <AllProviders><SignedInEAContext.Provider valu
 }}><ChildrenProvider><CacheObserver />{children}</ChildrenProvider></SignedInEAContext.Provider></AllProviders>;
 const Home = () => <Text>Home route</Text>;
 const Complete = ({ navigation }) => <><Text>Session complete route</Text><BrandButton label="Done" onPress={() => navigation.popTo('MainTabs')} /></>;
+function WrapUpWithHeader({ navigation, route }) {
+  const [options, setOptions] = React.useState({ title: 'Wrap up' });
+  const screenNavigation = React.useMemo(() => ({ ...navigation, setOptions: next => {
+    navigation.setOptions(next);
+    setOptions(previous => ({ ...previous, ...next }));
+  } }), [navigation]);
+  return <>
+    <ScreenHeader navigation={navigation} route={route} options={options} />
+    <LessonWrapUpScreen navigation={screenNavigation} route={route} />
+  </>;
+}
 const mount = () => renderInTestStack({ wrapper, initialIndex: 2, keepMounted: true,
   motion: { tier: 'static', motionLevel: 'still', reduceMotion: true },
   routes: [{ name: 'MainTabs', component: Home }, { name: 'Lesson', component: LessonScreen, params: { draftId: draft.id } },
-    { name: 'LessonWrapUp', component: LessonWrapUpScreen, params: { draftId: draft.id } },
+    { name: 'LessonWrapUp', component: WrapUpWithHeader, params: { draftId: draft.id } },
     { name: 'SessionComplete', component: Complete }],
 });
 const ready = view => view.findByText('Amahle');
@@ -285,12 +297,12 @@ testSave('crossing programme midnight refreshes Today and the calendar without m
     listeners.add(listener); return { remove: () => listeners.delete(listener) };
   });
   const view = mount(); await ready(view);
-  expect(view.getByRole('button', { name: 'Date, Today' })).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Lesson date, Today' })).toBeTruthy();
   await act(async () => {
     jest.setSystemTime(new Date('2026-11-01T00:01:00.000Z'));
     listeners.forEach(listener => listener('active'));
   });
-  fireEvent.press(await view.findByRole('button', { name: 'Date, Started Sat 31 Oct' }));
+  fireEvent.press(await view.findByRole('button', { name: 'Lesson date, Sat 31 Oct' }));
   expect(await view.findByRole('button', { name: 'Next month' })).not.toBeDisabled();
   fireEvent.press(view.getByRole('button', { name: 'Next month' }));
   expect(await view.findByRole('button', { name: 'Sun 1 November 2026' })).not.toBeDisabled();
@@ -336,4 +348,35 @@ for (const [languageCode, language, packId] of [
     .toEqual(['e', 'k'].map(letter => ({ letter, language: languageCode })));
   const outbox = await (await handle.getReader()).getAllAsync("select payload from sync_outbox where table_name = 'letter_mastery'");
   expect(outbox.map(row => JSON.parse(row.payload).language)).toEqual([languageCode]);
+});
+
+
+testSave('Wrap up displays letters in the class order and preserves tap order in the draft and save', async () => {
+  const tapped = ['d', 's', 'n', 'a'];
+  await handle.repositories.lessonDrafts.discard(draft.id);
+  draft = await handle.repositories.lessonDrafts.create(draftStart({
+    pack_id: 'english-interim-letters-v2', ticks: { letters: tapped, blends: [], books: [] },
+    tracker_changes: { c1: Object.fromEntries(tapped.map(letter => [letter, {
+      mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z',
+    }])) },
+  }));
+  const view = mount(); await ready(view);
+  expect(await view.findByRole('header', { name: 'Who knows s a n d without help?' })).toBeTruthy();
+  expect(view.getByText('Who knows s a n d without help?')).toBeTruthy();
+  const rows = view.getAllByTestId('wrap-up-letter-chips');
+  expect(rows).toHaveLength(2);
+  for (const chips of rows) expect(within(chips).getAllByRole('button')
+    .map(tile => tile.props.accessibilityLabel.split(',')[0])).toEqual(['s', 'a', 'n', 'd']);
+  fireEvent.press(within(view.getByTestId('wrap-up-child-c1')).getByRole('button', { name: /letter tracker/ }));
+  await view.findByRole('button', { name: 's, taught, added this session' });
+  expect(view.getAllByRole('button', { name: /^[a-z], / }).map(tile => tile.props.accessibilityLabel.split(',')[0]).slice(0, 4))
+    .toEqual(['s', 'a', 'n', 'd']);
+  fireEvent.press(view.getByRole('button', { name: 'Done' }));
+  const stored = await handle.repositories.lessonDrafts.getActive();
+  expect(stored.ticks.letters).toEqual(['d', 's', 'n', 'a']);
+  expect(Object.keys(stored.tracker_changes.c1)).toEqual(['d', 's', 'n', 'a']);
+  fireEvent.press(view.getByRole('button', { name: 'Save session' }));
+  await view.findByText('Session complete route');
+  expect((await sessions())[0].activities.letters_focused).toEqual(['d', 's', 'n', 'a']);
+  expect(view.navigationRef.getCurrentRoute().params.letters).toEqual(['s', 'a', 'n', 'd']);
 });

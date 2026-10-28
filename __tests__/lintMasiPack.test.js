@@ -1,12 +1,14 @@
 import vectors from '../src/constants/contracts/decodability-v1.json';
 import { lintSequence } from '../src/utils/decodability/index.js';
 import { lintMasiPack, MASI_LINT_OPTIONS, PACK_LANGUAGE_CODES, PACK_CHANNELS } from '../src/lessonPlan/packs/lintMasiPack';
+import { getLetterOrder } from '../src/utils/letterOrders';
 
 const codes = r => r.errors.map(e => e.split(':')[0]);
 const validPack = () => {
   const pack = JSON.parse(JSON.stringify(vectors.sequence));
   pack.letter_steps[0].readers = ['xh-test-r01'];
   return { ...pack, id: 'test-pack-v1', language: 'isixhosa', channel: 'release',
+    letter_order: 'isixhosa-order-2026-10-18',
     readers: { 'xh-test-r01': { title: 'Molo, Lolo!', step: 1, tricky_words: [], pages: ['Molo, Lolo!', 'Mmm… lala.'] } },
     word_bank: [{ text: 'molo', syllables: 'mo-lo', step: 1 }, { text: 'umama', syllables: 'u-ma-ma', step: 2 },
       { text: 'thina', syllables: 'thi-na', step: 13 }],
@@ -17,6 +19,32 @@ const validPack = () => {
 
 test('a valid pack passes', () => {
   expect(lintMasiPack(validPack())).toEqual({ ok: true, errors: [] });
+});
+
+test.each([
+  ['pack_letter_order', 'removed letter order', p => { delete p.letter_order; }],
+  ['pack_letter_order', 'unknown letter order', p => { p.letter_order = 'unknown-order'; }],
+  ['pack_letter_order_language', 'another language', p => { p.letter_order = 'english-order-legacy'; }],
+  ['pack_letter_order_letters', 'swapped step 2 letters', p => { p.letter_steps[1].new_letters.reverse(); }],
+  ['pack_letter_order_sounds', 'replaced sound', p => { p.sound_steps[0].new_sounds = ['ph']; }],
+])('%s rejects %s', (code, _name, mutate) => {
+  const pack = validPack();
+  mutate(pack);
+  expect(codes(lintMasiPack(pack))).toContain(code);
+});
+
+test('empty sound steps and word bank still match the letter order', () => {
+  const pack = validPack();
+  pack.sound_inventory = [...'abcdefghijklmnopqrstuvwxyz'];
+  pack.sound_steps = [];
+  pack.word_bank = [];
+  expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
+});
+
+test('an unchanged legacy pack resolves its letter order through its id', () => {
+  const pack = JSON.parse(JSON.stringify(require('../src/lessonPlan/packs/english-interim-letters-v1.json')));
+  expect(pack).not.toHaveProperty('letter_order');
+  expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
 });
 
 test.each(['letter_steps', 'sound_steps'].flatMap(field =>
@@ -73,6 +101,15 @@ test('pack language names map to the Masi codes', () => {
 test.each(['english', 'afrikaans'])('a %s pack passes', name => {
   const pack = validPack();
   pack.language = name;
+  pack.letter_order = `${name}-order-legacy`;
+  pack.sound_inventory = [...'abcdefghijklmnopqrstuvwxyz'];
+  pack.letter_steps = getLetterOrder(pack.letter_order).letter_steps.map((letters, index) => ({
+    step: index + 1, new_letters: [...letters], blends: [], words: [], readers: [],
+  }));
+  pack.sound_steps = [];
+  pack.word_bank = [];
+  pack.readers = {};
+  pack.reader_details = {};
   expect(lintMasiPack(pack)).toEqual({ ok: true, errors: [] });
 });
 
@@ -275,7 +312,10 @@ test('shared errors retain their order and precede Masi errors', () => {
     .map(issue => `${issue.code}: ${issue.message}`);
   const result = lintMasiPack(pack);
   expect(result.errors.slice(0, sharedErrors.length)).toEqual(sharedErrors);
-  expect(result.errors.slice(sharedErrors.length)).toEqual(['pack_id: id must be a non-empty string.']);
+  expect(result.errors.slice(sharedErrors.length)).toEqual([
+    'pack_id: id must be a non-empty string.',
+    expect.stringMatching(/^pack_letter_order_letters:/),
+  ]);
 });
 
 test.each([

@@ -56,6 +56,9 @@ const LEGACY_KEYS_TO_STRIP = {
 // Real server columns deliberately withheld from push (reserved strictly for that — NOT a
 // catch-all). B2 activates sessions.group_id; state stays completed until the state-machine slice.
 const INTENTIONALLY_UNSYNCED = {
+  classes: {
+    letter_order_edition: 'Server-owned: the classes trigger sets it (migration 20261027120000); pulls take the server value.',
+  },
   sessions: {
     state: 'Forward-prep; server RLS keeps state = completed (migration 20261021140000_session_group_authorization).',
   },

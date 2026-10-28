@@ -167,7 +167,7 @@ export default function LessonScreen({ navigation, route }) {
         {!needs && plan && choices ? <>
           {!plan.history_complete ? <InlineNote tone="warning">Still downloading past lessons. Suggestions may repeat.</InlineNote> : null}
           {!plan.mastery_complete ? <InlineNote tone="warning">Still downloading what children know. Suggestions may repeat.</InlineNote> : null}
-          <LessonLettersSection draft={draft} plan={plan} choices={choices} onToggle={toggleLetter} onOther={() => setOtherVisible(true)} />
+          <LessonLettersSection needsAppUpdate={lesson.teachingOrder?.kind === 'update'} draft={draft} plan={plan} choices={choices} onToggle={toggleLetter} onOther={() => setOtherVisible(true)} />
           <LessonBlendSection draft={draft} plan={plan} choices={choices} participants={participants}
             onToggle={toggleBlend} onTier={showTier} error={error} />
           <LessonBookSection draft={draft} choices={choices} isEcd={lessonInput?.isEcd ?? lessonClass?.grade === 'ECD'} onToggle={toggleBook} />

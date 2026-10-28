@@ -71,33 +71,6 @@ export const ISIXHOSA_WORD_SET = {
 
 export const WORD_SETS = { english: ENGLISH_WORD_SET, isixhosa: ISIXHOSA_WORD_SET };
 
-// Pedagogical order for the 26-letter tracker grid (NOT the EGRA 60-letter assessment set).
-// These are the unique letters in teaching order, used by the Letter Tracker feature.
-export const ENGLISH_PEDAGOGICAL_ORDER = [
-  'a','m','s','t','n','i','p','c','f','d',
-  'h','o','r','b','l','k','e','g','w','v',
-  'u','j','y','z','q','x',
-];
-
-export const ISIXHOSA_PEDAGOGICAL_ORDER = [
-  'a','e','i','o','u','b','l','m','k','p',
-  's','h','z','n','d','y','f','w','v','x',
-  'g','t','q','r','c','j',
-];
-
-// Zazi's provisional order, pending the official Afrikaans teaching sequence.
-// Source: Zazi f0c9ee49 src/constants/egraConstants.js:261-266.
-export const AFRIKAANS_PEDAGOGICAL_ORDER = Object.freeze([
-  'a','s','m','e','k','i','r','o','n','t',
-  'd','l','p','u','b','g','h','v','w','y',
-  'f','j','c','z','x','q',
-]);
-
-export const PEDAGOGICAL_ORDERS = {
-  english: ENGLISH_PEDAGOGICAL_ORDER,
-  isixhosa: ISIXHOSA_PEDAGOGICAL_ORDER,
-};
-
 export function getLetterSetById(id) {
   return Object.values(LETTER_SETS).find((s) => s.id === id) || null;
 }

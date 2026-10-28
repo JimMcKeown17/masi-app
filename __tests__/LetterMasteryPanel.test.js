@@ -15,6 +15,7 @@ import LetterMasteryPanel from '../src/components/assessment/LetterMasteryPanel'
 import { assessmentsRepository } from '../src/db/repositories/assessmentsRepository';
 import { createMasteryRepository, masteryRepository } from '../src/db/repositories/masteryRepository';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
+import { createClassesRepository, classesRepository } from '../src/db/repositories/classesRepository';
 import { createFamilySyncFixture } from '../test-support/assessmentFamilySyncTestUtils';
 import { useAuth } from '../src/context/AuthContext';
 import { useOffline } from '../src/context/OfflineContext';
@@ -36,11 +37,16 @@ jest.mock('../src/db/repositories/masteryRepository', () => ({
   masteryRepository: { getLetterMastery: jest.fn(), setLetterMastery: jest.fn() },
 }));
 
+jest.mock('../src/db/repositories/classesRepository', () => ({
+  ...jest.requireActual('../src/db/repositories/classesRepository'),
+  classesRepository: { getActiveClassForChild: jest.fn() },
+}));
+
 describe('LetterMasteryPanel', () => {
   const refreshSyncStatus = jest.fn();
   const triggerBackgroundSync = jest.fn();
   const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini' };
-  const classItem = { id: 'class-1', home_language: 'English' };
+  const classItem = { id: 'class-1', home_language: 'English', letter_order_edition: '2026-10-23' };
   const panel = (props = {}) => <LetterMasteryPanel child={child} classItem={classItem} {...props} />;
   const stored = (letter, confirmed = true, overrides = {}) => ({
     id: 'record-' + letter, child_id: child.id, letter, language: 'en', confirmed, ...overrides,
@@ -58,6 +64,7 @@ describe('LetterMasteryPanel', () => {
   beforeEach(() => {
     useAuth.mockReturnValue({ user: { id: 'user-1' } });
     useOffline.mockReturnValue({ refreshSyncStatus, triggerBackgroundSync, lastSyncResult: null });
+    classesRepository.getActiveClassForChild.mockResolvedValue(classItem);
     assessmentsRepository.letterEvidenceFor.mockResolvedValue([]);
     storedRows = [];
     masteryRepository.getLetterMastery.mockImplementation(async ({ childId, language }) =>
@@ -108,7 +115,8 @@ describe('LetterMasteryPanel', () => {
   });
 
   test.each([null, 'isiZulu'])('shows no letter grid for unsupported class language %s', async home_language => {
-    const screen = render(panel({ classItem: { home_language } }));
+    classesRepository.getActiveClassForChild.mockResolvedValue({ ...classItem, home_language });
+    const screen = render(panel());
     expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
     expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
     expect(assessmentsRepository.letterEvidenceFor).not.toHaveBeenCalled();
@@ -116,9 +124,26 @@ describe('LetterMasteryPanel', () => {
     expect(masteryRepository.setLetterMastery).not.toHaveBeenCalled();
   });
 
+  test('no active class membership has no letter grid', async () => {
+    classesRepository.getActiveClassForChild.mockResolvedValue(null);
+    const screen = render(panel());
+    expect(await screen.findByText('No letter set for this class language.')).toBeTruthy();
+    expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
+    expect(assessmentsRepository.letterEvidenceFor).not.toHaveBeenCalled();
+    expect(masteryRepository.getLetterMastery).not.toHaveBeenCalled();
+  });
+
+  test('an unknown class edition asks for an app update without a grid', async () => {
+    classesRepository.getActiveClassForChild.mockResolvedValue({ ...classItem, letter_order_edition: '2099-01-01' });
+    const screen = render(panel());
+    expect(await screen.findByText("Update the app to teach this class's letters.")).toBeTruthy();
+    expect(screen.queryAllByText(/^[a-z]$/)).toHaveLength(0);
+  });
+
   test('an Afrikaans class shows Afrikaans confirmations only and saves new marks as af', async () => {
     storedRows = [stored('a', true, { language: 'af' }), stored('s')];
-    const screen = render(panel({ classItem: { id: 'class-af', home_language: 'Afrikaans' } }));
+    classesRepository.getActiveClassForChild.mockResolvedValue({ ...classItem, id: 'class-af', home_language: 'Afrikaans' });
+    const screen = render(panel());
     expect(await screen.findByLabelText('a, taught by coach')).toBeTruthy();
     expect(assessmentsRepository.letterEvidenceFor).toHaveBeenCalledWith({ userId: 'user-1', childId: child.id, language: 'af' });
     expect(masteryRepository.getLetterMastery).toHaveBeenCalledWith({ childId: child.id, language: 'af' });
@@ -267,7 +292,7 @@ const deferred = () => {
 
 describe('LetterMasteryPanel read/tap ordering with real SQLite', () => {
   let f, mastery, readRecords, writeRecord, read, write, offline, child, repositories;
-  const classItem = { id: 'class-1', home_language: 'English' };
+  const classItem = { id: 'class-1', home_language: 'English', letter_order_edition: '2026-10-23' };
   const panel = () => (
     <SignedInEAContext.Provider value={{ repositories }}>
       <LetterMasteryPanel child={child} classItem={classItem} />
@@ -297,7 +322,12 @@ describe('LetterMasteryPanel read/tap ordering with real SQLite', () => {
     await writeRecord(mark('m', false));
     read = jest.spyOn(mastery, 'getLetterMastery');
     write = jest.spyOn(mastery, 'setLetterMastery');
-    repositories = { assessments: f.assessments, mastery };
+    await f.db.runAsync("insert into schools (id, name) values ('school-1', 'Test school')");
+    await f.db.runAsync("insert into academic_years (id, label, starts_on, ends_on, is_active) values ('year-2026', '2026', '2026-01-15', '2026-12-15', 1)");
+    await f.db.runAsync("insert into classes (id, school_id, name, grade, home_language, academic_year_id) values ('class-1', 'school-1', 'English class', '1', 'English', 'year-2026')");
+    await f.db.runAsync("update children set class_id = 'class-1' where id = ?", f.childId);
+    await f.db.runAsync("insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at) values ('active-class', ?, 'class-1', 'year-2026', '2026-01-15')", f.childId);
+    repositories = { assessments: f.assessments, mastery, classes: createClassesRepository({ database: f.db }) };
     child = { id: f.childId, first_name: 'Test', last_name: 'Child' };
     offline = { refreshSyncStatus: jest.fn(async () => {}), triggerBackgroundSync: jest.fn(), lastSyncResult: null };
     useAuth.mockReturnValue({ user: { id: f.userId } });
@@ -308,6 +338,19 @@ describe('LetterMasteryPanel read/tap ordering with real SQLite', () => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
     await f.db.closeAsync();
+  });
+
+  test('the active isiXhosa membership wins over the English class on the child row', async () => {
+    await f.db.runAsync("insert into classes (id, school_id, name, grade, home_language, academic_year_id) values ('xhosa-class', 'school-1', 'Xhosa class', '1', 'isiXhosa', 'year-2026')");
+    await f.db.runAsync("update child_class_memberships set class_id = 'xhosa-class' where id = 'active-class'");
+    const screen = render(panel());
+    expect(await screen.findByText('isiXhosa')).toBeTruthy();
+    expect(screen.queryByText('English')).toBeNull();
+    expect(screen.getAllByText(/^[a-z]$/).map(node => node.props.children).slice(0, 4)).toEqual(['o', 'm', 'l', 'a']);
+    expect((await f.db.getFirstAsync('select class_id from children where id = ?', f.childId)).class_id).toBe('class-1');
+    fireEvent.press(screen.getByLabelText('a, not mastered'));
+    await screen.findByLabelText('a, taught by coach');
+    expect(write).toHaveBeenCalledWith({ childId: f.childId, letter: 'a', language: 'xh', confirmed: true });
   });
 
   test('a pre-tap snapshot released after commit cannot change the tile or make the next tap confirm twice', async () => {

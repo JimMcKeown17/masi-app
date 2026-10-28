@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useSignedInEA } from '../context/SignedInEAContext';
 import { useProgrammeTodayKey } from './useProgrammeTodayKey';
-import { loadLessonBase, loadLessonParticipants, presentLessonInput } from '../lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadLessonParticipants, presentLessonInput, lessonOrderAndPack } from '../lessonPlan/inputs/lessonInputs';
 import {
   computeLessonPlan, computeLessonChoices, isPlanRecomputable, isPlanSuperseded, resolveLessonClass,
 } from '../lessonPlan/engine';
-import { getPack } from '../lessonPlan/packs';
 import { isPreviewContentEnabled } from '../lessonPlan/packs/previewContent';
 import { languageCodeForHomeLanguage } from '../utils/assessmentRegistry';
 import { presentChildIds } from '../db/repositories/lessonDraftsRepository';
@@ -94,8 +93,9 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
       const { classId } = resolveLessonClass({
         groupClassId: group.class_id, memberClassIds: members.map(child => child.class_id),
       });
-      const languageCode = languageCodeForHomeLanguage(baseLoaded.classes.find(row => row.id === classId)?.home_language);
-      const pack = getPack(languageCode, { allowPreview: isPreviewContentEnabled() });
+      const lessonClass = baseLoaded.classes.find(row => row.id === classId);
+      const languageCode = languageCodeForHomeLanguage(lessonClass?.home_language);
+      const { pack } = lessonOrderAndPack({ lessonClass, languageCode, allowPreview: isPreviewContentEnabled() });
       if (!active) return null;
       await controller.open({ start: transitions.newLessonDraftInput({
         group, members, programmeId: openingBase.programmeId, classId, languageCode,
@@ -120,11 +120,10 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
     setParticipantError(null);
     const load = async () => {
       const loaded = await loadLessonParticipants({ handle, repositories, services,
-        programmeId: draft.programme_id, languageCode: draft.language_code, packId: draft.pack_id,
+        programmeId: draft.programme_id, classId: draft.class_id, languageCode: draft.language_code, packId: draft.pack_id,
         participantChildIds: JSON.parse(participantKey),
       });
-      const lessonClass = await repositories.classes.getClassById(draft.class_id);
-      if (active) setParticipantsLoaded({ key: inputKey, loaded, lessonClass });
+      if (active) setParticipantsLoaded({ key: inputKey, loaded });
     };
     void load().catch(error => { if (active) setParticipantError(error); });
     return () => { active = false; };
@@ -135,7 +134,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
   const lessonInput = useMemo(() => base && participantsLoaded?.key === inputKey
     ? presentLessonInput({ base, loaded: participantsLoaded.loaded, presentChildIds: JSON.parse(presentKey), lesson: {
       groupId: draft.group_id, upNextGroupId: draft.plan?.up_next_group_id ?? start?.upNextGroupId ?? null,
-      languageCode: draft.language_code, isEcd: participantsLoaded.lessonClass?.grade === 'ECD',
+      languageCode: draft.language_code, isEcd: participantsLoaded.loaded.lessonClass?.grade === 'ECD',
     } }) : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [base, participantsLoaded, inputKey, presentKey]);
@@ -186,10 +185,12 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
       const lessonClass = classes.find(row => row.id === classId)
         ?? await repositories.classes.getClassById(classId);
       const languageCode = option.languageCode ?? languageCodeForHomeLanguage(lessonClass?.home_language);
-      const packId = option.packId ?? getPack(languageCode, { allowPreview: isPreviewContentEnabled() })?.id ?? null;
+      const { pack } = lessonOrderAndPack({ lessonClass, languageCode, packId: option.packId,
+        allowPreview: isPreviewContentEnabled() });
+      const packId = pack?.id ?? null;
       const choiceBase = base ?? await loadLessonBase({ handle, repositories, today, programmeId: draft.programme_id });
       const loaded = await loadLessonParticipants({ handle, repositories, services,
-        programmeId: draft.programme_id, languageCode, packId, participantChildIds: JSON.parse(participantKey),
+        programmeId: draft.programme_id, classId, languageCode, packId, participantChildIds: JSON.parse(participantKey),
       });
       const input = presentLessonInput({ base: choiceBase, loaded, presentChildIds: JSON.parse(presentKey), lesson: {
         groupId: draft.group_id, upNextGroupId: start?.upNextGroupId ?? null,
@@ -235,6 +236,7 @@ export const useLessonDraft = ({ draftId, start } = {}) => {
     else setRetryCount(count => count + 1);
   }, [baseError]);
   return { ...snapshot, plan, choices, lessonInput, base, needs, apply, ensureDraft, beginSave, retry,
+    teachingOrder: participantsLoaded?.key === inputKey ? participantsLoaded.loaded.teachingOrder : null,
     inputError: baseError ?? participantError,
     endSave: controller.endSave, discard: controller.discard, error: snapshot.error ?? openError ?? baseError ?? participantError };
 };

@@ -6,6 +6,9 @@ import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { renderWithProviders } from '../test-support/renderWithProviders';
 import { draftStart, deferred } from '../test-support/lessonDraftTestUtils';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
+import ScreenHeader from '../src/components/common/ScreenHeader';
+import { getTeachingOrder } from '../src/utils/letterOrders';
+import { ActivityIndicator } from 'react-native-paper';
 import { colors } from '../src/constants/colors';
 import { saveLesson, LessonSaveError } from '../src/services/lessonSave';
 
@@ -38,19 +41,32 @@ const mockHandle = { userId: 'ea', isCurrent: () => true, repositories: { childr
   getChildrenByIds: jest.fn(async () => mockChildren),
   getWriteAuthority: jest.fn(async () => ({ c1: { attend: true, deliver: true, level: true }, c2: { attend: true, deliver: true, level: true } })),
 } } };
-let mockInitial, mockDraft, mockApply, mockBeginSave, mockEndSave;
+let mockInitial, mockDraft, mockApply, mockBeginSave, mockEndSave, mockOrderLoading, mockSetDraft;
 function mockUseLessonDraft() {
   const [draft, setDraft] = React.useState(mockInitial);
   mockDraft = draft;
+  mockSetDraft = setDraft;
   mockApply = jest.fn(async (transition, ...args) => setDraft(row => ({ ...row, ...transition(row, ...args) })));
-  return { draft, status: 'ready', apply: mockApply, beginSave: mockBeginSave, endSave: mockEndSave };
+  return { draft, teachingOrder: mockOrderLoading ? null : getTeachingOrder({ letter_order_edition: '2026-10-23' }, draft?.language_code), status: 'ready', apply: mockApply, beginSave: mockBeginSave, endSave: mockEndSave };
 }
 const navigation = { replace: jest.fn(), popTo: jest.fn(), setOptions: jest.fn() };
-const mount = () => renderWithProviders(<LessonWrapUpScreen navigation={navigation} route={{ params: { draftId: 'draft-1' } }} />);
+function WrapUp() {
+  const [options, setOptions] = React.useState({ title: 'Wrap up' });
+  navigation.setOptions.mockImplementation(next => setOptions(previous => ({ ...previous, ...next })));
+  const route = { name: 'LessonWrapUp', params: { draftId: 'draft-1' } };
+  return <>
+    <ScreenHeader navigation={navigation} route={route} options={options} />
+    <LessonWrapUpScreen navigation={navigation} route={route} />
+  </>;
+}
+const mount = () => renderWithProviders(<WrapUp />);
+const headerRight = () => navigation.setOptions.mock.calls.findLast(([options]) => 'headerRight' in options)?.[0].headerRight;
+const renderHeader = view => within(view.getByTestId('screen-header'));
 const ready = view => view.findByText('Amahle');
 const row = (view, id = 'c1') => within(view.getByTestId(`wrap-up-child-${id}`));
 beforeEach(() => {
   jest.clearAllMocks();
+  mockOrderLoading = false;
   mockInitial = draftStart({ id: 'draft-1', session_id: 'session-1', ticks: { letters: ['a', 'm'] } });
   mockBeginSave = jest.fn(async () => mockDraft);
   mockEndSave = jest.fn();
@@ -81,7 +97,7 @@ test('no ticked letters leaves no empty chip row between the name and the tracke
   mockInitial = draftStart();
   const view = mount(); await ready(view);
   expect(view.queryAllByTestId('wrap-up-letter-chips')).toHaveLength(0);
-  expect(view.queryByText('No one new yet')).toBeNull();
+  expect(view.queryByText('None of these yet')).toBeNull();
   expect(row(view).getByText('Amahle')).toBeTruthy();
   expect(row(view).getByLabelText(/Amahle, letter tracker/)).toBeTruthy();
 });
@@ -98,15 +114,17 @@ test('an assessment-mastered letter is locked', async () => {
   const tile = await row(view).findByRole('button', { name: 'm, mastered from assessment, locked' });
   expect(tile).toBeDisabled(); fireEvent.press(tile); expect(mockApply).not.toHaveBeenCalled();
 });
-test("No one new yet clears the child's chips", async () => {
+test("None of these yet clears the child's chips", async () => {
   mockInitial.tracker_changes = { c1: { a: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' },
     z: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' } } };
   const view = mount(); await ready(view);
-  expect(row(view).getByRole('checkbox', { name: 'No one new yet' })).not.toBeChecked();
-  fireEvent.press(row(view).getByRole('checkbox', { name: 'No one new yet' }));
+  expect(row(view).getByText('None of these yet')).toBeTruthy();
+  expect(row(view, 'c2').getByRole('checkbox', { name: 'Lulu, none of these yet' })).not.toBeChecked();
+  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' })).not.toBeChecked();
+  fireEvent.press(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' }));
   await waitFor(() => expect(mockDraft.ticks.noOneNew).toEqual(['c1']));
-  expect(row(view).getByRole('checkbox', { name: 'No one new yet' })).toBeChecked();
-  expect(row(view).getByRole('checkbox', { name: 'No one new yet' }).findAll(node => node.props.name === 'checkmark').length).toBeGreaterThan(0);
+  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' })).toBeChecked();
+  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' }).findAll(node => node.props.name === 'checkmark').length).toBeGreaterThan(0);
   expect(Object.keys(mockDraft.tracker_changes.c1)).toEqual(['z']);
 });
 test("the tracker sheet opens in the lesson language with the child's marks", async () => {
@@ -126,9 +144,36 @@ test('a reading level back to the current one removes the change', async () => {
   fireEvent.press(await view.findByRole('button', { name: 'Cannot blend' }));
   await waitFor(() => expect(mockDraft.reading_level_changes).toEqual({}));
 });
-test('resumed lesson shows its start date', async () => {
+test('a resumed lesson shows its date above the heading and in the header button', async () => {
   const view = mount(); await ready(view);
-  expect(view.getByRole('button', { name: 'Date, Started Mon 19 Oct' })).toBeTruthy();
+  const header = renderHeader(view);
+  expect(header.getByRole('button', { name: 'Lesson date, Mon 19 Oct' }).props.testID).toBe('wrap-up-date-button');
+  const scroll = view.UNSAFE_getByType(ScrollView);
+  const date = within(scroll).getByTestId('wrap-up-lesson-date');
+  expect(date).toHaveTextContent('Lesson on Mon 19 Oct');
+  expect(within(scroll).getAllByText(/Lesson on|Who knows/)[0]).toBe(date);
+});
+test('a lesson dated today has no date line and its header button says Today', async () => {
+  mockInitial.lesson_date = '2026-10-22';
+  const view = mount(); await ready(view);
+  expect(view.queryByTestId('wrap-up-lesson-date')).toBeNull();
+  expect(renderHeader(view).getByRole('button', { name: 'Lesson date, Today' })).toBeTruthy();
+});
+test('the scroll content has no Date field', async () => {
+  const view = mount(); await ready(view);
+  const scroll = within(view.UNSAFE_getByType(ScrollView));
+  expect(scroll.queryByText('Date')).toBeNull();
+  expect(scroll.queryByRole('button', { name: /^Date,/ })).toBeNull();
+});
+test('the date button is absent until a draft loads and clears when the draft is null', async () => {
+  mockInitial = null;
+  const view = mount();
+  expect(headerRight()).toBeNull();
+  await act(async () => mockSetDraft(draftStart()));
+  await ready(view);
+  expect(renderHeader(view).getByRole('button', { name: 'Lesson date, Mon 19 Oct' })).toBeTruthy();
+  await act(async () => mockSetDraft(null));
+  expect(headerRight()).toBeNull();
 });
 test('empty lesson asks before saving', async () => {
   mockInitial = draftStart({ id: 'draft-1', ticks: { letters: [] } });
@@ -178,7 +223,7 @@ test('authority hides only the controls the EA cannot write', async () => {
   });
   const view = mount(); await ready(view);
   expect(row(view).getByText("Letters can't be updated for this child")).toBeTruthy();
-  expect(row(view).queryByRole('checkbox', { name: 'No one new yet' })).toBeNull();
+  expect(row(view).queryByRole('checkbox', { name: 'Amahle, none of these yet' })).toBeNull();
   expect(row(view).queryByRole('button', { name: /letter tracker/ })).toBeNull();
   expect(row(view).getByRole('button', { name: /reading level/ })).toBeTruthy();
   expect(row(view, 'c2').queryByRole('button', { name: /reading level/ })).toBeNull();
@@ -191,11 +236,15 @@ test('a language without a letter order has no tracker opener', async () => {
 });
 test('the date calendar refuses future dates and saves the chosen past date', async () => {
   const view = mount(); await ready(view);
-  fireEvent.press(view.getByRole('button', { name: 'Date, Started Mon 19 Oct' }));
+  const header = renderHeader(view);
+  fireEvent.press(header.getByRole('button', { name: 'Lesson date, Mon 19 Oct' }));
   expect(await view.findByRole('button', { name: 'Fri 23 October 2026, unavailable' })).toBeDisabled();
+  expect(view.getByRole('header', { name: 'Lesson date' })).toBeTruthy();
   fireEvent.press(view.getByRole('button', { name: 'Tue 20 October 2026' }));
   await waitFor(() => expect(mockDraft.lesson_date).toBe('2026-10-20'));
-  expect(view.getByRole('button', { name: 'Date, Started Tue 20 Oct' })).toBeTruthy();
+  await waitFor(() => expect(view.queryByRole('button', { name: 'Tue 20 October 2026' })).toBeNull());
+  expect(header.getByRole('button', { name: 'Lesson date, Tue 20 Oct' })).toBeTruthy();
+  expect(view.getByTestId('wrap-up-lesson-date')).toHaveTextContent('Lesson on Tue 20 Oct');
 });
 test('confirming an empty lesson normalizes deferred blend and book data to empty arrays', async () => {
   mockInitial.ticks = { letters: [] };
@@ -311,12 +360,13 @@ test.each(['ios', 'android'])('the notes scroll keeps the %s keyboard inset poli
 });
 test('cancelling date browsing keeps the selected day and reopening resets the month', async () => {
   const view = mount(); await ready(view);
-  fireEvent.press(view.getByRole('button', { name: 'Date, Started Mon 19 Oct' }));
+  const header = renderHeader(view);
+  fireEvent.press(header.getByRole('button', { name: 'Lesson date, Mon 19 Oct' }));
   fireEvent.press(await view.findByRole('button', { name: 'Previous month' }));
   expect(view.getByRole('header', { name: 'September 2026' })).toBeTruthy();
   fireEvent.press(view.getByRole('button', { name: 'Cancel' }));
   expect(mockDraft.lesson_date).toBe('2026-10-19');
-  fireEvent.press(view.getByRole('button', { name: 'Date, Started Mon 19 Oct' }));
+  fireEvent.press(header.getByRole('button', { name: 'Lesson date, Mon 19 Oct' }));
   expect(await view.findByRole('header', { name: 'October 2026' })).toBeTruthy();
   expect(view.getByRole('button', { name: 'Mon 19 October 2026' })).toBeSelected();
 });
@@ -338,4 +388,15 @@ test('the Save action stays outside the scroll and scrolling updates the navigat
   expect(navigation.setOptions).toHaveBeenLastCalledWith({ headerScrolled: true });
   fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 0 } } });
   expect(navigation.setOptions).toHaveBeenLastCalledWith({ headerScrolled: false });
+});
+
+
+test('opening the tracker before the teaching order loads keeps its loading state', async () => {
+  mockOrderLoading = true;
+  const view = mount(); await ready(view);
+  fireEvent.press(row(view).getByRole('button', { name: /letter tracker/ }));
+  await act(async () => {});
+  expect(view.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  expect(view.queryByText('No letter set for this class language.')).toBeNull();
+  expect(view.queryByRole('button', { name: 'z, not mastered' })).toBeNull();
 });

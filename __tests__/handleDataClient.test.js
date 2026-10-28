@@ -36,6 +36,21 @@ afterEach(async () => {
   jest.restoreAllMocks();
 });
 
+test('a class upsert sends the letter order editions header alongside authorization', async () => {
+  const transport = jest.fn(async () => response());
+  setLatestAuthSession(session(A, 'token-A'));
+  const handle = await requestOpen({ userId: A, openDatabase, fetchImpl: transport });
+  expect(await handle.enqueueRequest(() => handle.dataClient.from('classes').upsert({ id: 'class-1', name: 'Class' })))
+    .toMatchObject({ error: null });
+  expect(transport).toHaveBeenCalledTimes(1);
+  const [url, init] = transport.mock.calls[0];
+  expect(String(url)).toContain('/rest/v1/classes');
+  expect(init.method).toBe('POST');
+  const headers = new Headers(init.headers);
+  expect(headers.get('Authorization')).toBe('Bearer token-A');
+  expect(headers.get('X-Masi-Letter-Order-Editions')).toBe('2026-10-23');
+});
+
 test('T18: a task paused mid-request is refused at its next send after A signs out and B signs in', async () => {
   const sent = [];
   const enteredSelect = deferred();

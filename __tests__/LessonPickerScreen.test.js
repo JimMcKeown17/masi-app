@@ -92,7 +92,7 @@ testPicker('Up next shows the top-ranked group with its letters and Start lesson
   const view = mount();
   await ready(view);
   expect(view.getByText('Up next')).toBeTruthy();
-  await waitFor(() => expect(view.getByText('Not seen yet · letters a m s t').props.children).toBe('Not\u00a0seen\u00a0yet ·\u00a0letters\u00a0a\u00a0m\u00a0s\u00a0t'));
+  await waitFor(() => expect(view.getByText('Not seen yet · letters s a n d').props.children).toBe('Not\u00a0seen\u00a0yet ·\u00a0letters\u00a0s\u00a0a\u00a0n\u00a0d'));
   fireEvent.press(view.getByRole('button', { name: 'Start lesson' }));
   await waitFor(() => expect(view.routeNames()).toEqual(['Home', 'SessionForm', 'Lesson']));
   expect(view.navigationRef.getCurrentRoute().params).toEqual({ groupId: 'g2', upNextGroupId: 'g2' });
@@ -265,7 +265,7 @@ testPicker('a group with no letters to suggest shows only when it was seen', asy
   await handle.withTransaction(db => db.runAsync("update classes set home_language = 'isiZulu' where id = 'xh-class'"));
   const view = mount();
   await ready(view);
-  await waitFor(() => expect(view.getByText('Not seen yet · letters a m s t')).toBeTruthy());
+  await waitFor(() => expect(view.getByText('Not seen yet · letters s a n d')).toBeTruthy());
   expect(view.getByText('Wed')).toBeTruthy();
   expect(view.queryByText(/^Wed · letters/)).toBeNull();
 });
@@ -338,4 +338,16 @@ testPicker('Not in a group yet shows full names and known classes in locale orde
   fireEvent.press(view.getAllByRole('button', { name: 'Put in a group' })[0]);
   fireEvent.press(await view.findByRole('button', { name: 'New group' }));
   await waitFor(() => expect(mockRoster.makeGroup).toHaveBeenCalledWith(['c7']));
+});
+
+
+testPicker('unknown editions show the update message in the up-next card and group row', async () => {
+  await handle.withTransaction(db => db.runAsync("update classes set letter_order_edition = '2099-01-01' where id = 'class-1'"));
+  const view = mount();
+  await ready(view);
+  // The long message must wrap between its words on a narrow phone.
+  await waitFor(() => expect(view.getByText("Not seen yet · Update the app to teach this class's letters.").props.children)
+    .toBe("Not seen yet · Update the app to teach this class's letters."));
+  expect(view.getByText("Today ✓ · Update the app to teach this class's letters.")).toBeTruthy();
+  expect(view.queryByText(/letters s a n d/)).toBeNull();
 });

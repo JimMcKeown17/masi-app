@@ -46,7 +46,7 @@ describe('loadMasteryState', () => {
     const masteryRead = jest.spyOn(repositories.mastery, 'getLetterMastery');
     const state = await load('zu');
     expect(state).toEqual({
-      assessmentMastered: new Set(), pedagogicalOrder: null,
+      assessmentMastered: new Set(), trackerLetters: null,
       latestAssessment: null, taughtRecords: [],
     });
     expect(resultsRead).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('loadMasteryState', () => {
     await confirm('k', 'af', true);
     await confirm('s', 'en', true);
     const state = await load('af');
-    expect(state.pedagogicalOrder).toEqual(['a','s','m','e','k','i','r','o','n','t','d','l','p','u','b','g','h','v','w','y','f','j','c','z','x','q']);
+    expect(state.trackerLetters).toEqual([...'abcdefghijklmnopqrstuvwxyz']);
     expect(state.latestAssessment.id).toBe(af.id);
     expect(state.assessmentMastered).toEqual(new Set(['l', 'm', 'e']));
     expect(state.taughtRecords.map(r => [r.letter, r.language])).toEqual([['k', 'af']]);
@@ -163,7 +163,7 @@ describe('loadMasteryState', () => {
 });
 
 describe('countMastered', () => {
-  const pedagogicalOrder = ['a', 'b', 'c', 'd'];
+  const trackerLetters = ['a', 'b', 'c', 'd'];
   const change = (mastered, languageCode = 'en', madeAt = '2026-10-19T08:00:00.000Z') => ({ mastered, languageCode, madeAt });
 
   test('counts assessment, pending-add, and stored-taught; pending-remove wins over stored', () => {
@@ -171,7 +171,7 @@ describe('countMastered', () => {
       assessmentMastered: new Set(['a']),
       taughtLetters: new Set(['b', 'c']),
       pendingChanges: { c: change(false), d: change(true) },
-      pedagogicalOrder,
+      trackerLetters,
     });
     // a (assessment) + b (stored) + d (pending add); c removed by pending false
     expect(count).toBe(3);
@@ -182,7 +182,7 @@ describe('countMastered', () => {
       assessmentMastered: new Set(),
       taughtLetters: new Set(['a', 's']),
       pendingChanges: { m: change(true), s: change(false) },
-      pedagogicalOrder: ['a', 'm', 's'],
+      trackerLetters: ['a', 'm', 's'],
     });
     expect(count).toBe(2);
   });

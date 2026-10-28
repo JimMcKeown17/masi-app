@@ -156,7 +156,7 @@ describe('current academic year letter evidence through real SQLite', () => {
       const assessments = await phone.repositories.assessments.getLetterEvidenceResults({ userId: USER });
       const confirmations = await phone.repositories.mastery.getLetterMastery({ childIds: [CHILD] });
       const [rank] = getLetterMasteryRanking([{ id: CHILD, class_id: 'class-1' }], assessments,
-        confirmations, [{ id: 'class-1', home_language: 'English' }]);
+        confirmations, new Map([[CHILD, { id: 'class-1', home_language: 'English' }]]));
       expect(rank.masteredCount).toBe(trackerCount(await load(phone)));
       counts.push(rank.masteredCount);
     }
@@ -171,7 +171,7 @@ describe('current academic year letter evidence through real SQLite', () => {
     expect(state.assessmentMastered).toEqual(new Set(['a', 'm', 's']));
     const assessments = await oldPhone.repositories.assessments.getLetterEvidenceResults({ userId: USER });
     const [rank] = getLetterMasteryRanking([{ id: CHILD, class_id: 'class-1' }], assessments,
-      [], [{ id: 'class-1', home_language: 'English' }]);
+      [], new Map([[CHILD, { id: 'class-1', home_language: 'English' }]]));
     expect(rank.masteredCount).toBe(trackerCount(state));
     expect(rank.masteredCount).toBe(3);
   });

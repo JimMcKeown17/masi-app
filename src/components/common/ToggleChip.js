@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, colors, tints } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
-export default function ToggleChip({ label, selected, onPress, testID }) {
-  return <Pressable testID={testID} accessibilityRole="checkbox" accessibilityLabel={label}
+export default function ToggleChip({ label, accessibilityLabel = label, selected, onPress, testID }) {
+  return <Pressable testID={testID} accessibilityRole="checkbox" accessibilityLabel={accessibilityLabel}
     accessibilityState={{ checked: selected }} onPress={onPress} hitSlop={4}
     style={[styles.chip, selected ? styles.selected : styles.unselected]}>
     {selected ? <Ionicons name="checkmark" size={16} color={colors.onDark} /> : null}

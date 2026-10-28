@@ -7,6 +7,7 @@ module.exports = {
   testMatch: [
     '<rootDir>/__tests__/HomeScreen.test.js',
     '<rootDir>/__tests__/LessonWrapUp.save.test.js',
+    '<rootDir>/__tests__/letterOrderAgreement.test.js',
     '<rootDir>/__tests__/LessonScreen.test.js',
     '<rootDir>/__tests__/LessonFlowNavigation.test.js',
     '<rootDir>/__tests__/LessonPickerScreen.test.js',
@@ -41,6 +42,8 @@ module.exports = {
     '<rootDir>/__tests__/childrenRepository.test.js',
     '<rootDir>/__tests__/childrenHistoryReference.test.js',
     '<rootDir>/__tests__/classesRepository.test.js',
+    '<rootDir>/__tests__/classLetterOrderMigration.test.js',
+    '<rootDir>/__tests__/classLetterOrderSync.test.js',
     '<rootDir>/__tests__/groupsRepository.test.js',
     '<rootDir>/__tests__/sessionsRepository.test.js',
     '<rootDir>/__tests__/sessionGroupSync.test.js',

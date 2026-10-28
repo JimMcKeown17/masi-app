@@ -7,14 +7,14 @@
  * deliberately NOT here: the panel writes immediately, the sheet defers via
  * pendingChanges. Only reads and pure counting live in this module.
  */
-import { PEDAGOGICAL_ORDERS } from './assessmentRegistry';
+import { TRACKER_LETTERS } from './assessmentRegistry';
 import { computeLetterMastery } from './letterMastery';
 
 export async function loadMasteryState({ repositories, userId, childId, languageCode }) {
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
-  if (!pedagogicalOrder) {
+  const trackerLetters = TRACKER_LETTERS[languageCode];
+  if (!trackerLetters) {
     return {
-      pedagogicalOrder: null,
+      trackerLetters: null,
       assessmentMastered: new Set(),
       latestAssessment: null,
       taughtRecords: [],
@@ -27,18 +27,18 @@ export async function loadMasteryState({ repositories, userId, childId, language
     userId, childId, language: languageCode,
   });
   const latestAssessment = letterResults[0] ?? null;
-  const assessmentMastered = computeLetterMastery(letterResults, pedagogicalOrder);
+  const assessmentMastered = computeLetterMastery(letterResults, trackerLetters);
 
   const taughtRecords = (await repositories.mastery.getLetterMastery({
     childId, language: languageCode,
   })).filter(r => r.confirmed);
 
-  return { pedagogicalOrder, assessmentMastered, latestAssessment, taughtRecords };
+  return { trackerLetters, assessmentMastered, latestAssessment, taughtRecords };
 }
 
-export function countMastered({ assessmentMastered, taughtLetters, pendingChanges = {}, pedagogicalOrder }) {
+export function countMastered({ assessmentMastered, taughtLetters, pendingChanges = {}, trackerLetters }) {
   let count = 0;
-  for (const letter of pedagogicalOrder) {
+  for (const letter of trackerLetters) {
     if (assessmentMastered.has(letter)) { count += 1; continue; }
     if (pendingChanges[letter]?.mastered === true) { count += 1; continue; }
     if (pendingChanges[letter]?.mastered === false) continue;
@@ -56,12 +56,12 @@ export function assertTrackerChanges(changesByChild) {
   for (const [childId, changes] of Object.entries(changesByChild ?? {})) {
     for (const [letter, change] of Object.entries(changes ?? {})) {
       const languageCode = change?.languageCode;
-      const order = Object.prototype.hasOwnProperty.call(PEDAGOGICAL_ORDERS, languageCode)
-        ? PEDAGOGICAL_ORDERS[languageCode]
+      const trackerLetters = Object.prototype.hasOwnProperty.call(TRACKER_LETTERS, languageCode)
+        ? TRACKER_LETTERS[languageCode]
         : null;
       const valid = change !== null && typeof change === 'object' &&
         typeof change.mastered === 'boolean' &&
-        Array.isArray(order) && order.includes(letter) &&
+        Array.isArray(trackerLetters) && trackerLetters.includes(letter) &&
         typeof change.madeAt === 'string' && Number.isFinite(Date.parse(change.madeAt));
 
       if (!valid) {

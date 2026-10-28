@@ -6,14 +6,18 @@ import { getContentDiagnostics } from '../src/lessonPlan/packs/contentDiagnostic
 test('reports the release packs and a clean self-check in a normal build', () => {
   expect(getContentDiagnostics()).toEqual({
     previewContentAllowed: false,
-    currentPacks: { xh: 'isixhosa-interim-letters-v1', en: 'english-interim-letters-v1', af: 'afrikaans-interim-letters-v1' },
+    currentPacks: { xh: 'isixhosa-interim-letters-v2', en: 'english-interim-letters-v2', af: 'afrikaans-interim-letters-v2' },
     bundledPackIds: expect.arrayContaining(['isixhosa-candidates-preview-v1', 'english-interim-letters-v1']),
     decodabilitySelfCheck: { vectorVersion: 1, passed: 72, failed: [] },
   });
 });
 
-test('a developer build reports the isiXhosa preview pack', () => {
-  expect(getContentDiagnostics({ allowPreview: true }).currentPacks.xh).toBe('isixhosa-candidates-preview-v1');
+test('a developer build reports the preview packs for the new class edition', () => {
+  expect(getContentDiagnostics({ allowPreview: true }).currentPacks).toEqual({
+    xh: 'isixhosa-candidates-preview-v2',
+    en: 'english-candidates-preview-v1',
+    af: 'afrikaans-candidates-preview-v1',
+  });
 });
 
 test('returns { error } instead of throwing', () => {

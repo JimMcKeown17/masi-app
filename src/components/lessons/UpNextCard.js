@@ -15,7 +15,7 @@ export default React.memo(function UpNextCard({ row, today, onStart }) {
       <View accessible={false} style={[styles.dot, { backgroundColor: row.dotColor }]} />
       <Text style={styles.names}>{row.members.map(child => child.firstName).join(' & ')}</Text>
     </View>
-    <Text style={styles.detail}>{lessonRowDetail(seen, row.nextLetters ?? [])}</Text>
+    <Text style={styles.detail}>{lessonRowDetail(seen, row.nextLetters ?? [], { needsAppUpdate: row.lettersNeedUpdate })}</Text>
     <BrandButton label="Start lesson" onPress={start} />
   </SurfaceCard>;
 });

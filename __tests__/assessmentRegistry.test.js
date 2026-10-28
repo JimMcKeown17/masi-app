@@ -17,7 +17,7 @@ describe('assessment language and standalone test registry', () => {
 
   test('keeps the exact public registry contract without copying package item sets', () => {
     expect(Object.keys(registry).sort()).toEqual([
-      'LANGUAGE_LABELS', 'LETTER_EVIDENCE_CODES', 'PEDAGOGICAL_ORDERS',
+      'LANGUAGE_LABELS', 'LETTER_EVIDENCE_CODES', 'TRACKER_LETTERS',
       'STANDALONE_TESTS', 'languageCodeForHomeLanguage', 'languageList',
     ].sort());
     expect(registry.LANGUAGE_LABELS).toEqual({ en: 'English', xh: 'isiXhosa', zu: 'isiZulu', af: 'Afrikaans' });
@@ -48,29 +48,30 @@ describe('assessment language and standalone test registry', () => {
     }
   });
 
-  test('preserves the exact teaching orders under codes, with no unsupported-language substitution', () => {
-    expect(registry.PEDAGOGICAL_ORDERS).toEqual({
-      en: ['a','m','s','t','n','i','p','c','f','d','h','o','r','b','l','k','e','g','w','v','u','j','y','z','q','x'],
-      xh: ['a','e','i','o','u','b','l','m','k','p','s','h','z','n','d','y','f','w','v','x','g','t','q','r','c','j'],
-      af: ['a','s','m','e','k','i','r','o','n','t','d','l','p','u','b','g','h','v','w','y','f','j','c','z','x','q'],
+  test('tracker letters are alphabetical under language codes without unsupported-language substitution', () => {
+    expect(registry.TRACKER_LETTERS).toEqual({
+      en: [...'abcdefghijklmnopqrstuvwxyz'],
+      xh: [...'abcdefghijklmnopqrstuvwxyz'],
+      af: [...'abcdefghijklmnopqrstuvwxyz'],
     });
-    expect(registry.PEDAGOGICAL_ORDERS.zu).toBeUndefined();
-    expect(registry.PEDAGOGICAL_ORDERS[null]).toBeUndefined();
+    expect(registry.TRACKER_LETTERS.zu).toBeUndefined();
+    expect(registry.TRACKER_LETTERS[null]).toBeUndefined();
   });
 
-  test('every tracker order is a–z once, has a stored label, and the Afrikaans order is frozen', () => {
-    for (const [code, order] of Object.entries(registry.PEDAGOGICAL_ORDERS)) {
-      expect([...order].sort().join('')).toBe('abcdefghijklmnopqrstuvwxyz');
+  test('the tracker letter map and every language set are frozen', () => {
+    expect(Object.isFrozen(registry.TRACKER_LETTERS)).toBe(true);
+    for (const [code, letters] of Object.entries(registry.TRACKER_LETTERS)) {
+      expect(letters.join('')).toBe('abcdefghijklmnopqrstuvwxyz');
       expect(typeof registry.LANGUAGE_LABELS[code]).toBe('string');
+      expect(Object.isFrozen(letters)).toBe(true);
     }
-    expect(Object.isFrozen(registry.PEDAGOGICAL_ORDERS.af)).toBe(true);
   });
 
   test('every class language an EA can choose has a tracker language', () => {
     const codes = HOME_LANGUAGES.map(registry.languageCodeForHomeLanguage);
     expect(codes).toEqual(['xh', 'en', 'af']);
     for (const code of codes) {
-      expect(registry.PEDAGOGICAL_ORDERS[code]).toHaveLength(26);
+      expect(registry.TRACKER_LETTERS[code]).toHaveLength(26);
       expect(CURRENT_ITEM_SETS.letter_sounds[code]).toBeDefined();
       expect(CURRENT_ITEM_SETS.word_reading[code]).toBeDefined();
     }

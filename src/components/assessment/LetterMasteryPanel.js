@@ -7,17 +7,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import LetterToggleGrid from '../sessions/LetterToggleGrid';
 import { letterStateColors } from '../../constants/letterStateColors';
-import { PEDAGOGICAL_ORDERS, languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
-import { loadMasteryState } from '../../utils/masteryState';
+import { TRACKER_LETTERS, languageCodeForHomeLanguage } from '../../utils/assessmentRegistry';
+import { getTeachingOrder, UPDATE_APP_LETTERS_MESSAGE } from '../../utils/letterOrders';
+import { loadMasteryState, countMastered } from '../../utils/masteryState';
 import useLetterMasterySyncRefresh from '../../hooks/useLetterMasterySyncRefresh';
 
 import { useAuth } from '../../context/AuthContext';
 import { useOffline } from '../../context/OfflineContext';
 
 
-export default function LetterMasteryPanel({ child, classItem, isDelivery = true }) {
+export default function LetterMasteryPanel({ child, isDelivery = true }) {
   const { repositories } = useSignedInEA();
-  const { mastery: masteryRepository } = repositories;
+  const { mastery: masteryRepository, classes: classesRepository, assessments: assessmentsRepository } = repositories;
 
   const { user } = useAuth();
   const { refreshSyncStatus, triggerBackgroundSync } = useOffline();
@@ -29,8 +30,10 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
   const [mutationError, setMutationError] = useState(null);
   const [updatingLetter, setUpdatingLetter] = useState(null);
 
-  const languageCode = languageCodeForHomeLanguage(classItem?.home_language);
-  const pedagogicalOrder = PEDAGOGICAL_ORDERS[languageCode];
+  const [lessonClass, setLessonClass] = useState(null);
+  const languageCode = languageCodeForHomeLanguage(lessonClass?.home_language);
+  const teachingOrder = getTeachingOrder(lessonClass, languageCode);
+  const trackerLetters = TRACKER_LETTERS[languageCode];
   const loadGeneration = useRef(0);
   const writeInFlight = useRef(false);
 
@@ -39,12 +42,15 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
     if (!background) setLoading(true);
     try {
 
-      const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({ repositories,
+      const activeClass = await classesRepository.getActiveClassForChild(child.id);
+      const code = languageCodeForHomeLanguage(activeClass?.home_language);
+      const { assessmentMastered: masteredSet, latestAssessment, taughtRecords } = await loadMasteryState({ repositories: { assessments: assessmentsRepository, mastery: masteryRepository },
         userId: user.id,
         childId: child.id,
-        languageCode,
+        languageCode: code,
       });
       if (generation !== loadGeneration.current || writeInFlight.current) return;
+      setLessonClass(activeClass);
       setLatestAssessmentDate(latestAssessment?.assessment_date || null);
       setAssessmentMastered(masteredSet);
 
@@ -56,7 +62,7 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
     } finally {
       if (generation === loadGeneration.current && !writeInFlight.current) setLoading(false);
     }
-  }, [child.id, languageCode, user.id]);
+  }, [child.id, classesRepository, assessmentsRepository, masteryRepository, user.id]);
 
   const onRefresh = useCallback(() => loadData({ background: true }), [loadData]);
   useLetterMasterySyncRefresh(onRefresh);
@@ -69,7 +75,7 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
 
   const handleCellTap = async (letter) => {
     // Assessment-mastered cells are locked
-    if (!isDelivery || !pedagogicalOrder || assessmentMastered.has(letter)) return;
+    if (!isDelivery || teachingOrder.kind !== 'order' || assessmentMastered.has(letter)) return;
     if (updatingLetter || writeInFlight.current) return;
 
     writeInFlight.current = true;
@@ -116,13 +122,16 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
     );
   }
 
-  if (!pedagogicalOrder) {
+  if (teachingOrder.kind === 'update') {
+    return <Text style={styles.missingSetText}>{UPDATE_APP_LETTERS_MESSAGE}</Text>;
+  }
+
+  if (teachingOrder.kind !== 'order') {
     return <Text style={styles.missingSetText}>No letter set for this class language.</Text>;
   }
 
-  const languageLabel = classItem.home_language;
-  const allMastered = new Set([...assessmentMastered, ...Object.keys(taughtLetters)]);
-  const masteredCount = allMastered.size;
+  const languageLabel = lessonClass.home_language;
+  const masteredCount = countMastered({ assessmentMastered, taughtLetters: new Set(Object.keys(taughtLetters)), trackerLetters });
 
   return (
     <View>
@@ -161,7 +170,7 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
       </View>
 
       {!isDelivery ? <View style={styles.readOnlyGrid}>
-        {pedagogicalOrder.map(letter => {
+        {teachingOrder.letters.map(letter => {
           const state = getCellState(letter);
           const palette = letterStateColors[state];
           return <View key={letter} style={[styles.readOnlyTile, {
@@ -171,7 +180,7 @@ export default function LetterMasteryPanel({ child, classItem, isDelivery = true
             <Text style={[styles.readOnlyLetter, { color: palette.text }]}>{letter.toLowerCase()}</Text>
           </View>;
         })}
-      </View> : <LetterToggleGrid letters={pedagogicalOrder} onPressLetter={handleCellTap} tileFor={(letter) => {
+      </View> : <LetterToggleGrid letters={teachingOrder.letters} onPressLetter={handleCellTap} tileFor={(letter) => {
         const state = getCellState(letter);
         const locked = state === 'assessment';
         const disabled = locked || Boolean(updatingLetter);

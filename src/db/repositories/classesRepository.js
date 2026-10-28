@@ -24,6 +24,7 @@ const CLASS_COLUMNS = [
   'teacher',
   'teacher_id',
   'home_language',
+  'letter_order_edition',
   'academic_year',
   'academic_year_id',
   'archived_at',
@@ -88,6 +89,29 @@ export const createClassesRepository = ({ database } = {}) => {
     return row ? mapDomainRow(row) : null;
   };
 
+  const getActiveClassesForChildren = async (childIds) => {
+    const activeClasses = new Map();
+    if (childIds.length === 0) return activeClasses;
+    const db = await resolveDatabase(database);
+    const rows = await db.getAllAsync(`
+      select ccm.child_id, classes.*
+      from child_class_memberships ccm
+      join classes on classes.id = ccm.class_id and classes.archived_at is null
+      left join academic_years ay on ay.id = ccm.academic_year_id
+      where ccm.child_id in (select value from json_each(?)) and ccm.exited_at is null
+      order by ccm.child_id, case when ay.is_active = 1 then 0 else 1 end,
+        ccm.enrolled_at desc, ccm.id asc
+    `, JSON.stringify(childIds));
+    for (const { child_id, ...classRow } of rows) {
+      if (!activeClasses.has(child_id)) activeClasses.set(child_id, mapDomainRow(classRow));
+    }
+    return activeClasses;
+  };
+
+  const getActiveClassForChild = async (childId) => (
+    (await getActiveClassesForChildren([childId])).get(childId) ?? null
+  );
+
   const saveClass = async (classData, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const incomingSyncStatus = classData.sync_status || syncStatusFromSynced(classData.synced);
     const isLocalWrite = !['synced', 'terminal'].includes(incomingSyncStatus);
@@ -108,7 +132,14 @@ export const createClassesRepository = ({ database } = {}) => {
       created_by: classData.created_by || ownerUserId,
       sync_status: incomingSyncStatus,
     });
+    if (isLocalWrite || typeof record.letter_order_edition !== 'string') {
+      delete record.letter_order_edition;
+    }
     if (await serverPullWouldClobberPendingLocal(txn, 'classes', record)) {
+      // The server owns the edition even while the EA's other edits are pending.
+      if (typeof record.letter_order_edition === 'string') {
+        await txn.runAsync('update classes set letter_order_edition = ? where id = ?', record.letter_order_edition, record.id);
+      }
       return false;
     }
     await upsertDomainRecord(txn, {
@@ -172,6 +203,7 @@ export const createClassesRepository = ({ database } = {}) => {
       synced: false,
       last_sync_error: null,
     });
+    delete record.letter_order_edition;
     await upsertDomainRecord(txn, {
       tableName: 'classes',
       columns: CLASS_COLUMNS,
@@ -283,6 +315,8 @@ export const createClassesRepository = ({ database } = {}) => {
   return {
     getClasses,
     getClassById,
+    getActiveClassForChild,
+    getActiveClassesForChildren,
     saveClass,
     saveServerClassRows,
     updateClass,

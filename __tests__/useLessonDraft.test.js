@@ -11,6 +11,7 @@ import * as engine from '../src/lessonPlan/engine/lessonPlan';
 import { planForSave } from '../src/lessonPlan/engine';
 import { saveLesson } from '../src/services/lessonSave';
 import * as inputs from '../src/lessonPlan/inputs/lessonInputs';
+import * as previewContent from '../src/lessonPlan/packs/previewContent';
 
 let handle, start;
 // Dispose mounted screens before the global default-handle teardown publishes closed.
@@ -54,6 +55,22 @@ beforeEach(async () => {
     members: [{ id: 'c1', class_id: 'class-1' }, { id: 'c2', class_id: 'class-1' }], upNextGroupId: 'group-1' };
 });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+
+for (const allowPreview of [false, true]) {
+  testHook(`a new isiXhosa draft uses its edition pack with preview ${allowPreview}`, async () => {
+    jest.spyOn(previewContent, 'isPreviewContentEnabled').mockReturnValue(allowPreview);
+    start = { ...start, group: { ...start.group, class_id: 'class-2' } };
+    const { result } = mount();
+    expect(result.current.teachingOrder).toBeNull();
+    await ready(result);
+    expect(result.current.teachingOrder).toMatchObject({ kind: 'order', id: 'isixhosa-order-2026-10-23' });
+    const expected = allowPreview ? 'isixhosa-candidates-preview-v2' : 'isixhosa-interim-letters-v2';
+    expect(result.current.draft.pack_id).toBe(expected);
+    expect(result.current.lessonInput.pack.id).toBe(expected);
+    await change(result, transitions.setNotes, 'Persist the selected edition pack');
+    expect((await handle.repositories.lessonDrafts.getActive()).pack_id).toBe(expected);
+  });
+}
 
 // Control notifications independently of the transactional page/cursor write.
 const historyVersions = () => {
@@ -319,7 +336,7 @@ testHook('a mixed-class group needs a class; choosing stores class, language, pa
   await change(result, transitions.chooseClass, { classId: 'class-2' });
   await ready(result);
   const row = await handle.repositories.lessonDrafts.getActive();
-  expect(row).toMatchObject({ class_id: 'class-2', language_code: 'xh', pack_id: 'isixhosa-interim-letters-v1',
+  expect(row).toMatchObject({ class_id: 'class-2', language_code: 'xh', pack_id: 'isixhosa-interim-letters-v2',
     plan: { present_child_ids: ['c1', 'c2'] } });
   expect(result.current.needs).toBeNull();
 });
@@ -331,7 +348,7 @@ testHook('a class with no language needs a language (P6)', async () => {
   await change(result, transitions.chooseLanguage, { languageCode: 'en' });
   await ready(result);
   expect(await handle.repositories.lessonDrafts.getActive()).toMatchObject({
-    class_id: 'class-1', language_code: 'en', pack_id: 'english-interim-letters-v1', plan: { made_on: '2026-10-19' },
+    class_id: 'class-1', language_code: 'en', pack_id: 'english-interim-letters-v2', plan: { made_on: '2026-10-19' },
   });
 });
 testHook('engine functions run once per change', async () => {

@@ -25,9 +25,9 @@
  * @property {string} groupId              the lesson's group (rotation seed)
  * @property {string|null} upNextGroupId   rankGroups().upNextGroupId when the picker opened
  * @property {string|null} languageCode    the lesson class's language code (C18): languageCodeForHomeLanguage(class.home_language), 'xh' | 'en' | 'af' (after AF) | 'zu' | null. null = unknown; never defaulted to 'en'.
- * @property {Object|null} pack            spec §4.1 pack: A1's getPack(languageCode, options), or getPackById(draft.pack_id, options) for a resumed draft; null → no_pack
+ * @property {Object|null} pack            spec §4.1 pack: getPackForOrder(teachingOrder.id, options), or getPackById(draft.pack_id, options) for a resumed draft; null → no_pack
  * @property {PackIndex|null} [packIndex]  optional precomputed content for this exact pack object
- * @property {string[]|null} alphabet      the language's 26 letters for the manual letter picker: PEDAGOGICAL_ORDERS[languageCode] (src/utils/assessmentRegistry.js:19-22; 'af' arrives with AF), else null. Used only when there is no usable pack.
+ * @property {string[]|null} alphabet      the class's resolved teaching-order letters, or null without a supported order. Used only when there is no usable pack.
  * @property {boolean} isEcd               the lesson class's grade === 'ECD' (C8; classes.grade, GRADES in src/constants/options.js:1)
  * @property {ChildInput[]} presentChildren   present only (C1), in screen order, including children added for the day
  * @property {SessionRecord[]} sessions    the phone's sessions; the engine applies the §7.3 window itself

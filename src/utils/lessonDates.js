@@ -1,3 +1,4 @@
+import { UPDATE_APP_LETTERS_MESSAGE } from './letterOrders';
 import { formatSessionDate, parseDateKey } from './sessionDateFormat';
 
 // Each dot binds to the detail after it and spaces inside a detail never break, so a wrapped
@@ -26,7 +27,9 @@ export const lessonHeaderSeenLabel = (lastSeenOn, today) => {
   return `last seen ${lastSeenLabel(lastSeenOn, today)}`;
 };
 // A group with no suggested letters (isiZulu, a class still to choose) shows only when it was seen.
-export const lessonRowDetail = (seen, letters = []) => joinDetail([seen,
-  letters.length ? `letters ${letters.join(' ')}` : null]);
-export const startedLabel = (lessonDate, today) => lessonDate === today
-  ? null : `Started ${formatSessionDate(lessonDate, 'pill')}`;
+// The update message is a sentence, so it wraps between its words; only its dot stays bound.
+export const lessonRowDetail = (seen, letters = [], { needsAppUpdate } = {}) => needsAppUpdate
+  ? [joinDetail([seen]), UPDATE_APP_LETTERS_MESSAGE].filter(Boolean).join(' · ')
+  : joinDetail([seen, letters.length ? `letters ${letters.join(' ')}` : null]);
+export const lessonDateLabel = (lessonDate, today) => lessonDate === today
+  ? null : formatSessionDate(lessonDate, 'pill');

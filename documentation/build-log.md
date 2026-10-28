@@ -5202,6 +5202,323 @@ force-quit offline; the Notes keyboard; "+ Record" resume; and an offline save t
 confirmed on the server. Device gates V3, V5, V6, V7 and V8 record it, and the roadmap entry is
 updated.
 
+### 2026-10-27 — Letter order editions
+
+**Scope and base.** Letter orders sits on the lesson-flow branch after its conflict-free rebase
+onto main `1401b6d` (#108). Tasks 1–7 are committed through `546bbd9`; Task 8 (the commit that adds
+this section) adds the agreement and leftovers guards and the standing-document updates. The server owns each
+class's edition (`2026-10-23`), the phone accepts its authoritative value without uploading it,
+and all teaching surfaces resolve edition plus language through the unchanged books registry.
+Packs are selected by order id. Mastery counts still use each language's 26 tracker letters;
+drafts and saved sessions keep tap order while Wrap up and the receipt display class order.
+Decision and trade-offs: [ADR-0011](../docs/adr/0011-letter-order-edition-per-class-set-by-server.md).
+
+**Check first, supplied historical result.** On 2026-10-26 at `04de20a`, all nine comparisons in
+the plan's Task 1 Step 1 matched: the three legacy constants equalled their `*-order-legacy`
+entries; each v1 release pack's steps equalled its mapped order, and the isiXhosa preview v1's
+sounds equalled the 2026-10-18 order's; every order covered `a`–`z` once. Dependencies were
+already installed by the orchestrator, so Task 1 skipped `npm ci`.
+
+**Committed task gates, supplied by the orchestrator.** These are the results on the named
+commits, not new executions on those historical revisions. Every Jest and harness command used
+Node 20.19.4 (`PATH=/Users/jimmckeown/.nvm/versions/node/v20.19.4/bin:$PATH`).
+
+| Task | Commit | Gate and result | Evidence owner / notes |
+| --- | --- | --- | --- |
+| 1 — Vendored registry and resolver | `9560a7a` | `npm test -- __tests__/letterOrders.test.js`: 14 tests passed. | Supplied orchestrator record. Registry is deep-frozen and pinned byte for byte. |
+| 2 — Server column, check and trigger | `451ccfb` | `npm test -- __tests__/letterOrderMigration.test.js`: 5 tests passed. `npm run verify:letter-order:postgres`: all 10 checks passed on local PostgreSQL 17, 2026-10-27. | Orchestrator verified the PostgreSQL gate. Removing the trigger's UPDATE rule made `app-update-cannot-change` fail, proving that case is not vacuous. |
+| 3 — Phone storage, pull and upload | `937ad4b` | Full `npm test`: 449 suites / 6,898 tests passed. `npm run test:integration`: 86 suites / 1,175 tests passed. | Codex; focused orchestrator reruns passed. |
+| 4 — Packs carry their order | `f393cfe` | Full `npm test`: 449 suites / 6,937 tests passed. Six pack and engine suites: 258 tests passed. | Full run: Codex. Six-suite focused run: orchestrator. |
+| 5 — Lesson flow reads the class's order | `8520893` | Full `npm test`: 449 suites / 6,941 tests passed. `npm run test:integration`: 86 suites / 1,196 tests passed. | Orchestrator, after the picker wrapping fix below. |
+| 6 — Trackers and the 26-letter set | `99535ac` | Full `npm test`: 449 suites / 6,956 tests passed. `npm run test:integration`: 86 suites / 1,200 tests passed. | Codex; focused orchestrator reruns passed. The source leftovers check excludes the vendored registry's provenance strings. |
+| 7 — Session complete receipt | `546bbd9` | Full `npm test`: 449 suites / 6,959 tests passed. `npm run test:integration`: 86 suites / 1,200 tests passed. | Codex. Orchestrator hardened `sortLettersByOrder`: a missing order is treated as no order. |
+
+**Migration number correction.** The plan originally chose `20261026120000`; main's #108 used
+it for `20261026120000_welaplus_2026_1_default.sql`. The letter order migration therefore moved
+to `20261027120000_class_letter_order_edition.sql`. The disposable PostgreSQL harness replays
+every lower-version migration, including the WelaPLUS migration, before applying it. No hosted
+migration or Supabase action ran in Task 8.
+
+**Preview hash correction.** An earlier preview hash table described intermediate bytes that
+were never committed. The correct pin is books `6cd5e64`; the three working-tree exports were
+copied unchanged, with the following SHA-256 values. Task 8 rechecked all four files with
+`shasum -a 256` and matched the plan's Global Constraints:
+
+| File | SHA-256 |
+| --- | --- |
+| `src/constants/contracts/letter-orders-v1.json` (books `9cd66f8`) | `33af38be2ceeb45051660ff790774e5aa55299fce8091c60ed055e166cfd2490` |
+| `src/lessonPlan/packs/isixhosa-candidates-preview-v2.json` | `7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366` |
+| `src/lessonPlan/packs/english-candidates-preview-v1.json` | `e430d4887104a04db6295bfd407891c3b0a4911c6ba99ab1d243684613364abd` |
+| `src/lessonPlan/packs/afrikaans-candidates-preview-v1.json` | `76d4aec38b0bd8748bd9bdfd9e9aaa0df3bbaae3c3671d0c4086977cbe800ba7` |
+
+**Orchestrator fix to Task 5.** The plan's `lessonRowDetail` used
+`joinDetail([seen, UPDATE_APP_LETTERS_MESSAGE])`. `joinDetail` turns every space into a
+non-breaking space, so the 45-character update message could not wrap in a picker row at 360 dp.
+`lessonRowDetail` now binds only the dot to the message. Tests in `lessonDates.test.js` and
+`LessonPickerScreen.test.js` compare the raw text: `getByText` treats non-breaking spaces as
+spaces, so a plain text match cannot detect this. Task 8 records this supplied fix; it does not
+change the lesson code again.
+
+**Task 8 behavior and test-first evidence, measured on Task 8's tree (on top of `546bbd9`).** The agreement guard uses real SQLite and the public picker loaders,
+`loadLessonParticipants`, `useLessonDraft`, the rendered mastery panel's active-class loader,
+and Wrap up on the test stack through Save and the actual Session complete route params. Each
+language has one class and a two-child group, complete empty history, a first-step suggestion,
+full tracker order and five reverse-tapped letters. It checks the heading and both children's
+chips, receipt display order and preserved tap order in storage. The initial test fixture lacked
+an EA class assignment, so mastery completeness was false for all three cases; adding the real
+assignment corrected the fixture without relaxing the completeness assertions.
+
+The plan's Step 3 expects both new guards to pass immediately because Tasks 1–7 implement the
+behavior. Controlled mutation runs additionally established RED before the final GREEN runs:
+
+- `npm test -- __tests__/letterOrderLeftovers.test.js`: temporary test-only mocks injected
+  `PEDAGOGICAL_ORDER`, word-matched `LETTER_ORDER`, exact `getPack(` and an `en` current-pack key.
+  All 4 checks failed with the injected lines/key named in the assertions (1 failed suite).
+- `npm run test:integration -- __tests__/letterOrderAgreement.test.js`: a temporary test-only
+  mock removed the receipt builder's teaching order. All 3 language cases failed on the actual
+  receipt params, which kept reverse tap order instead of class order (1 failed suite).
+- Both probes were removed, with no production source edits. Final focused GREEN:
+  `npm test -- __tests__/letterOrderLeftovers.test.js`: 1 suite / 4 tests passed;
+  `npm run test:integration -- __tests__/letterOrderAgreement.test.js`: 1 suite / 3 tests passed.
+- `npm run test:integration -- --listTests | grep letterOrderAgreement` printed exactly one line,
+  confirming the real-SQLite suite is registered in the explicit integration `testMatch` list.
+
+All commands above used the Node 20 PATH prefix.
+
+**Full Task 8 gates, measured on Task 8's tree (Codex).**
+Runtime verified as `v20.19.4`. Both commands used
+`PATH=/Users/jimmckeown/.nvm/versions/node/v20.19.4/bin:$PATH`:
+
+| Command | Result |
+| --- | --- |
+| `npm test -- --runInBand` | 451/451 suites, 6,966/6,966 tests and 14/14 snapshots passed; exit 0 (366.677 s). |
+| `npm run test:integration` | 87/87 suites and 1,203/1,203 tests passed; exit 0 (105.359 s). |
+
+`git diff --check` passed, and all five new
+local documentation links resolve. The source checks returned no matches:
+`rg -n 'PEDAGOGICAL_ORDER' src --glob '!letter-orders-v1.json'`,
+`grep -rnw LETTER_ORDER src`, and `rg -n 'getPack\(' src`. The vendored registry's three
+provenance strings remain untouched; its SHA-256 still matches the pin above.
+
+**Remaining gates.** This is local Jest/SQLite evidence. PostgreSQL results above are supplied
+Task 2 evidence, not a Task 8 rerun. Task 9's types, content, PostgreSQL, adversarial review,
+hosted apply, EAS installation and physical device gates remain outside this task. In particular,
+the migration must precede installation, schema 19 prevents downgrade to older builds, and test
+phones must finish or discard old v1 drafts. The roadmap retains the two content follow-ups:
+Masi's second-edition schedule and readers for the new-order previews. No dependencies were
+changed.
+
+**Task 9 release gates on `d787816` (orchestrator, Node 20.19.4).**
+
+| Gate | Result |
+| --- | --- |
+| `npm test` | 451/451 suites, 6,966 tests passed |
+| `npm run test:integration` | 87/87 suites, 1,203 tests passed |
+| `npm run test:types` | clean |
+| `node --test content/egra/verify.cjs` | 5 pass, 0 fail |
+| All ten PostgreSQL harnesses on a disposable local PostgreSQL 17 (`PGTZ=UTC`) | every case passed: history authorization, upload contract, organisation label, support incident, assessment results (113), assessment history (144), EA access (43), letter mastery (20), session group (36), letter order (10) |
+
+**Codex adversarial review (`gpt-6-astra`) of `feat/lesson-flow...d787816`: approve, no material
+findings.** It traced server ownership, pending-edit protection, missing or null server editions,
+order-based pack selection with the preview gate, and every production caller of
+`getTeachingOrder`, and found no path that shows a user the missing-edition `TypeError`. The plan
+stops reviewing when a round finds nothing above low, so one round closed it.
+
+**Read-only staging preflight (2026-10-27, `project_ref=segygjzpujphwvrubusm`), from this
+worktree through the helper.** `sqlite:staging:check` and `sqlite:staging:link` pointed at the
+SQLite backend. `sqlite:staging:migrations`: all 35 earlier migrations match, including #108's
+`20261026120000`; `20261027120000` is the only local migration not applied, and no remote-only
+migration exists. #108's migration does not touch `classes`, so the 2026-10-26 live table check
+still holds. Classes: 15, all active (isiXhosa 9, English 2, Afrikaans 2, isiZulu 1, no language
+1); `max(updated_at)` 2026-10-27 16:43:28.764+00, `sum(row_version)` 21. English and Afrikaans
+classes changed that afternoon (other testing), so the apply is verified against a per-class
+snapshot of `id`, `updated_at` and `row_version` taken at the same time, not only the totals.
+Nothing on the server was changed. The hosted apply waits for Jim's yes.
+
+**Hosted apply (Jim's yes, 2026-10-28, `segygjzpujphwvrubusm`), from this worktree.**
+`sqlite:staging:dry-run` listed exactly `20261027120000_class_letter_order_edition.sql`. A fresh
+per-class snapshot just before the push matched the preflight one (no class changed in between).
+`sqlite:staging:push` applied it; its two NOTICEs are the first-run `drop ... if exists` skips.
+Read-only verification: all 15 classes hold `2026-10-23`; the column is `text`, not null, with
+no default; `classes_letter_order_edition_known` is `CHECK (letter_order_edition = '2026-10-23')`;
+trigger `classes_letter_order_edition` is `BEFORE INSERT OR UPDATE`; `anon` and `authenticated`
+cannot execute its function; `20261027120000` is recorded in `schema_migrations`. Every class's
+`updated_at` and `row_version` is identical to the snapshot, so the backfill rewrote no row. The
+temporary `.env.local` link was removed afterwards.
+
+**EAS builds (2026-10-28), `preview-content` only (Jim: EAS credits).** Both from `e4f21d2`, app
+version 1.3.0: Android build 53 (`88e773d8-c49b-4bfa-afe2-e44b58f6cabd`) and iOS build 24
+(`efe3f6b1-20c7-4593-81dd-9044ea9c9e9d`). Before installing, the APK's bundle was checked for
+`X-Masi-Letter-Order-Editions`, `2026-10-23` and `pack_letter_order`. EAS reported 95% of the
+included build credits used.
+
+**Device run, Galaxy A03s (2026-10-28, build 53, default text size).** Installed over main's build
+52 with `adb install -r`, which kept TestB's data and moved the phone from schema 18 to 19. Home
+showed everything synced and no open lesson before and after. One account, TestB, covers every
+case: isiXhosa 1C, English ZEN, Afrikaans ZAF and isiZulu ZZU. ZEN, ZAF and ZZU had no group, so
+each child was put in a new group from the picker. Lessons were recorded without clocking in. The
+taught letters were tapped out of class order on purpose, plus one letter from further along the
+order.
+
+| Language (class) | Picker | Lesson screen | Wrap up and tracker sheet | Receipt | Mastery panel |
+| --- | --- | --- | --- | --- | --- |
+| isiXhosa (1C, two children) | `o m l a` | `o m l a`; letter sheet in class order | "Who knows o m l a e" (tapped `a l m o e`); sheet `o m l a k u / e n i z s t / …` | `o m l a e` | isiXhosa, 2/26, class order |
+| English (ZEN) | `s a n d` | `s a n d`; "Review: k" (assessed) | "Who knows s a n d e" (tapped `d n s a e`); sheet `s a n d i t / p e l o c k / …`, k locked | `s a n d e` | English, 5/26, class order |
+| Afrikaans (ZAF) | `a e k n` | `a e k n`; "Review: o i y u" (assessed) | "Who knows a e k n d" (tapped `n k e a d`); sheet `a e k n o s / p t d l r h / …`, o i y u locked | `a e k n d` | Afrikaans, 6/26, class order |
+| isiZulu (ZZU) | "Not seen yet", no letters | not run | not run | not run | "No letter set for this class language." |
+
+After the English lesson the picker suggested `i t`, the next two letters Emma did not know
+(`SUGGESTED_LETTER_COUNT` is 2). Preview lessons say "No books for … yet" because the new-order
+previews have no readers, as the plan expected (roadmap follow-up).
+
+Read-only server check afterwards. The three sessions synced with their classes. Each
+`activities.lesson.plan.suggested_letters` holds its first step, and `activities.letters_focused`
+keeps tap order (`d n s a e`, `n k e a d`, `a l m o e`), so class order is display-only as designed.
+`activities.lesson.pack_id` is `english-candidates-preview-v1`, `afrikaans-candidates-preview-v1`
+and `isixhosa-candidates-preview-v2`; each pack declares its language's `2026-10-23` order. A
+per-class snapshot of all 15 classes (`id`, `updated_at`, `row_version`) is identical to the one
+taken after the apply, so the phone rewrote no class. Phone settings were never changed (font 1.0,
+density 280, Wi-Fi on, airplane mode off, automatic time on), and the phone was handed back free.
+
+Found, not caused by this branch: Session complete's sync line cuts off descenders. See the Bug And
+Gap Register, 2026-10-28.
+
+Remaining in Step 6: Jim's iPhone pass on iOS build 24.
+
+### 2026-10-28 — Wrap up: "None of these yet" and the date button (Jim's iPhone pass)
+
+**Jim's notes on iOS build 24, and his choices.**
+- **Button copy.** Wrap up's per-child "No one new yet" read as if it were about the whole group.
+  It now says **"None of these yet"**, and VoiceOver/TalkBack read "Amahle, none of these yet".
+  `ToggleChip` gained an optional `accessibilityLabel`; the other callers are unchanged.
+- **Lesson date.** The full-width Date field moved to a round calendar button beside the Wrap up
+  title (`headerRight`, `IconCircleButton`). When the lesson's date is not today, "Lesson on Mon
+  19 Oct" shows at the top of the screen. `startedLabel` became `lessonDateLabel`. The date sheet,
+  its future-date refusal and C14's plan drop are unchanged.
+- **Session clock.** Masi has never had one, and main's old Record form didn't either; Zazi has.
+  Jim: leave it out of this release. It is on the roadmap (`e0bf1b4`).
+- **Saved timestamps (Jim's question).** Read-only staging check of this morning's three A03
+  lessons: `session_date` is the chosen day, `created_at` is the phone's clock at Save, and
+  `updated_at` is the server's on upload, about 2 s later. A back-dated lesson is one whose
+  `session_date` is earlier than the `created_at` date. `started_at` and `ended_at` are always
+  null.
+
+**Build and gates.** Codex built it test first. The focused suites failed first (10 tests,
+including `lessonDateLabel is not a function` and "Unable to find … Lesson date, Mon 19 Oct").
+The tests now mount the real `ScreenHeader`, so the header button is exercised as a user would.
+Codex's full run: 451/451 suites, 6,970 tests; types clean. After review, the orchestrator changed
+`hasDraft` to `Boolean(draft)` to match the screen's other draft checks. The four affected
+suites were rerun: 72/72 tests passed. The spec §5.3 copy and Date bullet were updated in the
+same change. Device check: next build.
+
+### 2026-10-28 — Jim's iPhone pass on iOS build 24 (letter orders Step 6 done)
+
+Jim ran the five iPhone-only checks on build 24 (`e4f21d2`, before the Wrap up change above), and
+all five passed:
+1. Swiping back from the Lesson screen asks "Leave this lesson?" and keeps the lesson.
+2. Force-quitting mid-lesson, then reopening in airplane mode, shows "Lesson in progress …
+   Resume" first on Home, with the ticks kept.
+3. In Wrap up, the keyboard doesn't cover Notes, and Save stays reachable.
+4. "+ Record" with a lesson open goes straight back into that lesson.
+5. Saving offline, then reconnecting, uploads the lesson.
+
+**Server check for 5 (read-only, staging).** The newest lesson of the day is account Test, class
+1A, Group 5, letters `[o k]`, 3 attendees (Alunamida, Nwabisa, Xola), and one confirmed tracker
+mark (Alunamida, `o`). Phone `created_at` was 14:29:10. Server `updated_at` was 14:29:25, and the
+mark arrived at 14:29:25.8. Earlier online saves that day took 1–3 s, so the 15 s gap fits a save
+made offline and uploaded on reconnect. Jim did not name the group, so the match is inferred from
+timing.
+
+With the A03 run, this completes Step 6. The Wrap up change and the assessment finish flow (#114)
+still need their device smoke on the next build.
+
+### 2026-10-28 — Letter orders rebased onto the new lesson flow; the ranking uses the active class
+
+**Rebase (Jim's yes, 2026-10-28).** The branch's 24 commits now sit on `feat/lesson-flow`, which is
+main `561f668` plus the known-letters fix (see the lesson flow entry of the same date). Jim also
+chose to hold the 1.4.0 pilot build until both branches merge. Backups of the old tips:
+`backup/lesson-flow-cd28ffe` and `backup/letter-orders-2640a2a`.
+- **Two commits conflicted.** The trackers commit conflicted with #113 in `letterMastery.js`,
+  `masteryState.js`, `dashboardStats.js`, `knownLetters.js` and five tests. The docs commit
+  conflicted in `CONTEXT.md` and this log.
+- **The changes were independent.** #113 changed *which result decides* each letter (the newest
+  result that reached it). This branch changed *which letters are checked* (`TRACKER_LETTERS`,
+  a–z, in place of `PEDAGOGICAL_ORDERS`). Each resolution keeps #113's logic with this branch's
+  names.
+- **One silent leftover.** #113's new `letterMastery.latestEvidence.test.js` still imported
+  `PEDAGOGICAL_ORDERS`, which the trackers commit deletes. It now uses `TRACKER_LETTERS` (same 26
+  letters), in that commit.
+- **Process.** The first attempt was paused when the lesson flow's runtime break turned up. Its
+  resolutions were recorded with `git rerere` and replayed byte for byte on the second attempt.
+  The affected suites passed at the trackers commit (8 suites, 118 tests).
+- **Gates at `bcc9283`.** Unit 452/7,029; integration 87/1,205; types and content clean.
+
+**Review round 1 (Codex adversarial, `gpt-6-astra`, base `feat/lesson-flow`, using `git range-diff`
+against the backups): needs attention, one medium.**
+- The range-diff shows the resolutions keep per-letter newest evidence, the 26-letter set, class
+  order display, counts filtered to the tracker letters, `assertTrackerChanges` and "Last
+  assessed". No `src/` caller of a removed name remains.
+- **The finding was not from the rebase.** This branch made the tracker panel take the class from
+  the child's active membership (plan Task 3/6). The Letter mastery ranking still took it from
+  `children.class_id`, and passed that class to the tracker route. When the two differ (a
+  server-side class move or a new-year membership), the same evidence counted 1/26 in the
+  ranking and 3/26 on the tracker. On main they agreed only because both used `children.class_id`.
+
+**Fix (`7a6d31f`, built by Codex from a work order, reviewed here).**
+- `classesRepository.getActiveClassesForChildren(childIds)` reads every child's active class in
+  one `json_each` query, with the same order as before. `getActiveClassForChild` now delegates to
+  it, so the rule lives in one place.
+- `getLetterMasteryRanking` takes that Map. `LetterMasteryRankingScreen` loads it with the
+  evidence and uses it for both the count and the tracker route.
+- A child with no active class shows 0/26 and its row can't open the tracker, which matches the
+  panel's "No letter set".
+- Test first: 7 repository, 2 ranking and 3 screen/agreement tests failed. The real-SQLite
+  agreement test failed with "Expected: 3, Received: 1" against the old ranking, while the
+  mounted panel showed "3 / 26 letters mastered".
+- **Gates (rerun here, Node 20):** unit **452/452 suites, 7,041 tests**; integration **87/87
+  suites, 1,215 tests**; types clean; content 5/5.
+- **Docs:** `CONTEXT.md` (trimmed to plain terms), ADR 0011, a dated plan note and the RLS/sync
+  contract map.
+
+**Review round 2 (base `bcc9283`): the ranking fix is correct; one more medium, recorded, not
+fixed.**
+- The old single-child query and the batched query picked identical classes for 1,009 synthetic
+  children: ties, archived classes, exited memberships, inactive years and missing class rows.
+  Ranking and tracker both counted 3/26. Dropping `useClasses` loses no refresh, and the docs
+  agree.
+- **Finding.** Class Detail lists children by `children.class_id` (`ClassesContext.js:596`).
+  Child Results then starts "Assess now" in that class's language (`ChildResultsScreen.js:43`),
+  while its embedded letter panel uses the active membership. With a stale `class_id`, the EA
+  could give a test in the old class's language.
+- **Why not fixed now.** Read-only staging check (2026-10-28): of 46 children with a class, **0**
+  have a `class_id` different from their active membership, and none has one without the other.
+  Phone writes change both in one transaction (`childrenRepository.js:543`), and nothing else
+  writes memberships today. A fix means moving every delivery class list onto memberships, a
+  cross-cutting change before the pilot for a state the data doesn't contain.
+- **Revive when** anything other than the app can write `child_class_memberships` without
+  `children.class_id`: a head-office tool, or a new-year rollover seed. Then give the delivery
+  lists the same active-membership rule (roadmap). The loop stops here, per Jim's rule on rare
+  edge cases.
+
+**Rebased again onto main `2bc6c46` (#115, the assessment leave sheet; Jim's yes, 2026-10-28).**
+- Jim had #115 merged first, so each branch is force-pushed only once.
+- Lesson flow: two of its docs commits conflicted, only where both sides added sections at the end
+  of this log and `LEARNING.md`. Both sides were kept, main's first. Letter orders then replayed
+  with no conflicts.
+- On each branch, the files that changed from the previous tip (backups
+  `backup/lesson-flow-53f1742` and `backup/letter-orders-bd1be0e`) are exactly #115's files, so
+  no lesson or letter code moved.
+- Lesson flow `de75f52` gates: unit 447/6,954; integration 84/1,157; types and content clean.
+- Letter orders `2ae95b2` gates: unit 453/7,080; integration 87/1,215; types and content clean.
+
+**Lesson flow merged; letter orders onto main (Jim's yes, 2026-10-28).**
+- Jim accepted the product choices P1–P12 through his 2026-10-28 iPhone review.
+- #97's CI passed on `de75f52` (9m36s), and it was squash-merged as main `a341535`.
+- Main's tree equals `de75f52`'s tree, so the merge carried exactly what was tested.
+- Letter orders was rebased with `--onto origin/main de75f52`: 27 commits, no conflicts.
+- Its tree equals the pre-rebase tip `bcdb6e9` (backup `backup/letter-orders-bcdb6e9`), so the
+  gates above still hold without a rerun.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -5414,6 +5731,7 @@ updated.
 
 | Date | Gap/Bug | Resolution | Reuse Note |
 | --- | --- | --- | --- |
+| 2026-10-28 | **Session complete's sync line cuts off descenders** on the Galaxy A03s (build 53): the "y" and "g" of "Syncing…" and "All saved and synced" lose their tails, and the cloud glyph sits above the text's centre. `SyncStatusLine` puts an 18 px inline View inside a `textNote` Text; that is the likely cause, not yet verified. The component is unchanged from main's #84, so main builds should show it too. | Open; outside letter orders, not fixed on `feat/letter-orders`. GitHub issue pending Jim's OK. | Check descenders in a zoomed screenshot; an inline View inside Text can change the line box on Android. |
 | 2026-10-22 | **The app log loses its last 30 s when Android kills the app.** `logger.js` flushes every 30 s (`FLUSH_INTERVAL`) and on backgrounding only, so a force-stop, crash or low-memory kill drops the buffered lines. On the A03s, two killed runs lost every line, including `Running "main"`. | Open: #93. | Write warnings and errors straight through, flush on a shorter cycle, or persist incrementally, so a killed or crashed run keeps its last lines. |
 | 2026-10-22 | **A brand-new sign-in blocks Record for 35–45 s with "No active programme… contact your supervisor".** The EA's programme simply has not downloaded yet; the copy blames a missing assignment. | Open: #94. | Distinguish "still loading" from "not assigned"; consider loading the staff programme first in the domain pull. |
 | 2026-10-22 | **A Head Office reassignment appeared on the receiving phone only after Sync now** in the Gate 4 run; a cold start and a pull-to-refresh on Children did not bring the moved child in on either EA. | Open: #95; needs a reproduction with logs. | A roster change should reach the phone on its next ordinary pull. |

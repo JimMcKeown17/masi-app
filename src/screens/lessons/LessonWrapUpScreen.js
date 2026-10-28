@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -15,8 +15,9 @@ import { saveLesson } from '../../services/lessonSave';
 import * as transitions from '../../lessonPlan/lessonDraftState';
 import { deriveSessionReadingLevel } from '../../lessonPlan/engine';
 import { loadMasteryState } from '../../utils/masteryState';
-import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
-import { startedLabel } from '../../utils/lessonDates';
+import { TRACKER_LETTERS } from '../../utils/assessmentRegistry';
+import { sortLettersByOrder } from '../../utils/letterOrders';
+import { lessonDateLabel } from '../../utils/lessonDates';
 import { buildSessionCompleteParams } from '../../utils/sessionCompleteView';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { isStaleActorError } from '../../session/staleActor';
@@ -26,7 +27,7 @@ import { READING_LEVEL_OPTIONS } from '../../constants/literacyConstants';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import WrapUpChildRow from '../../components/lessons/WrapUpChildRow';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
-import SelectField from '../../components/common/SelectField';
+import IconCircleButton from '../../components/common/IconCircleButton';
 import SelectSheet from '../../components/common/SelectSheet';
 import MonthCalendar from '../../components/common/MonthCalendar';
 import BottomSheet from '../../components/common/BottomSheet';
@@ -68,6 +69,13 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   const onScroll = useHeaderHairline(navigation);
   const [metadata, setMetadata] = useState(null);
   const [dateVisible, setDateVisible] = useState(false);
+  const dateLabel = draft ? lessonDateLabel(draft.lesson_date, today) : null;
+  const hasDraft = Boolean(draft);
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerRight: hasDraft ? () => <IconCircleButton icon="calendar-outline"
+      accessibilityLabel={`Lesson date, ${dateLabel ?? 'Today'}`} testID="wrap-up-date-button"
+      onPress={() => setDateVisible(true)} /> : null });
+  }, [navigation, hasDraft, dateLabel]);
   const [trackerId, setTrackerId] = useState(null);
   const [levelId, setLevelId] = useState(null);
   const [emptyConfirm, setEmptyConfirm] = useState(false);
@@ -81,7 +89,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   useEffect(() => () => { active.current = false; }, []);
   const childKey = JSON.stringify(draft ? presentChildIds(draft.attendance) : []);
   const languageCode = draft?.language_code;
-  const languageOrder = PEDAGOGICAL_ORDERS[languageCode];
+  const trackerLetters = TRACKER_LETTERS[languageCode];
   useFocusEffect(useCallback(() => {
     let current = true;
     if (!draft) return undefined;
@@ -92,7 +100,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         repositories.children.getWriteAuthority({ userId: handle.userId, childIds }),
       ]);
       const mastery = Object.fromEntries(await Promise.all(childIds.map(async id => [id,
-        authority[id]?.deliver && languageOrder
+        authority[id]?.deliver && trackerLetters
           ? await loadMasteryState({ repositories, userId: handle.userId, childId: id, languageCode }) : null,
       ])));
       if (current && handle.isCurrent()) setMetadata({ children, authority, mastery });
@@ -103,7 +111,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     return () => { current = false; };
     // Tick and note edits do not reload the child's stored mastery or reading level.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handle, repositories, draft?.id, childKey, languageCode, languageOrder]));
+  }, [handle, repositories, draft?.id, childKey, languageCode, trackerLetters]));
 
   // endSave has published empty before this committed render, releasing Lesson's leave guard.
   useEffect(() => {
@@ -137,7 +145,9 @@ export default function LessonWrapUpScreen({ navigation, route }) {
       if (active.current && handle.isCurrent()) setCompletion({
         ...buildSessionCompleteParams({ selectedChildren: presentChildIds(snapshot.attendance).map(id => children[id] ?? { id }),
           selectedLetters: snapshot.ticks.letters, sessionReadingLevel: deriveSessionReadingLevel(snapshot.ticks.blends),
-          sessionDateKey: snapshot.lesson_date }), languageCode: snapshot.language_code,
+          sessionDateKey: snapshot.lesson_date,
+          teachingOrder: lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null,
+        }), languageCode: snapshot.language_code,
       });
     } catch (caught) {
       if (isStaleActorError(caught) || !handle.isCurrent()) return;
@@ -179,7 +189,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     } catch (caught) { if (active.current && !isStaleActorError(caught)) setError({ message: errorMessage(caught, []) }); }
   };
   const ids = JSON.parse(childKey);
-  const letters = draft?.ticks.letters ?? [];
+  const letters = sortLettersByOrder(draft?.ticks.letters ?? [],
+    lesson.teachingOrder?.kind === 'order' ? lesson.teachingOrder.letters : null);
   const askSave = () => {
     if (!draft || ids.length === 0 || savingRef.current) return;
     if (!letters.length && !draft.ticks.blends?.length && !draft.ticks.books?.length) setEmptyConfirm(true);
@@ -189,6 +200,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   return <View style={styles.screen}>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}
       keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+      {dateLabel ? <Text testID="wrap-up-lesson-date" style={styles.note}>Lesson on {dateLabel}</Text> : null}
       {letters.length ? <View style={styles.heading}>
         <Text accessibilityRole="header" accessibilityLabel={`Who knows ${letters.join(' ')} without help?`} style={styles.title}>
           Who knows <Text style={styles.headingLetters}>{letters.join(' ')}</Text> without help?
@@ -196,7 +208,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         <Text style={styles.note}>Teaching it today doesn't count.</Text>
       </View> : null}
       {draft && metadata ? ids.map(id => metadata.children[id] ? <WrapUpChildRow key={id}
-        child={metadata.children[id]} letters={letters} languageOrder={languageOrder}
+        child={metadata.children[id]} letters={letters} trackerLetters={trackerLetters}
         authority={metadata.authority[id] ?? {}} mastery={metadata.mastery[id]}
         changes={draft.tracker_changes[id] ?? {}} noOneNew={draft.ticks.noOneNew?.includes(id)}
         readingLevel={draft.reading_level_changes[id] ?? metadata.children[id].reading_level}
@@ -204,7 +216,6 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         onNoOneNew={() => edit(transitions.toggleNoOneNew, id)}
         onOpenTracker={() => setTrackerId(id)} onOpenLevel={() => setLevelId(id)} /> : null) : null}
       {draft ? <>
-        <SelectField label="Date" value={startedLabel(draft.lesson_date, today) ?? 'Today'} onPress={() => setDateVisible(true)} />
         <TextField label="Notes (optional)" value={draft.notes ?? ''} multiline
           onChangeText={text => edit(transitions.setNotes, text)} placeholder="Add session notes…" {...NO_TEXT_SUGGESTIONS} />
       </> : null}
@@ -218,7 +229,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     </StickyActionFooter>
     <ConfirmSheet visible={emptyConfirm} title="Save without letters, blends or a book?"
       confirmLabel="Save session" confirmVariant="primary" cancelLabel="Go back" onConfirm={() => void save()} onCancel={() => setEmptyConfirm(false)} />
-    <BottomSheet visible={dateVisible} title="Date" onDismiss={() => setDateVisible(false)} keyboardAvoiding={false}
+    <BottomSheet visible={dateVisible} title="Lesson date" onDismiss={() => setDateVisible(false)} keyboardAvoiding={false}
       dismissLabel="Dismiss session date picker"
       footer={<BrandButton variant="tertiary" tone="ink" label="Cancel" onPress={() => setDateVisible(false)} />}>
       {dateVisible && draft ? <MonthCalendar selectedKey={draft.lesson_date} todayKey={today}
@@ -227,7 +238,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     <SelectSheet visible={levelId !== null} title="Reading level" cancelLabel="Cancel" options={READING_LEVEL_OPTIONS}
       selectedKey={draft?.reading_level_changes[levelId] ?? metadata?.children[levelId]?.reading_level}
       onDismiss={() => setLevelId(null)} onSelect={value => edit(transitions.setReadingLevel, levelId, value, metadata?.children[levelId]?.reading_level)} />
-    <LetterTrackerBottomSheet visible={trackerId !== null} onDismiss={() => setTrackerId(null)}
+    <LetterTrackerBottomSheet teachingOrder={lesson.teachingOrder} visible={trackerId !== null} onDismiss={() => setTrackerId(null)}
       child={metadata?.children[trackerId] ?? null} userId={handle.userId} languageCode={languageCode}
       pendingChanges={draft?.tracker_changes[trackerId] ?? {}}
       onChangesUpdate={changes => edit(transitions.setTrackerChanges, trackerId, changes)} />
