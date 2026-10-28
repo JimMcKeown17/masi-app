@@ -20,7 +20,7 @@ describe('class letter order editions', () => {
     await seedCoreData(db);
     repository = createClassesRepository({ database: db });
   });
-  afterEach(async () => db.closeAsync());
+  afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
 
   const serverClass = (overrides = {}) => ({
     id: 'class-1', school_id: 'school-1', name: 'Server class', grade: '1',
@@ -80,7 +80,41 @@ describe('class letter order editions', () => {
     expect(await repository.getClassById('class-1')).toMatchObject({ home_language: 'English', letter_order_edition: '2026-10-23' });
   });
 
-  describe('the active class for a child', () => {
+  test('reads several children in one statement and omits children without an active membership', async () => {
+    for (const id of ['child-1', 'child-2', 'child-none']) {
+      await db.runAsync("insert into children (id, first_name, last_name, class_id) values (?, 'Test', 'Child', 'class-1')", id);
+    }
+    await repository.saveClass(serverClass({ id: 'class-2', home_language: 'isiXhosa' }));
+    for (const id of ['child-1', 'child-2']) {
+      await db.runAsync(`insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at)
+        values (?, ?, 'class-2', 'year-2026', '2026-01-15')`, id, id);
+    }
+    const query = jest.spyOn(db, 'getAllAsync');
+    const singleQuery = jest.spyOn(db, 'getFirstAsync');
+    const result = await repository.getActiveClassesForChildren(['child-1', 'child-2', 'child-none', 'missing']);
+    expect(query).toHaveBeenCalledTimes(1);
+    // Injected databases also check PRAGMA user_version in resolveDatabase.
+    expect(singleQuery.mock.calls.filter(([sql]) => !/pragma/i.test(sql))).toEqual([]);
+    expect([...result.keys()]).toEqual(['child-1', 'child-2']);
+    expect(result.get('child-1')).toMatchObject({ id: 'class-2', home_language: 'isiXhosa', synced: true });
+    for (const id of ['child-1', 'child-2']) {
+      expect(result.get(id)).toEqual(await repository.getActiveClassForChild(id));
+      expect(result.get(id)).not.toHaveProperty('child_id');
+    }
+  });
+
+  test('an empty batch returns an empty Map without a query', async () => {
+    const query = jest.spyOn(db, 'getAllAsync');
+    const singleQuery = jest.spyOn(db, 'getFirstAsync');
+    expect(await repository.getActiveClassesForChildren([])).toEqual(new Map());
+    expect(query).not.toHaveBeenCalled();
+    expect(singleQuery).not.toHaveBeenCalled();
+  });
+
+  describe.each(['single', 'batch'])('the active class for a child (%s)', readMode => {
+    const readClass = async childId => readMode === 'single'
+      ? repository.getActiveClassForChild(childId)
+      : (await repository.getActiveClassesForChildren([childId])).get(childId) ?? null;
     beforeEach(async () => {
       await db.runAsync("insert into children (id, first_name, last_name, class_id) values ('child-1', 'Test', 'Child', 'class-1')");
       for (const year of [2023, 2024, 2025]) {
@@ -100,7 +134,7 @@ describe('class letter order editions', () => {
     test('follows the active membership instead of children.class_id and ignores exited memberships', async () => {
       await membership('active', 'class-2', 'year-2026', '2026-02-01');
       await membership('exited', 'class-3', 'year-2026', '2026-03-01', '2026-04-01');
-      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({
+      expect(await readClass('child-1')).toMatchObject({
         id: 'class-2', home_language: 'English', letter_order_edition: '2099-01-01',
       });
     });
@@ -108,28 +142,28 @@ describe('class letter order editions', () => {
     test('prefers the active academic year over a newer enrollment in another year', async () => {
       await membership('active-year', 'class-2', 'year-2026', '2026-01-01');
       await membership('other-year', 'class-3', 'year-2025', '2026-05-01');
-      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({ id: 'class-2' });
+      expect(await readClass('child-1')).toMatchObject({ id: 'class-2' });
     });
 
     test('ranks other years by newest enrollment then ascending membership id', async () => {
       await membership('old', 'class-4', 'year-2023', '2025-01-01');
       await membership('b', 'class-3', 'year-2024', '2025-05-01');
       await membership('a', 'class-2', 'year-2025', '2025-05-01');
-      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({ id: 'class-2' });
+      expect(await readClass('child-1')).toMatchObject({ id: 'class-2' });
     });
 
     test('an archived membership class is ignored', async () => {
       await membership('archived', 'class-2', 'year-2026', '2026-01-01');
       await membership('available', 'class-3', 'year-2025', '2025-01-01');
       await db.runAsync("update classes set archived_at = '2026-10-26' where id = 'class-2'");
-      expect(await repository.getActiveClassForChild('child-1')).toMatchObject({ id: 'class-3' });
+      expect(await readClass('child-1')).toMatchObject({ id: 'class-3' });
     });
 
     test('returns null without an active membership even when children.class_id is set', async () => {
-      expect(await repository.getActiveClassForChild('child-1')).toBeNull();
+      expect(await readClass('child-1')).toBeNull();
       await membership('exited', 'class-2', 'year-2026', '2026-01-01', '2026-02-01');
-      expect(await repository.getActiveClassForChild('child-1')).toBeNull();
-      expect(await repository.getActiveClassForChild('missing-child')).toBeNull();
+      expect(await readClass('child-1')).toBeNull();
+      expect(await readClass('missing-child')).toBeNull();
     });
   });
 });

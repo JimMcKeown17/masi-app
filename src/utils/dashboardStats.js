@@ -175,16 +175,15 @@ export function getMonthlyStatsFootnote(now = new Date()) {
 // ─── Ranking Stats ──────────────────────────────────────────────────────
 
 /**
- * Rank children by total letter mastery (assessment-mastered + coach-taught).
+ * Rank children by total letter mastery (assessment evidence + EA confirmations).
+ * activeClassByChildId maps child ids to active membership classes; their language selects evidence.
  * Returns sorted array (best first) of { child, masteredCount, total, percent }.
  */
-export function getLetterMasteryRanking(children, assessments, letterMastery, classes) {
+export function getLetterMasteryRanking(children, assessments, letterMastery, activeClassByChildId = new Map()) {
   const rankings = [];
 
   for (const child of children) {
-    // Determine language from class
-    const cls = classes.find(c => c.id === child.class_id);
-    const languageCode = languageCodeForHomeLanguage(cls?.home_language);
+    const languageCode = languageCodeForHomeLanguage(activeClassByChildId.get(child.id)?.home_language);
     const trackerLetters = languageCode ? TRACKER_LETTERS[languageCode] : null;
 
     if (!trackerLetters) {

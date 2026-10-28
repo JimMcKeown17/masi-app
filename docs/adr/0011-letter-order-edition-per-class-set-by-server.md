@@ -28,9 +28,12 @@ null server values preserve the phone's stored edition.
 
 **Edition plus language resolves one teaching order from the shared registry.** The registry is
 vendored unchanged from books. Lesson inputs, suggestions, the tracker sheet, the mastery panel
-and the receipt all use that order. The mastery panel resolves the child's active class
-membership. An unknown edition shows “Update the app to teach this class's letters.” rather than
-substituting a different sequence.
+and the receipt all use that order. The mastery panel and Letter mastery ranking resolve the child's
+active class membership, ignoring `children.class_id`. Both share the repository rule: a non-archived
+class, active academic year first, newest `enrolled_at`, then ascending membership id. The ranking
+reads the classes in one batch and opens its tracker route with the same resolved class. An unknown
+edition shows “Update the app to teach this class's letters.” rather than substituting a different
+sequence.
 
 **Packs are chosen by order id.** A new pack names its `letter_order`; lint checks its letter and
 sound steps against the registry. Release versions are immutable, and older packs remain bundled

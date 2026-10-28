@@ -1,5 +1,11 @@
 # Letter Order Editions Implementation Plan
 
+> **2026-10-28 class-selection correction:** Letter mastery ranking now shares the panel's
+> active-membership rule through `classesRepository.getActiveClassesForChildren(childIds)`.
+> The single-child method delegates to this one-query batch read. Ranking language and the
+> tracker route use the same map entry, ignoring stale `children.class_id`; no membership
+> means 0/26 and a non-pressable ranking row. See ADR 0011 and the RLS/sync contract map.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every class records the letter order edition it is taught from (`2026-10-23` for every Masi class), and every screen teaches from that one order.

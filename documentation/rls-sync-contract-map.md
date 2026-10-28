@@ -1683,7 +1683,15 @@ those with no reached items, then order newest first by `assessment_date`, break
 it, so a letter a chart does not ask or the child does not reach keeps its earlier evidence
 (2026-10-27). The ranking screen supplies the bounded accessor; `loadMasteryState` goes
 through `letterEvidenceFor` and labels "Last assessed" from its first result. Both compute
-mastery from stored item prompts. Old phones retaining
+mastery from stored item prompts. The panel and ranking select the language from the child's
+active `child_class_memberships` row, ignoring `children.class_id`: `exited_at is null`,
+non-archived class, active academic year first, newest `enrolled_at`, then ascending membership
+id. `classes.getActiveClassesForChildren(childIds)` reads all requested children in one
+`json_each` query and returns a Map with the first class per child; missing memberships have
+no entry. `getActiveClassForChild` delegates to that batch rule. The ranking screen reads the
+map through the signed-in EA's `repositories.classes` with its evidence and confirmations,
+and uses that same map for the tracker route. Without an active class its row shows 0/26 and
+cannot open the tracker. Old phones retaining
 last year's results and fresh phones therefore use the same evidence window.
 Confirmations remain current child state: no year, recorder or Programme filter is added to
 `mastery.getLetterMastery`. They still count before a new baseline or when no year is active.

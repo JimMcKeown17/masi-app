@@ -1,4 +1,5 @@
 import React from 'react';
+import { v4 as uuid } from 'uuid';
 import { Text } from 'react-native';
 import { act, cleanupAsync, fireEvent, renderHook, waitFor, within } from '@testing-library/react-native';
 import { SignedInEAContext } from '../src/context/SignedInEAContext';
@@ -12,6 +13,8 @@ import { teachingOrderFromPack } from '../src/lessonPlan/engine';
 import { getLetterOrder, resolveTeachingOrder } from '../src/utils/letterOrders';
 import { useLessonDraft } from '../src/hooks/useLessonDraft';
 import { toggleTick } from '../src/lessonPlan/lessonDraftState';
+import { getLetterMasteryRanking } from '../src/utils/dashboardStats';
+import { questionResult } from '../test-support/assessmentFamilySyncTestUtils';
 import LetterMasteryPanel from '../src/components/assessment/LetterMasteryPanel';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
 
@@ -139,5 +142,53 @@ test.each([
     const saved = await repositories.sessions.getSessions({ userId: handle.userId });
     expect(saved).toHaveLength(1);
     expect(saved[0].activities.letters_focused).toEqual(selected);
+  } finally { await cleanupAsync(); }
+});
+
+
+test('ranking and mounted tracker count the same evidence with a stale English class_id and active isiXhosa membership', async () => {
+  try {
+    await handle.withTransaction(async db => {
+      await seedCoreData(db);
+      await db.runAsync('update staff_programme_assignments set user_id = ?', handle.userId);
+      await db.runAsync(`insert into programmes (id, code, name)
+        values ('00000000-0000-4000-8000-000000000002', 'ranking-literacy', 'Ranking literacy')`);
+      await db.runAsync("update staff_programme_assignments set programme_id = '00000000-0000-4000-8000-000000000002'");
+      await db.runAsync("update classes set home_language = 'isiXhosa' where id = 'class-1'");
+      await db.runAsync(`insert into classes (id, school_id, name, grade, home_language, academic_year_id)
+        values ('english-class', 'school-1', 'English class', '1', 'English', 'year-2026')`);
+      await db.runAsync(`insert into children (id, first_name, last_name, class_id, created_by)
+        values ('00000000-0000-4000-8000-000000000001', 'Amahle', 'Child', 'english-class', ?)`, handle.userId);
+      await db.runAsync(`insert into child_ea_assignments (id, user_id, child_id, assigned_at)
+        values ('delivery', ?, '00000000-0000-4000-8000-000000000001', '2026-01-15')`, handle.userId);
+      await db.runAsync(`insert into child_programme_enrollments (id, child_id, programme_id)
+        values ('enrollment', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002')`);
+      await db.runAsync(`insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at)
+        values ('active', '00000000-0000-4000-8000-000000000001', 'class-1', 'year-2026', '2026-01-15')`);
+    });
+    const { repositories } = handle;
+    for (const [language, letters] of [['en', ['z']], ['xh', ['a', 'b']]]) {
+      await repositories.assessments.saveQuestionResult({
+        assessmentId: uuid(), userId: handle.userId, childId: '00000000-0000-4000-8000-000000000001',
+        result: questionResult(letters.length, { language, item_set_id: `letter_sounds@2026.1.${language}`,
+          items: letters.map((prompt, position) => ({ position, item_key: prompt, prompt, is_correct: true, metadata: { reached: true } })),
+        }),
+      });
+    }
+    await repositories.mastery.setLetterMastery({ childId: '00000000-0000-4000-8000-000000000001', language: 'xh', letter: 'c', confirmed: true });
+    const children = await repositories.children.getMyChildren(handle.userId);
+    expect(children[0].class_id).toBe('english-class');
+    const [assessments, confirmations, activeClasses] = await Promise.all([
+      repositories.assessments.getLetterEvidenceResults({ userId: handle.userId }),
+      repositories.mastery.getLetterMastery({ childIds: ['00000000-0000-4000-8000-000000000001'] }),
+      repositories.classes.getActiveClassesForChildren(['00000000-0000-4000-8000-000000000001']),
+    ]);
+    const [rank] = getLetterMasteryRanking(children, assessments, confirmations, activeClasses);
+    const Mastery = () => <LetterMasteryPanel child={children[0]} />;
+    const panel = renderInTestStack({ wrapper, motion, routes: [{ name: 'Mastery', component: Mastery }] });
+    const count = await panel.findByText('3 / 26 letters mastered');
+    expect(rank.masteredCount).toBe(Number(count.props.children[0]));
+    expect(rank).toMatchObject({ masteredCount: 3, total: 26 });
+    expect(panel.getAllByRole('button', { name: /^[a-z], (mastered from assessment|taught by coach)/ })).toHaveLength(rank.masteredCount);
   } finally { await cleanupAsync(); }
 });

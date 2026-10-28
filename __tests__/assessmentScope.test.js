@@ -41,6 +41,7 @@ import { createAssessmentsRepository } from '../src/db/repositories/assessmentsR
 import { createReferenceDataRepository } from '../src/db/repositories/referenceDataRepository';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createChildClassMembershipsRepository } from '../src/db/repositories/childClassMembershipsRepository';
+import { createClassesRepository } from '../src/db/repositories/classesRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createBatteryRunsRepository } from '../src/db/repositories/batteryRunsRepository';
 import AssessmentsScreen from '../src/screens/main/AssessmentsScreen';
@@ -84,7 +85,7 @@ beforeEach(async () => {
   await db.runAsync(`insert into child_group_memberships (id, group_id, child_id, created_by, sync_status)
     values ('delivery-group-member', 'delivery-group', 'delivery', 'user-1', 'synced')`);
   await db.runAsync('delete from sync_outbox');
-  repositories = { children, assessments: createAssessmentsRepository({ database: db }),
+  repositories = { children, classes: createClassesRepository({ database: db }), assessments: createAssessmentsRepository({ database: db }),
     academicYears: createReferenceDataRepository({ database: db, tableName: 'academic_years' }),
     programmes: createReferenceDataRepository({ database: db, tableName: 'programmes' }),
     sessions: createSessionsRepository({ database: db }),

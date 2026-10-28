@@ -89,20 +89,28 @@ export const createClassesRepository = ({ database } = {}) => {
     return row ? mapDomainRow(row) : null;
   };
 
-  const getActiveClassForChild = async (childId) => {
+  const getActiveClassesForChildren = async (childIds) => {
+    const activeClasses = new Map();
+    if (childIds.length === 0) return activeClasses;
     const db = await resolveDatabase(database);
-    const row = await db.getFirstAsync(`
-      select classes.*
+    const rows = await db.getAllAsync(`
+      select ccm.child_id, classes.*
       from child_class_memberships ccm
       join classes on classes.id = ccm.class_id and classes.archived_at is null
       left join academic_years ay on ay.id = ccm.academic_year_id
-      where ccm.child_id = ? and ccm.exited_at is null
-      order by case when ay.is_active = 1 then 0 else 1 end,
+      where ccm.child_id in (select value from json_each(?)) and ccm.exited_at is null
+      order by ccm.child_id, case when ay.is_active = 1 then 0 else 1 end,
         ccm.enrolled_at desc, ccm.id asc
-      limit 1
-    `, childId);
-    return row ? mapDomainRow(row) : null;
+    `, JSON.stringify(childIds));
+    for (const { child_id, ...classRow } of rows) {
+      if (!activeClasses.has(child_id)) activeClasses.set(child_id, mapDomainRow(classRow));
+    }
+    return activeClasses;
   };
+
+  const getActiveClassForChild = async (childId) => (
+    (await getActiveClassesForChildren([childId])).get(childId) ?? null
+  );
 
   const saveClass = async (classData, { transaction } = {}) => runWrite(transaction, async (txn) => {
     const incomingSyncStatus = classData.sync_status || syncStatusFromSynced(classData.synced);
@@ -308,6 +316,7 @@ export const createClassesRepository = ({ database } = {}) => {
     getClasses,
     getClassById,
     getActiveClassForChild,
+    getActiveClassesForChildren,
     saveClass,
     saveServerClassRows,
     updateClass,
