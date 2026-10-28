@@ -5432,6 +5432,74 @@ timing.
 With the A03 run, this completes Step 6. The Wrap up change and the assessment finish flow (#114)
 still need their device smoke on the next build.
 
+### 2026-10-28 — Letter orders rebased onto the new lesson flow; the ranking uses the active class
+
+**Rebase (Jim's yes, 2026-10-28).** The branch's 24 commits now sit on `feat/lesson-flow`, which is
+main `561f668` plus the known-letters fix (see the lesson flow entry of the same date). Jim also
+chose to hold the 1.4.0 pilot build until both branches merge. Backups of the old tips:
+`backup/lesson-flow-cd28ffe` and `backup/letter-orders-2640a2a`.
+- **Two commits conflicted.** The trackers commit conflicted with #113 in `letterMastery.js`,
+  `masteryState.js`, `dashboardStats.js`, `knownLetters.js` and five tests. The docs commit
+  conflicted in `CONTEXT.md` and this log.
+- **The changes were independent.** #113 changed *which result decides* each letter (the newest
+  result that reached it). This branch changed *which letters are checked* (`TRACKER_LETTERS`,
+  a–z, in place of `PEDAGOGICAL_ORDERS`). Each resolution keeps #113's logic with this branch's
+  names.
+- **One silent leftover.** #113's new `letterMastery.latestEvidence.test.js` still imported
+  `PEDAGOGICAL_ORDERS`, which the trackers commit deletes. It now uses `TRACKER_LETTERS` (same 26
+  letters), in that commit.
+- **Process.** The first attempt was paused when the lesson flow's runtime break turned up. Its
+  resolutions were recorded with `git rerere` and replayed byte for byte on the second attempt.
+  The affected suites passed at the trackers commit (8 suites, 118 tests).
+- **Gates at `bcc9283`.** Unit 452/7,029; integration 87/1,205; types and content clean.
+
+**Review round 1 (Codex adversarial, `gpt-6-astra`, base `feat/lesson-flow`, using `git range-diff`
+against the backups): needs attention, one medium.**
+- The range-diff shows the resolutions keep per-letter newest evidence, the 26-letter set, class
+  order display, counts filtered to the tracker letters, `assertTrackerChanges` and "Last
+  assessed". No `src/` caller of a removed name remains.
+- **The finding was not from the rebase.** This branch made the tracker panel take the class from
+  the child's active membership (plan Task 3/6). The Letter mastery ranking still took it from
+  `children.class_id`, and passed that class to the tracker route. When the two differ (a
+  server-side class move or a new-year membership), the same evidence counted 1/26 in the
+  ranking and 3/26 on the tracker. On main they agreed only because both used `children.class_id`.
+
+**Fix (`7a6d31f`, built by Codex from a work order, reviewed here).**
+- `classesRepository.getActiveClassesForChildren(childIds)` reads every child's active class in
+  one `json_each` query, with the same order as before. `getActiveClassForChild` now delegates to
+  it, so the rule lives in one place.
+- `getLetterMasteryRanking` takes that Map. `LetterMasteryRankingScreen` loads it with the
+  evidence and uses it for both the count and the tracker route.
+- A child with no active class shows 0/26 and its row can't open the tracker, which matches the
+  panel's "No letter set".
+- Test first: 7 repository, 2 ranking and 3 screen/agreement tests failed. The real-SQLite
+  agreement test failed with "Expected: 3, Received: 1" against the old ranking, while the
+  mounted panel showed "3 / 26 letters mastered".
+- **Gates (rerun here, Node 20):** unit **452/452 suites, 7,041 tests**; integration **87/87
+  suites, 1,215 tests**; types clean; content 5/5.
+- **Docs:** `CONTEXT.md` (trimmed to plain terms), ADR 0011, a dated plan note and the RLS/sync
+  contract map.
+
+**Review round 2 (base `bcc9283`): the ranking fix is correct; one more medium, recorded, not
+fixed.**
+- The old single-child query and the batched query picked identical classes for 1,009 synthetic
+  children: ties, archived classes, exited memberships, inactive years and missing class rows.
+  Ranking and tracker both counted 3/26. Dropping `useClasses` loses no refresh, and the docs
+  agree.
+- **Finding.** Class Detail lists children by `children.class_id` (`ClassesContext.js:596`).
+  Child Results then starts "Assess now" in that class's language (`ChildResultsScreen.js:43`),
+  while its embedded letter panel uses the active membership. With a stale `class_id`, the EA
+  could give a test in the old class's language.
+- **Why not fixed now.** Read-only staging check (2026-10-28): of 46 children with a class, **0**
+  have a `class_id` different from their active membership, and none has one without the other.
+  Phone writes change both in one transaction (`childrenRepository.js:543`), and nothing else
+  writes memberships today. A fix means moving every delivery class list onto memberships, a
+  cross-cutting change before the pilot for a state the data doesn't contain.
+- **Revive when** anything other than the app can write `child_class_memberships` without
+  `children.class_id`: a head-office tool, or a new-year rollover seed. Then give the delivery
+  lists the same active-membership rule (roadmap). The loop stops here, per Jim's rule on rare
+  edge cases.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

@@ -746,6 +746,12 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   ([ADR-0011](../docs/adr/0011-letter-order-edition-per-class-set-by-server.md)).
 - [ ] **Readers for the books v2 previews:** add readers to the new-order preview packs in the
   early-reader-books project. They currently supply candidate word banks without readers.
+- [ ] **One "current class" rule for delivery lists (deferred 2026-10-28).** The letter tracker
+  and the Letter mastery ranking take a child's class from the active class membership. Class
+  lists and Child Results' "Assess now" still use `children.class_id`. They agree today: on
+  staging, 0 of 46 children differ, and phone writes change both together. Revive when anything
+  other than the app can write memberships without `children.class_id`, such as a head-office
+  tool or a new-year rollover seed (build log, 2026-10-28, letter orders review round 2).
 - [ ] **Lesson clock (Jim, 2026-10-28: wanted later, not in this release).** The lesson flow has no
   timer by design (lesson-plan spec §8; `group-session-workflow.md`), and main's old Record form
   had none either. Zazi's session clock is the model: a countdown to the target length with
