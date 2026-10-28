@@ -20,7 +20,8 @@ npx eas-cli@26.0.0 build --platform all --profile pilot --auto-submit
 - **Android:** EAS Submit uploads the AAB to the Play **internal testing** track
   and releases it at once (`releaseStatus: completed` in `eas.json`), so testers
   get it within minutes with no Google review. Internal testing allows up to 100
-  testers. It needs the Play service account key on EAS (one-time setup below).
+  testers. It uses the `eas-submit-masi` key stored on EAS (one-time setup
+  below); build 54 was the first automatic submission, on 2026-10-28.
 - **iOS:** EAS Submit uploads the build to App Store Connect with the API key
   stored on EAS. Once Apple has processed it, the build reaches every TestFlight
   internal group with automatic distribution switched on. Testers outside the App
@@ -230,10 +231,13 @@ shown above against the generated `dist/` directory.
      `eas.json` has no production submit profile. Click **Apply**, then
      **Invite user**. These are two separate actions; Apply alone sends no
      invite.
-  4. `npx eas-cli@26.0.0 credentials -p android` → profile `pilot` → **Google
-     Service Account** → **Manage your Google Service Account Key for Play Store
-     Submissions** → **Set up a Google Service Account Key for Play Store
-     Submissions** → **[Upload a new service account key]** → the JSON file.
+  4. From the `masi-app` folder (EAS finds the app through `app.config.js`;
+     anywhere else it fails with "Run this command inside a project
+     directory"): `npx eas-cli@26.0.0 credentials -p android` → profile
+     `pilot` → **Google Service Account** → **Manage your Google Service Account
+     Key for Play Store Submissions** → **Set up a Google Service Account Key for
+     Play Store Submissions** → **[Upload a new service account key]** → the
+     JSON file.
      EAS keeps keys per Expo account, so it also offers **[Choose an existing
      key]**, which lists Zazi's key; do not pick it. Then delete the downloaded
      JSON file.
@@ -367,11 +371,15 @@ Should not happen with `autoIncrement: true`. If it does: `npx eas-cli@26.0.0 bu
 ### "App not found" (Android)
 The app must exist in Google Play Console with package `org.masinyusane.masi`.
 
-### "Service account lacks permission", a `403`, or a `404` on the package (Android)
-Check Play Console → **Users and permissions** → `eas-submit-masi` → Masi: it
-needs at least **Release apps to testing tracks** (see One-time setup). A new
-grant can take from minutes up to 24 hours to reach Google's API; wait and
-resubmit the same build ID.
+### "The Google service account cannot submit this app" (Android)
+Also shown as a `403` or a `404` on the package name. Check Play Console →
+**Users and permissions**: `eas-submit-masi` must be listed as **Active**, with
+Masi under App permissions and at least **Release apps to testing tracks**. On
+2026-10-28 it was missing from the list because the invite had stopped at
+**Apply** (see One-time setup, step 3); once it was invited, the resubmission
+succeeded within minutes. If it is listed, a new grant can take up to 24 hours
+to reach Google's API: wait and resubmit the same build ID. A failed submission
+uploads nothing.
 
 ### "Google Service Account Keys cannot be set up in --non-interactive mode" (Android)
 No Play key is assigned on EAS to `org.masinyusane.masi`. Do the one-time

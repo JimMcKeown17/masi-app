@@ -5577,10 +5577,19 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 - RED: `releaseGateConfig.test.js` expected that object and received `undefined`. GREEN: 8/8.
 - The test matches the object exactly, so a `serviceAccountKeyPath` cannot slip into the
   repository; the Play key lives on EAS servers.
-- Not yet usable: EAS has no Play service account key for `org.masinyusane.masi`. Jim's one-time
-  setup is in DEPLOYMENT.md. Expo's documented `track` values are `internal`, `alpha`, `beta`
-  and `production`, so July's custom closed track ("SQLite pilot") cannot be targeted from
-  `eas.json`.
+- Expo's documented `track` values are `internal`, `alpha`, `beta` and `production`, so July's
+  custom closed track ("SQLite pilot") cannot be targeted from `eas.json`.
+- First automatic submission of build 54, after Jim's one-time setup:
+  - `eas credentials` failed from his home folder with "Run this command inside a project
+    directory". It worked from `masi-app`, and DEPLOYMENT.md now says where to run it.
+  - The first submit (`02b3f668-80a5-4aff-8f07-528906ab505a`) used the right key
+    (`eas-submit-masi`, key source EAS servers). Play refused it with "The Google service account
+    cannot submit this app."
+  - Cause: the account was missing from Play Console's user list, because the invite had stopped
+    at Apply. Jim invited it.
+  - The resubmission (`9094fc1b-ab73-4277-ba47-40c7d02680d2`) succeeded within minutes: "Submitted
+    your app to Google Play Store!", track `internal`, status `COMPLETED`, version code 54.
+  - No manual AAB upload was needed.
 - Play key: one service account per app (Jim's call). Jim asked whether Zazi iZandi's key could
   serve Masi. It technically can: eas-cli 26.0.0 lists keys for the whole Expo account
   (`getGoogleServiceAccountKeysForAccountAsync` in `SetUpGoogleServiceAccountKeyForSubmissions.js`),
