@@ -746,6 +746,12 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   ([ADR-0011](../docs/adr/0011-letter-order-edition-per-class-set-by-server.md)).
 - [ ] **Readers for the books v2 previews:** add readers to the new-order preview packs in the
   early-reader-books project. They currently supply candidate word banks without readers.
+- [ ] **Lesson clock (Jim, 2026-10-28: wanted later, not in this release).** The lesson flow has no
+  timer by design (lesson-plan spec §8; `group-session-workflow.md`), and main's old Record form
+  had none either. Zazi's session clock is the model: a countdown to the target length with
+  Pause, saving the active teaching time, capped at 60 minutes. Masi's lesson sections already
+  carry times (Letters 15, Blending 15, Pair reading 5 min). `sessions.started_at` and `ended_at`
+  exist, but nothing fills them yet.
 - [ ] **Lesson plan (spec 2026-10-20): A1 content packs built; the Android Hermes check (T1) passed on 2026-10-22; the iOS check (A1 Task 7, T2) remains open.** Record: build log, "Lesson plan A1: content packs".
 - [ ] **Bold Red for the rest of the app (Jim, 2026-10-18: build all of it).** Shared look built
   on `feat/bold-red-app` (2026-10-19), following Home (#70). Design source: the Design Round 4
