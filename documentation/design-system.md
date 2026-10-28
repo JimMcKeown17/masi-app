@@ -388,8 +388,9 @@ cannot reopen Reset. Recovery and Reset's native D10 gate are tracked in
 
 The [ChecklistRow](../src/components/assessments/ChecklistRow.js) label comes from the run code
 and child's first name: “Write assessment code {code} and {firstName}'s name on the Writing Sheet”.
-The summary shows this one check for an eligible writable run when `view.hasWritingSheet`; until
-checked, Finalize stays disabled with “Tick the box to finalize”. Do not add a filing check.
+The overview shows this one check after the Question list for an eligible writable run when
+`view.hasWritingSheet`; until checked, Finalize stays disabled with “Tick the box to finalize”.
+Do not add a filing check.
 The row does not own persistence or finalization.
 
 The [MaterialsBlock](../src/components/assessments/MaterialsBlock.js) belongs above the package's

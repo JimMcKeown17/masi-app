@@ -155,7 +155,7 @@ export default function AssessmentHistoryScreen({ navigation }) {
         accessibilityLabel={isRun ? [date, title, childName, status.label,
           LANGUAGE_LABELS[item.language] || item.language, decidedCount].join(', ') : undefined}
         onPress={() => isRun
-          ? navigation.navigate('BatteryRunSummary', { runId: item.id })
+          ? navigation.navigate(item.status === 'in_progress' ? 'BatteryOverview' : 'BatteryRunSummary', { runId: item.id })
           : navigation.navigate('AssessmentDetail', { assessmentId: item.id, childName })}
       >
         <View style={styles.cardHeader}>

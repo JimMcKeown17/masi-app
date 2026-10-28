@@ -114,7 +114,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     ['completed', 'Finalized', 'success'],
     ['in_progress', 'Open', 'warning'],
     ['abandoned', 'Abandoned', 'neutral'],
-  ])('history: %s run shows date, child, battery and decided count with %s badge and opens BatteryRunSummary', async (status, label, tone) => {
+  ])('history: %s run shows date, child, battery and decided count with %s badge and opens the matching run screen', async (status, label, tone) => {
     assessmentsRepository.getQuestionResults.mockResolvedValue([
       { id: 'q1', child_id: 'child-1', battery_run_id: 'run-1', question_code: 'letter_sounds', assessment_date: '2026-10-22' },
       { id: 'q6', child_id: 'child-1', battery_run_id: 'run-1', question_code: 'wela_plus_read_words', assessment_date: '2026-10-22' },
@@ -142,7 +142,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(screen.queryByText('Letter Sounds')).toBeNull();
     fireEvent.press(row);
     expect(navigation.navigate).toHaveBeenCalledTimes(1);
-    expect(navigation.navigate).toHaveBeenCalledWith('BatteryRunSummary', { runId: 'run-1' });
+    expect(navigation.navigate).toHaveBeenCalledWith(status === 'in_progress' ? 'BatteryOverview' : 'BatteryRunSummary', { runId: 'run-1' });
   });
 
   test('unknown battery run keeps its code, chevron and decided count without inventing a total', async () => {
@@ -363,7 +363,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     expect(mockGetChildNamesByIds).toHaveBeenCalledWith(['history-only']);
   });
 
-  test('history: a pulled run (started_here 0) opens BatteryRunSummary', async () => {
+  test('history: a pulled unfinished run opens BatteryOverview for its remote-run redirect', async () => {
     assessmentsRepository.getQuestionResults.mockResolvedValue([]);
     batteryRunsRepository.getRunsForUser.mockResolvedValue([{
       id: 'pulled-run', child_id: 'child-1', status: 'in_progress', started_here: 0,
@@ -375,7 +375,7 @@ describe('AssessmentHistoryScreen Plan 5 behavior', () => {
     const row = await screen.findByRole('button', { name: 'Thu, Oct 22, 2026, WelaPLUS, Amahle Dlamini, Open, isiXhosa, 4 of 11 decided' });
     expect(within(row).UNSAFE_getByType(StatusBadge).props).toMatchObject({ label: 'Open', tone: 'warning' });
     fireEvent.press(row);
-    expect(navigation.navigate).toHaveBeenCalledWith('BatteryRunSummary', { runId: 'pulled-run' });
+    expect(navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: 'pulled-run' });
   });
 
   test.each([

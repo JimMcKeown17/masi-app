@@ -34,7 +34,7 @@ export function skipNoticeFor({ view, firstName }) {
   if (!copy) return null;
   return {
     trigger, title: copy.title,
-    body: `${copy.body} ${stillToDo.length ? 'Carry on with the next Question.' : 'Tap Review and finalize to finish.'}`,
+    body: `${copy.body} ${stillToDo.length ? 'Carry on with the next Question.' : 'Tap Finalize assessment to finish.'}`,
     stillToDo, skipped,
   };
 }

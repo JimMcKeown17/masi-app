@@ -418,6 +418,12 @@ Required component changes. Each keeps the OSS boundary and passes the contract 
 
 ### 5.4 Finalize and summary
 
+> **Jim, 2026-10-28:** Finalize assessment is on the overview, with the Writing Sheet tick
+> above it when the battery has one. After Finalize, the read-only summary offers
+> **Assess next child** (when the battery can start new runs) and **Back to Assess**.
+> History opens unfinished (`in_progress`) runs on the overview; other runs open the summary.
+> This supersedes the summary checklist and history routing described below and in the earlier notes.
+
 - **Finalize** sets `completed_at`, `status = 'completed'`, and locks the run.
 - The summary shows each Question's score / max (or its skip reason), plus a paper checklist
   the EA must tick before leaving the screen:

@@ -4,6 +4,7 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { v4 as uuid } from 'uuid';
 import { batteryFor, MANUAL_SKIP_REASONS, skippedResult } from '../../../assessment-questions';
+import ChecklistRow from '../../../components/assessments/ChecklistRow';
 import BrandButton from '../../../components/common/BrandButton';
 import SkipNoticeSheet from '../../../components/assessments/SkipNoticeSheet';
 import ConfirmSheet from '../../../components/common/ConfirmSheet';
@@ -73,6 +74,7 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   const [data, setData] = useState({ loading: true });
   const [skipQuestion, setSkipQuestion] = useState(null);
   const [abandonVisible, setAbandonVisible] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
   const [, refreshSkipNotice] = useState(0);
   const isFocused = useIsFocused();
   const [mutation, setMutation] = useState(null);
@@ -204,8 +206,9 @@ export default function BatteryOverviewScreen({ navigation, route }) {
   });
   const notice = view?.writable && run && !hasSeenSkipNotice(run.id)
     ? skipNoticeFor({ battery, view, firstName: data.childFirstName }) : null;
+  const checked = confirmation?.handle === handle && confirmation.runId === runId;
   // Actions wait for a refresh to finish, so a just-finished Question can't be started from stale rows.
-  current.current = ready && view && !data.refreshing ? { run, battery, view } : null;
+  current.current = ready && view && !data.refreshing ? { run, battery, view, checked } : null;
   const mutating = mutation?.handle === handle || Boolean(data.refreshing);
   useEffect(() => {
     if (!ready || data.refreshing || data.error) return;
@@ -243,12 +246,6 @@ export default function BatteryOverviewScreen({ navigation, route }) {
     launching.current = true;
     navigation.navigate('BatteryQuestion', { runId, questionCode });
   };
-  const review = () => {
-    if (!canPublish() || launching.current || mutationRef.current?.handle === handle
-      || !current.current?.view.writable || !current.current.view.eligibleToFinalize) return;
-    launching.current = true;
-    navigation.navigate('BatteryRunSummary', { runId });
-  };
   const beginMutation = () => {
     if (!canPublish() || launching.current || mutationRef.current?.handle === handle) return null;
     const token = { handle };
@@ -260,6 +257,35 @@ export default function BatteryOverviewScreen({ navigation, route }) {
     if (mutationRef.current !== token) return;
     mutationRef.current = null;
     if (canPublish()) setMutation(null);
+  };
+  const toggle = () => {
+    const snapshot = current.current;
+    if (!canPublish() || launching.current || mutationRef.current?.handle === handle
+      || !snapshot?.view.writable || !snapshot.view.eligibleToFinalize) return;
+    setConfirmation(previous => previous?.handle === handle && previous.runId === runId ? null : { handle, runId });
+  };
+  const finalize = async () => {
+    const snapshot = current.current;
+    if (!snapshot?.view.writable || !snapshot.view.eligibleToFinalize
+      || (snapshot.view.hasWritingSheet && !snapshot.checked)) return;
+    const token = beginMutation();
+    if (!token) return;
+    try {
+      await repositories.batteryRuns.finalizeRun(runId, {
+        questionCodes: snapshot.battery.questions.map(question => question.question_code),
+      });
+      if (handle.isCurrent()) triggerBackgroundSync();
+      if (canPublish()) {
+        launching.current = true;
+        navigation.replace('BatteryRunSummary', { runId, finalized: true });
+      }
+    } catch (error) {
+      if (!canPublish() || isStaleActorError(error)) return;
+      if (error.code !== 'RUN_INCOMPLETE') {
+        showToast({ tone: 'error', message: "Couldn't finalize this assessment. Try again." });
+      }
+      await load();
+    } finally { endMutation(token); }
   };
   const saveSkip = async reason => {
     const snapshot = current.current;
@@ -336,12 +362,24 @@ export default function BatteryOverviewScreen({ navigation, route }) {
           writable={view.writable && !mutating} onStart={launch}
           onSkip={question => { if (!launching.current) setSkipQuestion(question); }} />)}</ListGroup>
       </View>
+      {view.writable && view.eligibleToFinalize && view.hasWritingSheet && <>
+        <Text style={styles.section}>Before you finish</Text>
+        <View style={styles.checklist}>
+          <ChecklistRow label={`Write assessment code ${runCode(run.id)} and ${child.first_name}'s name on the Writing Sheet`}
+            checked={checked} onToggle={mutating ? undefined : toggle}>
+            Write assessment code <Text style={styles.runCode}>{runCode(run.id)}</Text>{` and ${child.first_name}'s name on the Writing Sheet`}
+          </ChecklistRow>
+        </View>
+      </>}
     </ScrollView>
     <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
       {view.writable && (view.eligibleToFinalize
-        ? <BrandButton label="Review and finalize" size="lg" onPress={review} disabled={mutating} />
+        ? <BrandButton label="Finalize assessment" size="lg" onPress={finalize}
+          disabled={mutating || (view.hasWritingSheet && !checked)} />
         : view.next && <BrandButton label={`Start ${view.next.title}`} size="lg"
           onPress={() => launch(view.next.question_code)} disabled={mutating} />)}
+      {view.writable && view.eligibleToFinalize && view.hasWritingSheet && !checked
+        && <Text style={styles.caption}>Tick the box to finalize</Text>}
       <BrandButton label="Abandon assessment" variant="tertiary" tone="ink" size="lg"
         disabled={mutating} onPress={() => { if (!launching.current) setAbandonVisible(true); }} />
     </View>
@@ -373,6 +411,9 @@ const styles = StyleSheet.create({
   headerLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   meta: { ...typeRoles.textCaption, color: colors.textSecondary, flexGrow: 1, flexShrink: 1 },
   runCode: { fontFamily: fontFamilies.textBold },
+  section: { ...typeRoles.textSectionLabel, color: colors.textSecondary },
+  checklist: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, paddingHorizontal: spacing.md },
+  caption: { ...typeRoles.textCaption, color: colors.textSecondary, textAlign: 'center' },
   next: { backgroundColor: colors.red50 },
   number: { width: 32, minHeight: 32, borderRadius: borderRadius.pill, backgroundColor: colors.background,
     alignItems: 'center', justifyContent: 'center' },
