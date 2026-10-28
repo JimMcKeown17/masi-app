@@ -5581,13 +5581,19 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
   setup is in DEPLOYMENT.md. Expo's documented `track` values are `internal`, `alpha`, `beta`
   and `production`, so July's custom closed track ("SQLite pilot") cannot be targeted from
   `eas.json`.
-- No second Play key is needed. Jim already made one for Zazi iZandi (`org.masinyusane.zz`, same
-  Expo owner `jimmckeown`). eas-cli 26.0.0 lists keys for the whole Expo account
-  (`getGoogleServiceAccountKeysForAccountAsync` in `SetUpGoogleServiceAccountKeyForSubmissions.js`)
-  and offers "Select an existing Google Service Account Key for Play Store Submissions", so that
-  key can be assigned to Masi. Play Console still has to grant it the Masi app. DEPLOYMENT.md lists
-  reuse first. A separate key would add little isolation: both keys would sit on the same Expo
-  account, so whoever controls that account controls both.
+- Play key: one service account per app (Jim's call). Jim asked whether Zazi iZandi's key could
+  serve Masi. It technically can: eas-cli 26.0.0 lists keys for the whole Expo account
+  (`getGoogleServiceAccountKeysForAccountAsync` in `SetUpGoogleServiceAccountKeyForSubmissions.js`),
+  and both apps are on `jimmckeown`. My first answer recommended reuse, and commit `1a8ac43`
+  documented it. Jim then saw the account in Play Console: it is named
+  `eas-submit-zazi@masinyusane-play-publishing.iam.gserviceaccount.com`, and Google service
+  account emails cannot be renamed. Reuse would label every Masi release "zazi" in Play's
+  records, and revoking it would cut off both apps. Reversed: Masi gets `eas-submit-masi` in the
+  same Cloud project, where the Play Android Developer API is already on. It gets the same
+  permission set as Zazi's, taken from Zazi's runbook
+  (`zazi-izandi-app/documentation/runbooks/google-play-service-account.md`, checked against the
+  live console 2026-07-31). In `eas credentials`, Jim must pick "[Upload a new service account
+  key]", not "[Choose an existing key]".
 - On iOS, EAS Submit can add builds only to internal TestFlight groups (Expo's `groups` option),
   plus Apple's automatic distribution for internal groups. External testers' groups still need
   each build added in App Store Connect.
@@ -5800,6 +5806,7 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-10-27 | Advance app/runtime to 1.4.0 before the first TestFlight pilot since July, and make "any native change → version bump" an explicit rule in DEPLOYMENT.md. | `expo-font`, `expo-splash-screen`, the iOS icon and the Android backup plugin changed native code after the July 1.3.0 store builds. Under `appVersion`, sharing 1.3.0 would let one OTA reach binaries with different native code. Cost: Beta App Review for the first 1.4.0 build in an external TestFlight group. | The project adopts fingerprint-based runtime versions, which make the native boundary automatic. |
 | 2026-10-28 | **No field cohort runs the app (Jim).** The 1.4.0 pilot builds (iOS 25, Android 54) are the baseline for every later TestFlight build and Play download; Masi's EAs retest from November 2026. | DEPLOYMENT.md's isolation rules protected a legacy cohort that no longer uses the app. | Any legacy-app user turns up, or the November retest group changes. |
 | 2026-10-28 | **Every `pilot` build submits itself: iOS to App Store Connect, Android to Play internal testing with `releaseStatus: completed` (Jim's choice).** The Play key lives on EAS, never in the repository. | Internal testing reaches testers in minutes with no Google review; manual AAB uploads were slow and error-prone. Limit: 100 testers. | The EA retest group exceeds 100 testers (move to closed testing, `alpha`), or production release begins. |
+| 2026-10-28 | **One Google Play service account per app, all in Cloud project `masinyusane-play-publishing` (Jim's call).** Masi uses `eas-submit-masi`, never Zazi iZandi's `eas-submit-zazi`. | Service account emails cannot be renamed, so a shared one names the wrong app in Play's records. Separate accounts can be revoked and rotated one app at a time. EAS would have allowed reuse. | Masinyusane publishes enough apps that per-app accounts become a burden. |
 
 ---
 

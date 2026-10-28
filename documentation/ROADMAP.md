@@ -210,10 +210,10 @@ shape.
 - [x] **1.4.0 pilot builds (2026-10-28):** iOS 25 and Android 54 (`pilot` profile) from main
   `dffe22c`, after the lesson flow, letter orders and the version bump merged. iOS 25 was
   submitted to App Store Connect the same day.
-- [ ] **Automatic Android submission: Play service account key on EAS (Jim).** `eas.json` now
-  sends every `pilot` build to Play internal testing (`--auto-submit`), but EAS needs the key
-  first ([DEPLOYMENT.md](../DEPLOYMENT.md), one-time setup). The first submission is the existing
-  build 54.
+- [ ] **Automatic Android submission: the `eas-submit-masi` Play key on EAS (Jim).** `eas.json`
+  now sends every `pilot` build to Play internal testing (`--auto-submit`), but EAS needs the key
+  first ([DEPLOYMENT.md](../DEPLOYMENT.md), one-time setup: a new service account, not Zazi
+  iZandi's). The first submission is the existing build 54.
 - [ ] **November 2026 EA retest (Jim):** add the EAs' Google accounts to Play internal testing (up
   to 100) and iOS testers to TestFlight. From the first EA session, `masi-app-sqlite` holds field
   data, so nothing on it is wiped without Jim.
