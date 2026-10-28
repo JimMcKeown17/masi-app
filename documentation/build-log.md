@@ -6330,3 +6330,14 @@ replace. Gates (Node 20): `npm test` 434 suites / 6,636 tests (Codex); the six a
 `npm run test:types` clean; `node --test content/egra/verify.cjs` 5/5. Specs updated in the same
 change: WelaPLUS Release 1 §5.4 (dated note), EGRA content and skip rules (copy), design-system
 (the check now sits on the overview). Device check: next build.
+
+Review: Codex adversarial review (`gpt-6-astra`, base `origin/main`) of `65b36af`: approve, no
+material findings. It confirmed the overview's mutation guard blocks repeated taps; the
+repository's finalize transaction refuses closed, remote or incomplete runs; and the replace runs
+before the overview's closed-run redirect can fire. Unfinished runs stay reachable from history
+and the Assess list, and Home and child results add no stranded summary route. Its probes also
+exercised what the unit tests mock: "Back to Assess" selecting the Assess tab through the nested
+`popTo`, and "Assess next child" for all 16 registered battery identities. Its sandbox could not
+write the Jest cache, so it ran those probes with caching off; the suites above ran normally here.
+Open: the native smoke check (Writing Sheet tick, rapid Finalize taps, Back from the summary,
+both footer buttons) on the next build.
