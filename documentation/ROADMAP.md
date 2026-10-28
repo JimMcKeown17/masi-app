@@ -531,10 +531,12 @@ the current-state model better than Zazi's per-session carry-forward.
   C7's durable start/resume implementation is closed: one draft per EA; Lesson and Wrap up share
   the handle's controller; Home resumes it first; leaving asks and keeps it; Discard is separate;
   Save atomically removes it (`src/services/lessonDraftController.js:76`,
-  `src/services/lessonSave.js:32`, `src/utils/homeAttention.js:21`). Outstanding: Jim's P1–P12
-  pass, the "advice from the children, record with the group" ADR through `grill-with-docs`,
-  orchestrator's final review result and PR, and [device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10)
-  on branch builds (`preview` and `preview-content`, Android and iOS; EAS needs Jim's yes).
+  `src/services/lessonSave.js:32`, `src/utils/homeAttention.js:21`). Draft PR #97; ADR 0010
+  records "advice from the children, record with the group". [Device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10):
+  A03 passed all eight, and Jim's iPhone pass on build 24 (2026-10-28) passed V3's swipe, V5's
+  keyboard, V6, V7 and V8. Outstanding before merge: Jim's P1–P12 product pass (his 2026-10-28 iPhone notes changed
+  P8's copy and the date control, on the letter orders branch). Jim (2026-10-28): the 1.4.0 pilot
+  waits for this flow and letter orders to merge.
   v1 has no timer. A2's teaching-order alignment and C4/C5 reader/receipt work remain separate;
   release packs are letters-only (P11). The build log holds implementation/review evidence.
 

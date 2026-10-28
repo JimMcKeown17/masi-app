@@ -5161,6 +5161,47 @@ builds 48 and 23 still show this flow.
 **Found while planning letter orders.** #108's server migration took version `20261026120000`,
 the number the letter orders plan had picked; the plan now uses `20261027120000`.
 
+### 2026-10-28 — Lesson flow rebased onto main `561f668`; known letters follow #113's rule
+
+**Rebase (Jim's yes, 2026-10-28).** The branch's 40 commits now sit on `origin/main` `561f668`,
+after #109, #111–#113 and the assessment finish flow (#114). Jim chose to hold the 1.4.0 pilot
+build until this flow and letter orders merge. Git replayed every commit without a conflict, and
+the rebased tree is identical to `git merge-tree` of the old branch with main.
+
+**A conflict git could not see.** #113 replaced `computeAssessmentMastery`, which read one latest
+result, with `computeLetterMastery`, where each letter takes the newest result that reached it.
+`loadKnownLetters` still imported the old name. On the rebased branch every lesson input threw
+`computeAssessmentMastery is not a function`, and 7 suites (100 tests) failed: lesson inputs, the
+picker, Lesson, Wrap up save, lesson save, the draft hook and navigation. On a phone, the picker
+and the Lesson screen would have had no letters. The text merge was clean; only the full test run
+caught it.
+
+**Fix (`1615020`).** Lesson-plan C23 requires one letter-evidence rule for the tracker, the
+dashboards and the engine, so `loadKnownLetters` now uses `eligibleLetterResults` and
+`computeLetterMastery`. The new test is set up like this:
+- February reached k and o.
+- March got o wrong, got m right and never reached k.
+
+The lesson knows k and m, and `loadMasteryState` returns the same two letters. A narrower fix that
+kept the latest-only rule made the new test fail on the missing k. The existing known-letters test
+now expects February's k as well. C23 and the spec's current-state row say this.
+
+**Effect on lesson advice.** Suppose a child's newest chart never asked a letter (DBE English
+HL 3 never asks q, v, x or z), or the child didn't reach it. That letter now stays known, so the
+lesson doesn't suggest teaching it again. Lesson advice and the tracker agree.
+
+**Gates on `1615020` (Node 20).**
+- Unit: **446/446 suites, 6,915 tests**.
+- Integration: **84/84 suites, 1,157 tests**.
+- `npm run test:types`: clean.
+- `npm run test:content`: 5/5.
+
+**Jim's iPhone pass (2026-10-28, iOS build 24 from the letter orders branch, which contains this
+flow).** All five iPhone-only checks passed: swipe back keeps the lesson; Resume works after a
+force-quit offline; the Notes keyboard; "+ Record" resume; and an offline save that later synced,
+confirmed on the server. Device gates V3, V5, V6, V7 and V8 record it, and the roadmap entry is
+updated.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
