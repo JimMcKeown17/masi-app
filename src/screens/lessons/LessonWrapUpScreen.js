@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -17,7 +17,7 @@ import { deriveSessionReadingLevel } from '../../lessonPlan/engine';
 import { loadMasteryState } from '../../utils/masteryState';
 import { TRACKER_LETTERS } from '../../utils/assessmentRegistry';
 import { sortLettersByOrder } from '../../utils/letterOrders';
-import { startedLabel } from '../../utils/lessonDates';
+import { lessonDateLabel } from '../../utils/lessonDates';
 import { buildSessionCompleteParams } from '../../utils/sessionCompleteView';
 import { buildSessionTypeFields } from '../../utils/sessionTypeResolver';
 import { isStaleActorError } from '../../session/staleActor';
@@ -27,7 +27,7 @@ import { READING_LEVEL_OPTIONS } from '../../constants/literacyConstants';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import WrapUpChildRow from '../../components/lessons/WrapUpChildRow';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
-import SelectField from '../../components/common/SelectField';
+import IconCircleButton from '../../components/common/IconCircleButton';
 import SelectSheet from '../../components/common/SelectSheet';
 import MonthCalendar from '../../components/common/MonthCalendar';
 import BottomSheet from '../../components/common/BottomSheet';
@@ -69,6 +69,13 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   const onScroll = useHeaderHairline(navigation);
   const [metadata, setMetadata] = useState(null);
   const [dateVisible, setDateVisible] = useState(false);
+  const dateLabel = draft ? lessonDateLabel(draft.lesson_date, today) : null;
+  const hasDraft = Boolean(draft);
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerRight: hasDraft ? () => <IconCircleButton icon="calendar-outline"
+      accessibilityLabel={`Lesson date, ${dateLabel ?? 'Today'}`} testID="wrap-up-date-button"
+      onPress={() => setDateVisible(true)} /> : null });
+  }, [navigation, hasDraft, dateLabel]);
   const [trackerId, setTrackerId] = useState(null);
   const [levelId, setLevelId] = useState(null);
   const [emptyConfirm, setEmptyConfirm] = useState(false);
@@ -193,6 +200,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   return <View style={styles.screen}>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}
       keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+      {dateLabel ? <Text testID="wrap-up-lesson-date" style={styles.note}>Lesson on {dateLabel}</Text> : null}
       {letters.length ? <View style={styles.heading}>
         <Text accessibilityRole="header" accessibilityLabel={`Who knows ${letters.join(' ')} without help?`} style={styles.title}>
           Who knows <Text style={styles.headingLetters}>{letters.join(' ')}</Text> without help?
@@ -208,7 +216,6 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         onNoOneNew={() => edit(transitions.toggleNoOneNew, id)}
         onOpenTracker={() => setTrackerId(id)} onOpenLevel={() => setLevelId(id)} /> : null) : null}
       {draft ? <>
-        <SelectField label="Date" value={startedLabel(draft.lesson_date, today) ?? 'Today'} onPress={() => setDateVisible(true)} />
         <TextField label="Notes (optional)" value={draft.notes ?? ''} multiline
           onChangeText={text => edit(transitions.setNotes, text)} placeholder="Add session notes…" {...NO_TEXT_SUGGESTIONS} />
       </> : null}
@@ -222,7 +229,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     </StickyActionFooter>
     <ConfirmSheet visible={emptyConfirm} title="Save without letters, blends or a book?"
       confirmLabel="Save session" confirmVariant="primary" cancelLabel="Go back" onConfirm={() => void save()} onCancel={() => setEmptyConfirm(false)} />
-    <BottomSheet visible={dateVisible} title="Date" onDismiss={() => setDateVisible(false)} keyboardAvoiding={false}
+    <BottomSheet visible={dateVisible} title="Lesson date" onDismiss={() => setDateVisible(false)} keyboardAvoiding={false}
       dismissLabel="Dismiss session date picker"
       footer={<BrandButton variant="tertiary" tone="ink" label="Cancel" onPress={() => setDateVisible(false)} />}>
       {dateVisible && draft ? <MonthCalendar selectedKey={draft.lesson_date} todayKey={today}

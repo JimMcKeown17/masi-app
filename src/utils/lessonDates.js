@@ -31,5 +31,5 @@ export const lessonHeaderSeenLabel = (lastSeenOn, today) => {
 export const lessonRowDetail = (seen, letters = [], { needsAppUpdate } = {}) => needsAppUpdate
   ? [joinDetail([seen]), UPDATE_APP_LETTERS_MESSAGE].filter(Boolean).join(' · ')
   : joinDetail([seen, letters.length ? `letters ${letters.join(' ')}` : null]);
-export const startedLabel = (lessonDate, today) => lessonDate === today
-  ? null : `Started ${formatSessionDate(lessonDate, 'pill')}`;
+export const lessonDateLabel = (lessonDate, today) => lessonDate === today
+  ? null : formatSessionDate(lessonDate, 'pill');

@@ -29,7 +29,8 @@ export default function WrapUpChildRow({ child, letters, trackerLetters, authori
           disabled={locked || !mastery} accessibilityLabel={`${letter}, ${description}`}
           accessibilityState={{ selected: locked || known }} onPress={() => onLetter(letter)} />;
       })}</View>
-      <ToggleChip selected={!!noOneNew} label="No one new yet" onPress={onNoOneNew} /></> : null}
+      <ToggleChip selected={!!noOneNew} label="None of these yet"
+        accessibilityLabel={`${child.first_name}, none of these yet`} onPress={onNoOneNew} /></> : null}
       <BrandButton variant="tertiary" label={`${count}/26 ›`}
         accessibilityLabel={`${child.first_name}, letter tracker, ${count}/26`} onPress={onOpenTracker} />
     </> : null : <Text style={styles.note}>Letters can't be updated for this child</Text>}

@@ -398,11 +398,12 @@ One scrolling screen, kept open for the whole session.
 - Heading: "Who knows **k u** without help?" with "Teaching it today doesn't count." (today's letters
   are the letters the EA ticked; if none were ticked, this section is skipped).
 - Per present child: one chip per ticked letter (assessment-mastered letters show locked), a
-  "No one new yet" button, the child's reading-level pill (opens the existing ladder sheet), and
+  "None of these yet" button (Jim, 2026-10-28), the child's reading-level pill (opens the existing ladder sheet), and
   "7/26 ›" opening the full `LetterTrackerBottomSheet` in the language's teaching order.
-- **Date**: the lesson's date: today for a new lesson, the day it started for a resumed one (shown
-  as "Started Mon 19 Oct"). A past date can be chosen (the only way to log a past lesson, as today);
-  changing the date drops the plan (C14).
+- **Date**: a calendar button beside the Wrap up title (Jim, 2026-10-28): today for a new lesson,
+  the day it started for a resumed one. When it is not today, "Lesson on Mon 19 Oct" shows under
+  the title. A past date can be chosen there (the only way to log a past lesson); changing the
+  date drops the plan (C14).
 - Notes (optional).
 - **Save session**. Never blocked except when no child is present. If letters, blends and book are
   all empty, a one-step confirm asks "Save without letters, blends or a book?" (capture and flag;

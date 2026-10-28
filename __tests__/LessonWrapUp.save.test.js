@@ -10,6 +10,7 @@ import { getTestWriter } from '../test-support/testDatabase';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { deferred, draftStart, holdDraftWrite } from '../test-support/lessonDraftTestUtils';
 import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
+import ScreenHeader from '../src/components/common/ScreenHeader';
 import LessonScreen from '../src/screens/lessons/LessonScreen';
 import { loadLessonBase, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
 import BrandButton from '../src/components/common/BrandButton';
@@ -32,10 +33,21 @@ const wrapper = ({ children }) => <AllProviders><SignedInEAContext.Provider valu
 }}><ChildrenProvider><CacheObserver />{children}</ChildrenProvider></SignedInEAContext.Provider></AllProviders>;
 const Home = () => <Text>Home route</Text>;
 const Complete = ({ navigation }) => <><Text>Session complete route</Text><BrandButton label="Done" onPress={() => navigation.popTo('MainTabs')} /></>;
+function WrapUpWithHeader({ navigation, route }) {
+  const [options, setOptions] = React.useState({ title: 'Wrap up' });
+  const screenNavigation = React.useMemo(() => ({ ...navigation, setOptions: next => {
+    navigation.setOptions(next);
+    setOptions(previous => ({ ...previous, ...next }));
+  } }), [navigation]);
+  return <>
+    <ScreenHeader navigation={navigation} route={route} options={options} />
+    <LessonWrapUpScreen navigation={screenNavigation} route={route} />
+  </>;
+}
 const mount = () => renderInTestStack({ wrapper, initialIndex: 2, keepMounted: true,
   motion: { tier: 'static', motionLevel: 'still', reduceMotion: true },
   routes: [{ name: 'MainTabs', component: Home }, { name: 'Lesson', component: LessonScreen, params: { draftId: draft.id } },
-    { name: 'LessonWrapUp', component: LessonWrapUpScreen, params: { draftId: draft.id } },
+    { name: 'LessonWrapUp', component: WrapUpWithHeader, params: { draftId: draft.id } },
     { name: 'SessionComplete', component: Complete }],
 });
 const ready = view => view.findByText('Amahle');
@@ -285,12 +297,12 @@ testSave('crossing programme midnight refreshes Today and the calendar without m
     listeners.add(listener); return { remove: () => listeners.delete(listener) };
   });
   const view = mount(); await ready(view);
-  expect(view.getByRole('button', { name: 'Date, Today' })).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Lesson date, Today' })).toBeTruthy();
   await act(async () => {
     jest.setSystemTime(new Date('2026-11-01T00:01:00.000Z'));
     listeners.forEach(listener => listener('active'));
   });
-  fireEvent.press(await view.findByRole('button', { name: 'Date, Started Sat 31 Oct' }));
+  fireEvent.press(await view.findByRole('button', { name: 'Lesson date, Sat 31 Oct' }));
   expect(await view.findByRole('button', { name: 'Next month' })).not.toBeDisabled();
   fireEvent.press(view.getByRole('button', { name: 'Next month' }));
   expect(await view.findByRole('button', { name: 'Sun 1 November 2026' })).not.toBeDisabled();

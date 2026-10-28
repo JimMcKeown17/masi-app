@@ -5385,6 +5385,32 @@ Gap Register, 2026-10-28.
 
 Remaining in Step 6: Jim's iPhone pass on iOS build 24.
 
+### 2026-10-28 — Wrap up: "None of these yet" and the date button (Jim's iPhone pass)
+
+**Jim's notes on iOS build 24, and his choices.**
+- **Button copy.** Wrap up's per-child "No one new yet" read as if it were about the whole group.
+  It now says **"None of these yet"**, and VoiceOver/TalkBack read "Amahle, none of these yet".
+  `ToggleChip` gained an optional `accessibilityLabel`; the other callers are unchanged.
+- **Lesson date.** The full-width Date field moved to a round calendar button beside the Wrap up
+  title (`headerRight`, `IconCircleButton`). When the lesson's date is not today, "Lesson on Mon
+  19 Oct" shows at the top of the screen. `startedLabel` became `lessonDateLabel`. The date sheet,
+  its future-date refusal and C14's plan drop are unchanged.
+- **Session clock.** Masi has never had one, and main's old Record form didn't either; Zazi has.
+  Jim: leave it out of this release. It is on the roadmap (`e0bf1b4`).
+- **Saved timestamps (Jim's question).** Read-only staging check of this morning's three A03
+  lessons: `session_date` is the chosen day, `created_at` is the phone's clock at Save, and
+  `updated_at` is the server's on upload, about 2 s later. A back-dated lesson is one whose
+  `session_date` is earlier than the `created_at` date. `started_at` and `ended_at` are always
+  null.
+
+**Build and gates.** Codex built it test first. The focused suites failed first (10 tests,
+including `lessonDateLabel is not a function` and "Unable to find … Lesson date, Mon 19 Oct").
+The tests now mount the real `ScreenHeader`, so the header button is exercised as a user would.
+Codex's full run: 451/451 suites, 6,970 tests; types clean. After review, the orchestrator changed
+`hasDraft` to `Boolean(draft)` to match the screen's other draft checks. The four affected
+suites were rerun: 72/72 tests passed. The spec §5.3 copy and Date bullet were updated in the
+same change. Device check: next build.
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
