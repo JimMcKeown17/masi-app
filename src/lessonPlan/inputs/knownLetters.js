@@ -1,5 +1,5 @@
 import { PEDAGOGICAL_ORDERS } from '../../utils/assessmentRegistry';
-import { pickLatestLetterResult, computeAssessmentMastery } from '../../utils/letterMastery';
+import { eligibleLetterResults, computeLetterMastery } from '../../utils/letterMastery';
 
 export const loadKnownLetters = async ({ repositories, userId, childIds, languageCode, programmeId, academicYear }) => {
   const order = PEDAGOGICAL_ORDERS[languageCode];
@@ -24,8 +24,9 @@ export const loadKnownLetters = async ({ repositories, userId, childIds, languag
     marksByChild.set(mark.child_id, letters);
   }
   return Object.fromEntries(childIds.map(id => {
-    const latest = pickLatestLetterResult(resultsByChild.get(id) ?? [], { childId: id, languageCode });
-    const known = computeAssessmentMastery(latest, order);
+    // One rule with the tracker (C23): each letter takes the newest result that reached it.
+    const letterResults = eligibleLetterResults(resultsByChild.get(id) ?? [], { childId: id, languageCode });
+    const known = computeLetterMastery(letterResults, order);
     for (const letter of marksByChild.get(id) ?? []) known.add(letter);
     return [id, order.map(letter => letter.toLowerCase()).filter(letter => known.has(letter))];
   }));

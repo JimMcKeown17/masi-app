@@ -9,6 +9,7 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { serverFamily } from '../test-support/assessmentHistoryFixtures';
 import { loadKnownLetters } from '../src/lessonPlan/inputs/knownLetters';
+import { loadMasteryState } from '../src/utils/masteryState';
 import * as domainReads from '../src/db/repositories/domainRepositoryUtils';
 import * as pickerInputs from '../src/lessonPlan/inputs/lessonInputs';
 import { loadLessonBase, loadPickerRanking, loadPickerLetters, loadLessonParticipants, presentLessonInput } from '../src/lessonPlan/inputs/lessonInputs';
@@ -71,10 +72,13 @@ const fullPicker = async options => {
     rows: ranking.rows.map(row => ({ ...row, ...letters.lettersByGroup[row.groupId] })) };
 };
 const picker = async () => fullPicker({ today, ...await roster() });
-const result = async (n, childId, letters, extra = {}) => {
+const result = async (n, childId, letters, { wrong = [], ...extra } = {}) => {
   const family = { ...serverFamily(n, { childId, items: letters.length }), user_id: USER,
     programme_id: 'programme-a', language: 'xh', ...extra };
-  family.items.forEach((item, i) => { item.prompt = letters[i]; });
+  family.items.forEach((item, i) => {
+    item.prompt = letters[i];
+    if (wrong.includes(letters[i])) item.is_correct = false;
+  });
   await write(async db => {
     await db.runAsync(`insert into assessments
       (id, user_id, child_id, programme_id, assessment_type, assessment_date, question_code,
@@ -127,7 +131,7 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('known letters come from the current-year result and confirmations', async () => {
+test('known letters come from current-year results and confirmations', async () => {
   await result(1, 'c1', ['s'], { assessment_date: '2025-12-01' });
   await result(2, 'c1', ['k'], { assessment_date: '2026-02-01' });
   await result(3, 'c1', ['O', 'm'], { assessment_date: '2026-03-01' });
@@ -138,11 +142,22 @@ test('known letters come from the current-year result and confirmations', async 
   const assessments = jest.spyOn(repositories.assessments, 'getLetterEvidenceResults');
   const mastery = jest.spyOn(repositories.mastery, 'getLetterMastery');
   expect(await loadKnownLetters({ repositories, userId: handle.userId, childIds: ['c1', 'c2'], languageCode: 'xh' }))
-    .toEqual({ c1: ['a', 'o', 'l', 'm'], c2: ['o', 'm'] });
+    // c1 keeps February's k: March never reached it. Last year's s does not count.
+    .toEqual({ c1: ['a', 'o', 'l', 'm', 'k'], c2: ['o', 'm'] });
   expect(assessments).toHaveBeenCalledTimes(1);
   expect(assessments).toHaveBeenCalledWith({ userId: USER, childIds: ['c1', 'c2'] });
   expect(mastery).toHaveBeenCalledTimes(1);
   expect(mastery).toHaveBeenCalledWith({ childIds: ['c1', 'c2'], language: 'xh' });
+});
+
+test('each letter takes the newest current-year result that reached it, as on the tracker', async () => {
+  // February reached k and o; March got o wrong, got m right and never reached k.
+  await result(1, 'c1', ['k', 'o'], { assessment_date: '2026-02-01' });
+  await result(2, 'c1', ['o', 'm'], { assessment_date: '2026-03-01', wrong: ['o'] });
+  const known = await loadKnownLetters({ repositories, userId: handle.userId, childIds: ['c1'], languageCode: 'xh' });
+  expect([...known.c1].sort()).toEqual(['k', 'm']);
+  const tracker = await loadMasteryState({ repositories, userId: handle.userId, childId: 'c1', languageCode: 'xh' });
+  expect([...tracker.assessmentMastered].sort()).toEqual(['k', 'm']);
 });
 
 test('reads do not grow with the number of children', async () => {
