@@ -659,6 +659,12 @@ const main = async () => {
       ...await runQuotaCases(databaseUrl), ...runV2GrantCases(databaseUrl) };
     runPsql({ databaseUrl, label: 'storage-policy-composition-fixture', sql: storagePolicyFixtureSql });
     const storageSql = fs.readFileSync(path.join(MIGRATIONS_DIR, STORAGE_MIGRATION), 'utf8');
+    // Hosted storage.* tables belong to supabase_storage_admin. postgres may only CREATE POLICY
+    // on them (supautils.policy_grants); ALTER/GRANT/REVOKE fail with 42501 on hosted, which this
+    // local stand-in (owned by postgres) cannot reproduce. Guard the migration text instead.
+    const ownerOnly = storageSql.replace(/--.*$/gm, '')
+      .match(/\b(ALTER\s+TABLE|GRANT|REVOKE)\b[^;]*\bstorage\.\w+/gi);
+    assert.equal(ownerOnly, null, `storage migration uses owner-only statements: ${ownerOnly}`);
     runPsql({ databaseUrl, label: `migration-${STORAGE_MIGRATION}`, sql: `BEGIN;\n${storageSql}\nCOMMIT;` });
     const summary = { ...receiptSummary, ...runStorageCases(databaseUrl) };
     process.stdout.write(`${JSON.stringify({ casesPassed: Object.values(summary).filter((v) => v === 'passed').length,
