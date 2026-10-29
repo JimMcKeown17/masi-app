@@ -9,6 +9,16 @@ const mockSignOut = jest.fn(async () => ({ error: null }));
 const mockCountUnsent = jest.fn(async () => ({ total: 2, byTable: {} }));
 const mockClockOut = jest.fn(async () => true);
 const mockHandle = { isCurrent: () => true, userId: 'ea-1', epoch: 1 };
+const mockCaptureEvent = jest.fn();
+const mockGetDeliveryState = jest.fn();
+const mockSyncNow = jest.fn();
+let mockSignedInEAOverride;
+const mockAvailablePicker = jest.fn(() => null);
+const mockPickScreenshot = jest.fn();
+jest.mock('../src/utils/supportScreenshot', () => ({
+  availablePicker: () => mockAvailablePicker(), pickSupportScreenshot: (...args) => mockPickScreenshot(...args),
+}));
+let mockIsOnline = true;
 const deferred = () => {
   let resolve; let reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
@@ -26,12 +36,13 @@ jest.mock('../src/hooks/useTimeTracking', () => ({
   useTimeTracking: () => ({ isSignedIn: true, handleSignOut: mockClockOut }),
 }));
 jest.mock('../src/context/OfflineContext', () => ({
-  useOffline: () => ({ isOnline: true, syncNow: jest.fn() }),
+  useOffline: () => ({ isOnline: mockIsOnline, syncNow: mockSyncNow }),
 }));
 jest.mock('../src/context/SignedInEAContext', () => ({
-  useSignedInEA: () => ({
+  useSignedInEA: () => mockSignedInEAOverride ?? ({
     handle: mockHandle,
     repositories: { syncOutbox: { countUnsent: mockCountUnsent } },
+    services: { supportIncidents: { captureEvent: mockCaptureEvent, getDeliveryState: mockGetDeliveryState } },
   }),
 }));
 
@@ -120,9 +131,195 @@ const fillPassword = (screen) => {
 };
 beforeEach(() => {
   jest.clearAllMocks();
+  mockIsOnline = true;
+  mockSignedInEAOverride = null;
+  mockAvailablePicker.mockReturnValue(null);
+  mockPickScreenshot.mockReset();
+  mockCaptureEvent.mockReset();
+  mockGetDeliveryState.mockReset();
+  mockSyncNow.mockReset();
+  mockGetDeliveryState.mockResolvedValue('sent');
+  mockSyncNow.mockResolvedValue({ success: true });
   mockGalleryEnabled = false;
   mockProfile = { first_name: 'Test', last_name: 'User', jobTitleName: 'Education Assistant', schoolName: 'Masi Primary' };
   mockSignOutFlowOverride = null;
+});
+
+test.each(['sent', 'pending', 'rejected'])('Send diagnostics captures a fresh manual event and confirms only its %s receipt', async (delivery) => {
+  const incidentRef = { id: 'diagnostics-1', kind: 'diagnostics_sent', reportGeneration: 1 };
+  mockCaptureEvent.mockResolvedValue({ saved: true, incidentRef });
+  mockGetDeliveryState.mockResolvedValue(delivery);
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Send diagnostics' }));
+  const send = screen.getByRole('button', { name: 'Send' });
+  await act(async () => { fireEvent.press(send); fireEvent.press(send); });
+  expect(mockCaptureEvent).toHaveBeenCalledTimes(1);
+  expect(mockCaptureEvent).toHaveBeenCalledWith('diagnostics_sent', { trigger: 'manual' });
+  expect(mockGetDeliveryState).toHaveBeenCalledWith(incidentRef);
+  const message = delivery === 'sent' ? 'Sent. Thank you.' : delivery === 'pending'
+    ? "Saved on your phone. It will send when you're online." : 'Could not save diagnostics. Please try again.';
+  expect(screen.getByText(message)).toBeTruthy();
+});
+
+test('a screenshot reaches durable capture with its original metadata before any sync', async () => {
+  mockAvailablePicker.mockReturnValue({});
+  const screenshotFile = { uri: 'file:///private/picker/shot.heif', extension: 'heif', mimeType: 'image/heif', fileSize: 8000 };
+  mockPickScreenshot.mockResolvedValue(screenshotFile);
+  mockCaptureEvent.mockResolvedValue({ saved: true, incidentRef: { id: 'screenshot-report', kind: 'ea_report', reportGeneration: 1 } });
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Screenshot report');
+  await act(async () => { await fireEvent.press(screen.getByRole('button', { name: 'Attach a screenshot' })); });
+  await act(async () => { await fireEvent.press(screen.getByRole('button', { name: 'Send' })); });
+  expect(mockCaptureEvent).toHaveBeenCalledWith('ea_report', {
+    message: 'Screenshot report', screenshotAttached: true, screen: 'Profile',
+  }, { screenshotFile });
+});
+
+test('dismiss/reopen cannot create a duplicate report or let the old completion clear the new form', async () => {
+  const pending = deferred();
+  mockCaptureEvent.mockReturnValueOnce(pending.promise);
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'First report');
+  const send = screen.getByRole('button', { name: 'Send' });
+  act(() => { fireEvent.press(send); fireEvent.press(send); });
+  expect(mockCaptureEvent).toHaveBeenCalledTimes(1);
+  fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  expect(screen.getByLabelText('What went wrong?').props.value).toBe('');
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'New report');
+  await act(async () => { await fireEvent.press(screen.getByRole('button', { name: 'Send' })); });
+  expect(mockCaptureEvent).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('A report is still being saved. Please wait and try again.')).toBeTruthy();
+  await act(async () => { pending.resolve({ saved: true, incidentRef: { id: 'first-report', kind: 'ea_report', reportGeneration: 1 } }); });
+  expect(screen.getByLabelText('What went wrong?').props.value).toBe('New report');
+  expect(screen.getByRole('header', { name: 'Report a problem' })).toBeTruthy();
+});
+
+test('a current-actor outcome uses the root toast after navigating away for 4,000 ms', async () => {
+  jest.useFakeTimers();
+  try {
+    const pending = deferred();
+    mockCaptureEvent.mockReturnValueOnce(pending.promise);
+    const content = (profileVisible) => <ToastActorScope handle={mockHandle}>{profileVisible ? <ProfileScreen /> : null}</ToastActorScope>;
+    const screen = render(content(true));
+    fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+    fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Report before leaving');
+    fireEvent.press(screen.getByRole('button', { name: 'Send' }));
+    screen.rerender(content(false));
+    await act(async () => { pending.resolve({ saved: true, incidentRef: { id: 'navigated-report', kind: 'ea_report', reportGeneration: 1 } }); });
+    expect(screen.getByText('Sent. Thank you.')).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(3999); });
+    expect(screen.getByText('Sent. Thank you.')).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(1); });
+    act(() => { jest.advanceTimersByTime(500); });
+    expect(screen.queryByText('Sent. Thank you.')).toBeNull();
+  } finally { jest.useRealTimers(); }
+});
+
+// This checkout predates C's captureEvent/getDeliveryState handle services.
+// TODO Slice C: enable this real-handle Profile capture test after C is integrated.
+test.skip('TODO Slice C: Profile records a report through real handle services and reads its durable pending receipt', async () => {
+  const realHandle = require('../test-support/defaultTestHandle').getDefaultTestHandle();
+  mockSignedInEAOverride = { handle: realHandle, repositories: realHandle.repositories, services: realHandle.services };
+  const capture = jest.spyOn(realHandle.services.supportIncidents, 'captureEvent');
+  mockSyncNow.mockResolvedValue(null);
+  const screen = render(<ToastActorScope handle={realHandle}><ProfileScreen /></ToastActorScope>);
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Real handle report');
+  await act(async () => { await fireEvent.press(screen.getByRole('button', { name: 'Send' })); });
+  const result = await capture.mock.results[0].value;
+  expect(result.saved).toBe(true);
+  expect(await realHandle.services.supportIncidents.getDeliveryState(result.incidentRef)).toBe('pending');
+  const row = await realHandle.getReader().getFirstAsync('SELECT kind, payload FROM support_incident_queue WHERE id = ?', [result.incidentRef.id]);
+  expect(row.kind).toBe('ea_report');
+  expect(JSON.parse(row.payload).message).toBe('Real handle report');
+  expect(screen.getByText("Saved on your phone. It will send when you're online.")).toBeTruthy();
+});
+
+test('Report a problem awaits durable capture and bundle completion, syncs, then checks the exact receipt', async () => {
+  const capture = deferred();
+  const sync = deferred();
+  const incidentRef = { id: 'incident-1', kind: 'ea_report', reportGeneration: 2 };
+  mockCaptureEvent.mockReturnValueOnce(capture.promise);
+  mockSyncNow.mockReturnValueOnce(sync.promise);
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), '  My session disappeared.  ');
+  fireEvent.press(screen.getByRole('button', { name: 'Send' }));
+  expect(mockCaptureEvent).toHaveBeenCalledWith('ea_report', {
+    message: '  My session disappeared.  ', screenshotAttached: false, screen: 'Profile',
+  }, { screenshotFile: undefined });
+  expect(mockSyncNow).not.toHaveBeenCalled();
+  await act(async () => { capture.resolve({ saved: true, incidentRef }); });
+  expect(mockSyncNow).toHaveBeenCalledTimes(1);
+  expect(mockGetDeliveryState).not.toHaveBeenCalled();
+  await act(async () => { sync.resolve({ success: true }); });
+  expect(mockGetDeliveryState).toHaveBeenCalledWith(incidentRef);
+  expect(screen.getByText('Sent. Thank you.')).toBeTruthy();
+});
+
+test.each(['offline', 'online transport failure', 'generic success', 'joined preexisting sync'])('%s reports an exact pending receipt as saved on the phone', async (scenario) => {
+  const incidentRef = { id: 'pending-report', kind: 'ea_report', reportGeneration: 1 };
+  mockCaptureEvent.mockResolvedValue({ saved: true, incidentRef });
+  mockGetDeliveryState.mockResolvedValue('pending');
+  if (scenario === 'offline') { mockIsOnline = false; mockSyncNow.mockResolvedValue(null); }
+  if (scenario === 'online transport failure') mockSyncNow.mockRejectedValue(new Error('Transport unavailable'));
+  if (scenario === 'joined preexisting sync') mockSyncNow.mockResolvedValue({ success: true, incidentsSent: 0 });
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'My session disappeared');
+  await act(async () => { await fireEvent.press(screen.getByRole('button', { name: 'Send' })); });
+  expect(mockGetDeliveryState).toHaveBeenCalledWith(incidentRef);
+  expect(screen.getByText("Saved on your phone. It will send when you're online.")).toBeTruthy();
+  expect(screen.queryByText('Sent. Thank you.')).toBeNull();
+});
+
+test.each(['unsaved', 'too large', 'rejected', 'attachment failure'])('%s shows an inline failure and never claims saved or sent', async (scenario) => {
+  const incidentRef = { id: 'bad-report', kind: 'ea_report', reportGeneration: 1 };
+  if (scenario === 'too large' || scenario === 'attachment failure') mockCaptureEvent.mockRejectedValue(new Error(scenario));
+  else mockCaptureEvent.mockResolvedValue({ saved: scenario !== 'unsaved', incidentRef });
+  mockGetDeliveryState.mockResolvedValue('rejected');
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Preserve this report for retry');
+  await act(async () => { await fireEvent.press(screen.getByRole('button', { name: 'Send' })); });
+  expect(screen.queryByText('Sent. Thank you.')).toBeNull();
+  expect(screen.queryByText("Saved on your phone. It will send when you're online.")).toBeNull();
+  expect(screen.getByText('Could not save your report. Please try again.')).toBeTruthy();
+  expect(screen.getByLabelText('What went wrong?').props.value).toBe('Preserve this report for retry');
+  if (scenario !== 'rejected') expect(mockSyncNow).not.toHaveBeenCalled();
+});
+
+test.each(['capture', 'sync', 'delivery'])('sign-out during %s cannot continue as another EA or publish a toast', async (phase) => {
+  let current = true;
+  jest.spyOn(mockHandle, 'isCurrent').mockImplementation(() => current);
+  const pending = deferred();
+  const incidentRef = { id: 'old-ea-report', kind: 'ea_report', reportGeneration: 1 };
+  mockCaptureEvent.mockResolvedValue({ saved: true, incidentRef });
+  if (phase === 'capture') mockCaptureEvent.mockReturnValueOnce(pending.promise);
+  if (phase === 'sync') mockSyncNow.mockReturnValueOnce(pending.promise);
+  if (phase === 'delivery') mockGetDeliveryState.mockReturnValueOnce(pending.promise);
+  const screen = renderProfile();
+  fireEvent.press(screen.getByRole('button', { name: 'Support tools' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Report a problem' }));
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Old EA report');
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Send' })); });
+  current = false;
+  await act(async () => { pending.resolve(phase === 'capture' ? { saved: true, incidentRef } : phase === 'delivery' ? 'sent' : { success: true }); });
+  if (phase === 'capture') expect(mockSyncNow).not.toHaveBeenCalled();
+  if (phase !== 'delivery') expect(mockGetDeliveryState).not.toHaveBeenCalled();
+  expect(screen.queryByText('Sent. Thank you.')).toBeNull();
+  expect(screen.queryByText("Saved on your phone. It will send when you're online.")).toBeNull();
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -154,16 +351,16 @@ test('section labels are headers', () => {
     expect(screen.getByRole('header', { name })).toBeTruthy();
   }
 });
-test('Support tools toggles and reveals the three tools', () => {
+test('Support tools toggles and reveals reporting, diagnostics and the existing tools', () => {
   const screen = renderProfile();
   const support = () => screen.getByRole('button', { name: 'Support tools' });
   expect(support().props.accessibilityState).toMatchObject({ expanded: false });
-  expect(screen.getByText(/Share\slogs · Share\sdatabase · Test\scrash\sreporting/)).toBeTruthy();
+  expect(screen.getByText(/Report\sa\sproblem · Send\sdiagnostics · Share\slogs · Share\sdatabase · Test\scrash\sreporting/)).toBeTruthy();
   expect(screen.queryByText('Share logs')).toBeNull();
   fireEvent.press(support());
   expect(support().props.accessibilityState).toMatchObject({ expanded: true });
-  expect(screen.getByText('Use when Masi support asks')).toBeTruthy();
-  for (const name of ['Share logs', 'Share database, sensitive', 'Test crash reporting']) {
+  expect(screen.getByText('Report a problem or share app information with Masi')).toBeTruthy();
+  for (const name of ['Report a problem', 'Send diagnostics', 'Share logs', 'Share database, sensitive', 'Test crash reporting']) {
     expect(screen.getByRole('button', { name })).toBeTruthy();
   }
   fireEvent.press(support());
