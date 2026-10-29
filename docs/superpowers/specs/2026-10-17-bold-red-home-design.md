@@ -1,5 +1,7 @@
 # Bold Red Home — Design
 
+> **Updated 2026-10-25 (`fix/one-tap-clock-in`):** the clocked-in clock row now shows "On the clock" + "Since {formatDisplayTime}" instead of elapsed time.
+
 > **2026-10-17 status:** Reconciled with the signed-in EA handle, upload-path, location,
 > session-history and sign-out changes in main. See the
 > [reconciliation plan](../plans/2026-10-17-bold-red-home-reconcile.md) and

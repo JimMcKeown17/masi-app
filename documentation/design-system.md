@@ -172,7 +172,7 @@ exemption is necessary.
 | `displayTitle` | display | 28 / 32 | −0.56 | Screen titles, stat numerals |
 | `displaySheetTitle` | display | 24 / 28 | −0.48 | Sheet and empty-state titles |
 | `displayHeading` | display | 18 / 24 | −0.27 | Smaller display heading |
-| `displayCount` | display | 20 / 24 | −0.4 | **Addition:** Home elapsed time and week counts |
+| `displayCount` | display | 20 / 24 | −0.4 | **Addition:** Home week counts |
 | `textRowTitle` | textBold | 16 / 22 | — | Action-row titles and read-only values |
 | `textBodyL` | textMedium | 16 / 22 | — | Paper bodyLarge |
 | `textBodyLStrong` | textBold | 17 / 22 | — | **Addition:** Home gauge “/3” suffix |
@@ -528,9 +528,11 @@ action. Optional search filters labels case-insensitively and resets when visibi
 Flat min-56dp rows have border dividers; selected text uses `textOptionSelected` plus an ink
 checkmark. The class picker already used this component before Task 25; that task retained it.
 
-**`sessions/ClockInBeforeSessionSheet`** — `visible, onDismiss, onClockInNow, onContinueAnyway`.
-The D8 launch-guard sheet: primary “Clock in now”, md warning note, warning “Record without
-clocking in”, then ink tertiary “Cancel”. It keeps its existing warning copy and handlers and
+**`sessions/ClockInBeforeSessionSheet`** — `visible, clockingIn, onDismiss, onClockInNow, onContinueAnyway`.
+The D8 launch-guard sheet: primary “Clock in now” clocks in in place and continues to Record.
+While pending it shows “Clocking in…” and disables the plain secondary “Record without clocking
+in” escape hatch; ink tertiary “Cancel” stays enabled and dismisses without continuing after
+clock-in completes. There is no warning note. The title and subtitle are unchanged, and the sheet
 opts out of scrolling/keyboard avoidance. Other domain sheets compose `BottomSheet` rather than
 introducing another overlay host.
 

@@ -202,7 +202,7 @@ Home is the primary daily-use surface (Bold Red Home, spec
 - identity, Programme, and school;
 - sync status as an icon button whose glyph and badge carry the state (full wording on the Sync
   status screen and in the button's accessibility label);
-- clocked-in or clocked-out state with elapsed time and safe actions (clock-out is conditional on
+- clocked-in or clocked-out state with clock-in time and safe actions (clock-out is conditional on
   the time entry still being open);
 - the sessions-today segmented half gauge (locked R3 colour rule);
 - Monday-to-Friday session activity;

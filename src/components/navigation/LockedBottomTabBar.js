@@ -80,6 +80,7 @@ export default function LockedBottomTabBar({ state, descriptors, navigation }) {
   useToastObstruction(barHeight + FAB_OVERHANG + 5, isFocused);
   const {
     warningVisible,
+    clockingIn,
     requestSessionLaunch,
     continueAnyway,
     clockInNow,
@@ -133,6 +134,7 @@ export default function LockedBottomTabBar({ state, descriptors, navigation }) {
 
       <ClockInBeforeSessionSheet
         visible={warningVisible}
+        clockingIn={clockingIn}
         onDismiss={dismissWarning}
         onClockInNow={clockInNow}
         onContinueAnyway={continueAnyway}
