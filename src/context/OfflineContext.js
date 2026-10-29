@@ -290,18 +290,15 @@ export const OfflineProvider = ({ children }) => {
       setIsOnline(online);
       isOnlineRef.current = online;
 
-      // Reconnect uploads ready domain work, stranded in-flight rows and due incidents.
-      if (online && wasOffline && hasUploadWork()) {
-        console.log('Connection restored, triggering sync...');
-        triggerBackgroundSyncRef.current();
-      }
       if (online && wasOffline) {
+        // Observation/promotion can discover work even when the cached counters are zero.
+        void refreshSyncStatus();
         requestDomainPullOrResumeHistory('reconnect');
       }
     });
 
     return () => unsubscribe();
-  }, [requestDomainPullOrResumeHistory]);
+  }, [requestDomainPullOrResumeHistory, refreshSyncStatus]);
 
   /**
    * App state listener

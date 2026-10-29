@@ -1,3 +1,4 @@
+jest.mock('@react-native-community/netinfo',()=>({fetch:jest.fn(async()=>({type:'wifi',isConnected:true,isInternetReachable:true}))}));
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 
 import fs from 'fs';
@@ -328,7 +329,7 @@ test('the complete repository graph, composite onboarding and profile cache are 
   expect(Object.keys(a.services).sort()).toEqual([
     'repositories', 'homeAttention', 'syncEngine', 'referenceDataReady', 'pullReferenceData',
     'pullRoster', 'pullClasses', 'pullLookups', 'fetchAndCacheSchools', 'sessionHistory',
-    'assessmentHistory', 'deviceProfile', 'lessonDraft',
+    'assessmentHistory', 'deviceProfile', 'lessonDraft', 'supportIncidents',
   ].sort());
   expect(Object.keys(a.repositories).sort()).toEqual([
     'children', 'classes', 'groups', 'classEaAssignments', 'groupEaAssignments',
@@ -341,7 +342,7 @@ test('the complete repository graph, composite onboarding and profile cache are 
   await a.repositories.schools.replaceFromServer(referenceRows('schools', A));
   await a.services.deviceProfile.save({ id: A, label: 'A profile' });
   const incident = { kind: 'left_behind_unsent_work', repeatKey: 'a-file', payload: { unsentByTable: { children: 1 } } };
-  expect(await a.repositories.supportIncidents.enqueue(incident)).toEqual({ queued: true });
+  expect(await a.repositories.supportIncidents.enqueue(incident)).toMatchObject({ queued: true });
   await a.repositories.classOnboarding.start({ userId: A, classData: { id: 'class-a', name: 'A class', grade: '1', school_id: 'school', programme_id: PROGRAMME, created_by: A } });
   expect(await a.repositories.classOnboarding.getPendingClassId(A)).toBe('class-a');
   const b = await open(B, async () => response());

@@ -320,3 +320,28 @@ test('RPC wire evidence uses the assessment parent id, null mastery id, and reta
   expect(dump.failedOutboxRows.find(row => row.id === 'malformed')).toMatchObject({ serverRecordId: 'malformed', wirePayload: null,
     wirePayloadError: 'user_id: must be a nonempty string', payload: { id: 'raw-invalid-id', message: 'retain raw' }, lastError: 'raw error' });
 });
+
+test('bounded bundle export limits SQL rows and payload extraction while manual export remains complete', async () => {
+  const h = requireCurrentHandle();
+  for (let i=0;i<3;i++) await h.withTransaction(txn=>txn.runAsync(`insert into sync_outbox
+    (owner_user_id,id,table_name,record_id,operation,payload,status,updated_at) values (?,?, 'children',?,'insert',?,'terminal',?)`,
+  h.userId,`bounded-${i}`,`child-${i}`,JSON.stringify({id:`child-${i}`,notes:'😀'.repeat(10000)}),`2026-10-29T00:00:0${i}Z`));
+  const bounded=await debugDump({handle:h},{outboxLimit:2,payloadMaxBytes:20480,masteryLimit:1,sectionLimit:2});
+  expect(bounded.failedOutboxRows).toHaveLength(2);
+  expect(bounded.failedOutboxRows[0]).toMatchObject({id:'bounded-2',payloadTruncated:true,wirePayload:null});
+  expect(Buffer.byteLength(bounded.failedOutboxRows[0].payload)).toBeLessThanOrEqual(20480);
+  expect((await debugDump({handle:h})).failedOutboxRows).toHaveLength(3);
+});
+test('bounded variable-size error, cursor and incident fields carry honest sibling truncation markers',async()=>{
+ const h=requireCurrentHandle();const raw='é'.repeat(30000);
+ await h.withTransaction(async txn=>{
+  await txn.runAsync(`insert into sync_outbox (owner_user_id,id,table_name,record_id,operation,payload,status,last_error)
+    values (?,'bounded-error','children','c','insert','{}','terminal',?)`,h.userId,raw);
+  await txn.runAsync("insert into sync_state (scope,cursor) values ('large-cursor',?)",raw);
+  await h.services.repositories.supportIncidents.record(txn,'upload_terminal',['large'],{raw},{event:false});
+ });
+ const bounded=await debugDump({handle:h},{outboxLimit:200,payloadMaxBytes:20480,masteryLimit:500,sectionLimit:200});
+ expect(bounded.failedOutboxRows[0]).toMatchObject({lastErrorTruncated:true,lastErrorOriginalBytes:60000});
+ expect(bounded.syncState[0]).toMatchObject({cursorTruncated:true,cursorOriginalBytes:60000});
+ expect(bounded.supportIncidents[0]).toMatchObject({payloadTruncated:true,payloadOriginalBytes:60010,reportSnapshotOmitted:1});
+});

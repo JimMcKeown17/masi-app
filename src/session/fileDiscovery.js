@@ -1,3 +1,4 @@
+import { cleanupBundleFiles } from '../services/diagnosticBundle';
 import { openDatabaseAsync, defaultDatabaseDirectory } from 'expo-sqlite';
 import { Directory, File } from 'expo-file-system/next';
 import { DATABASE_FILE_PREFIX, LEGACY_DATABASE_NAME, databaseNameForUser } from '../db/client';
@@ -97,6 +98,7 @@ export const discoverAndQueueIncidents = async ({
   for (const incident of incidentsFromDiscovery(files, now)) {
     try {
       const result = await handle.services.repositories.supportIncidents.enqueue(incident);
+      cleanupBundleFiles(handle, result.evictedFiles ?? []);
       if (result.queued) queued += 1;
     } catch (error) {
       if (isStaleActorError(error)) return { queued };

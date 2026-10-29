@@ -207,9 +207,20 @@ describe('OfflineContext Plan 4 sync API', () => {
     expect(result.current.isOnline).toBe(false);
     await act(async () => { jest.advanceTimersByTime(1500); });
     expect(syncAll).not.toHaveBeenCalled();
-    act(() => { NetInfo.addEventListener.mock.calls[0][0]({ isConnected: true, isInternetReachable: true }); });
+    await act(async () => { NetInfo.addEventListener.mock.calls[0][0]({ isConnected: true, isInternetReachable: true }); });
     await act(async () => { jest.advanceTimersByTime(1000); });
     expect(syncAll).toHaveBeenCalledTimes(1);
+  });
+
+  test('reconnect refreshes stale zero counters before admitting newly observed incident work', async () => {
+    NetInfo.fetch.mockResolvedValueOnce({ isConnected: false, isInternetReachable: false });
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(0));
+    const view = await renderOfflineHook();
+    getSyncStatus.mockResolvedValue(incidentOnlyStatus(1));
+    await act(async () => { NetInfo.addEventListener.mock.calls[0][0]({ isConnected: true, isInternetReachable: true }); });
+    await waitFor(() => expect(getSyncStatus).toHaveBeenCalled());
+    await waitFor(() => expect(syncAll).toHaveBeenCalled());
+    view.unmount();
   });
 
   test('incident-only work discovered after mount is refreshed and schedules a pass', async () => {
@@ -777,7 +788,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     syncAll.mockClear();
 
     const listener = NetInfo.addEventListener.mock.calls[0][0];
-    act(() => {
+    await act(async () => {
       listener({ isConnected: false, isInternetReachable: false });
       listener({ isConnected: true, isInternetReachable: true });
     });
@@ -1029,7 +1040,7 @@ describe('OfflineContext Plan 4 sync API', () => {
     syncAll.mockClear();
 
     const listener = NetInfo.addEventListener.mock.calls[0][0];
-    act(() => {
+    await act(async () => {
       listener({ isConnected: false, isInternetReachable: false });
       listener({ isConnected: true, isInternetReachable: true });
     });

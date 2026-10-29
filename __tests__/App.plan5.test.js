@@ -1,11 +1,18 @@
-global.__MASI_NO_DEFAULT_HANDLE__ = true;
+jest.mock('@react-native-community/netinfo',()=>({fetch:jest.fn(async()=>({isConnected:true,type:'wifi'}))}));
+jest.mock('expo-file-system/next',()=>{
+ class File {constructor(...p){this.uri=p.map(x=>x.uri??x).join('/');}create(){}write(){}get exists(){return true;}delete(){}}
+ class Directory {constructor(...p){this.uri=p.map(x=>x.uri??x).join('/');}create(){}}
+ return {File,Directory,Paths:{document:'file:///documents',availableDiskSpace:123,totalDiskSpace:456}};
+});
+import {getDefaultTestHandle} from '../test-support/defaultTestHandle';
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 
 const mockUseFonts = jest.fn(() => [true, null]);
 jest.mock('expo-font', () => ({ useFonts: (...args) => mockUseFonts(...args) }));
 const mockAssessmentThemeProvider = jest.fn(({ children }) => children);
 jest.mock('../src/assessment-questions', () => ({
+  ...jest.requireActual('../src/assessment-questions'),
   AssessmentThemeProvider: (props) => mockAssessmentThemeProvider(props),
 }));
 jest.mock('expo-splash-screen', () => ({
@@ -13,11 +20,11 @@ jest.mock('expo-splash-screen', () => ({
   hideAsync: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock('../src/utils/logger', () => ({
-  logger: {
-    init: jest.fn(),
-  },
-}));
+jest.mock('../src/utils/logger', () => {
+  const actual = jest.requireActual('../src/utils/logger');
+  actual.logger.init = jest.fn();
+  return actual;
+});
 
 const mockInitializeObservability = jest.fn(() => ({ enabled: true }));
 const mockCaptureOperationalError = jest.fn();
@@ -169,4 +176,29 @@ describe('App root', () => {
     expect(mockFlushObservability).toHaveBeenCalled();
     expect(mockWrapAppWithObservability).toHaveBeenCalled();
   });
+});
+
+test('a rendered React crash records one durable event and a post-commit bundle for the open handle',async()=>{
+ const {ErrorBoundary}=require('../App');const h=getDefaultTestHandle();
+ const quiet=jest.spyOn(console,'error').mockImplementation(()=>{});
+ const BrokenScreen=()=>{throw new Error('Child 123 failed');};
+ try {
+  render(<ErrorBoundary><BrokenScreen/></ErrorBoundary>);
+  await waitFor(async()=>{
+    const rows=await (await h.getReader()).getAllAsync('select * from support_incident_queue');
+    expect(rows).toHaveLength(1);expect(rows[0].kind).toBe('app_error_caught');expect(rows[0].bundle_state).toBe('ready');
+    expect(JSON.parse(rows[0].payload)).toMatchObject({errorName:'Error',message:'Child 123 failed',messageDigest:expect.any(String),components:expect.arrayContaining(['BrokenScreen'])});
+  });
+ } finally {quiet.mockRestore();}
+});
+test('a rendered crash without an open handle keeps operational reporting and the fallback',async()=>{
+ const {ErrorBoundary}=require('../App');await require('../src/session/signedInHandle').requestClose({reason:'no handle'});
+ const before=mockCaptureOperationalError.mock.calls.length;
+ const quiet=jest.spyOn(console,'error').mockImplementation(()=>{});
+ const BrokenScreen=()=>{throw new Error('signed out crash');};
+ try {
+  const screen=render(<ErrorBoundary><BrokenScreen/></ErrorBoundary>);
+  expect(screen.getByText('Something went wrong')).toBeTruthy();
+  expect(mockCaptureOperationalError.mock.calls.length).toBe(before+1);
+ } finally {quiet.mockRestore();}
 });

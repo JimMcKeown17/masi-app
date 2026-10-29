@@ -1048,6 +1048,7 @@ export const createOutboxSyncEngine = ({
   outboxRepository = createSyncOutboxRepository({ database }),
   stateRepository = createSyncStateRepository({ database }),
   supportIncidentRepository = null,
+  observeStandingConditions = null,
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
   enqueueRequest,
@@ -1747,7 +1748,7 @@ export const createOutboxSyncEngine = ({
       if (!tableName && supportIncidentRepository) {
         try {
           result.incidents = await drainSupportIncidents({
-            repository: supportIncidentRepository, supabaseClient, enqueueRequest,
+            handle: database, repository: supportIncidentRepository, supabaseClient, enqueueRequest,
             envelope: await buildIncidentEnvelope(),
           });
         } catch (error) {
@@ -1791,6 +1792,10 @@ export const createOutboxSyncEngine = ({
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
   const getSyncStatus = async (options = {}) => {
+    try { await observeStandingConditions?.(); } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      console.warn('Support incident observer failed:', errorMessage(error));
+    }
     const [status, meta, incidentReadyCount] = await Promise.all([
       outboxRepository.getSyncStatus(options),
       stateRepository.getSyncMeta(),

@@ -36,7 +36,7 @@ export const createHandleDataClient = ({
     let timer;
     let abort;
     try {
-      return await new Promise((resolve, reject) => {
+      const response = await new Promise((resolve, reject) => {
         abort = () => {
           if (!handle.isOpen() || !handle.isCurrent()) task.markStale();
           // Reject explicitly: a transport that ignores its signal must still settle.
@@ -52,6 +52,12 @@ export const createHandleDataClient = ({
         Promise.resolve(fetchImpl(input, { ...init, headers, signal: controller.signal }))
           .then(resolve, reject);
       });
+      if (!handle.isOpen() || !handle.isCurrent()) {
+        task.markStale();
+        throw new StaleActorError();
+      }
+      if (!controller.signal.aborted && response.status < 500) handle.lastServerResponseAt = new Date().toISOString();
+      return response;
     } finally {
       clearTimeout(timer);
       for (const signal of signals) signal.removeEventListener('abort', abort);
