@@ -1,12 +1,13 @@
 # Field Diagnostics: Incident Receipts, Diagnostic Bundles, and the MA-BUG Registry — Design
 
-**Status:** revision 4, 2026-10-29.
+**Status:** revision 4.1, 2026-10-29.
 
 | Revision | Change |
 |---|---|
 | 1 | Trimmed by a check-solution pass. |
 | 2–3 | Three Codex adversarial rounds (§16). Receipts became immutable; incidents became observed from durable state rather than written inside domain transactions. |
 | 4 | Jim's capture-everything direction (J4), diagnostic bundles, Send diagnostics, Report a problem (J5–J6), and the round-3 fixes. |
+| 4.1 | Round-4 fixes: native-module preflight for the picker; bounded bundle capture; queue fairness; promotion in the observer; a capture gate before delivery. Spec review is closed at four rounds; the plan gets its own review. |
 
 **Roadmap item:** `documentation/ROADMAP.md` → "Minimum incident and provenance lane" and the
 field-bug feedback loop under it (priority-order item 4).
@@ -189,6 +190,7 @@ used, because it is set even when every upload failed on transport.
 | `report_snapshot` | Frozen report body for the current generation, written at its first send attempt. |
 | `has_unsent_changes` | 1 when the live condition changed after the current snapshot was frozen or sent. |
 | `bundle_id`, `bundle_file`, `screenshot_file` | The attached bundle (§9), if any. |
+| `bundle_state` | `none`, `capturing`, `ready`, `uploaded`, `failed`. Set to `capturing` in the same transaction that records an incident needing a bundle. |
 | `status` | `pending`, `sent`, `rejected`. |
 | `last_sent_at`, `last_sent_release` | Last acknowledgement and the release it carried. |
 | `attempts`, `next_attempt_at`, `last_error` | Backoff state. |
@@ -213,24 +215,39 @@ stored.
 
 ### 6.3 Promotion
 
-At the start of each drain, every `sent` row with `has_unsent_changes = 1` whose `last_sent_at`
-is ≥ 24 h ago is promoted: `report_generation + 1`, clear the snapshot, `pending`,
+Promotion runs **inside the observer's transaction** on every status refresh, before the ready
+count is computed. A due promotion therefore makes `incidentReadyCount` non-zero and schedules
+its own drain, with no domain work, auth event or manual sync needed (round 4, #4). Every `sent`
+row with `has_unsent_changes = 1` whose `last_sent_at` is ≥ 24 h ago is promoted: `report_generation + 1`, clear the snapshot, `pending`,
 `has_unsent_changes = 0`. A second crash after the freeze is therefore delivered within a day,
 even with no third event (review round 3, #3).
 
-### 6.4 Capacity
+### 6.4 Capacity and fairness
 
-200 rows:
-- Prune closed rows oldest-first. A `sent` row with `has_unsent_changes = 1` is not
-  prunable.
-- If every row is pending or unprunable, drop the new incident and increment
-  `local_state.support_incidents_dropped`.
+200 rows. Admission, in order:
+
+1. Prune `sent` and `rejected` rows of **observed** kinds oldest-first, whatever their
+   `has_unsent_changes`. They are re-derived from durable state on the next refresh if the
+   condition persists.
+2. Prune `sent` rows of event kinds without unsent changes.
+3. If the newcomer is `ea_report` or `diagnostics_sent`, evict the oldest `pending` row of an
+   observed kind (also re-derivable). **A human report is never dropped while any observed row
+   exists.**
+4. Otherwise drop the new incident and increment `local_state.support_incidents_dropped`.
+
+The drain orders rows by priority:
+1. `ea_report` and `diagnostics_sent`;
+2. other first deliveries (generation 1);
+3. re-reports.
+
+Within each group, oldest first.
 - A recreated condition gets a new row `id`, so its receipts have new `report_id`s. Nothing is
   merged.
 
 ### 6.5 Draining
 
-Bounded to 20 rows, after domain uploads, never under another EA's session (Plan 3).
+Bounded to 20 rows, after domain uploads, never under another EA's session (Plan 3). Rows with
+`bundle_state = 'capturing'` are not eligible, and are not counted as ready (round 4, #5).
 
 **Schema-1 rows** drain through v1 exactly as today.
 
@@ -342,8 +359,10 @@ replay of an original request still returns `false`. This is a documented except
 
 ### 8.3 Limits
 
-At most **150 receipts per reporter per rolling 24 h** (`54000`; duplicates not counted). The
-phone treats `54000` as transport.
+At most **150 receipts per reporter per rolling 24 h** across machine kinds, and a separate
+**50 per 24 h** for `ea_report` and `diagnostics_sent`, so machine noise can never use up a
+person's allowance. Both return `54000`; duplicates are not counted. The phone treats `54000`
+as transport.
 
 ### 8.4 Harness
 
@@ -400,8 +419,27 @@ Extend `scripts/support-incident-postgres-harness.cjs`:
 
 It is built **at capture time**, after the triggering transaction commits, so it shows the
 state when the problem happened. It is written to
-`FileSystem.documentDirectory + 'support-bundles/<bundle_id>.json'`. A bundle over 12 MB drops
-the oldest log lines first, then mastery rows, and records what it cut in `truncated`.
+`FileSystem.documentDirectory + 'support-bundles/<bundle_id>.json'`.
+
+**Budgets are applied before allocation** (round 4, #2), so a capture cannot exhaust memory on a
+Galaxy A03s:
+
+| Section | Budget |
+|---|---|
+| Failed/terminal outbox rows | Newest 200 |
+| Each row's `payload` | ≤ 20 KB, truncated with a marker |
+| Mastery rows | Newest 500 |
+| Logs | Read newest-first from the logger buffer and storage until 2 MB, each entry ≤ 4 KB. This adds a bounded `logger.tail({ maxBytes, maxEntryBytes })`; `exportLogs()` is not used for bundles. |
+
+`debugDump` gains an options argument for these limits; the Profile Share database export
+keeps its current unbounded behaviour.
+
+Capture rules:
+- It yields to the event loop between sections.
+- It checks that the handle is still open and current before each section and before writing.
+  A sign-out mid-capture abandons the capture and marks it `failed`.
+- If the serialized bundle still exceeds 12 MB, it is replaced by a minimal bundle: runtime,
+  EA, network, disk, counts, and the first 50 outbox rows. `truncated` records this.
 
 ### 9.3 Triggers and queueing
 
@@ -412,8 +450,13 @@ the oldest log lines first, then mastery rows, and records what it cut in `trunc
 | Report a problem | Each report | Bundle + optional screenshot + an `ea_report` incident |
 
 The rules for every trigger:
-- A bundle's file name is written to its incident row (`bundle_id`, `bundle_file`,
-  `screenshot_file`).
+- The incident is recorded with `bundle_state = 'capturing'` in its own transaction. The
+  drain cannot freeze or send it until capture ends.
+- Capture writes the file, then sets `bundle_id`, `bundle_file`, `screenshot_file` and
+  `bundle_state = 'ready'` in one transaction. On failure it sets `failed`.
+- A row still `capturing` 10 minutes after `updated_at` (process death mid-capture) is set to
+  `failed` by the observer. It then sends with `bundleCaptureFailed: true`. Evidence of the
+  problem still arrives; only the attachment is lost.
 - The drain uploads the bundle and screenshot before sending the receipt, which carries
   `bundle_path` and `screenshot_path`.
 - Upload failure → backoff; the receipt waits for its bundle. After 5 failed attempts the
@@ -456,11 +499,18 @@ opens a **bottom sheet** (`src/components/common/BottomSheet.js`), never a dialo
 - On submit: record `diagnostics_sent`, build the bundle, trigger a sync. Same confirmation
   copy.
 
-**Picker availability.** The picker is loaded with a guarded dynamic `require`. If the native
-module is missing (older binaries running the OTA), the attach option is hidden and nothing
-throws. The plan pins the exact availability check against `expo-image-picker`'s SDK-matched
-version. The version is installed with `npx expo install`, so it matches the SDK and is older
-than the 24 h supply-chain window.
+**Picker availability** (round 4, #1):
+- A plain guarded `require('expo-image-picker')` is **not** safe. The package calls
+  `requireNativeModule('ExponentImagePicker')` at import. Metro's `guardedLoadModule` reports
+  that failure as fatal before the caller's `catch` runs.
+- So availability is decided first with the non-throwing
+  `requireOptionalNativeModule('ExponentImagePicker')` from `expo-modules-core`. Only when it
+  returns a module does the sheet `require('expo-image-picker')`. Otherwise the attach option
+  is hidden.
+- The version is installed with `npx expo install`, so it is SDK-matched and older than the
+  24 h supply-chain window.
+- **Device gate:** the A03s running the current pilot binary (no picker) plus an OTA of this
+  branch opens Report a problem, sends a report, and does not crash.
 
 Copy is provisional for a wording pass with Jim.
 
@@ -709,6 +759,17 @@ Resolved in revision 3 by redesign:
 - a review window.
 
 Revision 3 also dropped server aggregation, transactional hooks, and whole-estate resolution.
+
+### Codex round 4 (1 blocking, 4 advisory) — resolved in revision 4.1
+
+1. A guarded picker `require` is fatal under Metro → native-module preflight (§11).
+2. Unbounded capture → budgets before allocation, yields, handle checks (§9.2).
+3. Queue starvation → observed rows are evictable; human reports are always admitted; priority
+   drain; a separate human quota (§6.4, §8.3).
+4. Promotion invisible to the scheduler → promotion in the observer (§6.3).
+5. Receipt sent before its bundle → the `capturing` gate and stale-capture recovery (§9.3).
+
+Spec review closed at four rounds. Remaining risk moves to plan review, tests and device gates.
 
 ### Codex round 3 (1 blocking, 3 advisory)
 
