@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const identityFixture = require('../test-support/fixtures/fieldDiagnosticsIdentity.json');
+
 const readerPath = path.join(__dirname, '../scripts/read-support-incidents.cjs');
 const PROJECT = 'segygjzpujphwvrubusm';
 const SNAPSHOT = '2026-10-29T16:00:00.000Z';
@@ -283,17 +285,40 @@ test('invalid registry refs and malformed frontmatter fail instead of becoming a
 test('all ten kinds have the ruled abbreviations and only the five machine families have signatures', async () => {
   const kinds = ['upload_terminal', 'upload_backlog_stale', 'reconcile_breaker_tripped', 'pull_failing', 'app_error_caught', 'ea_report', 'diagnostics_sent', 'left_behind_unsent_work', 'foreign_owner_in_file', 'legacy_shared_file_unsent'];
   const abbreviations = ['ut', 'bl', 'rb', 'pf', 'ae', 'er', 'dg', 'lb', 'fo', 'ls'];
-  // C's shared fixture is absent in this worktree. Inline R-O8 rules until integration.
-  const raw = 'Child 550e8400-e29b-41d4-a716-446655440000\n  attempt 123 failed';
-  const normalized = raw.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<uuid>').replace(/\d+/g, '#').replace(/\s+/g, ' ').slice(0, 500);
-  expect(normalized).toBe('Child <uuid> attempt # failed');
-  const { v5 } = require('uuid');
-  const digest = v5(normalized, 'd3a1c6f2-5b7e-4c1a-9f0e-2b8d4e6a7c10');
+  const { message: raw, messageDigest: digest } = identityFixture.messages[0];
   const result = await run(kinds.map(kind => receipt({ kind, payload: { errorClass: 'terminal', errorCode: '23503', scopeFamily: 'session_history', failureKind: 'query', errorName: 'Error', message: raw, messageDigest: digest } })));
   const byKind = Object.fromEntries(result.data.conditions.map(c => [c.kind, c]));
   kinds.forEach((kind, i) => expect(byKind[kind].handle.startsWith(`${abbreviations[i]}:`)).toBe(true));
   expect(kinds.map(kind => byKind[kind].signature)).toEqual(['upload_terminal/terminal/23503', 'upload_backlog_stale/-/-', 'reconcile_breaker_tripped/session_history/-', 'pull_failing/session_history/query', `app_error_caught/Error/${digest.slice(0, 8)}`, null, null, null, null, null]);
   expect(byKind.app_error_caught.latestPayload.message).toBe(raw);
+});
+
+test.each(identityFixture.messages)('shared R-O8 vectors preserve raw evidence and use the producer digest: $messageDigest', async vector => {
+  const result = await run([{
+    ...identityFixture.storageRow,
+    payload: { ...identityFixture.envelope.payload, message: vector.message, messageDigest: vector.messageDigest },
+  }]);
+  expect(result.code).toBe(0);
+  const [condition] = result.data.conditions;
+  expect(condition.signature).toBe(`app_error_caught/Error/${vector.messageDigest.slice(0, 8)}`);
+  expect(condition.latestPayload).toMatchObject({ message: vector.message, messageDigest: vector.messageDigest });
+});
+
+test('shared R-O9 identity preserves the condition, report generation and observed release through the reader', async () => {
+  const { storageRow: row, envelope, report, releaseIdentity } = identityFixture;
+  const result = await run([row]);
+  expect(result.code).toBe(0);
+  const [condition] = result.data.conditions;
+  expect(condition.key).toBe(`${row.reporter_id}/${envelope.kind}/${envelope.repeat_key}`);
+  expect(condition.releases).toEqual([releaseIdentity]);
+  expect(condition.observed).toEqual(envelope.observed);
+  expect(condition.firstObserved).toEqual(envelope.first_observed);
+  expect(condition.delivery).toEqual(envelope.delivery);
+  expect(condition.receipts[0]).toMatchObject({ report_id: report.reportId, report_generation: report.generation });
+  expect(condition.bundles).toEqual([{
+    reportId: report.reportId, bundlePath: envelope.bundle_path,
+    screenshotPath: envelope.screenshot_path, receivedAt: row.received_at,
+  }]);
 });
 
 test('fetch downloads the latest bundle-bearing receipt with its own companion screenshot and report id', async () => {

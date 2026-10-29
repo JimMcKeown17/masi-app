@@ -387,10 +387,18 @@ An online flag or a generic sync-pass success cannot prove delivery.
 Automatic conditions are observed from committed SQLite state; caught app errors
 and human actions record in their own transactions. Immutable receipts carry
 observation provenance separately from delivery metadata. Capture/upload failures
-must not alter domain upload outcomes. These C/F behaviors are the approved
+must not alter domain upload outcomes. These C/F behaviors implement the approved
 [Revision 4.1 contract](docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md),
 with [binding plan rulings](docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md),
-pending integrated implementation and device proof.
+and are merged with local unit/integration proof. Persisting conditions re-record
+only on payload/release change or when `last_seen_at` is ≥15 minutes old; automatic
+observer capture runs detached from status refresh, with its receipt gated while
+`capturing`. A missing delivery-state row returns `unknown`, which cannot confirm
+saved/sent. The controller's prior disposable PostgreSQL run passed all ten
+harnesses, including 225 support-incident cases; local Storage policy-model proof
+remains separate from hosted behavior. Hosted apply/read-back, native build,
+device acceptance and first real sweeps remain open; see the
+[standing contract map](documentation/rls-sync-contract-map.md#field-diagnostics-immutable-receipts-and-observed-incidents).
 
 J4 applies to this private diagnostic lane for the field month. Receipts and
 bundles are retained through the pilot with no purge job. EA clients cannot read

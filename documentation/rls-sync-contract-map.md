@@ -1819,13 +1819,13 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
   are adopted for the file owner. Foreign-owned rows are quarantined as terminal
   with `terminal/FOREIGN_OWNER`, domain status and `local_state.integrity_scan_last`
   evidence in the same transaction; they stay unsent and raise counts-only
-  operational reporting. D4/R3's integration contract removes only the incident
-  insert hook: the separate observer derives `foreign_owner_in_file` from the
+  operational reporting. D4/R3 removed the transactional incident insert hook:
+  the separate observer derives `foreign_owner_in_file` from the
   committed foreign set, including already-terminal rows. Its unchanged
   `{foreignTotal,foreignByTable}` body and whole sorted-id episode digest remain.
   Incident failure must never roll back quarantine or replay a domain upload.
-  See the Field diagnostics section for the C integration boundary and tests.
-- **Sign-in discovery.** Each published handle exposes a non-rejecting `handle.discovery` promise. Discovery starts on a microtask after publication and never delays sign-in. `fileDiscovery` lists the directory from expo-sqlite's `defaultDatabaseDirectory`, converting a native path to a `file://` URI for `Directory`; an absent directory value or a listing failure yields no files. It examines only other UUID-shaped `masi-<userId>.db` files and legacy `masi.db`, ignoring the signed-in EA's own file and sidecars. Each read uses a new raw connection, `PRAGMA query_only = ON`, `PRAGMA busy_timeout = 2000`, and `readUnsentSummary`; it closes in `finally` without migrating, writing, renaming or deleting the source file. Unreadable/old-schema files are skipped. `readUnderFileFence` admits the read after pending disposal and makes a same-file `requestOpen` wait for it; failed disposals and bootstrap cleanup failures still refuse reads. Discovery checks handle currency before admitting each file and again inside the fence, stops after sign-out, and writes incidents only through the active handle's support repository. For another EA, the kind is `left_behind_unsent_work`, key `incidentRepeatKey(strandedUserId, oldestId, oldestCreatedAt)`, payload `{ strandedUserId, unsentByTable, oldestUnsentAgeHours }`; for legacy, the kind is `legacy_shared_file_unsent`, the key hashes `'legacy'` with the oldest id and creation time, and the payload omits `strandedUserId`. Ages are floored hours, minimum zero. Raw outbox/record ids enter only the hashed repeat key, never the queued payload or wire request. Dedupe and capacity follow the shared queue contract; a changed oldest id or creation time identifies a new episode. Tests: `fileDiscovery.test.js` (real SQLite, exact envelope, repeated/new episodes, source-file preservation, directory ruling, old/unreadable files, T12 through the real drain) and `signedInHandle.test.js` (cancellation, read/disposal ordering, same-file admission and failed-file fencing).
+  See the Field diagnostics section for the implemented observer and local tests.
+- **Sign-in discovery.** Each published handle exposes a non-rejecting `handle.discovery` promise. Discovery starts on a microtask after publication and never delays sign-in. `fileDiscovery` lists the directory from expo-sqlite's `defaultDatabaseDirectory`, converting a native path to a `file://` URI for `Directory`; an absent directory value or a listing failure yields no files. It examines only other UUID-shaped `masi-<userId>.db` files and legacy `masi.db`, ignoring the signed-in EA's own file and sidecars. Each read uses a new raw connection, `PRAGMA query_only = ON`, `PRAGMA busy_timeout = 2000`, and `readUnsentSummary`; it closes in `finally` without migrating, writing, renaming or deleting the source file. Unreadable/old-schema files are skipped. `readUnderFileFence` admits the read after pending disposal and makes a same-file `requestOpen` wait for it; failed disposals and bootstrap cleanup failures still refuse reads. Discovery checks handle currency before admitting each file and again inside the fence, stops after sign-out, and writes incidents only through the active handle's support repository. For another EA, the kind is `left_behind_unsent_work`, key `incidentRepeatKey(strandedUserId, oldestId, oldestCreatedAt)`, payload `{ strandedUserId, unsentByTable, oldestUnsentAgeHours }`; for legacy, the kind is `legacy_shared_file_unsent`, the key hashes `'legacy'` with the oldest id and creation time, and the payload omits `strandedUserId`. Ages are floored hours, minimum zero. For these Plan 3 episode payloads, raw outbox/record ids enter only the hashed repeat key; schema-2 diagnostic bundles can separately contain raw outbox evidence. Dedupe and capacity follow the shared queue contract; a changed oldest id or creation time identifies a new episode. Tests: `fileDiscovery.test.js` (real SQLite, exact envelope, repeated/new episodes, source-file preservation, directory ruling, old/unreadable files, T12 through the real drain) and `signedInHandle.test.js` (cancellation, read/disposal ordering, same-file admission and failed-file fencing).
 - **Incidents.** The existing per-EA support queue remains separate from the
   domain outbox. Field diagnostics extends it to ten kinds, observation
   provenance, immutable schema-2 generations and bundle delivery, while copied
@@ -1850,13 +1850,17 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 **Authority and evidence boundary (2026-10-29):**
 [Revision 4.1 spec](../docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md)
 and [binding plan rulings](../docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md).
-The receipt/Storage migrations, SQLite foundation and operator reader are present
-in this slice's A/B/D base. The observer, generation/capture/drain and Profile
-behaviors below are the **C/F integration contract**, not a claim of integrated
-or device verification. In particular, C must remove the existing transactional
-foreign-owner incident hook (R3). Hosted application of the two October 30
-migrations requires the orchestrator's disposable harness, guarded apply and
-read-back gates. Migration files alone establish none of those hosted claims.
+All six slices A–F are merged on `feat/bug-machinery`: receipt/Storage migration
+artifacts, SQLite foundation, operator reader, observer/generation/capture/drain
+services and Profile support sheets. Local unit/integration suites verify the
+merged phone/reader behavior. The controller's prior disposable PostgreSQL run
+passed all ten harnesses, including **225 support-incident cases** with the shared
+Storage bootstrap. The Storage cases prove a local PostgreSQL policy model;
+they do not prove hosted Storage HTTP, MIME/size enforcement or deployed policy
+composition. No PostgreSQL/network rerun was made during this integration task.
+D4/R3's foreign-owner transactional incident hook is removed; observation uses
+committed quarantine instead. Hosted application of the two October 30
+migrations still requires guarded apply and independent read-back gates.
 The original October 17 v1 apply remains historical evidence for v1 only.
 
 ### Outbox dispositions and failure evidence
@@ -1898,9 +1902,14 @@ three. Ordinary budget/dependency stops do not create failure evidence.
 **D4: observe committed state; do not hook domain transactions.**
 `observeStandingConditions(handle)` runs before due-incident counting in
 `getSyncStatus()`: initial load, active 30-second refresh, foreground, after a
-pass and explicit reconnect refresh. No new timer or throttle. Indexed reads
-precede a separate observer write transaction. Observer/incident/bundle failures
-are logged without changing domain/outbox state or replaying a mutation.
+pass and explicit reconnect refresh. No new timer. Indexed reads precede a
+separate observer write transaction only when a condition changed or queue
+maintenance is due. An existing eligible schema-2 condition is re-recorded only
+when its payload (preserving bundle outcome flags) or release tuple changed, or
+its `last_seen_at` is ≥15 minutes old. Unchanged refreshes do not acquire the
+writer unless stale-capture recovery or daily promotion is due. Schema-1,
+rejected and already-sent once-cadence rows are not re-recorded.
+Observer/incident/bundle failures are logged without changing domain/outbox state or replaying a mutation.
 `app_error_caught`, `ea_report` and `diagnostics_sent` record as events in their
 own transactions. Sign-in discovery retains its read-only foreign-file scan and
 records in the active EA's file only. It never uploads another EA's domain work.
@@ -2003,7 +2012,12 @@ capture applies on first recording of terminal upload, caught app error, stale
 backlog, persistent pull failure or breaker, at most once per EA per 24 h.
 `local_state.support_auto_bundle_last_at` is stamped when capture **starts**;
 failure still consumes the allowance. Each human report/manual diagnostics
-request captures its own bundle. Build locally **after commit**, with no network.
+request captures its own bundle. Build locally **after commit**, before any
+remote upload. Automatic observer bundles run detached from the status refresh;
+status can return while capture is in progress. The durable `capturing` gate
+excludes that row from pending/ready queries, and freeze also refuses it, so the
+receipt cannot send before capture completes or stale-capture recovery fails it.
+Manual Profile capture awaits bundle completion before its sync attempt.
 
 Bound `debugDump` reads before allocation: newest 200 failed/terminal outbox rows,
 ≤20 KB per payload, newest 500 mastery rows. `logger.tail({maxBytes,maxEntryBytes})`
@@ -2017,9 +2031,15 @@ database keeps its unbounded behavior and export warning, including dispositions
 every incident queue row and actual wire identity. Bundle options bound variable
 sections and avoid full queue-snapshot duplication, with honest truncation markers.
 
-Local ownership is `documentDirectory/support-bundles/<userId>/`, at most five
-bundles per EA; a screenshot pairs with its bundle. Evict only within that EA's
-directory, oldest unsent first; its queue row becomes failed/bundleDropped.
+Local ownership is `documentDirectory/support-bundles/<userId>/`; a screenshot
+pairs with its bundle. On completed capture, the retention query keeps at most
+five ready, unfrozen bundle rows per EA, evicting oldest by `(created_at,id)`
+within that directory and marking the victim failed/bundleDropped. This is a
+completed-capture retention bound, not a count of files currently being written;
+a screenshot is retained with its bundle. Capturing and frozen rows are outside
+the eviction query. Normal freezing requires uploaded/failed/none attachment
+state, and successful upload deletes its local files before freeze. Directory
+cleanup also removes files without pending capturing/ready owners.
 Sign-out abandons capture without any stale write or lifecycle bypass (N1).
 The row stays capturing in its own EA file until the observer, when that file
 next opens and updated_at is ≥10 minutes old, marks failed/bundleCaptureFailed.
@@ -2036,12 +2056,25 @@ attempts** (distinct from receipt attempts) give up with bundleUploadFailed and
 allow the receipt with final available paths, or none. Preserve a successful
 half of a pair; partial success must not cause another EA's upload.
 
+Profile submission uses the current handle's `captureEvent`, waits for durable
+capture/bundle completion, attempts `syncNow`, then reads `getDeliveryState` for
+that exact incident reference. Generic sync success never establishes delivery.
+`getDeliveryState` returns `unknown` for a missing row or a row behind the requested
+generation; a later stored generation means the requested earlier generation was
+sent. Otherwise it returns the row's `pending|sent|rejected` status. Profile shows
+"Sent. Thank you." only for sent, and "Saved on your phone. It will send when
+you're online." only for pending; unknown/rejected/unsaved results fail inline.
+Actor currency is checked after every await; the submission lease blocks duplicate
+saves even after sheet dismissal/reopen. The sheets reject stale completions,
+preserve failed input and enforce a nonblank report of at most 4,000 characters.
+
 The Profile screenshot contract (R-O1) selects one gallery image with
 `mediaTypes:['images']`, `allowsEditing:false`, `quality:0.5`; keep returned MIME
 and original extension, without forced conversion or resize dependency.
 Preflight `requireOptionalNativeModule('ExponentImagePicker')` before package
-require; older OTA binaries hide attach safely. Picker install/build and actual
-native behavior remain orchestrator gates.
+require; older OTA binaries hide attach safely. Native picker build and actual
+device behavior remain orchestrator gates. The JavaScript dependency is already
+declared in `package.json`; this does not establish that a native binary contains it.
 
 `20261030120100_support_bundles_storage.sql` declares private `support-bundles`,
 15 MB per file (15,728,640 bytes), MIME types application/json, image/jpeg,
@@ -2134,13 +2167,20 @@ gitignored; safe excerpts alone enter Git. Receipts/bundles remain through the
 pilot, with no purge job.
 
 Local proof sources: `fieldDiagnosticsMigration.test.js`,
-`uploadDispositions.test.js`, `debugExport.test.js`,
-`readSupportIncidents.test.js`; disposable server gate:
-`scripts/support-incident-postgres-harness.cjs`. C/F acceptance targets (pending
-integration here): `supportIncidentRepository.test.js`,
+`uploadDispositions.test.js`, `debugExport.test.js`, `incidentPayloads.test.js`,
+`readSupportIncidents.test.js`, `supportIncidentRepository.test.js`,
 `supportIncidentObserver.test.js`, `diagnosticBundle.test.js`,
-`supportIncidentDrain.test.js`, `ProfileDiagnostics.test.js`, `App.plan5.test.js`.
-The existing repository/drain test names alone do not establish the new behavior.
+`supportIncidentDrain.test.js`, `ProfileScreen.layout.test.js`,
+`supportScreenshot.test.js` and `App.plan5.test.js`. The repository/observer/
+bundle/drain suites also run in the real-SQLite integration tier. Profile's
+previously skipped real-handle report test now records through the actual
+services, reads the durable pending receipt and checks the saved-on-phone toast.
+C's producer and D's Node-reader tests consume the same
+`test-support/fixtures/fieldDiagnosticsIdentity.json`; the reader consumes the
+stored digest without importing phone modules or re-normalizing messages.
+Disposable PostgreSQL proof is the controller's prior ten-harness run described
+above; `scripts/support-incident-postgres-harness.cjs` covers populated v1 replay,
+v2 identity/validation/quotas/grants and the local Storage policy model.
 Hosted apply/read-back, native build/old-binary OTA, default-text A03s/iPhone,
 first real sweeps, field convergence and no-recurrence remain independent gates.
 
@@ -2188,7 +2228,7 @@ cases plus rollback and concurrent creation. This adds no server rule or new syn
 | Table | Producer | Local required fields | Sync operation | RLS authority / SELECT dependency | Ordering / dependencies | Tests and probes |
 | --- | --- | --- | --- | --- | --- | --- |
 | `mobile_support_incidents` | Server-only, v1/v2 reporting RPCs | Ten kinds; reporter from auth.uid(); immutable report identity and provenance as detailed above | Unique `(reporter_id, report_id)` insert/ignore; schema-1 compatibility, v2 structural validation and independent quotas | Authenticated EXECUTE only; service-role SELECT only, explicit default-ACL revokes | After bundle outcome for v2; October 30 hosted apply/read-back is an open orchestrator gate | `scripts/support-incident-postgres-harness.cjs`; populated replay, validation, concurrency/quotas/grants and Storage behavior gate |
-| `support_incident_queue` | Local-only per-EA handle; separate observer/event transactions under D4 contract | SQLite v20: copied schema 1, new schema 2; ten kinds, unique `(kind, repeat_key)`, generations, dirty state and durable bundle progress | No domain outbox; up to 20 due after domain uploads; outcome before freeze; generation CAS ack; v1 preserved | Current signed-in EA only; stale continuations refused | Cap/fairness, once/daily cadence, readiness/capture and scheduling as detailed above; C integration proof pending | `fieldDiagnosticsMigration.test.js`; incident repository/observer/drain/bundle integration targets above |
+| `support_incident_queue` | Local-only per-EA handle; separate observer/event transactions under D4 contract | SQLite v20: copied schema 1, new schema 2; ten kinds, unique `(kind, repeat_key)`, generations, dirty state and durable bundle progress | No domain outbox; up to 20 due after domain uploads; outcome before freeze; generation CAS ack; v1 preserved | Current signed-in EA only; stale continuations refused | Cap/fairness, once/daily cadence, readiness/capture and scheduling as detailed above; locally verified in real-SQLite suites | `fieldDiagnosticsMigration.test.js`; incident repository/observer/drain/bundle integration suites above |
 | `lesson_drafts` | Local-only, per-EA file; `handle.repositories.lessonDrafts` / `createLessonDraftsRepository` (also through `useSignedInEA()`). The handle-owned `lessonDraft` controller is the only draft writer outside `saveLesson`; screens subscribe through `useLessonDraft`. First change or Wrap up creates the draft; Save drains the queue and calls `discard(id, { transaction })` inside its transaction | SQLite v17. Required input: `programme_id`, `group_id`, `lesson_date`; the repository mints draft `id` and stable `session_id`. One row per file through unique `slot = 1`. `language_code` and tracker `languageCode` use `LANGUAGE_LABELS` codes; every tracker change retains its ISO tap time and matches the lesson's language | Never synced or enqueued; no server table or `SERVER_COLUMNS` entry | Local reads/writes are bound to the signed-in EA handle; stale actors are refused. No server RLS | No foreign keys: roster reconciliation must not cascade away an unfinished lesson. Context and fixed plan are checked at the repository boundary. Discard joins the caller's save transaction; rollback keeps the same draft/session id | `lessonDraftsMigration.test.js` (schema, one-row slot, additive upgrade); `lessonDraftsRepository.test.js` (validation, fixed context/language, corruption, discard rollback); `lessonDraftsDurability.test.js` (on-disk commit, offline reopen, EA isolation, stale refusal); `handleServices.test.js` (repository graph) |
 | `organizations` | Canonical migrations; partners are added by migration | Server-only: `id`, `slug`, `name`; no phone table | No mobile sync | RLS enabled with no policies. Only `service_role` has API-role SELECT; no INSERT/UPDATE/DELETE. `anon`, `authenticated`, and `authenticator` have no SELECT | Seed before users, with session-level 10s lock / 60s statement bounds. Applied to hosted 2026-10-14 | `organisation-label-postgres-harness.cjs`: role refusals, slug resolution, explicit revocations under default ACLs, timeout rollback |
 | `users` | `scripts/createTesters.js`; service-role insert-if-absent, then mutable-fields UPDATE restricted by id and organisation. Built EA-access functions update only `is_active` (applied to hosted 2026-10-18; contract above) | Server `organization_id` is required with no default. The phone ignores it; no SQLite/outbox sync | No mobile domain write. Own-profile SELECT with school/job-title joins stays unchanged | Existing own-profile SELECT policy. Organisation is an employer label, not an access boundary. Provisioning preflight rejects known conflicts; the conditional UPDATE refuses a concurrent organisation mismatch without overwriting it. Inactivity alone does not revoke access; the Auth ban does | Auth user and organisation must exist before profile creation. Confirm the profile UPDATE before Programme-assignment writes. Organisation label applied to hosted 2026-10-14; EA access apply pending | `organisationProvisioning.test.js` (including concurrent insertion); `testerProvisioning.test.js`; `organisation-label-postgres-harness.cjs` (timestamp, constraints, own-profile read); history/S1 and `rls-visibility-probe.cjs` fixtures supply the id; `ea-access-postgres-harness.cjs` (execution pending) |

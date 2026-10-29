@@ -15,6 +15,9 @@ const mockSyncNow = jest.fn();
 let mockSignedInEAOverride;
 const mockAvailablePicker = jest.fn(() => null);
 const mockPickScreenshot = jest.fn();
+jest.mock('@react-native-community/netinfo', () => ({
+  fetch: jest.fn(async () => ({ type: 'wifi', isConnected: true, isInternetReachable: true, details: {} })),
+}));
 jest.mock('../src/utils/supportScreenshot', () => ({
   availablePicker: () => mockAvailablePicker(), pickSupportScreenshot: (...args) => mockPickScreenshot(...args),
 }));
@@ -222,9 +225,7 @@ test('a current-actor outcome uses the root toast after navigating away for 4,00
   } finally { jest.useRealTimers(); }
 });
 
-// This checkout predates C's captureEvent/getDeliveryState handle services.
-// TODO Slice C: enable this real-handle Profile capture test after C is integrated.
-test.skip('TODO Slice C: Profile records a report through real handle services and reads its durable pending receipt', async () => {
+test('Profile records a report through real handle services and reads its durable pending receipt', async () => {
   const realHandle = require('../test-support/defaultTestHandle').getDefaultTestHandle();
   mockSignedInEAOverride = { handle: realHandle, repositories: realHandle.repositories, services: realHandle.services };
   const capture = jest.spyOn(realHandle.services.supportIncidents, 'captureEvent');
@@ -237,7 +238,8 @@ test.skip('TODO Slice C: Profile records a report through real handle services a
   const result = await capture.mock.results[0].value;
   expect(result.saved).toBe(true);
   expect(await realHandle.services.supportIncidents.getDeliveryState(result.incidentRef)).toBe('pending');
-  const row = await realHandle.getReader().getFirstAsync('SELECT kind, payload FROM support_incident_queue WHERE id = ?', [result.incidentRef.id]);
+  const db = await realHandle.getReader();
+  const row = await db.getFirstAsync('SELECT kind, payload FROM support_incident_queue WHERE id = ?', [result.incidentRef.id]);
   expect(row.kind).toBe('ea_report');
   expect(JSON.parse(row.payload).message).toBe('Real handle report');
   expect(screen.getByText("Saved on your phone. It will send when you're online.")).toBeTruthy();

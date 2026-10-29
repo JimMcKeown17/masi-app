@@ -16,10 +16,11 @@ description: >-
 Turn phone observations into evidence-led records in the existing Masi registry.
 Read `docs/bugs/README.md` and `docs/bugs/_template.md` in full. They own record
 fields, severity arithmetic, priority, confidence, lifecycle states, privacy and
-ID allocation. Phone observation/generation/capture/drain and Profile descriptions
-in this skill state the approved Revision 4.1 contract with binding plan rulings;
-they require C/F integration and device verification. Reader behavior is grounded
-in the current script. One record holds one causal problem across channels. Do not make
+ID allocation. Phone observation, reporting, bundle capture and Profile behaviour
+described here match the integrated code (spec Revision 4.1 plus the plan's
+binding rulings). Device verification is a separate gate: check the build log
+before assuming a behaviour is proven on a phone. One record holds one causal
+problem across channels. Do not make
 a second registry or infer a cause from an error code alone.
 
 ## Establish the boundary and canonical registry
@@ -334,7 +335,7 @@ mark inference explicitly and obtain authorization before applying skill edits.
 - `supabase/migrations/20261030120000_incident_receipts.sql`: immutable receipt/RPC migration intent.
 - `supabase/migrations/20261030120100_support_bundles_storage.sql`: private bucket/policy migration intent.
 - `scripts/support-incident-postgres-harness.cjs`: disposable server proof; not hosted truth.
-- `docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md` and `docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md`: capture/observer/Profile contract and overriding rulings pending integration.
+- `docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md` and `docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md`: design intent and the binding rulings behind the integrated capture, observer and Profile code; read the code when they disagree.
 
 ## Land records with authorization
 

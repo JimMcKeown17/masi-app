@@ -267,9 +267,13 @@ work is external release and device proof.
 The active contract is the
 [Field diagnostics Revision 4.1 spec](../docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md)
 with the [binding plan rulings](../docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md).
-A/B/D are in this slice's base; C (phone observation/bundles) and F (Profile) are
-parallel implementation contracts pending integration. Checked items below mean
-local artifact delivery only, not hosted apply, native/device or field proof.
+All six slices A–F are merged on `feat/bug-machinery`, including the phone
+observer, immutable generations, bundles and Profile support sheets. Local
+unit/integration verification covers the merged implementation. The controller's
+prior disposable PostgreSQL run passed all ten harnesses, including 225
+support-incident cases with the shared Storage bootstrap. That Storage proof is
+a local policy model, not hosted Storage HTTP behavior. Checked items below do
+not establish hosted apply, native/device or field proof.
 
 - [x] Existing `MA-BUG` registry, template and human-intake skill are built under
   `docs/bugs/`. Keep one causal record across channels; do not rebuild the schema.
@@ -295,33 +299,46 @@ local artifact delivery only, not hosted apply, native/device or field proof.
   previous snapshot minus ten minutes, a bounded overlap convention.
 - [x] Slice E drafts `/bug-sync` and the narrow `/bug-user` EA-report patch in
   `/tmp/masi-bug-sync/` and `/tmp/masi-bug-user/`, and reconciles standing docs.
-  The learned mappings table starts empty. Orchestrator installation is still open.
-- [ ] Integrate C's D4 observer: report terminal owned work, stale backlog only
-  after real contact, reconcile breakers and ≥24 h history failures, even with an
-  empty domain outbox. Ordinary retries/offline passes/CAS misses/stale actors/
-  dependency stops do not produce diagnostic incidents. Remove the foreign-owner
-  transactional incident hook; preserve committed quarantine and scan evidence.
-- [ ] Integrate C's immutable generations: synchronous first/current full observed
-  runtime versus delivery; outcome-before-freeze, generation CAS ack preserving
-  post-freeze dirty events, observer-before-ready promotion, once/daily cadence,
+  Canonical `.agents/skills/bug-sync` and `bug-user` artifacts and the
+  `.claude/skills/bug-sync` symlink are present; final installed-artifact review
+  remains open. The learned mappings table starts empty.
+- [x] D4 observer implemented and locally tested: terminal owned work, stale
+  backlog only after real contact, reconcile breakers and ≥24 h history failures,
+  even with an empty domain outbox. Ordinary retries/offline passes/CAS misses/stale actors/
+  dependency stops do not produce diagnostic incidents. Foreign-owner incidents
+  derive from committed quarantine; the transactional incident hook is removed.
+  Persisting conditions re-record only on payload/release change or when
+  `last_seen_at` is ≥15 minutes old; unchanged refreshes acquire no writer unless
+  promotion or stale-capture recovery is due.
+- [x] Immutable generations implemented and locally tested: synchronous
+  first/current full observed runtime versus delivery; outcome-before-freeze,
+  generation CAS ack preserving post-freeze dirty events, observer-before-ready promotion, once/daily cadence,
   200-row fairness and human-first drain. Complete runtime includes device name.
-- [ ] Integrate C's bounded after-commit bundles, capture gate, consumed start-time
-  automatic allowance, per-EA five-bundle cap, ten-minute stale-capture recovery,
-  upload-before-receipt/409 retries and five-failure fallback. J4 captures raw ids,
+- [x] Bounded after-commit bundles implemented and locally tested: capture gate,
+  consumed start-time automatic allowance, per-EA retention of five ready,
+  unfrozen bundles (capturing/frozen rows are outside that eviction query),
+  ten-minute stale-capture recovery, upload-before-receipt/409 retries and
+  five-failure fallback. J4 captures raw ids,
   wire payloads, error text/stacks, logs and EA identity; safe Git excerpts are a
   separate publication rule. No diagnostic redaction or raw SQLite upload.
-- [ ] Integrate F's Report a problem / Send diagnostics bottom sheets, exact
-  receipt-based feedback and optional-native-module screenshot preflight. Preserve
-  original returned type/extension; no forced resize/conversion dependency.
-- [ ] Orchestrator installs scratch skills at canonical `.agents/skills/` paths,
-  creates `.claude/skills/bug-sync` symlink, reviews all integrated diffs and runs
-  full local suite/type checks plus the disposable PostgreSQL/Storage harness.
+  Automatic observer capture runs detached from status refresh; `capturing`
+  excludes its receipt from ready counting and delivery until capture settles.
+- [x] Profile Report a problem / Send diagnostics bottom sheets implemented and
+  locally tested, with exact receipt-based feedback and optional-native-module
+  screenshot preflight. Preserve original returned type/extension; no forced resize/conversion dependency.
+  Feedback reads the captured incident reference after a sync attempt; a missing
+  row returns `unknown` and cannot claim saved/sent.
+- [ ] Orchestrator reviews the installed skill artifacts and final integrated
+  diff. Unit/integration suites and the controller's disposable PostgreSQL
+  harness run are complete; final type/release checks
+  remain separate.
 - [ ] Hosted apply through guarded SQLite staging helper after harness success,
   then independent read-only schema/function/grant/policy read-back and the
   separately identified pilot-shaped authenticated v1 smoke. Record final v1
   definition md5; migration files do not prove hosted state.
-- [ ] Native picker install/build and old-binary OTA compatibility; Galaxy A03s at
-  default text size: online/offline reports/diagnostics, screenshots and formats,
+- [ ] Native build with the declared `expo-image-picker` dependency and old-binary
+  OTA compatibility; Galaxy A03s at default text size: online/offline reports/
+  diagnostics, screenshots and formats,
   force-quit/retry, exact receipt fetch/resolve, capture/sign-out/account-switch
   fencing, keyboard/footer/toasts and pixel-level UI acceptance. iPhone smoke
   remains separate if unavailable.
