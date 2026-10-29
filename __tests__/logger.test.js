@@ -85,3 +85,18 @@ describe('logger.addLog', () => {
     ]);
   });
 });
+
+test('tail bounds newest buffered and persisted UTF-8 entries without flushing or materializing history', async () => {
+  expect(typeof logger.tail).toBe('function');
+  logger.buffer=[];logger.persisted=[];logger.loaded=true;
+  logger.addLog('LOG',['persisted é']);await logger.flush();
+  logger.addLog('ERROR',['😀'.repeat(10000)]);
+  const flush=jest.spyOn(logger,'flush'); const all=jest.spyOn(logger,'getLogs');
+  const entries=await logger.tail({maxBytes:4500,maxEntryBytes:4096});
+  expect(entries[0]).toMatchObject({level:'ERROR',messageTruncated:true,messageOriginalBytes:expect.any(Number)});
+  expect(entries).toHaveLength(2);
+  expect(Buffer.byteLength(JSON.stringify(entries))).toBeLessThanOrEqual(4500);
+  for(const entry of entries)expect(Buffer.byteLength(JSON.stringify(entry))).toBeLessThanOrEqual(4096);
+  expect(flush).not.toHaveBeenCalled();expect(all).not.toHaveBeenCalled();
+  flush.mockRestore();all.mockRestore();
+});

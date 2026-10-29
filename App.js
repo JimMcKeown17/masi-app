@@ -1,3 +1,5 @@
+import { getCurrentHandle } from './src/session/signedInHandle';
+import { isStaleActorError } from './src/session/staleActor';
 import 'react-native-get-random-values';
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet as RNStyleSheet } from 'react-native';
@@ -57,6 +59,20 @@ export class ErrorBoundary extends React.Component {
     });
     console.error('App crashed:', error, errorInfo?.componentStack);
     flushObservability();
+    // The React boundary sits above the actor providers. Capture the handle once;
+    // the bound service fences every continuation against sign-out.
+    const handle = getCurrentHandle();
+    if (handle?.isOpen() && handle.isCurrent()) {
+      const componentStack = errorInfo?.componentStack ?? null;
+      const components = (componentStack ?? '').split('\n')
+        .map(line => /^\s*(?:at|in)\s+([^\s(]+)/.exec(line)?.[1]).filter(Boolean);
+      void handle.services.supportIncidents.captureEvent('app_error_caught', {
+        errorName: error?.name ?? 'Error', message: error?.message ?? String(error),
+        stack: error?.stack ?? null, componentStack, components,
+      }).catch(recordError => {
+        if (!isStaleActorError(recordError)) console.warn('Could not capture React error diagnostics:', recordError?.message);
+      });
+    }
   }
 
   render() {

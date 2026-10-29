@@ -269,3 +269,12 @@ test('opening a handle logs no Realtime auth warning (Masi does not use Realtime
     warn.mockRestore();
   }
 });
+
+test.each([200,401,403,409,499,500])('server contact admits HTTP %i only below 500', async status => {
+  const transport = jest.fn(async () => new Response('{}', { status, headers: {'content-type':'application/json'} }));
+  setLatestAuthSession(session(A,'token'));
+  const h = await requestOpen({userId:A,openDatabase,fetchImpl:transport});
+  await h.enqueueRequest(() => h.dataClient.rpc('test_contact',{}));
+  if (status < 500) expect(h.lastServerResponseAt).toEqual(expect.any(String));
+  else expect(h.lastServerResponseAt).toBeUndefined();
+});

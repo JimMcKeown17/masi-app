@@ -31,6 +31,17 @@ const serializeArg = (arg) => {
   return String(arg);
 };
 
+const utf8Size = text => {
+  let bytes = 0;
+  for (const char of text) { const cp = char.codePointAt(0); bytes += cp < 128 ? 1 : cp < 2048 ? 2 : cp < 65536 ? 3 : 4; }
+  return bytes;
+};
+const bytePrefix = (text, limit) => {
+  let bytes = 0; let end = 0;
+  for (const char of text) { const n = utf8Size(char); if (bytes+n > limit) break; bytes += n; end += char.length; }
+  return text.slice(0,end);
+};
+
 class Logger {
   constructor() {
     this.buffer = [];
@@ -162,6 +173,30 @@ class Logger {
       // it is intercepted by this logger and would recurse.
       this.buffer.unshift(...newEntries);
     }
+  }
+
+  async tail({ maxBytes = 2*1024*1024, maxEntryBytes = 4096 } = {}) {
+    if (!this.loaded && this.initPromise) await this.initPromise;
+    const entries = []; let bytes = 2;
+    // These arrays are already hydrated by normal logging. Do not flush or copy the history.
+    for (const source of [this.buffer, this.persisted]) {
+      for (let i = source.length-1; i >= 0 && entries.length < MAX_LOGS; i--) {
+        const original = source[i];
+        const entry = { ...original, message: bytePrefix(original.message, Math.max(0, maxEntryBytes-512)) };
+        if (entry.message !== original.message) {
+          entry.messageTruncated = true; entry.messageOriginalBytes = utf8Size(original.message);
+        }
+        // Escaping can expand JSON beyond the source byte budget.
+        while (utf8Size(JSON.stringify(entry)) > maxEntryBytes && entry.message.length) {
+          entry.message = bytePrefix(entry.message, Math.floor(utf8Size(entry.message)/2));
+          entry.messageTruncated = true; entry.messageOriginalBytes = utf8Size(original.message);
+        }
+        const n = utf8Size(JSON.stringify(entry));
+        if (n > maxEntryBytes || bytes+n+(entries.length ? 1 : 0) > maxBytes) return entries;
+        bytes += n+(entries.length ? 1 : 0); entries.push(entry);
+      }
+    }
+    return entries;
   }
 
   async getLogs() {
