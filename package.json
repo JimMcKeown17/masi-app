@@ -30,6 +30,7 @@
     "verify:session-group:postgres": "node scripts/session-group-postgres-harness.cjs",
     "verify:letter-order:postgres": "node scripts/letter-order-postgres-harness.cjs",
     "ea:status": "node scripts/ea-access.cjs status",
+    "bugs:incidents": "node scripts/read-support-incidents.cjs",
     "ea:suspend": "node scripts/ea-access.cjs suspend",
     "ea:restore": "node scripts/ea-access.cjs restore",
     "testers:provision": "node scripts/createTesters.js",
