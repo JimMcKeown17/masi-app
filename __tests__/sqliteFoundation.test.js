@@ -140,7 +140,7 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(19);
+      expect(CURRENT_SCHEMA_VERSION).toBe(20);
       expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await getTableNames(db)).toEqual(expect.arrayContaining([
         'schema_migrations',
@@ -559,6 +559,7 @@ describe('SQLite debug dump', () => {
         tableCounts: {},
         syncState: [],
         failedOutboxRows: [],
+        supportIncidents: [],
         letterMastery: [],
         generatedAt: expect.any(String),
       });
@@ -603,6 +604,7 @@ describe('SQLite debug dump', () => {
           { version: 17, name: 'lesson_drafts' },
           { version: 18, name: 'sessions_group_history_reference' },
           { version: 19, name: 'classes_letter_order_edition' },
+          { version: 20, name: 'field_diagnostics' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,
@@ -610,6 +612,7 @@ describe('SQLite debug dump', () => {
         }),
         syncState: [],
         failedOutboxRows: [],
+        supportIncidents: [],
         letterMastery: [],
         generatedAt: expect.any(String),
       });

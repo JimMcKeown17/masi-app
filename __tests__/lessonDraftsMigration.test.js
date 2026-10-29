@@ -28,7 +28,9 @@ test('upgrading the previous version keeps every row and adds an empty lesson_dr
   expect(draftsMigration().version).toBeGreaterThan(15);
   expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
   expect(await db.getAllAsync('select * from sessions order by id')).toEqual(sessions);
-  expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(outbox);
+  expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(outbox.map(row => ({
+    ...row, error_class: null, error_code: null,
+  })));
   expect(await db.getFirstAsync('select count(*) as n from lesson_drafts')).toEqual({ n: 0 });
   expect(await db.getAllAsync('pragma foreign_key_check')).toEqual([]);
 });

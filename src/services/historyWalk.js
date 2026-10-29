@@ -76,7 +76,7 @@ const runOnce = async ({ userId, force, deps, walk: config }) => {
     windowStart, updatedAt: null, id: null, deltaComplete: false, complete: false,
     firstWalk: true, firstWalkChildIds: null,
     rescanAfter: null, rewalkChildIds: null, rescanCompletedAt: null, nextRewalkAt: null, rescanChildIds: [],
-    lastFailureAt: null,
+    lastFailureAt: null, lastFailureKind: null, lastFailureMessage: null,
   };
   for (const key of config.coverageKeys) {
     const [rescan, rewalk, firstWalk] = coverageFields(key);
@@ -146,7 +146,7 @@ const runOnce = async ({ userId, force, deps, walk: config }) => {
   // state as it will be after this page. last_pulled_at is stamped on every page that leaves
   // overall hydration complete (so a routine up-to-date check refreshes it), never otherwise.
   const persist = async (data, makePatch) => {
-    let nextState = { ...state, ...makePatch(state), lastFailureAt: null };
+    let nextState = { ...state, ...makePatch(state), lastFailureAt: null, lastFailureKind: null, lastFailureMessage: null };
     let nextLastPulledAt = nextState.complete ? wallIso() : lastPulledAt;
     let nextCoverage = currentCoverage;
     const pullState = config.dropLostCoverage ? async (txn) => {
@@ -283,6 +283,7 @@ const runOnce = async ({ userId, force, deps, walk: config }) => {
       // through the writer transaction (the resolved handle is the read-only reader in
       // production), with admission re-checked inside it.
       let failed = { ...state, lastFailureAt: state.lastFailureAt ?? wallIso(),
+        lastFailureKind: kind, lastFailureMessage: error?.message || String(error),
         ...(['disabled', 'year_mismatch'].includes(kind) ? { complete: false } : {}) };
       try {
         await runRepositoryTransaction(database, async (txn) => {

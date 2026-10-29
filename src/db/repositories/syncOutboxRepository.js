@@ -1,3 +1,4 @@
+import { normalizeErrorCode } from '../../utils/normalizeErrorCode';
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
 import { isStampedOperation } from './rowVersion';
 import { enqueueSupportIncident, incidentRepeatKey } from './supportIncidentRepository';
@@ -258,7 +259,8 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
         byTable[row.table_name] = (byTable[row.table_name] || 0) + 1;
         await txn.runAsync(`
           update sync_outbox
-          set status = 'terminal', last_error = 'foreign_owner', next_retry_at = null, updated_at = ?
+          set status = 'terminal', error_class = 'terminal', error_code = 'FOREIGN_OWNER',
+              last_error = 'foreign_owner', next_retry_at = null, updated_at = ?
           where id = ?
         `, now, row.id);
         // A hard delete may already have removed its domain row; a zero-row update is fine.
@@ -351,30 +353,37 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
   const markRetriableFailure = async (id, {
     errorMessage,
     nextRetryAt = null,
+    errorClass = 'retryable',
+    errorCode,
   } = {}, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await txn.runAsync(`
       update sync_outbox
       set status = 'failed',
+          error_class = ?,
+          error_code = ?,
           retry_count = retry_count + 1,
           last_error = ?,
           next_retry_at = ?,
           updated_at = ?
       where id = ?
-    `, errorMessage || 'Sync failed', nextRetryAt, timestamp(), id);
+    `, ['retryable', 'needs_parent', 'needs_reauth'].includes(errorClass) ? errorClass : 'retryable', normalizeErrorCode(errorCode), errorMessage || 'Sync failed', nextRetryAt, timestamp(), id);
     return true;
   });
 
   const markTerminalFailure = async (id, {
     errorMessage,
+    errorCode,
   } = {}, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await txn.runAsync(`
       update sync_outbox
       set status = 'terminal',
+          error_class = 'terminal',
+          error_code = ?,
           last_error = ?,
           next_retry_at = null,
           updated_at = ?
       where id = ?
-    `, errorMessage || 'Terminal sync failure', timestamp(), id);
+    `, normalizeErrorCode(errorCode), errorMessage || 'Terminal sync failure', timestamp(), id);
     return true;
   });
 

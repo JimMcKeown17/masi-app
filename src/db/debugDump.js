@@ -1,3 +1,4 @@
+import { buildSyncPayload } from '../services/syncPayload';
 import { StaleActorError } from '../session/staleActor';
 export const assertExportHandle = (handle) => {
   if (!handle?.isOpen() || !handle.isCurrent()) throw new StaleActorError();
@@ -78,6 +79,31 @@ const parseJson = (value) => {
   }
 };
 
+const wireEvidence = (row) => {
+  try {
+    const wirePayload = buildSyncPayload(row.table_name, parseJson(row.payload), row.operation);
+    const serverRecordId = row.table_name === 'letter_mastery' ? null
+      : wirePayload?.id ?? wirePayload?.p_assessment?.id ?? row.record_id;
+    return { wirePayload, serverRecordId };
+  } catch (error) {
+    return { wirePayload: null, wirePayloadError: error.message, serverRecordId: row.record_id };
+  }
+};
+
+const getSupportIncidents = async (db, tableNames) => {
+  if (!tableNames.includes('support_incident_queue')) return [];
+  try {
+    const rows = await db.getAllAsync('select * from support_incident_queue order by created_at, id');
+    return rows.map(row => ({ ...row, ...Object.fromEntries(
+      ['payload', 'observed', 'first_observed', 'report_snapshot', 'last_sent_release']
+        .filter(key => Object.prototype.hasOwnProperty.call(row, key))
+        .map(key => [key, parseJson(row[key])])
+    ) }));
+  } catch (error) {
+    return diagnosticError(error);
+  }
+};
+
 const getFailedOutboxRows = async (db, tableNames) => {
   if (!tableNames.includes('sync_outbox')) return [];
 
@@ -92,6 +118,8 @@ const getFailedOutboxRows = async (db, tableNames) => {
         status,
         retry_count,
         last_error,
+        error_class,
+        error_code,
         next_retry_at,
         created_at,
         updated_at
@@ -105,6 +133,7 @@ const getFailedOutboxRows = async (db, tableNames) => {
     `);
 
     return rows.map((row) => ({
+      ...wireEvidence(row),
       id: row.id,
       tableName: row.table_name,
       recordId: row.record_id,
@@ -113,6 +142,9 @@ const getFailedOutboxRows = async (db, tableNames) => {
       status: row.status,
       retryCount: row.retry_count,
       lastError: row.last_error,
+      // Export keeps its established camelCase convention for SQLite error_class/error_code.
+      errorClass: row.error_class,
+      errorCode: row.error_code,
       nextRetryAt: row.next_retry_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -163,6 +195,7 @@ export async function debugDump({ handle }) {
     tableCounts: await getTableCounts(db, tableNames),
     syncState: await getSyncState(db, tableNames),
     failedOutboxRows: await getFailedOutboxRows(db, tableNames),
+    supportIncidents: await getSupportIncidents(db, tableNames),
     letterMastery: await getLetterMastery(db, tableNames),
     generatedAt: new Date().toISOString(),
   };

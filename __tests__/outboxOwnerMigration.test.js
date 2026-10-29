@@ -18,7 +18,11 @@ test('v11 to v12 preserves existing rows and indexes and enforces the exact owne
   await runMigrations(db);
   expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
   expect(MIGRATIONS.find(item => item.version === 12).name).toBe('sync_outbox_owner_required');
-  expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(rows);
+  expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(rows.map(row => ({
+    ...row,
+    error_class: row.status === 'failed' ? 'retryable' : null,
+    error_code: row.status === 'failed' ? 'OTHER' : null,
+  })));
   expect(await db.getAllAsync("select name, sql from sqlite_master where tbl_name = 'sync_outbox' and type = 'index' order by name")).toEqual(indexes);
   for (const ownerSql of ['null', "'ea'"]) {
     const insert = () => db.runAsync(`insert into sync_outbox (id, table_name, record_id, operation, owner_user_id)

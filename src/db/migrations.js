@@ -942,6 +942,63 @@ create table if not exists lesson_drafts (
       alter table classes add column letter_order_edition text not null default '2026-10-23';
     `,
   },
+  {
+    version: 20,
+    name: 'field_diagnostics',
+    sql: `
+      alter table sync_outbox add column error_class text
+        check (error_class in ('retryable', 'needs_parent', 'needs_reauth', 'terminal'));
+      alter table sync_outbox add column error_code text
+        check (length(error_code) between 1 and 40 and instr(error_code, char(0)) = 0
+          and error_code not glob '*[^A-Z0-9_]*');
+      update sync_outbox set error_class = 'terminal', error_code = 'OTHER' where status = 'terminal';
+      update sync_outbox set error_class = 'retryable', error_code = 'OTHER' where status = 'failed';
+
+      alter table support_incident_queue rename to support_incident_queue_v19;
+      drop index idx_support_incident_queue_status;
+      create table support_incident_queue (
+        id text primary key,
+        kind text not null check (kind in (
+          'left_behind_unsent_work', 'foreign_owner_in_file', 'legacy_shared_file_unsent',
+          'upload_terminal', 'upload_backlog_stale', 'reconcile_breaker_tripped', 'pull_failing',
+          'app_error_caught', 'ea_report', 'diagnostics_sent'
+        )),
+        repeat_key text not null,
+        schema_version integer not null default 2 check (schema_version in (1, 2)),
+        payload text not null,
+        observed text,
+        first_observed text,
+        occurrence_count integer not null default 1 check (occurrence_count > 0),
+        first_seen_at text,
+        last_seen_at text,
+        report_generation integer not null default 1 check (report_generation > 0),
+        report_snapshot text,
+        has_unsent_changes integer not null default 0 check (has_unsent_changes in (0, 1)),
+        bundle_id text,
+        bundle_file text,
+        screenshot_file text,
+        bundle_state text not null default 'none' check (bundle_state in ('none', 'capturing', 'ready', 'uploaded', 'failed')),
+        bundle_attempts integer not null default 0,
+        bundle_path text,
+        screenshot_path text,
+        status text not null default 'pending' check (status in ('pending', 'sent', 'rejected')),
+        last_sent_at text,
+        last_sent_release text,
+        attempts integer not null default 0,
+        next_attempt_at text,
+        last_error text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        unique (kind, repeat_key)
+      );
+      insert into support_incident_queue
+        (id, kind, repeat_key, schema_version, payload, status, attempts, next_attempt_at, last_error, created_at, updated_at)
+      select id, kind, repeat_key, 1, payload, status, attempts, next_attempt_at, last_error, created_at, updated_at
+      from support_incident_queue_v19;
+      drop table support_incident_queue_v19;
+      create index idx_support_incident_queue_status on support_incident_queue (status, next_attempt_at, created_at);
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

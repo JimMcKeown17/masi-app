@@ -98,7 +98,11 @@ describe('assessment results schema v15', () => {
 
     expect(await db.getAllAsync('select * from assessments')).toEqual([]);
     expect(await db.getAllAsync('select * from assessment_items')).toEqual([]);
-    expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(otherOutbox);
+    expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(otherOutbox.map(row => ({
+      ...row,
+      error_class: row.status === 'failed' ? 'retryable' : null,
+      error_code: row.status === 'failed' ? 'OTHER' : null,
+    })));
     expect(await db.getAllAsync('select * from children')).toEqual(children);
     expect(await db.getAllAsync('select * from time_entries')).toEqual(timeEntries);
     expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });

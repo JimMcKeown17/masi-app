@@ -137,7 +137,9 @@ test('v13 upgrade preserves existing content and queued payloads and defaults ex
     expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
     expect(await db.getFirstAsync("select * from children where id = 'child-1'"))
       .toEqual({ ...before, row_version: 1 });
-    expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outboxBefore);
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outboxBefore.map(row => ({
+      ...row, error_class: null, error_code: null,
+    })));
     expect(await db.getAllAsync('pragma foreign_key_check')).toEqual([]);
   } finally {
     await db.closeAsync();
