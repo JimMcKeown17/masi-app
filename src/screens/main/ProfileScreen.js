@@ -21,6 +21,8 @@ import AppReleaseInfo from '../../components/profile/AppReleaseInfo';
 import ChangePasswordSheet from '../../components/profile/ChangePasswordSheet';
 import ExportDatabaseSheet from '../../components/profile/ExportDatabaseSheet';
 import SignOutSheets from '../../components/profile/SignOutSheets';
+import ReportProblemSheet from '../../components/profile/ReportProblemSheet';
+import SendDiagnosticsSheet from '../../components/profile/SendDiagnosticsSheet';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { isQuestionGalleryEnabled } from '../../utils/questionGallery';
@@ -28,9 +30,10 @@ import { exportDatabase, exportLogs } from '../../utils/debugExport';
 import { getReleaseMetadata } from '../../utils/releaseMetadata';
 import { getRuntimeDiagnostics } from '../../utils/runtimeDiagnostics';
 import { sendObservabilityTest } from '../../services/observability';
+import { isStaleActorError } from '../../session/staleActor';
 
 export default function ProfileScreen({ navigation }) {
-  const { handle, repositories } = useSignedInEA();
+  const { handle, repositories, services } = useSignedInEA();
   const toast = useToast();
 
   const { user, profile, signOut, changePassword } = useAuth();
@@ -50,7 +53,10 @@ export default function ProfileScreen({ navigation }) {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const databaseExportRunning = useRef(false);
+  const supportSubmission = useRef(null);
 
   // Debug export state
   const [logsExportLoading, setLogsExportLoading] = useState(false);
@@ -63,6 +69,42 @@ export default function ProfileScreen({ navigation }) {
       tone: type,
       duration: 4000,
     });
+  };
+
+  const submitSupport = async (kind, { message, screenshotFile } = {}) => {
+    // Capture the actor and the lease before the first await. Dismissing a sheet
+    // abandons its form, but cannot admit a second report while this one saves.
+    const actor = handle;
+    if (!actor.isCurrent()) return { abandoned: true };
+    if (supportSubmission.current) return { error: 'A report is still being saved. Please wait and try again.' };
+    const attempt = {};
+    supportSubmission.current = attempt;
+    try {
+      const incidents = services.supportIncidents;
+      const payload = kind === 'ea_report'
+        ? { message, screenshotAttached: Boolean(screenshotFile), screen: 'Profile' }
+        : { trigger: 'manual' };
+      const result = kind === 'ea_report'
+        ? await incidents.captureEvent(kind, payload, { screenshotFile })
+        : await incidents.captureEvent(kind, payload);
+      if (!actor.isCurrent()) return { abandoned: true };
+      const failure = { error: kind === 'ea_report'
+        ? 'Could not save your report. Please try again.' : 'Could not save diagnostics. Please try again.' };
+      if (result?.saved !== true || !result.incidentRef) return failure;
+      try { await syncNow(); }
+      catch (error) { if (isStaleActorError(error)) throw error; }
+      if (!actor.isCurrent()) return { abandoned: true };
+      const delivery = await incidents.getDeliveryState(result.incidentRef);
+      if (!actor.isCurrent()) return { abandoned: true };
+      if (delivery !== 'sent' && delivery !== 'pending') return failure;
+      showMessage(delivery === 'sent' ? 'Sent. Thank you.' : "Saved on your phone. It will send when you're online.");
+      return {};
+    } catch (error) {
+      if (!actor.isCurrent() || isStaleActorError(error)) return { abandoned: true };
+      throw error;
+    } finally {
+      if (supportSubmission.current === attempt) supportSubmission.current = null;
+    }
   };
 
   const handleShareLogs = async () => {
@@ -189,9 +231,13 @@ export default function ProfileScreen({ navigation }) {
             <View>
               <ListRow title="Support tools" lead={<IconTile icon="help-buoy-outline" />}
                 trailing="disclosure" expanded={supportOpen} accessibilityLabel="Support tools"
-                subtitle={supportOpen ? 'Use when Masi support asks' : 'Share\u00a0logs · Share\u00a0database · Test\u00a0crash\u00a0reporting'}
+                subtitle={supportOpen ? 'Report a problem or share app information with Masi' : 'Report\u00a0a\u00a0problem · Send\u00a0diagnostics · Share\u00a0logs · Share\u00a0database · Test\u00a0crash\u00a0reporting'}
                 onPress={() => setSupportOpen((open) => !open)} />
               {supportOpen ? <View style={styles.supportPanel}>
+                <ListRow variant="nested" title="Report a problem" lead={<Ionicons name="chatbox-outline" size={20} color={colors.text} />}
+                  trailing="chevron" onPress={() => setReportOpen(true)} showDivider />
+                <ListRow variant="nested" title="Send diagnostics" lead={<Ionicons name="information-circle-outline" size={20} color={colors.text} />}
+                  trailing="chevron" onPress={() => setDiagnosticsOpen(true)} showDivider />
                 <ListRow variant="nested" title="Share logs" lead={<Ionicons name="document-text-outline" size={20} color={colors.text} />}
                   trailing="share" busy={logsExportLoading} onPress={handleShareLogs} showDivider />
                 <ListRow variant="nested" title="Share database" titleAccessory={<StatusBadge label="Sensitive" tone="warning" />}
@@ -231,6 +277,10 @@ export default function ProfileScreen({ navigation }) {
       <ChangePasswordSheet visible={passwordOpen} onClose={() => setPasswordOpen(false)}
         changePassword={changePassword} handle={handle} />
       <ExportDatabaseSheet visible={exportOpen} onExport={handleConfirmExport} onCancel={() => setExportOpen(false)} />
+      <ReportProblemSheet visible={reportOpen} handle={handle} onClose={() => setReportOpen(false)}
+        onSubmit={(values) => submitSupport('ea_report', values)} />
+      <SendDiagnosticsSheet visible={diagnosticsOpen} handle={handle} onClose={() => setDiagnosticsOpen(false)}
+        onSubmit={() => submitSupport('diagnostics_sent')} />
     </View>
   );
 }
