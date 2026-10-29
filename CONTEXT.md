@@ -312,11 +312,39 @@ An outbox row whose status is `pending`, `failed`, `in_flight`, or `terminal`. `
 **Left-behind work**:
 Unsent rows in one EA's file while a different EA is signed in on the same phone. They stay in that EA's file, untouched, until that EA signs in again; another EA never uploads them.
 
-**Support incident**:
-A counts-only report a phone sends so support can act on a problem. It carries the incident kind,
-the relevant EA identity, counts and age, plus release and install metadata. It never carries child
-data: no child ids, names, notes or record payloads. It reports a situation; it does not upload the
-left-behind work.
+**Incident** (support incident):
+The phone's durable record that it observed a reportable condition, held in its
+EA's `support_incident_queue`. It does not upload left-behind domain work.
+
+**Condition**:
+What an incident is about: `(reporter, kind, condition key)`. Multiple receipts
+can report the same condition; it is not itself a diagnosed causal bug.
+
+**Receipt**:
+One immutable server row in `mobile_support_incidents`: one report of one
+condition. Daily kinds can re-report a persisting condition about once a day;
+Plan 3 episode kinds use once cadence while retained locally. A receipt is a
+lead, not proof of data loss, current impact, backend convergence or recovery.
+
+**Diagnostic bundle**:
+A JSON file uploaded to private Storage with a support export, bounded log tail
+and device state at capture time. The field-month J4 contract permits raw ids,
+payloads, error text/stacks, EA identity and full device detail including name.
+Receipt/bundle API reading is service-role only; authorized operator psql reads
+are a separate path. Only safe excerpts enter Git.
+
+**EA report**:
+An EA's own description from Profile → Report a problem (`ea_report`), with an
+optional screenshot. Human intake routes to `/bug-user` and `field_report_ids`.
+
+**Bug record**:
+One causal problem in `docs/bugs/records/`, shared across human reports, phone
+observations and Sentry evidence. Recorded does not mean diagnosed or fixed.
+
+**Upload disposition**:
+The `error_class` of an unsent outbox row: `retryable`, `needs_parent`,
+`needs_reauth` or `terminal`. It records the upload decision already taken;
+it does not introduce another retry policy.
 
 **Install id**:
 A random UUID kept in device-level AsyncStorage. It identifies an app installation, stays the same

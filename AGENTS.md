@@ -19,6 +19,21 @@ Issues and PRDs live as **GitHub issues** on `JimMcKeown17/masi-app` (use the `g
 
 Canonical five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
+### Bug intake and phone incidents
+
+- Human descriptions, screenshots, Share logs/Share database and Profile `ea_report`
+  receipts route to `/bug-user`: `.agents/skills/bug-user/SKILL.md`.
+- Automatic phone observations route to `/bug-sync`:
+  `.agents/skills/bug-sync/SKILL.md`. Sweep the canonical `origin/main` registry
+  before deep diagnosis; a receipt is a lead, not proof of data loss or recovery.
+- Both use `docs/bugs/README.md` and `docs/bugs/_template.md`; keep one causal
+  registry. Read-only diagnosis permits bug documentation, not source fixes,
+  live data/Auth/Sentry changes or releases without separate authorization.
+- Slice E hands over scratch skills in `/tmp/masi-bug-sync/` and
+  `/tmp/masi-bug-user/`; the orchestrator installs them and creates
+  `.claude/skills/bug-sync` as a symlink. Canonical routing above is the install
+  contract, not a claim that scratch handoff has already installed the skill.
+
 ### Domain docs
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
