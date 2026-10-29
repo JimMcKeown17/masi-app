@@ -36,8 +36,10 @@ narrative mention does not claim it. Recorded does not mean diagnosed or fixed.
 Sentry-led human reports start with `/bug-user`; receipt-led investigations stay
 with `/bug-sync` when they add Sentry evidence.
 
-Receipt keys are actor-qualified: `<reporter_id>/<kind>/<repeat_key>`.
-Prefer exact keys. A signature, `<kind>/<a>/<b>`, claims every future matching
+Phones send immutable receipts; the reader groups them into conditions. A
+`support_incident_keys` entry names a **condition**, actor-qualified:
+`<reporter_id>/<kind>/<repeat_key>`. It covers every receipt of that condition,
+past and future. Prefer exact keys. A signature, `<kind>/<a>/<b>`, claims every future matching
 receipt. Declare one only when the condition belongs to exactly one causal
 record. Two records declaring one signature is an error the reader refuses;
 it must make no coverage claim.
@@ -53,8 +55,13 @@ For upload kinds, `a`/`b` are `errorClass`/`errorCode`; for pulls,
 before signatures.
 
 An incident is the phone's durable observation of a condition. A condition is
-identified by reporter, kind, and condition key. A receipt is its server row,
-a lead rather than proof of data loss, current impact, or recovery.
+identified by reporter, kind, and condition key. A receipt is one immutable
+server row reporting it; a persisting condition sends about one receipt a day.
+A receipt is a lead rather than proof of data loss, current impact, or recovery.
+
+Recorded is not reviewed. A full sweep passes the previous **Last full sweep**
+time as `--review-since`, so recorded conditions with new receipts (recurrence,
+or a new release still seeing it) are listed for a look.
 
 ## Affected-user linkage
 
