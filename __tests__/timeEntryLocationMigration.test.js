@@ -31,7 +31,9 @@ test('v10 upgrade preserves every old field, indexes, foreign keys and triggers 
   })));
   expect(await db.getAllAsync("select type, name, sql from sqlite_master where tbl_name = 'time_entries' and type != 'table' order by name")).toEqual(objects);
   expect(await db.getAllAsync('pragma foreign_key_list(time_entries)')).toEqual(foreignKeys);
-  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outboxBefore);
+  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outboxBefore.map(row => ({
+    ...row, error_class: null, error_code: null,
+  })));
   expect(await db.getFirstAsync('pragma foreign_keys')).toEqual({ foreign_keys: 1 });
   expect(await db.getAllAsync('pragma foreign_key_check')).toEqual([]);
   await db.runAsync(`insert into time_entries (id, user_id, sign_in_time, sign_in_location_status)

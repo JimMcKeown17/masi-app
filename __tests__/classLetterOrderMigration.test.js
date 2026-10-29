@@ -1,4 +1,4 @@
-import { MIGRATIONS, runMigrations } from '../src/db/migrations';
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS, runMigrations } from '../src/db/migrations';
 import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
 import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import { NEW_CLASS_LETTER_ORDER_EDITION } from '../src/utils/letterOrders';
@@ -22,17 +22,18 @@ test('a version 18 class gains the edition without changing its data or queued u
     values ('class-upload', 'classes', 'class-1', 'insert', '{"id":"class-1","name":"Grade 1A"}', 'user-1')`);
   const before = await db.getFirstAsync("select * from classes where id = 'class-1'");
   const outbox = await db.getAllAsync('select * from sync_outbox');
+  const upgradedOutbox = outbox.map(row => ({ ...row, error_class: null, error_code: null }));
 
   await runMigrations(db);
 
-  expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 19 });
+  expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
   expect(await db.getFirstAsync('select version, name from schema_migrations where version = 19'))
     .toEqual({ version: 19, name: 'classes_letter_order_edition' });
   expect(await db.getFirstAsync("select * from classes where id = 'class-1'"))
     .toEqual({ ...before, letter_order_edition: '2026-10-23' });
-  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outbox);
+  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(upgradedOutbox);
   await runMigrations(db);
-  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(outbox);
+  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(upgradedOutbox);
 });
 
 test('new classes take the permanent edition default and future server editions are accepted', async () => {

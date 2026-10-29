@@ -79,7 +79,10 @@ test('upgrade keeps sessions, attendees, queued uploads, indexes and the attende
   expect(await db.getFirstAsync('pragma user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
   expect(await db.getFirstAsync('select version, name from schema_migrations where version = ?', V))
     .toEqual({ version: V, name: 'sessions_group_history_reference' });
-  expect(await snapshotRows()).toEqual(rows);
+  expect(await snapshotRows()).toEqual({
+    ...rows,
+    outbox: rows.outbox.map(row => ({ ...row, error_class: null, error_code: null })),
+  });
   expect(await sessionIndexes()).toEqual(indexes);
   expect(await db.getAllAsync('pragma foreign_key_list(session_attendees)')).toEqual(attendeeForeignKeys);
   expect(await db.getAllAsync('pragma foreign_key_check')).toEqual([]);

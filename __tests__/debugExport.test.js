@@ -238,3 +238,85 @@ describe('debug database export metadata', () => {
     });
   });
 });
+
+test('Share database preserves raw failure evidence, dispositions, actual wire ids and every incident status', async () => {
+  const handle = require('../test-support/defaultTestHandle').getDefaultTestHandle();
+  const payload = { id: 'local-attendee', session_id: 'session-raw', child_id: 'child-raw', sync_status: 'terminal', rawEvidence: 'keep in export' };
+  await handle.withTransaction(async txn => {
+    await txn.runAsync(`insert into sync_outbox
+      (id, table_name, record_id, operation, payload, status, error_class, error_code, last_error, owner_user_id)
+      values ('wire-export', 'session_attendees', 'local-attendee', 'insert', ?, 'terminal', 'terminal', '23503', 'full raw server message', ?)`,
+    JSON.stringify(payload), handle.userId);
+    for (const status of ['pending', 'sent', 'rejected']) {
+      await txn.runAsync(`insert into support_incident_queue (id, kind, repeat_key, payload, observed, first_observed, report_snapshot, status)
+        values (?, 'ea_report', ?, ?, ?, ?, ?, ?)`, status, status, '{"raw":"message"}', '{"version":"observed"}', '{"version":"first"}', '{"frozen":true}', status);
+    }
+  });
+  expect(await exportDatabase({ handle })).toEqual({ success: true });
+  const dump = JSON.parse(mockWrittenContent).database;
+  const expectedId = require('../src/db/repositories/domainRepositoryUtils').sessionAttendeeDomainId('session-raw', 'child-raw');
+  expect(dump.failedOutboxRows).toEqual([expect.objectContaining({ errorClass: 'terminal', errorCode: '23503',
+    payload, lastError: 'full raw server message', serverRecordId: expectedId,
+    wirePayload: { id: expectedId, session_id: 'session-raw', child_id: 'child-raw' } })]);
+  expect(dump.supportIncidents).toHaveLength(3);
+  expect(dump.supportIncidents.map(row => row.status).sort()).toEqual(['pending', 'rejected', 'sent']);
+  expect(dump.supportIncidents[0]).toMatchObject({ payload: { raw: 'message' }, observed: { version: 'observed' },
+    first_observed: { version: 'first' }, report_snapshot: { frozen: true } });
+});
+
+test('wire evidence uses canonical item and assignment ids and keeps archive identity', async () => {
+  const handle = require('../test-support/defaultTestHandle').getDefaultTestHandle();
+  const ids = require('../src/db/repositories/domainRepositoryUtils');
+  const cases = [
+    ['assessment_items', { id: 'local-item', assessment_id: 'assessment', item_key: 'a', position: 0, is_correct: true },
+      ids.assessmentItemDomainId({ assessmentId: 'assessment', itemKey: 'a', position: 0, isCorrect: true })],
+    ['child_ea_assignments', { id: 'local-cea', child_id: 'child', user_id: 'ea' },
+      ids.childEaAssignmentDomainId({ childId: 'child', userId: 'ea' })],
+    ['child_programme_enrollments', { id: 'local-cpe', child_id: 'child', programme_id: 'programme' },
+      ids.childProgrammeEnrollmentDomainId({ childId: 'child', programmeId: 'programme' })],
+    ['class_ea_assignments', { id: 'local-classea', class_id: 'class', ea_user_id: 'ea', programme_id: 'programme' },
+      ids.classEaAssignmentDomainId({ classId: 'class', eaUserId: 'ea', programmeId: 'programme' })],
+    ['group_ea_assignments', { id: 'local-gea', group_id: 'group' }, ids.groupEaAssignmentDomainId({ groupId: 'group' })],
+    ['class_grouping_state', { id: 'local-cgs', class_id: 'class', academic_year_id: 'year' },
+      ids.classGroupingStateDomainId({ classId: 'class', academicYearId: 'year' })],
+    ['child_ea_assignments', { id: 'archive-id', unassigned_at: '2026-10-29' }, 'archive-id', 'archive'],
+  ];
+  await handle.withTransaction(async txn => {
+    for (const [table, payload, , operation = 'insert'] of cases) {
+      await txn.runAsync(`insert into sync_outbox (id, table_name, record_id, operation, payload, status, owner_user_id)
+        values (?, ?, ?, ?, ?, 'terminal', ?)`, payload.id, table, payload.id, operation, JSON.stringify(payload), handle.userId);
+    }
+  });
+  const dump = await debugDump({ handle });
+  for (const [, payload, serverId] of cases) {
+    expect(dump.failedOutboxRows.find(row => row.recordId === payload.id)).toMatchObject({ payload, serverRecordId: serverId, wirePayload: { id: serverId } });
+  }
+});
+
+test('RPC wire evidence uses the assessment parent id, null mastery id, and retains malformed rows', async () => {
+  const handle = require('../test-support/defaultTestHandle').getDefaultTestHandle();
+  const uuid = n => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
+  const assessment = { id: uuid(1), user_id: uuid(2), child_id: uuid(3), programme_id: uuid(4),
+    assessment_type: 'letter_sounds', assessment_date: '2026-10-29', assessment_purpose: 'progress_check',
+    question_code: 'letter_sounds', question_version: '2026.1', item_set_id: 'letter_sounds@2026.1.en',
+    language: 'en', stopped_reason: 'completed', duration_ms: 1000, derived: { total_correct: 1 }, total_items: 1,
+    items: [{ id: uuid(5), assessment_id: uuid(1), item_key: 'a', position: 0, is_correct: true, metadata: {} }] };
+  const mastery = { id: 'local-mastery', correction_id: uuid(6), child_id: uuid(3), letter: 'a', language: 'en',
+    confirmed: false, changed_at: '2026-10-29T08:00:00Z' };
+  await handle.withTransaction(async txn => {
+    for (const [id, table, payload] of [['assessment', 'assessments', assessment], ['mastery', 'letter_mastery', mastery],
+      ['malformed', 'assessments', { id: 'raw-invalid-id', message: 'retain raw' }]]) {
+      await txn.runAsync(`insert into sync_outbox (id, table_name, record_id, operation, payload, status, last_error, owner_user_id)
+        values (?, ?, ?, 'insert', ?, 'terminal', 'raw error', ?)`, id, table, id, JSON.stringify(payload), handle.userId);
+    }
+  });
+  const dump = await debugDump({ handle });
+  expect(dump.failedOutboxRows).toHaveLength(3);
+  expect(dump.failedOutboxRows.find(row => row.id === 'assessment')).toMatchObject({ serverRecordId: uuid(1),
+    wirePayload: { p_assessment: { id: uuid(1) }, p_items: [{ id: uuid(5) }] } });
+  expect(dump.failedOutboxRows.find(row => row.id === 'mastery')).toMatchObject({ serverRecordId: null, wirePayload: {
+    p_correction_id: uuid(6), p_child_id: uuid(3), p_letter: 'a', p_language: 'en', p_confirmed: false, p_changed_at: mastery.changed_at,
+  } });
+  expect(dump.failedOutboxRows.find(row => row.id === 'malformed')).toMatchObject({ serverRecordId: 'malformed', wirePayload: null,
+    wirePayloadError: 'user_id: must be a nonempty string', payload: { id: 'raw-invalid-id', message: 'retain raw' }, lastError: 'raw error' });
+});
