@@ -1,0 +1,4 @@
+interface:
+  display_name: "Masi Bug Intake & Triage (EA Reports)"
+  short_description: "Record and triage Masi EA reports with safe evidence"
+  default_prompt: "Use $bug-user to process these Masi EA reports, inspect Share logs/Share database and Sentry evidence, and update the Masi bug registry."
