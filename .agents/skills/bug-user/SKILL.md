@@ -66,6 +66,37 @@ Do not demand complete intake data before saving a report. Record `unknown` and
 ask only the smallest number of questions that would materially change safety,
 severity, deduplication, or the next diagnostic step.
 
+## Sweep EA reports
+
+Include Profile's human-written `ea_report` receipts in this intake channel:
+
+```sh
+npm run bugs:incidents -- --kind ea_report
+```
+
+Use direct node when saving JSON (npm adds a banner), with the provisioned Node
+20 runtime:
+
+```sh
+node scripts/read-support-incidents.cjs --registry-ref origin/main --kind ea_report --json
+```
+ Fetch each unrecorded report with
+`node scripts/read-support-incidents.cjs --registry-ref origin/main --fetch <handle> --json`,
+then inspect the actual bundle and its companion screenshot, preserving the EA's
+words. Record unavailable/failed evidence honestly. Store the exact condition key
+`<reporter_id>/ea_report/<repeat_key>` in `field_report_ids` as a YAML block-list
+entry; `er:` is the handle prefix, not a registry key. EA reports have no signature.
+J4 permits broad diagnostic capture; keep downloaded originals unchanged under
+ignored `docs/bugs/user-submissions-bundles/<handle>/` and commit safe excerpts only.
+
+This kind-filtered intake cannot advance Last full sweep. A full channel sweep
+uses the reader's one unfiltered SQL snapshot and, after the first sweep, passes
+`--review-since <previous-boundary-minus-10-minutes>` to review recorded
+recurrences too. Store only its exact successful snapshot boundary in Coverage.
+The ten-minute overlap is bounded; unlimited commit delay can escape it. A failed
+or contested read cannot claim coverage. Coordinate the canonical sweep with
+`/bug-sync`; recorded does not mean reviewed or fixed.
+
 ## Inspect supplied evidence
 
 For each artifact:
@@ -184,11 +215,16 @@ When the user asks to figure out a report:
    - backend rows and required relationships; and
    - eventual convergence.
    Inspect Profile → Share logs and Profile → Share database support JSON
-   directly. Verify the export actor before joining `recordRef` values.
+   directly. Verify the export actor before joining raw `recordId`,
+   `serverRecordId` and `wirePayload` evidence. Use the actual serializer id
+   (nested `p_assessment.id` for assessments); `letter_mastery` has no server
+   record id. A serialization error is evidence of an unavailable wire body,
+   not proof of an absent server row.
    A support summary alone cannot establish the full local row state.
-   Use `npm run bugs:incidents` (`scripts/read-support-incidents.cjs`, built
-   separately) when available; otherwise record it as unavailable. For backend
-   checks, read `.claude/skills/sqlite-staging-sql/SKILL.md` and use its read-only
+   Use `npm run bugs:incidents` (`scripts/read-support-incidents.cjs`)
+   and resolve record-bearing leads with `--resolve <handle>` before diagnosing;
+   unsupported/failed lookups are not absence. Non-record conditions make resolve
+   inapplicable. For backend checks, read `.claude/skills/sqlite-staging-sql/SKILL.md` and use its read-only
    SQL runbook. Verify `masi-app-sqlite` (`segygjzpujphwvrubusm`); never use the
    legacy backend `jcqrlwetutnpuchjoyyd`. Check live schema rather than assuming
    migration files prove hosted state.

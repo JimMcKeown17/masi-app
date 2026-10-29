@@ -2325,3 +2325,111 @@ Two habits to take from this:
   tries again, for as long as the disk stays full. An automatic write must not retry on its own
   schedule: here it waits while the controller shows "Couldn't save your last change", which
   only a successful write clears, so the next change the EA makes is the retry.
+
+## Why receipts became immutable and incidents observed (field diagnostics, 2026-10-29)
+
+The field-diagnostics design went through four review rounds because two small
+words hid different promises: *condition* and *receipt*. A condition can keep
+happening while the phone is offline. A receipt is evidence that one report of
+that condition reached the server. If the server updates a condition row in
+place, a retry, an older request arriving late or a restored database can change
+what we think the phone originally reported. The stable thing to preserve is the
+report itself. The reader can group immutable reports into a condition later.
+
+Round one exposed the identity and observation problems: mutable key ownership,
+mutable paging, schema-1 delivery, unknown-table finalization without a snapshot
+guard, and the assumption that a successful pass proves server contact. Imagine
+one pass in which every upload failed on transport: the app finished its work,
+but the server never answered. Calling that recent contact would wrongly blame
+the queue for a stale backlog. The contract now asks for an actual response below
+HTTP 500, and accepts that a cold launch has no such evidence. Migration backfill
+also needs to preserve old rows honestly rather than pretend a new release
+observed them.
+
+Round two found the most consequential transaction mistake. Suppose the server
+rejects an old write with **MV001** because a newer version is already there.
+The terminal finalizer should commit that refusal locally and stop retrying the
+stale mutation. If that transaction also inserts an incident, and the incident
+insert fails, the domain finalization rolls back. The surrounding failure path
+can leave the stale work eligible for another upload. A diagnostic failure has
+now reopened a path that can replay the old mutation against newer server data.
+This is why “put everything in one transaction” is the wrong mental model here.
+Atomicity should protect one business fact, not join unrelated failure domains.
+
+The right boundary is narrower. Status, class and code commit together in the
+outbox's existing guarded UPDATE: they describe the same upload decision. Then
+an observer reads committed state and records incidents in a separate
+transaction. If that observer fails, the terminal refusal stays terminal. On a
+later refresh the observer can derive the same condition again. The same rule
+removes the foreign-owner incident hook from quarantine: adoption, quarantine,
+domain status and scan evidence remain durable even when diagnostics fails.
+Caught errors and human reports are events rather than standing outbox facts,
+so each gets its own incident transaction. Bundles are built **after** that
+commit; reading logs, disk or a screenshot cannot change an upload outcome.
+
+Immutable receipts solved the other round-two races. A local row id and report
+generation determine a report id. Retries after a lost acknowledgement and
+restored-database replay use the same id, so insert-or-ignore preserves the first
+accepted report. A later observation uses another generation. A changed release
+can promote a daily condition immediately; otherwise daily promotion is bounded.
+First observation provenance stays first observation provenance. Send-time app,
+EA, network and disk information belongs in delivery, not over the observation
+that may have happened before an OTA.
+
+Round three tested a smaller race: freeze generation 1, catch another error,
+then receive the acknowledgement for generation 1. Clearing all pending state
+would silently acknowledge the second error too. The row therefore keeps a live
+body beside its frozen snapshot and sets **has_unsent_changes** for observations
+after freeze. The ack uses a generation guard and leaves that bit alone. After
+24 hours the observer can promote the later event without a third error being
+needed. Once-cadence Plan 3 episodes are deliberately different: retained rows
+never promote. If fairness pruning removes one and it is recreated, N2 accepts
+a second report id grouped under the same condition, rather than adding a
+permanent tombstone system.
+
+Round three also separated enumeration from review. Several paged reads against
+a live table can observe different realities, even when every page is valid.
+One SQL statement returns one complete snapshot, joining receipt and identity
+data together. That proves which rows were visible to that statement. It does
+not prove fleet health, and it does not make “recorded” mean “reviewed.” The
+next sweep reviews new receipts for recorded conditions too, with ten minutes
+of overlap. A transaction delayed longer than that can still escape the review
+window; the overlap is an honest bounded convention, not an unlimited watermark.
+
+Round four followed capture through memory pressure, scheduler admission and
+native module loading. A 200-row queue can starve a person's report if observed
+rows are never evictable; re-derivable observations now yield to human reports,
+which also have their own server allowance. Promotion must run before the ready
+count, or a due generation remains invisible to the scheduler. Capture applies
+budgets before allocation, uses bounded logger.tail reads, yields and checks the
+EA handle between sections. An OTA cannot safely catch a native picker import
+failure after Metro reports it as fatal; it must preflight the native module
+before importing the package.
+
+Finally, freeze must wait for the attachment outcome. If a receipt is accepted
+before bundle upload finishes, adding a failure flag later would rewrite accepted
+evidence. The capturing gate, durable upload progress and five-failure fallback
+settle paths and outcome flags before freezing. A kill after upload but before
+local progress can retry with a 409; a kill after progress and file deletion
+uses the durable path. A second event still dirties the live body while the first
+snapshot stays fixed. Sign-out never bypasses actor fencing just to mark capture
+failed: N1 leaves it capturing in that EA's file until the observer recovers it
+after ten minutes on reopening. Consuming the automatic allowance at capture
+start also prevents repeated disk failures from becoming an unbounded loop.
+
+J4 widened the evidence we collect for the field month: raw ids, wire payloads,
+server text, stacks, logs, EA identity and device name can be necessary to
+reconstruct the causal chain without another conversation. This is a capture
+contract, separate from publishing safe excerpts in Git and from service-role
+API access. It does not turn a receipt into proof of a missing row or recovery.
+An operator must resolve the real wire id and inspect relationships and local
+state before making those claims.
+
+This account explains the approved design, including C/F contracts being built
+in parallel; it is not a report that all those races have passed in this base.
+Local migration/disposition/reader tests, integrated real-SQLite race tests,
+disposable PostgreSQL, hosted apply/read-back, native build, physical device,
+first real sweeps, causal field convergence and a no-recurrence window remain
+different evidence tiers. The orchestrator reconciles the final code and records
+their results in the build log. A green local test cannot stand in for a later
+field observation.

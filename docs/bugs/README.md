@@ -27,7 +27,7 @@ Sweep phone incident receipts and report what is unrecorded.
 
 | Channel | Skill | Recorded-when frontmatter field |
 | --- | --- | --- |
-| Field reports | `/bug-user` | `field_report_ids` |
+| Field reports (including Profile `ea_report` receipts) | `/bug-user` | `field_report_ids` |
 | Phone incident receipts | `/bug-sync` | `support_incident_keys`, `support_incident_signatures` |
 | Sentry evidence | Whichever skill the starting artifact belongs to | `sentry_issue_ids`, `sentry_event_ids` |
 
@@ -49,19 +49,26 @@ belong to one isolated query defect only after ruling out competing causes.
 Otherwise declare the exact reporter-qualified keys. This is an illustration,
 not a learned mapping or an ownership declaration.
 
-For upload kinds, `a`/`b` are `errorClass`/`errorCode`; for pulls,
+For `upload_terminal`, `a`/`b` are `errorClass`/`errorCode`; for pulls,
 `scopeFamily`/`failureKind`; for breakers, `scopeFamily`/`-`; for app errors,
 `errorName`/the first eight characters of `messageDigest`. Exact keys match
-before signatures.
+before signatures. `ea_report`, `diagnostics_sent` and the three Plan 3 kinds
+have no signature. For `ea_report`, declare the exact condition key in
+`field_report_ids`; its `er:` handle is only a display shortcut.
 
 An incident is the phone's durable observation of a condition. A condition is
 identified by reporter, kind, and condition key. A receipt is one immutable
-server row reporting it; a persisting condition sends about one receipt a day.
+server row reporting it; daily kinds can re-report a persisting condition about
+once a day. Plan 3 episode kinds use once cadence while retained locally.
 A receipt is a lead rather than proof of data loss, current impact, or recovery.
 
-Recorded is not reviewed. A full sweep passes the previous **Last full sweep**
-time as `--review-since`, so recorded conditions with new receipts (recurrence,
-or a new release still seeing it) are listed for a look.
+Recorded is not reviewed. A full sweep uses one unfiltered SQL statement snapshot,
+passing the previous **Last full sweep** boundary minus ten minutes as
+`--review-since` (first sweep omits it). All unrecorded conditions remain listed;
+recorded conditions with new receipts are listed for review too. Subtract the
+overlap once in the caller. Duplicates in that window are harmless; arbitrarily
+long commit delays can escape it. It is a bounded convention, not an unlimited
+late-commit guarantee.
 
 ## Affected-user linkage
 
@@ -81,9 +88,11 @@ current blockage, release uptake, or recovery.
 | Sentry | never | unknown | unknown | unknown |
 
 Update after intake or a sweep. State scope, time window, counts, and limits.
-A targeted follow-up belongs in Notes; it does not advance Last full sweep or
-claim full-channel coverage. Unknown is not zero. A sweep that writes records
-is unfinished until they reach `origin/main` with authorization.
+Store the exact reader `snapshotAt` as Last full sweep only after a successful
+canonical unfiltered sweep completes, with reader/registry commits and limits.
+Filtered, targeted, failed or contested runs belong in Notes; they do not advance
+Last full sweep or claim full-channel coverage. Unknown is not zero. A sweep
+that writes records is unfinished until they reach `origin/main` with authorization.
 
 ## Record and frontmatter contract
 
@@ -274,6 +283,9 @@ builds, releases, deploys, merges, and pushes need explicit authorization.
   recreating missing work.
 - Check UI visibility, local rows, outbox state, backend rows and relationships,
   and convergence separately before claiming data loss or recovery.
+- J4 authorizes raw ids, payloads, error text/stacks, logs, EA identity and full
+  device detail in field-month diagnostic capture. Do not redact the diagnostic
+  bundle itself. This capture contract is separate from safe Git publication.
 - Never commit credentials, tokens, passwords, learner PII, or an unredacted
   Share database export, including its support JSON.
 - Inspect artifacts first. Safe derivatives go to
@@ -299,13 +311,27 @@ verification passed. Intake alone does not authorize implementation.
 - **Profile → Share logs:** inspect the actual log, time window, release, and
   workflow; preserve safe excerpts only.
 - **Profile → Share database:** support JSON export with failed/terminal
-  `sync_outbox` rows and `error_class`/`error_code`, the incident queue, and record
-  refs. Verify the export's actor before joining a receipt's `recordRef` to an
-  actual row. A support summary alone cannot prove all local rows exist.
-- **Receipt reader:** `npm run bugs:incidents`, implemented separately in
-  `scripts/read-support-incidents.cjs`. Its default registry is `origin/main`.
-  It must page to completion and refuse contested signature ownership. Until
-  available, record reader evidence as unavailable, not a clean sweep.
+  `sync_outbox` rows and `error_class`/`error_code`, every incident queue row,
+  actual `wirePayload` and `serverRecordId`. Verify the export's actor before
+  joining raw `recordId`/wire identities; assessments use `p_assessment.id`,
+  `letter_mastery` has no server record id, and serialization failure retains
+  `wirePayloadError`. A bounded bundle or support summary cannot prove every
+  local row exists.
+- **Diagnostic bundles:** `node scripts/read-support-incidents.cjs --fetch <handle>`
+  downloads the latest bundle-bearing receipt and that receipt's optional
+  screenshot, printing its report id. Inspect the actual export/log tail/image.
+  Originals stay unchanged under gitignored
+  `docs/bugs/user-submissions-bundles/<handle>/`; only safe excerpts with hashes
+  go to `docs/bugs/evidence/<BUG-ID>/`. Fetch can be unavailable or failed.
+- **Receipt reader:** `npm run bugs:incidents` uses
+  `scripts/read-support-incidents.cjs`; direct node with `--json` avoids npm
+  banners. Its default registry is committed `origin/main`. One unfiltered psql
+  statement joins both identity sources and enumerates all receipts, with an
+  exact snapshot boundary and no paging. `--actor`, `--kind`, `--since` are
+  display filters, not full sweeps. `--review-since` alone preserves coverage.
+  Contested ownership (exit 2) refuses coverage; exit 1 is a failed/unsupported
+  operation. Inspect fetch/resolve statuses even after exit 0. Use `--resolve`
+  before diagnosing record-bearing leads; existence is not convergence.
 - **Backend:** use the `sqlite-staging-sql` skill at
   `.claude/skills/sqlite-staging-sql/SKILL.md` for read-only SQL against
   `masi-app-sqlite` (`segygjzpujphwvrubusm`). Verify the target and live schema;
