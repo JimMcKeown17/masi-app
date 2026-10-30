@@ -333,18 +333,16 @@ not establish hosted apply, native/device or field proof.
 - [x] Hosted apply through the guarded SQLite staging helper, read-only
   schema/function/grant/policy read-back and the pilot-shaped authenticated v1
   smoke (2026-10-29; v1 md5 `fc9fa2bc52e4f58060057884769435eb`, build log).
-- [ ] Native 1.5.0 pilot build with `expo-image-picker` (a native change, so the
-  version moved from 1.4.0; DEPLOYMENT.md rule). Because the runtime is now 1.5.0,
-  OTAs from `main` no longer reach 1.4.0 binaries; the picker preflight stays as
-  defence. Galaxy A03s at default text size: Galaxy A03s at default text size: online/offline reports/
-  diagnostics, screenshots and formats,
-  force-quit/retry, exact receipt fetch/resolve, capture/sign-out/account-switch
-  fencing, keyboard/footer/toasts and pixel-level UI acceptance. iPhone smoke
-  remains separate if unavailable.
-- [ ] First real `/bug-sync` and `/bug-user` sweeps: inspect bundles/screenshots,
-  resolve record-bearing leads, correlate valid Sentry queries when available,
-  record honest MA-BUG leads, review recurrences and land safe registry evidence
-  on origin/main with authorization. Do not manufacture a field defect from tests.
+- [x] Native 1.5.0 pilot builds (iOS 26, Android 55 from `f002e08`, submitted
+  2026-10-30). Galaxy A03s at default text size passed online/offline reports and
+  diagnostics, a JPEG screenshot, force-quit then send, exact fetch and resolve, and
+  a forced terminal upload (build log, 2026-10-30). The pass found the bugs in
+  MA-BUG-20261030-001 to -007.
+- [ ] Still open from that gate: capture/sign-out/account-switch fencing on a
+  device, PNG/HEIC screenshots, and the iPhone smoke on TestFlight 26.
+- [x] First `/bug-sync` and `/bug-user` sweep (2026-10-30): 10 test receipts and
+  the A03s observations recorded as MA-BUG-20261030-001 to -008; 0 unrecorded.
+  Sentry was not searched (no read-only connector in that session).
 
 **B7 deferrals stay open:** web health panel, retention job, additional
 schema-version ceremony and guarded automatic recovery. The approved design

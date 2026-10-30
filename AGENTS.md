@@ -19,20 +19,22 @@ Issues and PRDs live as **GitHub issues** on `JimMcKeown17/masi-app` (use the `g
 
 Canonical five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
-### Bug intake and phone incidents
+### Bugs: the MA-BUG registry
 
-- Human descriptions, screenshots, Share logs/Share database and Profile `ea_report`
-  receipts route to `/bug-user`: `.agents/skills/bug-user/SKILL.md`.
-- Automatic phone observations route to `/bug-sync`:
-  `.agents/skills/bug-sync/SKILL.md`. Sweep the canonical `origin/main` registry
-  before deep diagnosis; a receipt is a lead, not proof of data loss or recovery.
-- Both use `docs/bugs/README.md` and `docs/bugs/_template.md`; keep one causal
-  registry. Read-only diagnosis permits bug documentation, not source fixes,
-  live data/Auth/Sentry changes or releases without separate authorization.
-- Slice E hands over scratch skills in `/tmp/masi-bug-sync/` and
-  `/tmp/masi-bug-user/`; the orchestrator installs them and creates
-  `.claude/skills/bug-sync` as a symlink. Canonical routing above is the install
-  contract, not a claim that scratch handoff has already installed the skill.
+Every bug gets an MA-BUG record in `docs/bugs/`, including bugs you notice
+yourself during a device gate, test run or review. Record it before or with any
+fix. One record holds one causal problem; `docs/bugs/README.md` owns IDs,
+severity, states and privacy rules.
+
+- A person's report (message, screenshot, Share logs, Share database, Profile
+  "Report a problem") or a bug you observe: `/bug-user`.
+- Phone incident receipts (`npm run bugs:incidents`): `/bug-sync`. A receipt is
+  a lead, not proof of data loss or recovery.
+- Fix work is a GitHub issue linked from the record's `github_issues`. Advance
+  the record's delivery and verification states with their own evidence
+  (merged, released, device-verified); the build log records what shipped.
+- Recording and read-only diagnosis cover bug documentation only. Fixes, live
+  data/Auth/Sentry changes and releases need the user's separate go-ahead.
 
 ### Domain docs
 
@@ -183,8 +185,9 @@ Two Supabase projects exist:
 `EXPO_PUBLIC_*` values from `.env.local` are NOT available in EAS cloud builds; public values must also come through Expo config `extra` with a client-side fallback (`app.config.js` carries the Supabase target guardrails). Fallback pattern and details: `expo-deployment` skill.
 
 ### Debugging Tools Available
-- **Profile → Export Logs**: captures all `console.log/error/warn` output to a shareable text file
-- **Profile → Export Database**: exports a SQLite-aware support package with schema version, table counts, sync status, failed outbox rows, release/backend identity, and support metadata.
+- **Profile → Support tools → Report a problem / Send diagnostics**: sends a diagnostic bundle (support export, log tail, device and EA identity, optional screenshot) to the private `support-bundles` bucket with a receipt; read with `npm run bugs:incidents -- --fetch <handle>`.
+- **Profile → Share logs**: captures all `console.log/error/warn` output to a shareable text file.
+- **Profile → Share database**: exports a SQLite-aware support package with schema version, table counts, sync status, failed outbox rows, release/backend identity, and support metadata.
 
 ---
 

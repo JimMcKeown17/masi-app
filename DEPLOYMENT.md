@@ -353,7 +353,7 @@ Any child a tester "deleted" on a pre-fix build still exists in Supabase with no
 | Audience | App | Version | Backend | Distribution |
 |---|---|---|---|---|
 | No field cohort today (Jim, 2026-10-28) | Legacy AsyncStorage app, unused | 1.2.x | `masi-app` (legacy) | Nothing new is distributed |
-| Testers now; Masi's EAs from November 2026 | SQLite app (`main`) | 1.5.0 from `main` after field diagnostics (1.4.0: iOS 25, Android 54 from `dffe22c`; July 2026 pilot: 1.3.0) | `masi-app-sqlite` | `pilot` profile → TestFlight + Play internal testing, submitted by EAS |
+| Testers now; Masi's EAs from November 2026 | SQLite app (`main`) | 1.5.0: iOS 26, Android 55 from `f002e08` (field diagnostics; 1.4.0: iOS 25, Android 54 from `dffe22c`; July 2026 pilot: 1.3.0) | `masi-app-sqlite` | `pilot` profile → TestFlight + Play internal testing, submitted by EAS |
 
 OTA updates go per channel: `preview` serves the SQLite store builds, and
 `production` served the legacy builds. Runtime versions (1.2.x vs 1.3.0 and

@@ -7537,3 +7537,67 @@ Codex gpt-6-astra ran the adversarial reviews.
 | Operator loop on hosted | `node scripts/read-support-incidents.cjs --registry-ref HEAD --json`; `--fetch dg:92c460ce` | 4 receipts, `coverage.complete: true`, EA emails joined; bundle downloaded to the gitignored evidence path |
 
 **Still open:** the 1.5.0 native pilot build with expo-image-picker (version bumped from 1.4.0 on 2026-10-30; `releaseGateConfig` RED at 1.4.0, GREEN at 1.5.0); Galaxy A03s gates at default text size (Report a problem with/without screenshot, online/offline; Send diagnostics; a forced terminal upload); iPhone smoke; the first real `/bug-sync` and `/bug-user` sweeps. The old "OTA on a 1.4.0 binary" gate no longer applies: 1.5.0 OTAs cannot reach 1.4.0 binaries. The hosted smoke left 2 labelled smoke receipts and 1 smoke bundle on masi-app-sqlite.
+
+### 2026-10-30 — 1.5.0 pilot builds, Galaxy A03s gates, reader read-only fix, first bug sweep (`fix/incident-reader-and-first-sweep`)
+
+PR #121 merged as `main` `f002e08` (squash; tree equal to the tested head `2de09bd`; CI test
+passed in 12m14s). The `pilot` builds from `f002e08` were built and submitted by EAS:
+**Android 1.5.0 (55)** `9cd89fdb-99bf-40be-b83c-c5854ed4f51a` to Play internal testing, and
+**iOS 1.5.0 (26)** `684295e9-59b2-4989-9d3d-ee937516e818` to App Store Connect.
+
+#### Device gates: Galaxy A03s (SM-A037U, Android 13), Play build 55, TestB, default text size
+
+| Gate | Result |
+|---|---|
+| Update 54 → 55 from Play | Pass: signed in, data kept, SQLite migration 20 ran, no false incidents at launch; Profile reads "Version 1.5.0 (Build 55) · Backend sqlite-staging" |
+| Send diagnostics online | Pass: `dg:9be72255` received in ~4 s; 46 KB bundle with device profile, EA identity, network, disk, support export (schema 20) and 147 log lines |
+| Report a problem online, no screenshot | Pass: `er:ddb36337` with bundle |
+| Report a problem with a screenshot | Pass: `er:d825982c`; the 720×1600 JPEG round-trips through `--fetch` |
+| Offline report and diagnostics | Pass: "Saved on your phone. It will send when you're online."; both survived a force-stop and arrived ~25 s after Wi-Fi returned (`er:eee0a7ed`, `dg:dfc2798d`), `first_seen_at` kept |
+| Forced terminal upload | Pass: an offline edit of test child Tootie (`6ea13ec4…`) against a server copy raised to `row_version = 10` failed `MV001`, terminal; receipt `ut:d59e852f` with bundle and wire payload arrived 19 s later; Home shows "1 item needs attention" |
+
+Wi-Fi was toggled with `cmd wifi` and a watchdog (airplane mode re-enables Wi-Fi on this phone).
+Staging keeps the gate 5 change: Tootie's `preferred_name = 'HO edit (A03 gate 5)'`, `row_version = 10`.
+
+#### Reader read-only gap (reported by the Zazi iZandi team)
+
+The reader set `default_transaction_read_only`, `statement_timeout` and `lock_timeout` through
+`PGOPTIONS`. Through the hosted session pooler a session opened that way reported
+`default_transaction_read_only=off`, `statement_timeout=2min`, `lock_timeout=0`: **the pooler
+drops startup options silently**, so nothing stopped a write and the timeouts were not ours.
+Fix: every query runs in `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY` with
+`SET LOCAL` timeouts; a `DO` guard raises before the read unless the database reports
+`transaction_read_only = on`; psql prints that value first and the reader refuses any output
+without it; the script ends in `ROLLBACK`. Through the same pooler the transaction reports
+`on`, `30s`, `10s` and refuses `CREATE`.
+
+#### First bug sweep
+
+Full unfiltered sweep, snapshot `2026-10-30T23:08:55.076884+00:00`, exit 0,
+`coverage.complete: true`: 10 receipts, 10 conditions, all unrecorded against the empty
+registry. All ten were deliberate tests (the 2026-10-17 D1 sign-out gates on A03s build 8 and
+the iPhone build 10, the 2026-10-29 hosted smoke, and today's gates), recorded as
+MA-BUG-20261030-008. The A03s observations became records 001–007: keyboard leaves Android
+layouts shrunk (S2, fix approved), Remove screenshot hidden with the keyboard open, the two
+screenshot actions styled differently, upload failures dropping the server's detail, a stale
+release label / no commit / no Android version code in diagnostics, Send diagnostics text on
+the footer divider, and the Android picker's Done step (likely the OS). A recheck at the
+branch's commit (`--registry-ref HEAD`) found 0 unrecorded. AGENTS.md now says every bug gets
+a record, including ones agents find themselves.
+
+Surprises: the bundle's `releaseLabel` still reads `sqlite-critical-hardening` and
+`gitCommit` `unknown` (a hand-written JSON since the cutover; record 005). The picker
+screenshot was withheld from Git because its gallery thumbnails show children's names.
+
+#### Verification
+
+| Gate | Command / evidence | Result |
+|---|---|---|
+| Reader unit tests | `npx jest __tests__/readSupportIncidents.test.js` | RED 52 failed before the fix; GREEN 83/83 |
+| PostgreSQL 17 (disposable, port 55432) | `verify:support-incident:postgres` | 229 cases pass, including 4 new: session writable by default, snapshot confirmed read-only, `DELETE` refused `25006`, weakened `BEGIN` stopped by the guard |
+| Hosted pooler probe | old options vs `BEGIN … READ ONLY` | old: `off` / `2min` / `0`; new: `on` / `30s` / `10s`, `CREATE` refused |
+| Sweep | `node scripts/read-support-incidents.cjs --registry-ref origin/main --json`, then `--registry-ref HEAD` | 10 receipts; 10 unrecorded → 0 |
+| Resolve through the new transaction | `--resolve ut:d59e852f` | `present`, `row_version 10`: the server copy won gate 5 |
+
+**Still open:** the keyboard fix (MA-BUG-20261030-001) on its own branch; the iPhone smoke on
+TestFlight 26; records 002–007 await decisions.
