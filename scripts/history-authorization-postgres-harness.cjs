@@ -156,6 +156,104 @@ $auth_uid$;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role, authenticator;
 GRANT SELECT ON auth.users TO anon, authenticated, service_role, authenticator;
 GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role, authenticator;
+
+-- Supabase Storage stand-in: schema-only pg_dump from PostgreSQL 17.6,
+-- storage.migrations latest = vector-buckets (supabase-storage-schema.sql).
+-- Keep the dumped column/default/constraint definitions and API-role grants.
+-- buckettype is required by buckets.type. Omit unrelated Storage objects,
+-- triggers calling omitted functions, and platform ownership-role changes.
+-- This models PostgreSQL authorization, not Storage HTTP or hosted state.
+
+CREATE SCHEMA storage;
+
+CREATE TYPE storage.buckettype AS ENUM (
+    'STANDARD',
+    'ANALYTICS',
+    'VECTOR'
+);
+
+CREATE TABLE storage.buckets (
+    id text NOT NULL,
+    name text NOT NULL,
+    owner uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    public boolean DEFAULT false,
+    avif_autodetection boolean DEFAULT false,
+    file_size_limit bigint,
+    allowed_mime_types text[],
+    owner_id text,
+    type storage.buckettype DEFAULT 'STANDARD'::storage.buckettype NOT NULL
+);
+
+CREATE TABLE storage.objects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    bucket_id text,
+    name text,
+    owner uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    last_accessed_at timestamp with time zone DEFAULT now(),
+    metadata jsonb,
+    path_tokens text[] GENERATED ALWAYS AS (string_to_array(name, '/'::text)) STORED,
+    version text,
+    owner_id text,
+    user_metadata jsonb
+);
+
+ALTER TABLE ONLY storage.buckets
+    ADD CONSTRAINT buckets_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY storage.objects
+    ADD CONSTRAINT objects_pkey PRIMARY KEY (id);
+
+CREATE UNIQUE INDEX bname ON storage.buckets USING btree (name);
+
+CREATE UNIQUE INDEX bucketid_objname ON storage.objects USING btree (bucket_id, name);
+
+ALTER TABLE ONLY storage.objects
+    ADD CONSTRAINT "objects_bucketId_fkey" FOREIGN KEY (bucket_id) REFERENCES storage.buckets(id);
+
+CREATE FUNCTION storage.foldername(name text) RETURNS text[]
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+DECLARE
+    _parts text[];
+BEGIN
+    -- Split on "/" to get path segments
+    SELECT string_to_array(name, '/') INTO _parts;
+    -- Return everything except the last segment
+    RETURN _parts[1 : array_length(_parts,1) - 1];
+END
+$$;
+
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+GRANT USAGE ON SCHEMA storage TO postgres WITH GRANT OPTION;
+
+GRANT USAGE ON SCHEMA storage TO anon;
+
+GRANT USAGE ON SCHEMA storage TO authenticated;
+
+GRANT USAGE ON SCHEMA storage TO service_role;
+
+GRANT ALL ON TABLE storage.buckets TO postgres WITH GRANT OPTION;
+
+GRANT ALL ON TABLE storage.buckets TO anon;
+
+GRANT ALL ON TABLE storage.buckets TO authenticated;
+
+GRANT ALL ON TABLE storage.buckets TO service_role;
+
+GRANT ALL ON TABLE storage.objects TO postgres WITH GRANT OPTION;
+
+GRANT ALL ON TABLE storage.objects TO anon;
+
+GRANT ALL ON TABLE storage.objects TO authenticated;
+
+GRANT ALL ON TABLE storage.objects TO service_role;
 `;
 
 const classOnlySessionFixtureSql = `

@@ -2,7 +2,7 @@
 
 **Document role:** current product, domain, and architecture requirements.
 
-**Updated:** 2026-10-23
+**Updated:** 2026-10-29
 
 This file is not a progress ledger. Use:
 
@@ -39,7 +39,13 @@ completes.
 - **Simple interfaces:** large tap targets, clear next actions, minimal hidden state, and explicit
   recovery paths.
 - **Privacy by default:** the app handles child, staff, attendance, assessment, and location data.
-  Cloud telemetry must be allowlisted and local support exports must warn before sharing PII.
+  During the November 2026 field month, J4 authorizes this incident/bundle lane
+  to capture raw record ids, wire payloads, server error text, exception messages
+  and stacks, log tails, EA identity and full runtime/device detail including
+  device name. Receipt and bundle API reads remain service-role only; explicitly
+  authorized read-only operator psql access is separate. Local support exports
+  still warn before sharing sensitive data; Git receives safe excerpts only.
+  This exception does not broaden the independent Sentry capture rules (§6.11).
 
 ## 3. Users and domain
 
@@ -369,7 +375,39 @@ Profile support tools must:
 - provide a safe handled-error Sentry verification action;
 - preserve local evidence when cloud telemetry is unavailable.
 
-Initial Sentry posture:
+The field-diagnostics contract adds **Report a problem** and **Send diagnostics**
+rows beside Share actions. They use existing bottom sheets and record durably
+before attempting sync. Report text is required and limited to 4,000 characters;
+an optional screenshot is offered only after native-module preflight. The picker
+contract retains the returned MIME type and original extension without forced
+resizing/conversion. Confirmation is based on that exact incident generation:
+"Sent. Thank you." or "Saved on your phone. It will send when you're online."
+An online flag or a generic sync-pass success cannot prove delivery.
+
+Automatic conditions are observed from committed SQLite state; caught app errors
+and human actions record in their own transactions. Immutable receipts carry
+observation provenance separately from delivery metadata. Capture/upload failures
+must not alter domain upload outcomes. These C/F behaviors implement the approved
+[Revision 4.1 contract](docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md),
+with [binding plan rulings](docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md),
+and are merged with local unit/integration proof. Persisting conditions re-record
+only on payload/release change or when `last_seen_at` is ≥15 minutes old; automatic
+observer capture runs detached from status refresh, with its receipt gated while
+`capturing`. A missing delivery-state row returns `unknown`, which cannot confirm
+saved/sent. The controller's prior disposable PostgreSQL run passed all ten
+harnesses, including 225 support-incident cases; local Storage policy-model proof
+remains separate from hosted behavior. Hosted apply/read-back, native build,
+device acceptance and first real sweeps remain open; see the
+[standing contract map](documentation/rls-sync-contract-map.md#field-diagnostics-immutable-receipts-and-observed-incidents).
+
+J4 applies to this private diagnostic lane for the field month. Receipts and
+bundles are retained through the pilot with no purge job. EA clients cannot read
+or list either. Service-role receipt SELECT and private Storage API reads are
+separate from the explicitly authorized operator reader's read-only psql path,
+which uses validated SQLite staging credentials and one complete SQL snapshot.
+Never source dotenv files or assume migration files establish hosted state.
+
+Initial Sentry posture (independent of the diagnostic lane):
 
 - no Session Replay;
 - no screenshots or view hierarchy;

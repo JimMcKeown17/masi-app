@@ -7486,3 +7486,54 @@ review finding, and ran the device pass.
   `formatTime` ("7:31 AM"); Home uses 24-hour `formatDisplayTime` ("07:31"). Now visible
   back-to-back. Needs one app-wide choice.
 - No RLS, sync, schema or outbox change; `documentation/rls-sync-contract-map.md` untouched.
+
+### 2026-10-29 — Field diagnostics: incident receipts, diagnostic bundles, Report a problem, MA-BUG registry (`feat/bug-machinery`)
+
+Jim asked to rebuild Zazi iZandi's bug machinery here: phones report problems automatically, an
+operator sweeps them into a git-tracked bug registry, and the loop collect → diagnose → fix →
+release runs fast enough to harden the app during the November field test. Spec
+`docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md` (rev 4.1); plan
+`docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md`. Codex (gpt-6.1-sol, high) mapped
+both codebases, drafted the plan and built six slices in parallel worktrees; Claude designed,
+ruled, reviewed every diff, re-ran every suite and harness, committed, and ran the hosted gates.
+Codex gpt-6-astra ran the adversarial reviews.
+
+#### Decision Register
+
+| Decision | Why |
+|---|---|
+| Extend Plan 3's queue/table/RPC; no second lane | Roadmap rule; Plan 3 already solved actor binding, per-EA files and backoff |
+| Capture sync conditions + caught app errors; auto bundles; Send diagnostics; Report a problem with an optional screenshot (Jim, J1/J5/J6) | Zazi: receipts said who and where, exports said what. Bundles make exports arrive without asking the EA |
+| Capture everything diagnostic: raw ids, payloads, server text, stacks, logs, device name, EA identity (Jim, J4: permission slips cover EAs and children) | Optimise the field month's loop; access stays service-role only |
+| Receipts are immutable (insert-or-ignore on reporter + report_id); the reader groups them into conditions | Review rounds 1–2: mutable per-condition aggregates lost observations under pruning, restore and lost acknowledgements |
+| Incidents are observed from durable state on each status refresh, never written inside a domain transaction | Round 2: a failed incident write inside a terminal finalizer could retry an MV001 stale write with a bumped row_version and overwrite newer server data |
+| Reader reads every receipt in one read-only psql statement | Round 3: paging is not a snapshot; one statement is exact for its snapshot, with no PostgREST row cap |
+| expo-image-picker 17.0.11 (SDK 54, published 2026-04-27), gallery only; preflight `requireOptionalNativeModule('ExponentImagePicker')` before `require` | Round 4: runtimeVersion is appVersion, so OTAs reach 1.4.0 binaries without the module, and Metro reports a failed native import as fatal before the caller's catch |
+| Release as **1.5.0** (2026-10-30), not a 1.4.0 rebuild | `expo-image-picker` is a native change, and DEPLOYMENT.md requires a version bump for one: the version is the OTA runtime boundary, so 1.4.0 binaries without the module must not share a runtime with binaries that have it. OTAs from `main` now target 1.5.0 only; the preflight remains defence in depth |
+| Registry `docs/bugs/` (MA-BUG IDs, empty), skills `bug-sync` and `bug-user` (canonical `.agents`, `.claude` symlinks) | Zazi's contract without its people, ids, history or learned mappings |
+| Receipts kept through the pilot; no purge job (Jim, J3) | Revisit before national scale |
+
+#### Review findings, dead ends and surprises
+
+- **Spec reviews (4 rounds, gpt-6-astra), all findings accepted:** round 1, 10 blocking (savepoints are forbidden on the signed-in facade; pruning reset counters; resolver false absences; …); round 2, 6 blocking (the MV001 overwrite, restore double-counts, throttle suppressing backlog, …) → redesign to immutable receipts and observed incidents; round 3, 1 blocking (paged sweeps are not a snapshot) + `chr(0)` is invalid in PostgreSQL; round 4, 1 blocking (the picker preflight) + bounded capture, queue fairness, promotion visibility, capture gate. A check-solution pass cut 7 elements from revision 1. Plan review: approve.
+- **Full suites found what focused tests missed, twice:** migration 20 broke 8 historical migration tests that compared whole outbox rows / hard-coded `user_version: 19` (fixed by asserting the exact backfill and `CURRENT_SCHEMA_VERSION`); the Storage migration broke 6 other PostgreSQL harnesses that replay all migrations (fixed with a Storage stand-in in the shared bootstrap, copied from a real Supabase `storage` schema dump rather than invented — the builder refused to invent one).
+- **Orchestrator review of Slice C caught three cost/UX defects the tests did not:** the observer re-recorded every persisting condition on every 30 s refresh (now only on change, release change, or last_seen ≥ 15 min); automatic bundle capture blocked the status refresh (now detached; the capturing gate stops early sends); a pruned EA report read as "rejected" (now "unknown").
+- **Hosted apply failed once:** `ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY` → `42501 must be owner of table objects`. storage.* is owned by supabase_storage_admin; postgres may only CREATE POLICY there (`supautils.policy_grants`). The failed migration rolled back completely (ledger, bucket and policies verified empty). Both statements were redundant (RLS on, service_role SELECT already granted). Fix + a harness guard that statically refuses ALTER/GRANT/REVOKE on storage.* (RED with the old text, GREEN with the fix), because the local stand-in, owned by postgres, cannot reproduce hosted ownership.
+- SQLite `GLOB` stops at an embedded NUL, so the error_code CHECK also needs `instr(error_code, char(0)) = 0`. The unknown-table finalizer's id-only UPDATE did stamp a concurrently newer row (race test RED) — it now has a snapshot guard.
+- **Final whole-branch code review (gpt-6-astra, fresh thread, 22 commits vs origin/main): approve, no material findings.** Its targeted probes held for incident writes outside finalizers, freeze/generation CAS, capture recovery, human-report admission, the picker preflight against the installed module, and the post-response stale-handle race through the real request queue. Its sandbox could not write Jest's cache; the orchestrator ran the focused and full suites on the same commit (table below).
+- Process slips: a bash-only `${s^^}` in a zsh launcher silently started no builders (caught by checking the process table); Codex's sandbox cannot write `.agents/` or reach the local PostgreSQL container, so the orchestrator installed skill files and ran every harness RED/GREEN.
+
+#### Verification
+
+| Gate | Command / evidence | Result |
+|---|---|---|
+| Unit | `npm test -- --silent` (Node 20) | 462/462 suites, 7,351 tests |
+| Integration (real SQLite) | `npm run test:integration -- --silent` | 94/94 suites, 1,342 tests |
+| Types / content | `npm run test:types`, `npm run test:content` | pass |
+| PostgreSQL 17 (disposable, port 55432, `PGTZ=UTC`) | all ten `verify:*:postgres` harnesses | all pass; support-incident 225 cases; behavioural RED with no-op migrations |
+| Hosted apply (J2) | `npm run sqlite:staging:dry-run` → `:push` from the worktree, `project_ref=segygjzpujphwvrubusm` | `20261030120000`, `20261030120100` applied |
+| Hosted read-only verification | ledger, 11 columns, 0 null report_ids after backfill of 2 existing rows, unique `mobile_support_incidents_report_once`, both functions SECURITY DEFINER, anon cannot execute v2, authenticated cannot read receipts, bucket private 15 MB, 6 storage policies | pass. **v1 body md5 `fc9fa2bc52e4f58060057884769435eb` on hosted = disposable DB** |
+| Hosted smoke as a test EA (labelled smoke data) | v1 pilot-shaped call true→false; bundle upload own folder ok, re-upload 409, other folder 403, EA read/list refused; v2 inserted→duplicate, foreign bundle path 22023 | pass |
+| Operator loop on hosted | `node scripts/read-support-incidents.cjs --registry-ref HEAD --json`; `--fetch dg:92c460ce` | 4 receipts, `coverage.complete: true`, EA emails joined; bundle downloaded to the gitignored evidence path |
+
+**Still open:** the 1.5.0 native pilot build with expo-image-picker (version bumped from 1.4.0 on 2026-10-30; `releaseGateConfig` RED at 1.4.0, GREEN at 1.5.0); Galaxy A03s gates at default text size (Report a problem with/without screenshot, online/offline; Send diagnostics; a forced terminal upload); iPhone smoke; the first real `/bug-sync` and `/bug-user` sweeps. The old "OTA on a 1.4.0 binary" gate no longer applies: 1.5.0 OTAs cannot reach 1.4.0 binaries. The hosted smoke left 2 labelled smoke receipts and 1 smoke bundle on masi-app-sqlite.

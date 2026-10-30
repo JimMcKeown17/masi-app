@@ -22,7 +22,7 @@ module.exports = () => {
     expo: {
       name: 'Masi',
       slug: 'masi-mobile-app',
-      version: '1.4.0',
+      version: '1.5.0',
       orientation: 'portrait',
       scheme: 'masi-app',
       icon: './assets/masi-mobile-icon.png',
@@ -67,6 +67,16 @@ module.exports = () => {
           {
             locationWhenInUsePermission:
               'Masi needs your location to verify you are at the school when signing in and out for time tracking.',
+          },
+        ],
+        [
+          'expo-image-picker',
+          {
+            // Report a problem attaches one screenshot from the gallery. No camera use.
+            photosPermission:
+              'Masi lets you attach a screenshot when you report a problem to the Masi team.',
+            cameraPermission: false,
+            microphonePermission: false,
           },
         ],
         ...sentryPlugin,

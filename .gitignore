@@ -58,3 +58,6 @@ scripts/testers.*.csv
 .claude/worktrees/
 
 .env.local
+
+# Private bug-report originals; commit only safe evidence derivatives.
+docs/bugs/user-submissions*/

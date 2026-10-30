@@ -17,7 +17,7 @@ not status.
 
 Jim confirmed on 2026-08-27 that no staff are currently using the Masi app, while staff want to go
 live soon. On 2026-10-28 Jim confirmed there is still no field cohort, and set the next step:
-Masi's EAs retest the SQLite app from November 2026, starting from the 1.4.0 pilot builds. Use
+Masi's EAs retest the SQLite app from November 2026, starting from the 1.5.0 pilot builds. Use
 this window for root-cause schema, identity, authorization, sync, and operational
 changes that would become much more expensive after trusted work accumulates on phones. "No active
 users" does not prove that no old binaries, test records, credentials, or legacy-backend automation
@@ -53,8 +53,10 @@ These horizons summarize the ordered register below. They are not a second backl
    `assessments`/`assessment_items`. Bounded keyset pagination and request deadlines are part of the
    first implementation, not a later optimization.
 4. **P0: add minimum incident and release provenance before expanding the pilot.** Durable,
-   idempotent, privacy-safe incidents need stable causal identity, a reader, an action, and exact
-   backend/app/runtime/protocol provenance.
+   idempotent receipts need stable condition identity, a reader, an action and exact
+   observed backend/app/runtime provenance. J4 authorizes broad field-month diagnostic
+   capture with service-role API reading and safe Git excerpts; integration/release gates
+   remain in the incident lane below.
 5. **P0: settle the upload contract and local-database ownership before the candidate build.**
    U1's bounded requests and send-order protection shipped in #77 (2026-10-19), applied to
    `masi-app-sqlite`, with D2/D3 passed on the Galaxy A03s (§2). Assessment-family upload is built and locally
@@ -262,48 +264,95 @@ work is external release and device proof.
 
 ### Minimum incident and provenance lane
 
-- [ ] Define a stable incident identity and preserve first/last-seen evidence without minting one
-  record per sync cycle.
-- [ ] Add a durable local incident queue and an authenticated idempotent server-acceptance path
-  outside the serialized domain outbox.
-- [ ] Carry privacy-safe actor, backend/project, app/runtime/build, protocol, capability/scope, and
-  normalized-disposition provenance.
-- [ ] Give every incident/support state a named reader, bounded diagnostic view, safe action, and
-  retention rule. Sentry is telemetry, not the durable sync-state ledger.
+The active contract is the
+[Field diagnostics Revision 4.1 spec](../docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md)
+with the [binding plan rulings](../docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md).
+All six slices A–F are merged on `feat/bug-machinery`, including the phone
+observer, immutable generations, bundles and Profile support sheets. Local
+unit/integration verification covers the merged implementation. The controller's
+prior disposable PostgreSQL run passed all ten harnesses, including 225
+support-incident cases with the shared Storage bootstrap. That Storage proof is
+a local policy model, not hosted Storage HTTP behavior. Checked items below do
+not establish hosted apply, native/device or field proof.
 
-Design rules from Zazi's field evidence ([Z12, Z13](./zazi-sync-lessons-for-masi-2026-10-08.md)):
+- [x] Existing `MA-BUG` registry, template and human-intake skill are built under
+  `docs/bugs/`. Keep one causal record across channels; do not rebuild the schema.
+- [x] SQLite v20 adds structured `error_class`/`error_code` in all seven failure
+  status writers and backfills existing terminal/failed rows without replay.
+  Classes: retryable, needs_parent, needs_reauth, terminal. Support export includes
+  dispositions, every queue row, actual wire payload and raw server record id.
+- [x] V20 queue schema preserves schema-1 row delivery while providing schema-2
+  generations, snapshot/dirty state and durable bundle columns in the same queue.
+- [x] Server migration artifacts extend the existing receipt table to ten kinds
+  and immutable `(reporter_id,report_id)` identity. V1 insert body/constraint swap
+  preserves boolean replay and unlimited v1; v2 alone has structural/size checks
+  and independent rolling-day machine 150 / human 50 allowances. No update-in-place
+  receipt, payload hash, field-value allowlist or 8 KB v2 privacy cap.
+- [x] Private `support-bundles` migration artifact declares own-folder INSERT,
+  service-role reading, 15 MB per-file and JSON/JPEG/PNG/HEIC/HEIF types, with
+  restrictive guards against broad pre-existing object policies. Hosted effective
+  policy proof remains open.
+- [x] Operator reader `scripts/read-support-incidents.cjs` enumerates one complete
+  psql snapshot, groups exact conditions and matches committed registry ownership.
+  Fetch pairs private evidence; resolve distinguishes existence from convergence.
+  Filtered/failed/contested runs never advance coverage. Recorded recurrences use
+  previous snapshot minus ten minutes, a bounded overlap convention.
+- [x] Slice E drafts `/bug-sync` and the narrow `/bug-user` EA-report patch in
+  `/tmp/masi-bug-sync/` and `/tmp/masi-bug-user/`, and reconciles standing docs.
+  Canonical `.agents/skills/bug-sync` and `bug-user` artifacts and the
+  `.claude/skills/bug-sync` symlink are present; final installed-artifact review
+  remains open. The learned mappings table starts empty.
+- [x] D4 observer implemented and locally tested: terminal owned work, stale
+  backlog only after real contact, reconcile breakers and ≥24 h history failures,
+  even with an empty domain outbox. Ordinary retries/offline passes/CAS misses/stale actors/
+  dependency stops do not produce diagnostic incidents. Foreign-owner incidents
+  derive from committed quarantine; the transactional incident hook is removed.
+  Persisting conditions re-record only on payload/release change or when
+  `last_seen_at` is ≥15 minutes old; unchanged refreshes acquire no writer unless
+  promotion or stale-capture recovery is due.
+- [x] Immutable generations implemented and locally tested: synchronous
+  first/current full observed runtime versus delivery; outcome-before-freeze,
+  generation CAS ack preserving post-freeze dirty events, observer-before-ready promotion, once/daily cadence,
+  200-row fairness and human-first drain. Complete runtime includes device name.
+- [x] Bounded after-commit bundles implemented and locally tested: capture gate,
+  consumed start-time automatic allowance, per-EA retention of five ready,
+  unfrozen bundles (capturing/frozen rows are outside that eviction query),
+  ten-minute stale-capture recovery, upload-before-receipt/409 retries and
+  five-failure fallback. J4 captures raw ids,
+  wire payloads, error text/stacks, logs and EA identity; safe Git excerpts are a
+  separate publication rule. No diagnostic redaction or raw SQLite upload.
+  Automatic observer capture runs detached from status refresh; `capturing`
+  excludes its receipt from ready counting and delivery until capture settles.
+- [x] Profile Report a problem / Send diagnostics bottom sheets implemented and
+  locally tested, with exact receipt-based feedback and optional-native-module
+  screenshot preflight. Preserve original returned type/extension; no forced resize/conversion dependency.
+  Feedback reads the captured incident reference after a sync attempt; a missing
+  row returns `unknown` and cannot claim saved/sent.
+- [x] Orchestrator reviewed the installed skill artifacts and the final integrated
+  diff; final whole-branch Codex review approved (2026-10-29). Types and content pass.
+- [x] Hosted apply through the guarded SQLite staging helper, read-only
+  schema/function/grant/policy read-back and the pilot-shaped authenticated v1
+  smoke (2026-10-29; v1 md5 `fc9fa2bc52e4f58060057884769435eb`, build log).
+- [ ] Native 1.5.0 pilot build with `expo-image-picker` (a native change, so the
+  version moved from 1.4.0; DEPLOYMENT.md rule). Because the runtime is now 1.5.0,
+  OTAs from `main` no longer reach 1.4.0 binaries; the picker preflight stays as
+  defence. Galaxy A03s at default text size: Galaxy A03s at default text size: online/offline reports/
+  diagnostics, screenshots and formats,
+  force-quit/retry, exact receipt fetch/resolve, capture/sign-out/account-switch
+  fencing, keyboard/footer/toasts and pixel-level UI acceptance. iPhone smoke
+  remains separate if unavailable.
+- [ ] First real `/bug-sync` and `/bug-user` sweeps: inspect bundles/screenshots,
+  resolve record-bearing leads, correlate valid Sentry queries when available,
+  record honest MA-BUG leads, review recurrences and land safe registry evidence
+  on origin/main with authorization. Do not manufacture a field defect from tests.
 
-- [ ] The incident key identifies the **causal condition**. A re-report of the same condition with
-  a newer body (`last_seen_at`, observed build) is accepted as an update, never rejected as a key
-  mismatch. Zazi's server rejected exactly this and needed schema v3 (`condition_key`,
-  `report_generation`).
-- [ ] A size-bounded payload with an explicit allowlist of fields per schema version (Zazi: 8 KB).
-- [ ] Observed OTA provenance (update id, embedded-launch flag, release label), not only the app
-  version and build number. Zazi found build numbers did not prove which OTA was running.
-- [ ] Store a structured `error_class` and `error_code` on `sync_outbox` rows (today: `status` plus
-  free-text `last_error`, `src/db/migrations.js:45-48`). Map each class (retryable, needs-parent,
-  support-needed, terminal) to a named owner and procedure. Do this while the schema is still cheap
-  to change.
-
-The field-bug feedback loop, a pilot-sized version of Zazi's incident envelopes and `/bug-sync`
-([B1–B6](./zazi-sync-lessons-for-masi-2026-10-08.md)):
-
-Plan 3 supplies `mobile_support_incidents`, its reporting RPC and a capped local queue with backoff
-and an actor fence. Step 4 extends that envelope; it does not add a second queue or table.
-
-- [ ] Extend the incident RPC for the wider kinds: versioned field allowlists, payload hashes,
-  per-actor daily limits and rules for updating a continuing condition. Keep the existing three
-  kinds' episode dedupe; define the new key and update rules in Step 4's spec.
-- [ ] Report only terminal, support-needed, or long-failing outbox rows, reconcile-breaker events,
-  and persistent pull failure. Never report an ordinary retry: 62% of Zazi's active EAs raised a
-  receipt within 10 days, mostly from upstream bugs.
-- [ ] A Masi `/bug-sync` skill and an `MA-BUG` registry under `docs/bugs/`. The skill sweeps
-  receipts, dedupes against the registry, and checks whether each record exists on the server
-  before diagnosing. Its rules: receipts are leads, not proof; bind attribution to the receipt's
-  actor id, never to a forwarded file.
-- [ ] The support export carries outbox rows with their `error_class`/`error_code`, because Zazi's
-  hardest bugs needed exports, not receipts. Keep `deviceName` out of every incident payload
-  (`runtimeDiagnostics.js` collects it today).
+**B7 deferrals stay open:** web health panel, retention job, additional
+schema-version ceremony and guarded automatic recovery. The approved design
+explicitly brings the already-built bug-user intake into this lane. Other
+non-goals remain user-health reconciliation, lifetime totals across pruned rows,
+raw SQLite upload and converting domain uploads to protocol-v2 RPCs. Receipts
+and bundles are retained through the pilot with no purge. Causal field recovery
+and a no-recurrence window remain later evidence, independent of implementation.
 
 ### Highest-signal device gates
 

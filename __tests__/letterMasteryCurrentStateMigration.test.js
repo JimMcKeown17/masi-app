@@ -67,7 +67,9 @@ test('upgrading converts labels to codes, keeps the latest row per key, and drop
   expect(await db.getFirstAsync("select programme_id, created_at, updated_at, server_updated_at from letter_mastery where letter = 'a'"))
     .toEqual({ programme_id: 'programme-2', created_at: T1, updated_at: T2, server_updated_at: T2 });
   expect(await db.getAllAsync('select table_name from sync_outbox')).toEqual([{ table_name: 'children' }]);
-  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(childOutbox);
+  expect(await db.getAllAsync('select * from sync_outbox')).toEqual(childOutbox.map(row => ({
+    ...row, error_class: null, error_code: null,
+  })));
   expect(await db.getAllAsync('select * from children')).toEqual(children);
   expect(await db.getAllAsync('pragma foreign_key_check')).toEqual([]);
   expect(await db.getFirstAsync('pragma foreign_keys')).toEqual({ foreign_keys: 1 });

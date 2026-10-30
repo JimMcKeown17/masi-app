@@ -1815,9 +1815,22 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 - **Per-handle data client and queue.** Every server request runs inside `handle.enqueueRequest` on `handle.dataClient` (supabase-js in `accessToken` mode). Its fetch re-checks, at send time, that the handle is open and current, that a queued task is running, and that the latest session belongs to the handle's EA; it aborts on revocation or after 30 s and resolves as a codeless network error. Every data request carries `X-Masi-Letter-Order-Editions: 2026-10-23`, derived from `MASI_LETTER_ORDER_EDITIONS.join(',')` in `fencedFetch`, alongside the current Authorization token. The header advertises the editions this build can teach; server enforcement is not enabled. The shared client is used only for `supabase.auth.*` in `supabaseClient.js`, `persistedAuthSession.js` and `AuthContext.js` (static test).
 - **`StaleActorError` vs `AuthUnavailableError`.** Stale means the work belongs to a revoked or superseded handle: it is never retried under anyone else. Auth-unavailable means the handle is current but has no usable session: a retriable, codeless failure for later.
 - **Whole-pass stale rule.** A stale refusal anywhere in a sync pass ends the pass: no record is finalised, no batch fallback runs, `sync_meta` is not written, and `syncAll` resolves `{ success: false, abortedStaleActor: true }` without observability noise. Rows left `in_flight` are reset when that EA's file next opens.
-- **Integrity scan.** At open and before every pass: legacy NULL-owner rows are adopted for the file owner; rows stamped with another EA move to `terminal` with `last_error = 'foreign_owner'` (domain row too), stay counted as unsent, are recorded in `local_state.integrity_scan_last`, and raise one operational error (`foreign_owner_in_file`, counts by table only). A nonempty foreign set also queues a `foreign_owner_in_file` support incident in the same transaction as adoption, quarantine and scan evidence, using `enqueueSupportIncident(txn, ...)`. Its payload is exactly `{ foreignTotal, foreignByTable }`; its repeat key is `incidentRepeatKey('foreign', ...sortedForeignOutboxIds)`, so no outbox id, record id or foreign EA id is stored in the incident payload/key. Every scan includes already-quarantined terminal rows: the same set deduplicates (including after delivery), and a grown set creates a new incident even when its smallest id is unchanged. The shared queue's bounded-capacity/pruning rules still apply. Incident insert or scan-evidence SQL errors roll back the whole transaction. Coverage: `outboxIntegrityScan.test.js` (real SQLite, open/pass/reopen, all unsent states, privacy, set changes and rollback).
-- **Sign-in discovery.** Each published handle exposes a non-rejecting `handle.discovery` promise. Discovery starts on a microtask after publication and never delays sign-in. `fileDiscovery` lists the directory from expo-sqlite's `defaultDatabaseDirectory`, converting a native path to a `file://` URI for `Directory`; an absent directory value or a listing failure yields no files. It examines only other UUID-shaped `masi-<userId>.db` files and legacy `masi.db`, ignoring the signed-in EA's own file and sidecars. Each read uses a new raw connection, `PRAGMA query_only = ON`, `PRAGMA busy_timeout = 2000`, and `readUnsentSummary`; it closes in `finally` without migrating, writing, renaming or deleting the source file. Unreadable/old-schema files are skipped. `readUnderFileFence` admits the read after pending disposal and makes a same-file `requestOpen` wait for it; failed disposals and bootstrap cleanup failures still refuse reads. Discovery checks handle currency before admitting each file and again inside the fence, stops after sign-out, and writes incidents only through the active handle's support repository. For another EA, the kind is `left_behind_unsent_work`, key `incidentRepeatKey(strandedUserId, oldestId, oldestCreatedAt)`, payload `{ strandedUserId, unsentByTable, oldestUnsentAgeHours }`; for legacy, the kind is `legacy_shared_file_unsent`, the key hashes `'legacy'` with the oldest id and creation time, and the payload omits `strandedUserId`. Ages are floored hours, minimum zero. Raw outbox/record ids enter only the hashed repeat key, never the queued payload or wire request. Dedupe and capacity follow the shared queue contract; a changed oldest id or creation time identifies a new episode. Tests: `fileDiscovery.test.js` (real SQLite, exact envelope, repeated/new episodes, source-file preservation, directory ruling, old/unreadable files, T12 through the real drain) and `signedInHandle.test.js` (cancellation, read/disposal ordering, same-file admission and failed-file fencing).
-- **Incidents.** The three kinds are `left_behind_unsent_work`, `foreign_owner_in_file` and `legacy_shared_file_unsent`. Producers queue counts in the current EA's `support_incident_queue`, separate from the domain outbox, with at most 200 rows. At the end of a full `syncAll` pass with a live session, the drain sends up to 20 due rows through the handle's client and queue to `report_mobile_support_incident`. Table-only passes do not drain; due incidents schedule a pass without increasing the EA's unsent count. Local repeat keys are UUIDv5 digests of the episode: the stranded EA (or `legacy`), oldest outbox id and its `created_at`; the foreign-owner kind uses the whole sorted foreign-id set. The wire key adds `<installId>:` and the server dedupes on `(reporter_id, kind, repeat_key)`. Release/build/update/backend/install metadata is added at send time. The deny-list applies to the whole queued row and RPC request, including the repeat key: no raw outbox or record ids, child ids, names, notes or record payloads. The stranded EA id is intentional support metadata. T12 tests cover both queue and wire data; the RPC's kind and size checks do not replace that producer privacy rule.
+- **Integrity scan.** At open and before every pass, ownerless legacy outbox rows
+  are adopted for the file owner. Foreign-owned rows are quarantined as terminal
+  with `terminal/FOREIGN_OWNER`, domain status and `local_state.integrity_scan_last`
+  evidence in the same transaction; they stay unsent and raise counts-only
+  operational reporting. D4/R3 removed the transactional incident insert hook:
+  the separate observer derives `foreign_owner_in_file` from the
+  committed foreign set, including already-terminal rows. Its unchanged
+  `{foreignTotal,foreignByTable}` body and whole sorted-id episode digest remain.
+  Incident failure must never roll back quarantine or replay a domain upload.
+  See the Field diagnostics section for the implemented observer and local tests.
+- **Sign-in discovery.** Each published handle exposes a non-rejecting `handle.discovery` promise. Discovery starts on a microtask after publication and never delays sign-in. `fileDiscovery` lists the directory from expo-sqlite's `defaultDatabaseDirectory`, converting a native path to a `file://` URI for `Directory`; an absent directory value or a listing failure yields no files. It examines only other UUID-shaped `masi-<userId>.db` files and legacy `masi.db`, ignoring the signed-in EA's own file and sidecars. Each read uses a new raw connection, `PRAGMA query_only = ON`, `PRAGMA busy_timeout = 2000`, and `readUnsentSummary`; it closes in `finally` without migrating, writing, renaming or deleting the source file. Unreadable/old-schema files are skipped. `readUnderFileFence` admits the read after pending disposal and makes a same-file `requestOpen` wait for it; failed disposals and bootstrap cleanup failures still refuse reads. Discovery checks handle currency before admitting each file and again inside the fence, stops after sign-out, and writes incidents only through the active handle's support repository. For another EA, the kind is `left_behind_unsent_work`, key `incidentRepeatKey(strandedUserId, oldestId, oldestCreatedAt)`, payload `{ strandedUserId, unsentByTable, oldestUnsentAgeHours }`; for legacy, the kind is `legacy_shared_file_unsent`, the key hashes `'legacy'` with the oldest id and creation time, and the payload omits `strandedUserId`. Ages are floored hours, minimum zero. For these Plan 3 episode payloads, raw outbox/record ids enter only the hashed repeat key; schema-2 diagnostic bundles can separately contain raw outbox evidence. Dedupe and capacity follow the shared queue contract; a changed oldest id or creation time identifies a new episode. Tests: `fileDiscovery.test.js` (real SQLite, exact envelope, repeated/new episodes, source-file preservation, directory ruling, old/unreadable files, T12 through the real drain) and `signedInHandle.test.js` (cancellation, read/disposal ordering, same-file admission and failed-file fencing).
+- **Incidents.** The existing per-EA support queue remains separate from the
+  domain outbox. Field diagnostics extends it to ten kinds, observation
+  provenance, immutable schema-2 generations and bundle delivery, while copied
+  schema-1 rows keep v1 delivery. See **Field diagnostics: immutable receipts and
+  observed incidents** below for the complete contract and integration gates.
 - **Profile and reference refresh.** Startup and reconnect refresh the EA profile and reference data through the current handle. Profile refreshes share an in-flight request; a missing profile shows “Loading your profile...” with Retry in the session form router. Reference readiness requires the durable `local_state.reference_data_complete_at` ISO timestamp, written only after all seven reference-table writes succeed; non-empty tables alone never establish readiness after reopening. Completed caches remain ready offline, including legitimately empty tables and EAs with no programme assignment. A failed or partial refresh neither writes nor clears the marker; without it, readiness joins an active refresh or retries a failed one.
   A refresh switches the active academic year inside its one `academic_years` transaction
   whatever order the server lists the years in. When the response holds an active year, every
@@ -1831,6 +1844,345 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 - **Shared auth session persistence.** The shared client's storage drops session writes for anyone but the admitted identity (the email being signed in, then that user's id; the restored user at launch; nobody after sign-out), and every shared auth request aborts after 30 s, so a late response can never restore or overwrite a session. **Accepted risk (Jim, 2026-10-17):** if A's background token refresh is in flight when B signs in on the same phone and the server rejects it, the SDK's own cleanup can remove B's new session and sign B out; B signs in again and nothing is lost, because B's work stays in B's file. A sequencing guard for this (Task 5 round 5) was built and then reverted by the auth simplicity check as not worth its complexity.
 - **Field-release prerequisite (ruling 11).** Sign-out aborts in-flight uploads, so an upload the server already accepted may be re-sent when the EA returns. Identical replay is proven harmless (Task 4 T5). Ordering an uncertain older write against a newer one is owned by the upload-contract spec and must be closed before field release.
 - **Device gates still open:** D1–D7 on the build intended to ship, including D7's native close under load on iOS and Android. Also confirm that `listDatabaseNames` finds the SQLite files on both platforms and visually check both sign-out sheets. Local Jest results do not close these gates.
+
+## Field diagnostics: immutable receipts and observed incidents
+
+**Authority and evidence boundary (2026-10-29):**
+[Revision 4.1 spec](../docs/superpowers/specs/2026-10-29-incident-lane-and-bug-registry-design.md)
+and [binding plan rulings](../docs/superpowers/plans/2026-10-29-field-diagnostics-plan.md).
+All six slices A–F are merged on `feat/bug-machinery`: receipt/Storage migration
+artifacts, SQLite foundation, operator reader, observer/generation/capture/drain
+services and Profile support sheets. Local unit/integration suites verify the
+merged phone/reader behavior. The controller's prior disposable PostgreSQL run
+passed all ten harnesses, including **225 support-incident cases** with the shared
+Storage bootstrap. The Storage cases prove a local PostgreSQL policy model;
+they do not prove hosted Storage HTTP, MIME/size enforcement or deployed policy
+composition. No PostgreSQL/network rerun was made during this integration task.
+D4/R3's foreign-owner transactional incident hook is removed; observation uses
+committed quarantine instead. Hosted application of the two October 30
+migrations still requires guarded apply and independent read-back gates.
+The original October 17 v1 apply remains historical evidence for v1 only.
+
+### Outbox dispositions and failure evidence
+
+SQLite migration **20** (`field_diagnostics`, `src/db/migrations.js`) adds nullable
+`sync_outbox.error_class` and `error_code`. Class CHECK:
+`retryable|needs_parent|needs_reauth|terminal`. Code is SQL-equivalent to
+`^[A-Z0-9_]{1,40}$`: length 1–40, no NUL and no character outside uppercase
+ASCII letters, digits and underscore (`NOT GLOB`, not an unregistered REGEXP).
+Existing terminal rows become `terminal/OTHER`, failed rows `retryable/OTHER`;
+other rows keep nulls. Backfill does not parse `last_error`, change retry state,
+modify payload/owner/creation time or replay domain work. `last_error` remains
+human-readable diagnostic evidence and may be sent under J4.
+
+`normalizeErrorCode` uppercases valid codes, otherwise uses structured fallback
+`TRANSPORT`, `UNKNOWN_TABLE`, `FOREIGN_OWNER` or `OTHER`. `dispositionFor` records
+the decision already taken by `classifyError`, preserving deterministic eighth
+attempt escalation and existing retry policy. Terminal wins; otherwise auth
+`28000` or no-live-session downgrade gives `needs_reauth`; pending parent/grant
+evidence with `23503`, `42501` or `UPDATE_NOT_APPLIED` gives `needs_parent`;
+remaining failures are `retryable`. `ARCHIVE_REQUIRED` is an EA action; other
+terminal codes are bug leads, not automatically diagnosed defects.
+
+All **seven failure-status writers** persist class/code in the **same UPDATE**
+as status, retaining transaction and snapshot/CAS safety:
+`finalizeRetriableFailure`, `finalizeTerminalFailure`,
+`finalizeOutboxOnlyTerminalFailure`, `finalizeManyRetriableFailure`, foreign-owner
+quarantine, repository `markRetriableFailure` and `markTerminalFailure`.
+Unknown-table finalization guards `id/updated_at/original status` without
+requiring `in_flight` or updating an unknown domain table (R10). Stale-actor
+cancellations and CAS misses are not failures to report.
+
+History cursor failure evidence includes optional `lastFailureKind` and
+`lastFailureMessage` in the same write as `lastFailureAt`; success clears all
+three. Ordinary budget/dependency stops do not create failure evidence.
+
+### Observation contract and all ten kinds
+
+**D4: observe committed state; do not hook domain transactions.**
+`observeStandingConditions(handle)` runs before due-incident counting in
+`getSyncStatus()`: initial load, active 30-second refresh, foreground, after a
+pass and explicit reconnect refresh. No new timer. Indexed reads precede a
+separate observer write transaction only when a condition changed or queue
+maintenance is due. An existing eligible schema-2 condition is re-recorded only
+when its payload (preserving bundle outcome flags) or release tuple changed, or
+its `last_seen_at` is ≥15 minutes old. Unchanged refreshes do not acquire the
+writer unless stale-capture recovery or daily promotion is due. Schema-1,
+rejected and already-sent once-cadence rows are not re-recorded.
+Observer/incident/bundle failures are logged without changing domain/outbox state or replaying a mutation.
+`app_error_caught`, `ea_report` and `diagnostics_sent` record as events in their
+own transactions. Sign-in discovery retains its read-only foreign-file scan and
+records in the active EA's file only. It never uploads another EA's domain work.
+
+| Kind | Condition parts (before fixed-namespace UUIDv5) | Trigger / evidence contract |
+|---|---|---|
+| `upload_terminal` | table, record_id, operation, outbox created_at, errorClass, errorCode | Each EA-owned terminal row; raw record/wire ids, actual wire payload, lastError, retries and outbox timestamps. A changed class/code is a new condition. |
+| `upload_backlog_stale` | `'backlog'` | Oldest pending/failed row >72 h AND real server response within 24 h; counts by class/table/code, oldest row and ≤10 distinct errors. |
+| `reconcile_breaker_tripped` | breaker scope | Durable `pull_reconcile_breaker:` state: scope/family, candidate/would-end counts and time. |
+| `pull_failing` | scopeFamily, failureKind | History failure ≥24 h with no success since; scope, message, age and cursor. Empty outbox does not suppress it. |
+| `app_error_caught` | errorName, normalized-message digest, first component | ErrorBoundary event while a handle is open; raw message, stack, componentStack and components. Without a handle, Sentry only. |
+| `ea_report` | fresh report id | Profile human event; message ≤4,000 chars, screenshotAttached, screen Profile. |
+| `diagnostics_sent` | fresh request id | Profile manual event; trigger manual. |
+| `left_behind_unsent_work` | stranded EA id, oldest outbox id, oldest created_at | Plan 3 episode; unchanged counts/age payload with strandedUserId. |
+| `foreign_owner_in_file` | `'foreign'`, whole sorted foreign outbox-id set | Plan 3 episode; observe quarantined FOREIGN_OWNER terminal rows separately, unchanged foreignTotal/foreignByTable payload. |
+| `legacy_shared_file_unsent` | `'legacy'`, oldest outbox id, oldest created_at | Plan 3 episode; unchanged counts/age payload, no strandedUserId. |
+
+`incidentRepeatKey` keeps `INCIDENT_KEY_NAMESPACE` unchanged; SQLite stores the
+digest, wire adds `<installId>:`. `delivery.installId` must equal that prefix.
+App-error normalization replaces UUIDs with `<uuid>`, digit runs with `#`,
+collapses whitespace, then takes 500 characters; UUIDv5 gives `messageDigest`.
+No AsyncStorage/native/network await belongs inside a SQLite transaction.
+
+`fencedFetch` records in-memory `lastServerResponseAt` on HTTP status <500,
+including 4xx, not 5xx or transport-only success. Cold launch has no contact
+until a real response. `lastSuccessfulSyncTime` alone cannot establish contact.
+Ordinary retries, offline passes, CAS misses, stale cancellation, history budget
+stops and dependency skips are never incidents. Conditions resolved before the
+next observation can go unreported by design.
+
+### Evidence, identity and immutable generations
+
+`observed` is the entire synchronous `getRuntimeDiagnostics()` at observation:
+application/version/build/release label and existing gitCommit; platform/OS/device, including name,
+CPU/memory; Expo update/channel/runtime/embedded/emergency flags; backend target
+and project; supported SQLite schema. `first_observed` preserves first-seen
+provenance. Release identity is `(application.version, application.build,
+update.id)` with explicit nulls. Delivery is separate send-time identity:
+installId; EA userId/email/displayName; current version/build/update; NetInfo;
+free/total disk; outbox status/class summary; last success/real response times;
+dropped incident count and sentAt. Delivery release never overwrites observed
+release, and upgrading a historical schema-1 row cannot invent provenance.
+
+J4 allows raw ids/payloads/error text/stacks/logs/identity/device name. Actual
+wire evidence comes from shared `buildSyncPayload` in `src/services/syncPayload.js`,
+used by domain upload, `debugDump` and the incident payload contract. Prefer
+`wirePayload.id`; assessments use `wirePayload.p_assessment.id`;
+`letter_mastery` has `serverRecordId: null`. Otherwise use `recordId`. If
+serialization throws, keep the row with `wirePayload: null`, `wirePayloadError`
+and the recordId fallback. Never invent an id or use a digest resolver.
+
+Migration 20 rebuilds the same local queue with unique `(kind,repeat_key)` and a
+status/due index. It copies v19 rows as **schema 1**, preserving id, payload,
+key, status, attempts/backoff/errors/timestamps and dedupe, with honest null new
+provenance. New rows default schema 2. JSON live payload/observed/first_observed,
+first/last observation times, occurrence_count, report_generation,
+report_snapshot, has_unsent_changes, last_sent_at/release and attachment columns
+share the row. Status is `pending|sent|rejected`; bundle state is separate.
+
+For schema 2, `report_id = uuidv5(id + ':' + report_generation,
+INCIDENT_KEY_NAMESPACE)`. New row: generation 1, pending. Events increment
+occurrence_count; observed kinds stay at 1. Observation intervals use min/max,
+and first provenance stays unchanged. Rejected rows remain rejected on observation.
+Live updates after freeze or send set `has_unsent_changes=1`. **Attachment outcome precedes freeze** (R-O4,
+overriding spec §6.5 ordering): finish upload or give up, persist final paths/
+outcome flags, then freeze observation body in `report_snapshot`. Retries reuse
+that body and report id; delivery metadata remains send-time. An ack changes
+only the sent generation via generation CAS, sets sent/time/release and clears
+snapshot, **leaving dirty state intact**. A later event is not acknowledged by
+an earlier request.
+
+The three Plan 3 kinds use **once** cadence: no release/daily promotion while
+retained. All others use **daily**. A changed release on a sent daily condition
+promotes immediately; otherwise the observer promotes dirty sent rows after
+24 h, before ready counting, without requiring a third event. Promotion advances
+generation, clears snapshot/dirty and makes pending. Pruning can recreate a
+Plan 3 episode with a new report id (N2); the reader groups the same condition
+key, so once cadence is not a lifetime tombstone guarantee.
+
+Capacity is 200. Admission first prunes oldest sent/rejected **observed** rows,
+even dirty, because they can be re-derived; then sent event rows without dirty
+changes. A human ea_report/diagnostics_sent may evict oldest pending observed
+work. Never prune pending or dirty event work; otherwise drop the newcomer and
+increment `local_state.support_incidents_dropped`. Drain priority is human
+reports/diagnostics, other generation-1 deliveries, then re-reports; oldest
+first within a group. Observed re-derivation and immutable receipt identity
+make queue eviction distinct from deleting server evidence.
+
+### Bundles and private Storage
+
+Attachment columns (R-O3): `bundle_id`, `bundle_file`, `screenshot_file`,
+`bundle_state` (`none|capturing|ready|uploaded|failed`), `bundle_attempts` default
+0, `bundle_path`, `screenshot_path`. Outcome flags `bundleUploadFailed`,
+`bundleCaptureFailed`, `bundleDropped` persist in the live payload, survive
+observer updates and enter the eventual snapshot. They cannot mutate a frozen
+possibly accepted receipt.
+
+Capture admission sets `capturing` atomically with incident recording. Automatic
+capture applies on first recording of terminal upload, caught app error, stale
+backlog, persistent pull failure or breaker, at most once per EA per 24 h.
+`local_state.support_auto_bundle_last_at` is stamped when capture **starts**;
+failure still consumes the allowance. Each human report/manual diagnostics
+request captures its own bundle. Build locally **after commit**, before any
+remote upload. Automatic observer bundles run detached from the status refresh;
+status can return while capture is in progress. The durable `capturing` gate
+excludes that row from pending/ready queries, and freeze also refuses it, so the
+receipt cannot send before capture completes or stale-capture recovery fails it.
+Manual Profile capture awaits bundle completion before its sync attempt.
+
+Bound `debugDump` reads before allocation: newest 200 failed/terminal outbox rows,
+≤20 KB per payload, newest 500 mastery rows. `logger.tail({maxBytes,maxEntryBytes})`
+reads newest-first with ≤2 MB total and ≤4 KB per entry; never build an unbounded
+exportLogs/getLogs then slice it. Yield between sections and check current/open
+handle before each section and writing. Above 12 MB serialized, write a minimal
+runtime/EA/network/disk/counts/first-50-outbox bundle with a truncation marker.
+An ordinary non-stale full capture/write failure also attempts the minimal bundle;
+even minimal write failure sets failed/bundleCaptureFailed. Manual Profile Share
+database keeps its unbounded behavior and export warning, including dispositions,
+every incident queue row and actual wire identity. Bundle options bound variable
+sections and avoid full queue-snapshot duplication, with honest truncation markers.
+
+Local ownership is `documentDirectory/support-bundles/<userId>/`; a screenshot
+pairs with its bundle. On completed capture, the retention query keeps at most
+five ready, unfrozen bundle rows per EA, evicting oldest by `(created_at,id)`
+within that directory and marking the victim failed/bundleDropped. This is a
+completed-capture retention bound, not a count of files currently being written;
+a screenshot is retained with its bundle. Capturing and frozen rows are outside
+the eviction query. Normal freezing requires uploaded/failed/none attachment
+state, and successful upload deletes its local files before freeze. Directory
+cleanup also removes files without pending capturing/ready owners.
+Sign-out abandons capture without any stale write or lifecycle bypass (N1).
+The row stays capturing in its own EA file until the observer, when that file
+next opens and updated_at is ≥10 minutes old, marks failed/bundleCaptureFailed.
+Capturing rows are neither ready nor eligible to freeze/send.
+
+Upload JSON and optional screenshot before the receipt, using the handle's
+actor-fenced request queue/client and `upsert:false`. Remote paths are
+`<reporter_id>/<yyyy-mm-dd>/<bundle_id>.json` and
+`<reporter_id>/<yyyy-mm-dd>/<bundle_id>-screenshot.<original extension>`.
+A 409 already-exists counts as uploaded after lost ack. Persist upload progress
+and remote paths before deleting local files; durable progress, not file
+existence, decides retry state. Upload failures back off; **five failed bundle
+attempts** (distinct from receipt attempts) give up with bundleUploadFailed and
+allow the receipt with final available paths, or none. Preserve a successful
+half of a pair; partial success must not cause another EA's upload.
+
+Profile submission uses the current handle's `captureEvent`, waits for durable
+capture/bundle completion, attempts `syncNow`, then reads `getDeliveryState` for
+that exact incident reference. Generic sync success never establishes delivery.
+`getDeliveryState` returns `unknown` for a missing row or a row behind the requested
+generation; a later stored generation means the requested earlier generation was
+sent. Otherwise it returns the row's `pending|sent|rejected` status. Profile shows
+"Sent. Thank you." only for sent, and "Saved on your phone. It will send when
+you're online." only for pending; unknown/rejected/unsaved results fail inline.
+Actor currency is checked after every await; the submission lease blocks duplicate
+saves even after sheet dismissal/reopen. The sheets reject stale completions,
+preserve failed input and enforce a nonblank report of at most 4,000 characters.
+
+The Profile screenshot contract (R-O1) selects one gallery image with
+`mediaTypes:['images']`, `allowsEditing:false`, `quality:0.5`; keep returned MIME
+and original extension, without forced conversion or resize dependency.
+Preflight `requireOptionalNativeModule('ExponentImagePicker')` before package
+require; older OTA binaries hide attach safely. Native picker build and actual
+device behavior remain orchestrator gates. The JavaScript dependency is already
+declared in `package.json`; this does not establish that a native binary contains it.
+
+`20261030120100_support_bundles_storage.sql` declares private `support-bundles`,
+15 MB per file (15,728,640 bytes), MIME types application/json, image/jpeg,
+image/png, image/heic, image/heif. Authenticated INSERT is allowed only in this
+bucket under `(storage.foldername(name))[1]=auth.uid()::text`. No authenticated
+SELECT/list/UPDATE/DELETE/overwrite. Service role reads. Restrictive guards
+intersect existing permissive policies so an unrelated broad policy cannot
+expose this bucket; outside it, guards preserve other-bucket policy behavior.
+No global grant revocation for unrelated buckets. Hosted policy composition and
+actual role behavior must be verified, not inferred from catalog strings alone.
+
+### Server compatibility, delivery and operator access
+
+`20261030120000_incident_receipts.sql` widens the ten-kind CHECK and adds
+report_id UUID, schema_version (default 1), positive generation/count, nullable
+observation times, nullable `observed`, `first_observed`, `delivery` JSON and
+bundle/screenshot paths. Historical payload/times are unchanged, new provenance
+stays null. Backfill exactly
+`md5(jsonb_build_array(kind,repeat_key)::text)::uuid`, set report_id NOT NULL,
+drop `mobile_support_incidents_once` and replace it with unique
+`(reporter_id,report_id)`. Index `(reporter_id,kind,repeat_key)` and
+`(received_at,id)`. Inserts/duplicate ignores only; **receipts are immutable**.
+No reviewed/resolved bookkeeping or UPDATE authority.
+
+The deployed-v1-body exception changes only insertion identity/conflict target:
+`report_mobile_support_incident(text,text,jsonb)` retains three-kind validation,
+1–512-character key, object ≤8192-byte payload, auth/grants, boolean new/duplicate
+results and original received_at default. It remains **unlimited** and does not
+consume v2 quota. Old receipt replay stays false after populated backfill;
+copied schema-1 phone rows still use v1 unchanged. Replacement definition md5
+provided for orchestration: **`fc9fa2bc52e4f58060057884769435eb`**. This slice did
+not compute it from a database; disposable and final hosted definition read-back
+must establish the applied md5 in the orchestrator's build log. Original
+migration bodies are not rewritten.
+
+`report_mobile_support_incident_v2(p_envelope jsonb)` is SECURITY DEFINER with
+empty search_path; auth.uid() alone chooses reporter. Exact envelope keys:
+schema_version 2, kind, repeat_key, report_id, report_generation,
+occurrence_count, first_seen_at, last_seen_at, payload, observed, first_observed,
+delivery, bundle_path, screenshot_path. Unknown top-level keys are rejected;
+nested diagnostic contents are unrestricted JSON within size. Validate objects,
+positive integral counters, UUID, finite ordered timestamps, install prefix,
+and null/string paths owned by reporter. Cast/shape errors are `22023`, missing
+subject `28000`. Insert/ignore returns `{status:'inserted'|'duplicate'}` and uses
+`clock_timestamp()` for received_at. No receipt update on duplicate/restore.
+
+V2 alone admits 150 machine receipts per reporter per rolling 24 h, independently
+50 combined ea_report/diagnostics_sent. A per-reporter advisory transaction lock
+checks duplicate before quota; duplicates still succeed when full. New over-quota
+receipts raise `54000`. Receipt SELECT is service-role only, no direct EA/anon
+DML/read; authenticated EXECUTE only on both RPCs, with explicit revokes against
+permissive default ACLs. Both migrations use session SET/RESET timeouts.
+
+Phone compact `JSON.stringify(envelope)`, including delivery, is ≤56,000 UTF-8
+bytes (R-O7), server `octet_length(p_envelope::text)` ≤65,536. Truncate wirePayload
+first (retain keys/ids), then stack/componentStack, then sampleLastErrors. Sibling
+`<field>Truncated:true` and `<field>OriginalBytes:n` markers are required. Still
+oversized: reject locally as TOO_LARGE without request. There is no 8 KB v2 cap,
+payload hash or diagnostic privacy redaction.
+
+A live-session full syncAll drains up to 20 due incidents **after domain uploads**;
+table-only/sessionless passes do not. Schema 1 uses v1 booleans; schema 2 sends
+the outcome-frozen snapshot plus delivery to v2. Inserted/duplicate acks mark only
+that generation sent. `22023` rejects and continues; `54000`, transport or auth
+back off, retain snapshot and stop. StaleActorError propagates. Incident trouble
+cannot change domain-pass success. Retry delays retain 5 s ×3 with 900,000 ms cap.
+`incidentReadyCount` follows observer promotion and excludes capturing/backoff;
+ordinary failures fall back to zero, stale errors propagate. Existing
+OfflineContext scheduling handles incident-only passes on refresh/reconnect/
+foreground/background without changing EA-facing domain unsent/ready counts or
+adding a scheduler. Discovery settlement refreshes status, and the existing
+periodic refresh retries without an immediate post-pass loop.
+
+Operator **psql read-only** is explicitly authorized and separate from
+service-role API receipt/Storage reading. `scripts/read-support-incidents.cjs`
+parses `.env` then `.env.local` with staging validation, pins SQLite project
+`segygjzpujphwvrubusm`, validates the session pooler and strips inherited libpq
+routing; never source dotenv or run raw root CLI. Ordinary reads need
+SUPABASE_DB_PASSWORD_SQLITE; only Storage `--fetch` needs
+SUPABASE_SECRET_KEY_SQLITE. One unfiltered statement joins both identity sources
+and returns the full receipt snapshot with snapshotAt. Filtered/targeted or
+contested runs do not claim coverage. Review overlap is previous boundary minus
+ten minutes once, a bounded convention, not protection against unlimited commit
+delay. Reader groups reporter/kind/wire key, exact registry declarations precede
+single-owner signatures, and ea_report keys belong in field_report_ids.
+`--resolve` fixed-table UUID lookup distinguishes present/absent from
+unsupported/indeterminate; existence is not convergence. `--fetch` pairs the
+latest bundle-bearing receipt with its own screenshot/report id. Originals stay
+gitignored; safe excerpts alone enter Git. Receipts/bundles remain through the
+pilot, with no purge job.
+
+Local proof sources: `fieldDiagnosticsMigration.test.js`,
+`uploadDispositions.test.js`, `debugExport.test.js`, `incidentPayloads.test.js`,
+`readSupportIncidents.test.js`, `supportIncidentRepository.test.js`,
+`supportIncidentObserver.test.js`, `diagnosticBundle.test.js`,
+`supportIncidentDrain.test.js`, `ProfileScreen.layout.test.js`,
+`supportScreenshot.test.js` and `App.plan5.test.js`. The repository/observer/
+bundle/drain suites also run in the real-SQLite integration tier. Profile's
+previously skipped real-handle report test now records through the actual
+services, reads the durable pending receipt and checks the saved-on-phone toast.
+C's producer and D's Node-reader tests consume the same
+`test-support/fixtures/fieldDiagnosticsIdentity.json`; the reader consumes the
+stored digest without importing phone modules or re-normalizing messages.
+Disposable PostgreSQL proof is the controller's prior ten-harness run described
+above; `scripts/support-incident-postgres-harness.cjs` covers populated v1 replay,
+v2 identity/validation/quotas/grants and the local Storage policy model.
+Hosted apply/read-back, native build/old-binary OTA, default-text A03s/iPhone,
+first real sweeps, field convergence and no-recurrence remain independent gates.
 
 ## Table Contract Map
 
@@ -1875,8 +2227,8 @@ cases plus rollback and concurrent creation. This adds no server rule or new syn
 
 | Table | Producer | Local required fields | Sync operation | RLS authority / SELECT dependency | Ordering / dependencies | Tests and probes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `mobile_support_incidents` | Server-only; written only by `report_mobile_support_incident(p_kind text, p_repeat_key text, p_payload jsonb)` | Phone queue: `support_incident_queue` (local, per-EA file). Reporter is derived from `auth.uid()`; kinds: `left_behind_unsent_work`, `foreign_owner_in_file`, `legacy_shared_file_unsent`; repeat key 1–512 characters; object payload ≤8192 bytes | SECURITY DEFINER RPC with empty `search_path`; unique `(reporter_id, kind, repeat_key)`; returns `true` for newly recorded, `false` for duplicate. No domain outbox write | RLS on with no policies. `service_role` SELECT only; `authenticated` EXECUTE on the RPC only, no direct table grants. Explicit REVOKEs remove permissive default ACLs. No subject: `28000`; invalid arguments: `22023`; anon EXECUTE: `42501` | Auth reporter must exist. Session-level 10s lock / 60s statement bounds with RESET. Applied to hosted 2026-10-17 (grants verified read-only against S2) | `support-incident-postgres-harness.cjs` (S2): default ACL control plus 17 acceptance, duplicate, reporter, validation, and role-grant cases (GREEN 2026-10-17; REVOKE mutations caught) |
-| `support_incident_queue` | Local-only, per-EA file; `handle.repositories.supportIncidents` / `createSupportIncidentRepository`; integrity-scan and sign-in-discovery producers are described above; callers already inside a transaction use `enqueueSupportIncident` | SQLite v13. Kinds: `left_behind_unsent_work`, `foreign_owner_in_file`, `legacy_shared_file_unsent`; UTF-8 JSON payload ≤8192 bytes; unique `(kind, repeat_key)`; repeat keys from `incidentRepeatKey` (UUIDv5, fixed namespace) | Never synced as a domain table or enqueued into `sync_outbox`. A live-session full `syncAll` pass drains up to 20 due rows through `report_mobile_support_incident` after the domain outbox; table-only and sessionless passes do not drain. Both boolean RPC results mark sent; `22023` rejects and continues; transport/auth trouble backs off and stops this drain. Incident failures do not change domain-pass success; stale actors still abort. Pending rows are due when `next_attempt_at` is null or elapsed; retries start at 5 s, multiply by 3 and cap at 900000 ms | Local access is bound to the signed-in EA handle; no server RLS policy for this local table. Server grants remain on the incident RPC/table above | Cap 200 total rows. At capacity, prune oldest sent/rejected rows by `(updated_at, id)`; never prune pending rows. Duplicate, full and oversized enqueue outcomes are explicit. Lists use `(created_at, id)` order; sent/rejected rows retain dedupe until pruned | `supportIncidentRepository.test.js` (real SQLite, bounds, dedupe, retries, transaction rollback); `supportIncidentDrain.test.js` (RPC shape, privacy, lifecycle and status); `OfflineContext.test.js` (incident-only scheduling); `installId.test.js` (persistence/concurrency/sign-out); `handleServices.test.js` (per-EA isolation, stale refusal, reopen); `sqliteFoundation.test.js` (v13 table and migration ledger) |
+| `mobile_support_incidents` | Server-only, v1/v2 reporting RPCs | Ten kinds; reporter from auth.uid(); immutable report identity and provenance as detailed above | Unique `(reporter_id, report_id)` insert/ignore; schema-1 compatibility, v2 structural validation and independent quotas | Authenticated EXECUTE only; service-role SELECT only, explicit default-ACL revokes | After bundle outcome for v2; October 30 hosted apply/read-back is an open orchestrator gate | `scripts/support-incident-postgres-harness.cjs`; populated replay, validation, concurrency/quotas/grants and Storage behavior gate |
+| `support_incident_queue` | Local-only per-EA handle; separate observer/event transactions under D4 contract | SQLite v20: copied schema 1, new schema 2; ten kinds, unique `(kind, repeat_key)`, generations, dirty state and durable bundle progress | No domain outbox; up to 20 due after domain uploads; outcome before freeze; generation CAS ack; v1 preserved | Current signed-in EA only; stale continuations refused | Cap/fairness, once/daily cadence, readiness/capture and scheduling as detailed above; locally verified in real-SQLite suites | `fieldDiagnosticsMigration.test.js`; incident repository/observer/drain/bundle integration suites above |
 | `lesson_drafts` | Local-only, per-EA file; `handle.repositories.lessonDrafts` / `createLessonDraftsRepository` (also through `useSignedInEA()`). The handle-owned `lessonDraft` controller is the only draft writer outside `saveLesson`; screens subscribe through `useLessonDraft`. First change or Wrap up creates the draft; Save drains the queue and calls `discard(id, { transaction })` inside its transaction | SQLite v17. Required input: `programme_id`, `group_id`, `lesson_date`; the repository mints draft `id` and stable `session_id`. One row per file through unique `slot = 1`. `language_code` and tracker `languageCode` use `LANGUAGE_LABELS` codes; every tracker change retains its ISO tap time and matches the lesson's language | Never synced or enqueued; no server table or `SERVER_COLUMNS` entry | Local reads/writes are bound to the signed-in EA handle; stale actors are refused. No server RLS | No foreign keys: roster reconciliation must not cascade away an unfinished lesson. Context and fixed plan are checked at the repository boundary. Discard joins the caller's save transaction; rollback keeps the same draft/session id | `lessonDraftsMigration.test.js` (schema, one-row slot, additive upgrade); `lessonDraftsRepository.test.js` (validation, fixed context/language, corruption, discard rollback); `lessonDraftsDurability.test.js` (on-disk commit, offline reopen, EA isolation, stale refusal); `handleServices.test.js` (repository graph) |
 | `organizations` | Canonical migrations; partners are added by migration | Server-only: `id`, `slug`, `name`; no phone table | No mobile sync | RLS enabled with no policies. Only `service_role` has API-role SELECT; no INSERT/UPDATE/DELETE. `anon`, `authenticated`, and `authenticator` have no SELECT | Seed before users, with session-level 10s lock / 60s statement bounds. Applied to hosted 2026-10-14 | `organisation-label-postgres-harness.cjs`: role refusals, slug resolution, explicit revocations under default ACLs, timeout rollback |
 | `users` | `scripts/createTesters.js`; service-role insert-if-absent, then mutable-fields UPDATE restricted by id and organisation. Built EA-access functions update only `is_active` (applied to hosted 2026-10-18; contract above) | Server `organization_id` is required with no default. The phone ignores it; no SQLite/outbox sync | No mobile domain write. Own-profile SELECT with school/job-title joins stays unchanged | Existing own-profile SELECT policy. Organisation is an employer label, not an access boundary. Provisioning preflight rejects known conflicts; the conditional UPDATE refuses a concurrent organisation mismatch without overwriting it. Inactivity alone does not revoke access; the Auth ban does | Auth user and organisation must exist before profile creation. Confirm the profile UPDATE before Programme-assignment writes. Organisation label applied to hosted 2026-10-14; EA access apply pending | `organisationProvisioning.test.js` (including concurrent insertion); `testerProvisioning.test.js`; `organisation-label-postgres-harness.cjs` (timestamp, constraints, own-profile read); history/S1 and `rls-visibility-probe.cjs` fixtures supply the id; `ea-access-postgres-harness.cjs` (execution pending) |
@@ -1899,15 +2251,10 @@ cases plus rollback and concurrent creation. This adds no server rule or new syn
 | `battery_runs` | `batteryRunsRepository.startRun`: one local unfinished run per EA/child/programme (`UNFINISHED_RUN_EXISTS`, `error.runId`); optional same-child `abandonRunId` replaces atomically with both outbox writes. `finalizeRun(id, { questionCodes })` requires a non-empty array and persisted decisions for every code (`RUN_INCOMPLETE`); `abandonRun` unchanged. Unfinished readers count stored Questions. Inbound `saveHistoryPage` | Owner, child, programme, optional class, battery code/version, language and stored start time are replay identity | Full-header `save_battery_run`: `inserted` / `updated` / `unchanged`; identity `MA001`, terminal conflict `MA002`, malformed `22023`, `23505` never success; `28000` retriable. No row version. Inbound `get_battery_run_history_page` through `runBatteryRunHistoryPull` (200 headers/page), plus embedded assessment headers: absent rows have `started_here = 0`, local writers stay unchanged, other runs advance only to terminal; page and cursor commit together | `battery_runs_select_owner_or_class_year` uses `private.can_read_assessment` with `(started_at at time zone 'Africa/Johannesburg')::date`; owner has no year bound, class reads are active-year bounded. New writes require child/programme authority and optional class membership at start; owned existing runs do not renew assignment checks | After `children`, before linked assessments; optional class is not a local FK dependency | `batteryRunsRepository.test.js`; `assessmentFamilySync.test.js`; `assessment-results-postgres-harness.cjs`  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
 | `letter_mastery` | `masteryRepository.setLetterMastery`, called by `saveLesson` with the draft tap time and `LetterMasteryPanel` with now | Required: `child_id, letter, language` (code), `confirmed, changed_at, correction_id, changed_by`; the single-slot payload also has local `id` and nullable `programme_id` context | Exactly one `set_letter_mastery` call per record slot with six arguments, no batch/table write or send-time re-key. Atomic CAS acknowledgement writes the returned winner, deletes an unreadable record, or preserves a newer local correction and updates only server ordering. See the canonical mastery section above. Inbound `get_letter_mastery_page` through `runLetterMasteryHistoryPull` (200/page, no Programme/year filter): monotonic accepted-tuple merge with cursor in one transaction; only acknowledged delivery reconcile deletes synced rows with nothing owed and drops coverage. | `letter_mastery_select_writer_or_deliverer`: last writer or current direct deliverer, no year/Programme bound. New correction requires current delivery; replay uses receipt identity; no direct DML | After `children`, D1 by correction time/UUID; only pending direct assignment counts as grant evidence | `masteryRepository.test.js`; `letterMasteryCurrentStateMigration.test.js`; `letterMasteryCorrectionSync.test.js`; `letterMasteryRpcError.test.js`; `masteryState.test.js`; `LetterMasteryRankingScreen.test.js`; `lessonSave.test.js`; `completionPathBudget.test.js`; `LessonWrapUp.save.test.js`; `LetterMasteryPanel.test.js` and disposable PG harness  `assessmentHistoryPull.test.js`; `letterMasteryHandover.test.js` |
 
-Support incident transport uses the device-level `masi:device:installId` (one persisted UUID per
-installation, retained across sign-out). The wire repeat key is `<installId>:<repeatKey>` and the
-payload adds only `appVersion`, `buildNumber`, `updateId`, `backend` and `installId` from the
-release envelope. `getSyncStatus().incidentReadyCount` counts due pending incidents and falls
-back to zero on ordinary count failures; stale-actor errors still propagate. OfflineContext uses
-that count only to schedule uploads at status refresh, reconnect, foreground and background;
-it never adds incidents to the EA-facing unsent/ready counts. Discovery settlement refreshes
-status when the published handle's non-rejecting `handle.discovery` promise settles, and
-the existing 30-second periodic refresh retries due work without an immediate post-pass loop.
+Support incident transport retains the device-level `masi:device:installId` across
+sign-out. The full **Field diagnostics** contract above distinguishes schema-1
+send-time metadata from schema-2 observation provenance and delivery, and defines
+observer-before-ready scheduling without adding incidents to domain work counts.
 
 **Time-entry location contract (2026-10-15):** Location availability never blocks a manual
 clock-in or clock-out. The service uses Balanced accuracy and one 10-second deadline for live

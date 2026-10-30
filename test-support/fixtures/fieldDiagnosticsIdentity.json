@@ -1,0 +1,308 @@
+{
+  "namespace": "d3a1c6f2-5b7e-4c1a-9f0e-2b8d4e6a7c10",
+  "release": {
+    "application": {
+      "version": "1.4.0",
+      "build": "54"
+    },
+    "update": {
+      "id": null
+    }
+  },
+  "report": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "generation": 2,
+    "reportId": "334b3771-0883-5bf4-bc7f-7cc742369842"
+  },
+  "messages": [
+    {
+      "message": "Child 123  550e8400-e29b-41d4-a716-446655440000 failed\n  at 99",
+      "normalized": "Child # <uuid> failed at #",
+      "messageDigest": "16cec11c-05f0-53ad-8409-a868ff8a85bb"
+    },
+    {
+      "message": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 123",
+      "normalized": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "messageDigest": "7db1438b-bc57-5c42-8bc8-fe97a2120b02"
+    },
+    {
+      "message": "No numbers here",
+      "normalized": "No numbers here",
+      "messageDigest": "e69dbae0-ef8f-5dbc-a099-f451d86eaa97"
+    }
+  ],
+  "releaseIdentity": {
+    "version": "1.4.0",
+    "build": "54",
+    "updateId": null
+  },
+  "envelope": {
+    "schema_version": 2,
+    "kind": "app_error_caught",
+    "repeat_key": "33333333-3333-4333-8333-333333333333:d7b6cd96-c19b-50bb-bcca-051b02c22c93",
+    "report_id": "334b3771-0883-5bf4-bc7f-7cc742369842",
+    "report_generation": 2,
+    "occurrence_count": 2,
+    "first_seen_at": "2026-10-28T12:00:00.000Z",
+    "last_seen_at": "2026-10-29T12:00:00.000Z",
+    "payload": {
+      "errorName": "Error",
+      "message": "Child 123  550e8400-e29b-41d4-a716-446655440000 failed\n  at 99",
+      "messageDigest": "16cec11c-05f0-53ad-8409-a868ff8a85bb",
+      "stack": "Error: fixture",
+      "componentStack": "at FixtureScreen",
+      "components": [
+        "FixtureScreen"
+      ],
+      "bundleUploadFailed": true
+    },
+    "observed": {
+      "application": {
+        "id": "org.masinyusane.masi",
+        "name": "Masi",
+        "version": "1.4.0",
+        "build": "54",
+        "releaseLabel": "fixture",
+        "gitCommit": "fixture-commit"
+      },
+      "device": {
+        "platform": "android",
+        "deviceName": "Fixture device",
+        "modelName": "Galaxy A03s"
+      },
+      "update": {
+        "id": null,
+        "channel": "preview",
+        "runtimeVersion": "1.4.0"
+      },
+      "backend": {
+        "target": "sqlite-staging",
+        "projectId": "segygjzpujphwvrubusm"
+      },
+      "sqlite": {
+        "schemaVersion": 20
+      }
+    },
+    "first_observed": {
+      "application": {
+        "id": "org.masinyusane.masi",
+        "name": "Masi",
+        "version": "1.4.0",
+        "build": "54",
+        "releaseLabel": "fixture",
+        "gitCommit": "fixture-commit"
+      },
+      "device": {
+        "platform": "android",
+        "deviceName": "Fixture device",
+        "modelName": "Galaxy A03s"
+      },
+      "update": {
+        "id": null,
+        "channel": "preview",
+        "runtimeVersion": "1.4.0"
+      },
+      "backend": {
+        "target": "sqlite-staging",
+        "projectId": "segygjzpujphwvrubusm"
+      },
+      "sqlite": {
+        "schemaVersion": 20
+      }
+    },
+    "delivery": {
+      "installId": "33333333-3333-4333-8333-333333333333",
+      "userId": "22222222-2222-4222-8222-222222222222",
+      "email": "fixture@example.invalid",
+      "displayName": "Fixture EA",
+      "appVersion": "1.4.0",
+      "buildNumber": "54",
+      "updateId": null,
+      "runtime": {
+        "application": {
+          "id": "org.masinyusane.masi",
+          "name": "Masi",
+          "version": "1.4.0",
+          "build": "54",
+          "releaseLabel": "fixture",
+          "gitCommit": "fixture-commit"
+        },
+        "device": {
+          "platform": "android",
+          "deviceName": "Fixture device",
+          "modelName": "Galaxy A03s"
+        },
+        "update": {
+          "id": null,
+          "channel": "preview",
+          "runtimeVersion": "1.4.0"
+        },
+        "backend": {
+          "target": "sqlite-staging",
+          "projectId": "segygjzpujphwvrubusm"
+        },
+        "sqlite": {
+          "schemaVersion": 20
+        }
+      },
+      "network": {
+        "type": "wifi",
+        "isConnected": true,
+        "isInternetReachable": true,
+        "details": {}
+      },
+      "freeDiskBytes": 123456,
+      "totalDiskBytes": 987654,
+      "outboxSummary": {
+        "byStatus": {
+          "terminal": 1
+        },
+        "byClass": {
+          "terminal": 1
+        }
+      },
+      "lastSuccessfulSyncTime": null,
+      "lastServerResponseAt": "2026-10-29T12:01:00.000Z",
+      "droppedIncidents": 3,
+      "sentAt": "2026-10-29T12:02:00.000Z"
+    },
+    "bundle_path": "22222222-2222-4222-8222-222222222222/2026-10-29/44444444-4444-4444-8444-444444444444.json",
+    "screenshot_path": null
+  },
+  "storageRow": {
+    "id": "55555555-5555-4555-8555-555555555555",
+    "reporter_id": "22222222-2222-4222-8222-222222222222",
+    "received_at": "2026-10-29T12:02:01.000Z",
+    "schema_version": 2,
+    "kind": "app_error_caught",
+    "repeat_key": "33333333-3333-4333-8333-333333333333:d7b6cd96-c19b-50bb-bcca-051b02c22c93",
+    "report_id": "334b3771-0883-5bf4-bc7f-7cc742369842",
+    "report_generation": 2,
+    "occurrence_count": 2,
+    "first_seen_at": "2026-10-28T12:00:00.000Z",
+    "last_seen_at": "2026-10-29T12:00:00.000Z",
+    "payload": {
+      "errorName": "Error",
+      "message": "Child 123  550e8400-e29b-41d4-a716-446655440000 failed\n  at 99",
+      "messageDigest": "16cec11c-05f0-53ad-8409-a868ff8a85bb",
+      "stack": "Error: fixture",
+      "componentStack": "at FixtureScreen",
+      "components": [
+        "FixtureScreen"
+      ],
+      "bundleUploadFailed": true
+    },
+    "observed": {
+      "application": {
+        "id": "org.masinyusane.masi",
+        "name": "Masi",
+        "version": "1.4.0",
+        "build": "54",
+        "releaseLabel": "fixture",
+        "gitCommit": "fixture-commit"
+      },
+      "device": {
+        "platform": "android",
+        "deviceName": "Fixture device",
+        "modelName": "Galaxy A03s"
+      },
+      "update": {
+        "id": null,
+        "channel": "preview",
+        "runtimeVersion": "1.4.0"
+      },
+      "backend": {
+        "target": "sqlite-staging",
+        "projectId": "segygjzpujphwvrubusm"
+      },
+      "sqlite": {
+        "schemaVersion": 20
+      }
+    },
+    "first_observed": {
+      "application": {
+        "id": "org.masinyusane.masi",
+        "name": "Masi",
+        "version": "1.4.0",
+        "build": "54",
+        "releaseLabel": "fixture",
+        "gitCommit": "fixture-commit"
+      },
+      "device": {
+        "platform": "android",
+        "deviceName": "Fixture device",
+        "modelName": "Galaxy A03s"
+      },
+      "update": {
+        "id": null,
+        "channel": "preview",
+        "runtimeVersion": "1.4.0"
+      },
+      "backend": {
+        "target": "sqlite-staging",
+        "projectId": "segygjzpujphwvrubusm"
+      },
+      "sqlite": {
+        "schemaVersion": 20
+      }
+    },
+    "bundle_path": "22222222-2222-4222-8222-222222222222/2026-10-29/44444444-4444-4444-8444-444444444444.json",
+    "screenshot_path": null,
+    "delivery": {
+      "installId": "33333333-3333-4333-8333-333333333333",
+      "userId": "22222222-2222-4222-8222-222222222222",
+      "email": "fixture@example.invalid",
+      "displayName": "Fixture EA",
+      "appVersion": "1.4.0",
+      "buildNumber": "54",
+      "updateId": null,
+      "runtime": {
+        "application": {
+          "id": "org.masinyusane.masi",
+          "name": "Masi",
+          "version": "1.4.0",
+          "build": "54",
+          "releaseLabel": "fixture",
+          "gitCommit": "fixture-commit"
+        },
+        "device": {
+          "platform": "android",
+          "deviceName": "Fixture device",
+          "modelName": "Galaxy A03s"
+        },
+        "update": {
+          "id": null,
+          "channel": "preview",
+          "runtimeVersion": "1.4.0"
+        },
+        "backend": {
+          "target": "sqlite-staging",
+          "projectId": "segygjzpujphwvrubusm"
+        },
+        "sqlite": {
+          "schemaVersion": 20
+        }
+      },
+      "network": {
+        "type": "wifi",
+        "isConnected": true,
+        "isInternetReachable": true,
+        "details": {}
+      },
+      "freeDiskBytes": 123456,
+      "totalDiskBytes": 987654,
+      "outboxSummary": {
+        "byStatus": {
+          "terminal": 1
+        },
+        "byClass": {
+          "terminal": 1
+        }
+      },
+      "lastSuccessfulSyncTime": null,
+      "lastServerResponseAt": "2026-10-29T12:01:00.000Z",
+      "droppedIncidents": 3,
+      "sentAt": "2026-10-29T12:02:00.000Z"
+    }
+  }
+}

@@ -6,9 +6,10 @@ Quick reference for building and distributing the SQLite app.
 
 ## Current Release Path
 
-**No field cohort runs the app today (Jim, 2026-10-28).** The 1.4.0 pilot builds
-(iOS 25, Android 54, from `main` `dffe22c`) are the starting point: every later
-TestFlight build and Play download starts from them. Masi's EAs retest the app
+**No field cohort runs the app today (Jim, 2026-10-28).** The 1.5.0 pilot builds
+(the first with field diagnostics and `expo-image-picker`) are the starting point;
+they replace the 1.4.0 pilot builds (iOS 25, Android 54, from `main` `dffe22c`).
+Every later TestFlight build and Play download starts from them. Masi's EAs retest the app
 from November 2026.
 
 One command builds both store artifacts and submits each one:
@@ -87,7 +88,7 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 
 - `expo-updates` is installed and configured in `app.json`
 - Store builds (`pilot` profile) listen on channel `preview`; the `production` profile's channel `production` is for the field launch
-- The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.4.0` on `main`)
+- The `runtimeVersion` uses the `appVersion` policy — OTA updates only apply to builds with a matching `expo.version` (currently `1.5.0` on `main`)
 - Updates are checked on app launch and applied on the *next* launch (users don't see a loading screen)
 
 ### Pushing an OTA Update
@@ -272,7 +273,7 @@ external TestFlight group that should have it.
 
 ### What you control
 
-- **Marketing version** (`expo.version` in `app.config.js`): Currently `1.4.0` on `main`. Bump this when you want users to see a new version number, and always when native code changes (see below).
+- **Marketing version** (`expo.version` in `app.config.js`): Currently `1.5.0` on `main`. Bump this when you want users to see a new version number, and always when native code changes (see below).
 
 ```bash
 # Check current remote versions
@@ -284,7 +285,7 @@ npx eas-cli@26.0.0 build:version:get
 - Adding a significant feature (e.g., new tab, new assessment type) → bump minor: `1.1.0` → `1.2.0`
 - Bug fixes and small improvements → keep the same version or bump patch: `1.1.0` → `1.1.1`
 - Breaking changes or major redesign → bump major: `1.1.0` → `2.0.0`
-- **Any native change** (adding, removing or upgrading a native package, a config plugin, or native config such as icons or permissions) → bump at least minor before the next store build. This one is required, not a judgement call: the version is the OTA runtime boundary, so two binaries with different native code must never share it. Example: 1.4.0 followed the July 1.3.0 pilot after `expo-font`, `expo-splash-screen`, the iOS icon and the Android backup plugin landed.
+- **Any native change** (adding, removing or upgrading a native package, a config plugin, or native config such as icons or permissions) → bump at least minor before the next store build. This one is required, not a judgement call: the version is the OTA runtime boundary, so two binaries with different native code must never share it. Example: 1.4.0 followed the July 1.3.0 pilot after `expo-font`, `expo-splash-screen`, the iOS icon and the Android backup plugin landed; 1.5.0 followed 1.4.0 when field diagnostics added `expo-image-picker`.
 
 ---
 
@@ -347,12 +348,12 @@ Any child a tester "deleted" on a pre-fix build still exists in Supabase with no
 
 ---
 
-## Current State (as of 2026-10-28)
+## Current State (as of 2026-10-30)
 
 | Audience | App | Version | Backend | Distribution |
 |---|---|---|---|---|
 | No field cohort today (Jim, 2026-10-28) | Legacy AsyncStorage app, unused | 1.2.x | `masi-app` (legacy) | Nothing new is distributed |
-| Testers now; Masi's EAs from November 2026 | SQLite app (`main`) | 1.4.0: iOS 25, Android 54 from `dffe22c` (July 2026 pilot: 1.3.0) | `masi-app-sqlite` | `pilot` profile → TestFlight + Play internal testing, submitted by EAS |
+| Testers now; Masi's EAs from November 2026 | SQLite app (`main`) | 1.5.0 from `main` after field diagnostics (1.4.0: iOS 25, Android 54 from `dffe22c`; July 2026 pilot: 1.3.0) | `masi-app-sqlite` | `pilot` profile → TestFlight + Play internal testing, submitted by EAS |
 
 OTA updates go per channel: `preview` serves the SQLite store builds, and
 `production` served the legacy builds. Runtime versions (1.2.x vs 1.3.0 and

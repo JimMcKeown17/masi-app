@@ -1,0 +1,4 @@
+interface:
+  display_name: "Masi Phone Incident Sweep"
+  short_description: "Sweep Masi receipts into evidence-led bug records"
+  default_prompt: "Use $bug-sync to sweep Masi phone incident receipts against origin/main, inspect evidence, and update the MA-BUG registry."

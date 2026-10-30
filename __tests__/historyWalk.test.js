@@ -347,3 +347,88 @@ describe('shared history walker', () => {
     expect(warn.mock.calls.at(-1)[0]).toContain('failureKind=year_mismatch');
   });
 });
+
+// New diagnostics coverage uses the signed-in default handle and its real SQLite writer.
+describe('durable history failure diagnostics', () => {
+  const { getDefaultTestHandle, TEST_ACTOR_ID } = require('../test-support/defaultTestHandle');
+  let handle;
+  let wall;
+  let clock;
+  let response;
+  let deps;
+  let walk;
+  const saved = async () => JSON.parse((await (await handle.getReader()).getFirstAsync(
+    "select cursor from sync_state where scope = 'diagnostics-probe'"
+  )).cursor);
+  const run = () => runHistoryWalk({ userId: TEST_ACTOR_ID, force: true, deps, walk });
+  beforeEach(() => {
+    handle = getDefaultTestHandle();
+    wall = Date.parse('2026-10-01T08:00:00Z');
+    clock = 0;
+    response = { error: { message: 'Network request failed: raw device detail' } };
+    deps = { database: handle, state: createHistoryWalkState(), enqueueRequest: handle.enqueueRequest,
+      now: () => clock, wallNow: () => wall, random: () => 0.5,
+      client: { rpc: () => ({ abortSignal: async () => response }) } };
+    walk = { tag: 'DiagnosticsProbe', coverageKeys: ['childIds'], pageSize: 1,
+      resolveScope: async () => ({ scope: 'diagnostics-probe', windowStart: '2026-01-15', context: {} }),
+      readCoverage: async () => ({ childIds: [] }),
+      fetchPage: async ({ request }) => ({ rows: await request('probe', {}) }),
+      savePage: ({ scope, pullState }) => handle.withTransaction(txn => handle.services.repositories.syncState.setPullState(scope, pullState, { transaction: txn })),
+    };
+  });
+
+  test('failure kind/message commit with the first failure time and a successful page clears the triad', async () => {
+    const firstFailure = new Date(wall).toISOString();
+    expect(await run()).toEqual({ status: 'transport', pages: 0 });
+    expect(await saved()).toMatchObject({ lastFailureAt: firstFailure, lastFailureKind: 'transport', lastFailureMessage: response.error.message });
+    wall += 2 * DAY;
+    deps.state = createHistoryWalkState();
+    response = { error: { code: '42703', message: 'raw query: missing column' } };
+    expect(await run()).toEqual({ status: 'query', pages: 0 });
+    expect(await saved()).toMatchObject({ lastFailureAt: firstFailure, lastFailureKind: 'query', lastFailureMessage: response.error.message });
+    response = { data: rowsOf(1) };
+    deps.onPageSaved = () => { clock = 60_000; };
+    expect(await run()).toEqual({ status: 'partial', pages: 1 });
+    expect(await saved()).toMatchObject({ lastFailureAt: null, lastFailureKind: null, lastFailureMessage: null, id: rowsOf(1)[0].id });
+  });
+
+  test.each([['MR001', 'disabled'], ['MR002', 'year_mismatch'], ['42703', 'query']])(
+    '%s persists its raw failure kind/message', async (code, kind) => {
+      response = { error: { code, message: 'raw failure ' + code } };
+      expect(await run()).toEqual({ status: kind, pages: 0 });
+      expect(await saved()).toMatchObject({ lastFailureKind: kind, lastFailureMessage: response.error.message });
+    });
+
+  test('old cursors without diagnostic fields remain readable and success clears the full marker', async () => {
+    await handle.services.repositories.syncState.setPullState('diagnostics-probe', { cursor: JSON.stringify({
+      windowStart: '2026-01-15', lastFailureAt: '2026-09-01T00:00:00Z', complete: false,
+    }) });
+    response = { data: [] };
+    expect(await run()).toEqual({ status: 'complete', pages: 1 });
+    expect(await saved()).toMatchObject({ lastFailureAt: null, lastFailureKind: null, lastFailureMessage: null });
+  });
+
+  test.each(['budget', 'dependency', 'cancelled'])('%s stops do not write failure metadata', async kind => {
+    if (kind === 'budget') deps.runBudgetMs = 0;
+    if (kind === 'dependency') walk.resolveScope = async () => null;
+    if (kind === 'cancelled') deps.client = { rpc: () => ({ abortSignal: async () => {
+      deps.state.actorGeneration += 1;
+      return { error: { message: 'late network error' } };
+    } }) };
+    expect((await run()).status).toBe(kind === 'budget' ? 'partial' : kind);
+    expect(await (await handle.getReader()).getFirstAsync("select * from sync_state where scope = 'diagnostics-probe'")).toBeNull();
+  });
+
+  test('a failed metadata write preserves the already committed successful page', async () => {
+    const writer = await require('../test-support/testDatabase').getTestWriter();
+    await writer.execAsync(`create trigger reject_failure_metadata before update on sync_state
+      when json_extract(new.cursor, '$.lastFailureKind') is not null
+      begin select raise(abort, 'failure metadata disk error'); end;`);
+    let calls = 0;
+    deps.client = { rpc: () => ({ abortSignal: async () => ++calls === 1
+      ? { data: rowsOf(1) } : { error: { message: 'Network request failed' } } }) };
+    expect(await run()).toEqual({ status: 'transport', pages: 1 });
+    expect(await saved()).toMatchObject({ id: rowsOf(1)[0].id, lastFailureAt: null, lastFailureKind: null, lastFailureMessage: null });
+  });
+
+});

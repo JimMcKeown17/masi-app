@@ -1,6 +1,8 @@
+jest.mock('@react-native-community/netinfo',()=>({fetch:jest.fn(async()=>({type:'wifi',isConnected:true}))}));
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 
 jest.mock('expo-file-system/next', () => ({
+  Paths: {availableDiskSpace:123,totalDiskSpace:456},
   Directory: jest.fn(),
   File: class File {
     constructor(uri) { this.uri = uri; }
@@ -251,9 +253,9 @@ test('T12: real discovery then RPC drain excludes child identity, name, private 
   const b = await openB();
   expect(await discover(b)).toEqual({ queued: 1 });
   const rows = await queued(b);
-  const supabaseClient = { rpc: jest.fn(async () => ({ data: true, error: null })) };
+  const supabaseClient = { rpc: jest.fn(async () => ({ data: {status:'inserted'}, error: null })) };
   expect(await drainSupportIncidents({
-    repository: b.services.repositories.supportIncidents, supabaseClient, enqueueRequest: task => task(),
+    handle: b, repository: b.services.repositories.supportIncidents, supabaseClient, enqueueRequest: task => task(),
     envelope: { appVersion: '1.2.0', buildNumber: '7', updateId: null, backend: 'segygjzpujphwvrubusm', installId: 'i-1' },
   })).toEqual({ sent: 1, rejected: 0, failed: 0 });
   expect(supabaseClient.rpc).toHaveBeenCalledTimes(1);

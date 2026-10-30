@@ -1,6 +1,7 @@
+import { buildSyncPayload } from './syncPayload';
+import { normalizeErrorCode } from '../utils/normalizeErrorCode';
 import { SERVER_COLUMNS } from './syncServerColumns';
-import { toSubmitArgs } from './assessmentFamilyPayload';
-import { toSetLetterMasteryArgs, parseSetLetterMasteryResult } from './letterMasteryCorrection';
+import { parseSetLetterMasteryResult } from './letterMasteryCorrection';
 import { applyCorrectionAcknowledgement } from '../db/repositories/masteryRepository';
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
@@ -20,38 +21,9 @@ import {
 import {
   createSyncStateRepository,
 } from '../db/repositories/syncStateRepository';
-import {
-  assessmentItemDomainId,
-  childEaAssignmentDomainId,
-  childProgrammeEnrollmentDomainId,
-  classEaAssignmentDomainId,
-  classGroupingStateDomainId,
-  ensureServerUuid,
-  groupEaAssignmentDomainId,
-  LEGACY_PROGRAMME_ID,
-  sessionAttendeeDomainId,
-} from '../db/repositories/domainRepositoryUtils';
+import { LEGACY_PROGRAMME_ID } from '../db/repositories/domainRepositoryUtils';
 
 const BASE_RETRY_DELAY = 5000;
-
-const LOCAL_ONLY_KEYS_TO_STRIP = [
-  'synced',
-  '_deleted',
-  '_pendingJobTitleResolve',
-  'pendingSessionTypeCode',
-  'pendingSessionTypeName',
-  'sync_status',
-  'last_sync_error',
-  'server_updated_at',
-  'tableName',
-  'recordId',
-];
-
-const LEGACY_KEYS_TO_STRIP = {
-  children: ['class', 'school', 'teacher'],
-  users: ['assigned_school', 'job_title'],
-  sessions: ['session_type'],
-};
 
 // Real server columns deliberately withheld from push (reserved strictly for that — NOT a
 // catch-all). B2 activates sessions.group_id; state stays completed until the state-machine slice.
@@ -544,6 +516,18 @@ const classifyError = (
   return { terminal: false, markAsSynced: false };
 };
 
+// Record the decision already taken by the upload policy; this does not choose retries.
+export const dispositionFor = (error, {
+  terminal = false, parentEvidencePending = false, sessionDowngraded = false, transport = false,
+} = {}) => {
+  const errorCode = normalizeErrorCode(error?.code ?? (transport ? 'TRANSPORT' : null));
+  const errorClass = terminal ? 'terminal'
+    : errorCode === '28000' || sessionDowngraded ? 'needs_reauth'
+    : parentEvidencePending && ['23503', '42501', 'UPDATE_NOT_APPLIED'].includes(errorCode) ? 'needs_parent'
+    : 'retryable';
+  return { errorClass, errorCode };
+};
+
 // Stamped onto last_error when a 42501 is quarantined WITH a live session.
 // Post-gate, that means a genuine RLS denial; the auth-restore heal
 // (offlineSync.requeueTerminalRlsFailures) must never touch marked rows.
@@ -556,84 +540,6 @@ const isHealableRlsError = (record) => {
   if (typeof err !== 'string') return false;
   if (err.startsWith(AUTHENTICATED_DENIAL_MARKER)) return false;
   return RLS_ERROR_SIGNATURE.test(err);
-};
-
-const buildSyncPayload = (tableName, record, operation) => {
-  if (tableName === 'assessments') return toSubmitArgs(record);
-  if (tableName === 'letter_mastery') return toSetLetterMasteryArgs(record);
-  const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
-  const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
-  if (tableName === 'battery_runs') keysToStrip.add('updated_at');
-  if (!isStampedOperation(tableName, operation)) keysToStrip.add('row_version');
-  const allowlist = SERVER_COLUMNS[tableName] ? new Set(SERVER_COLUMNS[tableName]) : null;
-
-  const payload = {};
-  for (const [key, value] of Object.entries(record || {})) {
-    if (keysToStrip.has(key) || value === undefined) continue;
-    if (allowlist && !allowlist.has(key)) continue;
-    payload[key] = value;
-  }
-  if (tableName === 'session_attendees' && payload.id) {
-    payload.id = ensureServerUuid(payload.id, sessionAttendeeDomainId(payload.session_id, payload.child_id));
-  }
-  if (tableName === 'assessment_items' && payload.id) {
-    payload.id = ensureServerUuid(
-      payload.id,
-      assessmentItemDomainId({
-        assessmentId: payload.assessment_id,
-        itemKey: payload.item_key,
-        position: payload.position,
-        isCorrect: payload.is_correct,
-      })
-    );
-  }
-  // Active-pair identity is the server partial-unique key. Only full insert payloads carry every
-  // key column; bare archive payloads must keep their original row id.
-  if (tableName === 'child_ea_assignments' && payload.id && payload.user_id && payload.child_id) {
-    payload.id = childEaAssignmentDomainId({
-      userId: payload.user_id,
-      childId: payload.child_id,
-    });
-  }
-  if (
-    tableName === 'child_programme_enrollments'
-    && payload.id
-    && payload.child_id
-    && payload.programme_id
-  ) {
-    payload.id = childProgrammeEnrollmentDomainId({
-      childId: payload.child_id,
-      programmeId: payload.programme_id,
-    });
-  }
-  if (
-    tableName === 'class_ea_assignments'
-    && payload.id
-    && payload.class_id
-    && payload.ea_user_id
-    && payload.programme_id
-  ) {
-    payload.id = classEaAssignmentDomainId({
-      classId: payload.class_id,
-      eaUserId: payload.ea_user_id,
-      programmeId: payload.programme_id,
-    });
-  }
-  if (tableName === 'group_ea_assignments' && payload.id && payload.group_id) {
-    payload.id = groupEaAssignmentDomainId({ groupId: payload.group_id });
-  }
-  if (
-    tableName === 'class_grouping_state'
-    && payload.id
-    && payload.class_id
-    && payload.academic_year_id
-  ) {
-    payload.id = classGroupingStateDomainId({
-      classId: payload.class_id,
-      academicYearId: payload.academic_year_id,
-    });
-  }
-  return payload;
 };
 
 const errorMessage = (error) => (
@@ -968,10 +874,14 @@ const finalizeRetriableFailure = async ({
   outboxRecord,
   tableName,
   reason,
+  errorClass = 'retryable',
+  errorCode = 'OTHER',
 }) => runRepositoryTransaction(database, async (txn) => {
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'failed',
+        error_class = ?,
+        error_code = ?,
         retry_count = retry_count + 1,
         last_error = ?,
         next_retry_at = ?,
@@ -979,7 +889,7 @@ const finalizeRetriableFailure = async ({
     where id = ?
       and updated_at = ?
       and status = 'in_flight'
-  `, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+  `, errorClass, errorCode, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
   if ((failureResult?.changes || 0) === 0) {
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -997,11 +907,14 @@ const finalizeTerminalFailure = async ({
   outboxRecord,
   tableName,
   reason,
+  errorCode = 'OTHER',
   retryCount = null,
 }) => runRepositoryTransaction(database, async (txn) => {
   const failureResult = await txn.runAsync(`
     update sync_outbox
     set status = 'terminal',
+        error_class = 'terminal',
+        error_code = ?,
         retry_count = coalesce(?, retry_count),
         last_error = ?,
         next_retry_at = null,
@@ -1009,7 +922,7 @@ const finalizeTerminalFailure = async ({
     where id = ?
       and updated_at = ?
       and status = 'in_flight'
-  `, retryCount, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at);
+  `, errorCode, retryCount, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
   if ((failureResult?.changes || 0) === 0) {
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -1027,15 +940,17 @@ const finalizeOutboxOnlyTerminalFailure = async ({
   outboxRecord,
   reason,
 }) => runRepositoryTransaction(database, async (txn) => {
-  await txn.runAsync(`
+  const result = await txn.runAsync(`
     update sync_outbox
     set status = 'terminal',
+        error_class = 'terminal',
+        error_code = 'UNKNOWN_TABLE',
         last_error = ?,
         next_retry_at = null,
         updated_at = ?
-    where id = ?
-  `, reason, timestamp(), outboxRecord.id);
-  return true;
+    where id = ? and updated_at = ? and status = ?
+  `, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at, outboxRecord.status);
+  return (result?.changes || 0) > 0;
 });
 
 const finalizeManySuccess = async ({ database, records, tableName, applyAcknowledgedPayload }) => {
@@ -1069,19 +984,21 @@ const finalizeManySuccess = async ({ database, records, tableName, applyAcknowle
   }
 };
 
-const finalizeManyRetriableFailure = async ({ database, records, tableName, reason }) => {
+const finalizeManyRetriableFailure = async ({ database, records, tableName, reason, errorClass = 'retryable', errorCode = 'OTHER' }) => {
   for (const chunk of chunkArray(records, 200)) {
     await runRepositoryTransaction(database, async (txn) => {
       for (const outboxRecord of chunk) {
         const failureResult = await txn.runAsync(`
           update sync_outbox
           set status = 'failed',
+              error_class = ?,
+              error_code = ?,
               retry_count = retry_count + 1,
               last_error = ?,
               next_retry_at = ?,
               updated_at = ?
           where id = ? and updated_at = ? and status = 'in_flight'
-        `, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+        `, errorClass, errorCode, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
         if ((failureResult?.changes || 0) === 0) {
           await restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -1131,6 +1048,7 @@ export const createOutboxSyncEngine = ({
   outboxRepository = createSyncOutboxRepository({ database }),
   stateRepository = createSyncStateRepository({ database }),
   supportIncidentRepository = null,
+  observeStandingConditions = null,
   tableConfigs = TABLE_CONFIGS,
   safeDuplicateSuccessTables = [],
   enqueueRequest,
@@ -1254,6 +1172,7 @@ export const createOutboxSyncEngine = ({
         console.log(`Sync retry deferred: ${config.tableName}:${inFlightRecord.record_id} awaiting pending local evidence (${failureCode})`);
       }
 
+      let sessionDowngraded = false;
       if (serverResult.error?.code === '42501' && classification.terminal) {
         let liveSession = null;
         try {
@@ -1266,6 +1185,7 @@ export const createOutboxSyncEngine = ({
           // A permission denial without a live session is not trustworthy
           // evidence; retry after auth restore instead of quarantining.
           classification.terminal = false;
+          sessionDowngraded = true;
         } else {
           reason = `${AUTHENTICATED_DENIAL_MARKER} ${reason}`;
         }
@@ -1289,6 +1209,7 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           outboxRepository,
           reason,
+          ...dispositionFor(serverResult.error, { terminal: true }),
         });
         return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
       }
@@ -1303,6 +1224,7 @@ export const createOutboxSyncEngine = ({
           outboxRepository,
           reason: deterministicReason,
           retryCount: attemptNumber,
+          ...dispositionFor(serverResult.error, { terminal: true }),
         });
         return {
           success: false,
@@ -1317,6 +1239,7 @@ export const createOutboxSyncEngine = ({
         tableName: config.tableName,
         outboxRepository,
         reason,
+        ...dispositionFor(serverResult.error, { parentEvidencePending, sessionDowngraded }),
       });
       return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
     } catch (error) {
@@ -1333,6 +1256,7 @@ export const createOutboxSyncEngine = ({
           tableName: config.tableName,
           outboxRepository,
           reason,
+          ...dispositionFor(error, { transport: true }),
         });
       } catch (finalizeError) {
         if (isStaleActorError(finalizeError)) throw finalizeError;
@@ -1452,6 +1376,7 @@ export const createOutboxSyncEngine = ({
           records: inFlightRecords || outboxRecords,
           tableName: config.tableName,
           reason,
+          ...dispositionFor(error, { transport: true }),
         });
       } catch (finalizeError) {
         if (isStaleActorError(finalizeError)) throw finalizeError;
@@ -1814,7 +1739,7 @@ export const createOutboxSyncEngine = ({
           const reason = errorMessage(error) || 'Unhandled sync error';
           const tableNameForRow = getConfig(outboxRecord.table_name)?.tableName || outboxRecord.table_name;
           try {
-            await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason });
+            await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason, ...dispositionFor(error, { transport: true }) });
           } catch (finalizeError) { if (isStaleActorError(finalizeError)) throw finalizeError; }
           applyRecordResult(outboxRecord, getConfig(outboxRecord.table_name), { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
         }
@@ -1823,7 +1748,7 @@ export const createOutboxSyncEngine = ({
       if (!tableName && supportIncidentRepository) {
         try {
           result.incidents = await drainSupportIncidents({
-            repository: supportIncidentRepository, supabaseClient, enqueueRequest,
+            handle: database, repository: supportIncidentRepository, supabaseClient, enqueueRequest,
             envelope: await buildIncidentEnvelope(),
           });
         } catch (error) {
@@ -1867,6 +1792,10 @@ export const createOutboxSyncEngine = ({
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
   const getSyncStatus = async (options = {}) => {
+    try { await observeStandingConditions?.(); } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      console.warn('Support incident observer failed:', errorMessage(error));
+    }
     const [status, meta, incidentReadyCount] = await Promise.all([
       outboxRepository.getSyncStatus(options),
       stateRepository.getSyncMeta(),

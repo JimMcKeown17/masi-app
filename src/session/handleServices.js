@@ -1,3 +1,4 @@
+import { observeStandingConditions, captureEvent, getDeliveryState } from '../services/supportIncidents';
 import { createChildrenRepository } from '../db/repositories/childrenRepository';
 import { createClassesRepository } from '../db/repositories/classesRepository';
 import { createGroupsRepository } from '../db/repositories/groupsRepository';
@@ -102,11 +103,17 @@ export const createHandleServices = (handle) => {
       ...options, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
       outboxRepository: repositories.syncOutbox, stateRepository: repositories.syncState,
       supportIncidentRepository: repositories.supportIncidents,
+      observeStandingConditions: () => observeStandingConditions(handle),
       getAuthSession: async () => {
         const s = getLatestAuthSession();
         return { data: { session: s?.user?.id === handle.userId ? s : null } };
       },
     }),
+    supportIncidents: {
+      observeStandingConditions: () => observeStandingConditions(handle),
+      captureEvent: (kind, payload, options) => captureEvent(handle, kind, payload, options),
+      getDeliveryState: incidentRef => getDeliveryState(handle, incidentRef),
+    },
     referenceDataReady,
     pullReferenceData: () => { assertCurrent(); return pullReferenceData(referenceOptions); },
     pullRoster: async ({ authorizedBreakerScopes } = {}) => {
