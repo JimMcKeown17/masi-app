@@ -6,7 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { spawn } = require('node:child_process');
+const os = require('node:os');
+const { spawn, spawnSync } = require('node:child_process');
 const {
   MIGRATIONS_DIR,
   assertDisposableAdminTarget,
@@ -16,6 +17,7 @@ const {
   expectSqlState,
   runPsql,
 } = require('./history-authorization-postgres-harness.cjs');
+const { READ_ONLY_PROOF, SNAPSHOT_SQL, readOnlyScript } = require('./read-support-incidents.cjs');
 
 const INCIDENT_MIGRATION = '20261017120000_mobile_support_incidents.sql';
 const RECEIPTS_MIGRATION = '20261030120000_incident_receipts.sql';
@@ -624,6 +626,54 @@ FROM public.mobile_support_incidents WHERE repeat_key = 'upgrade:original';`, 't
   return summary;
 };
 
+// The incident reader's own script, fed to psql -f as the reader does, against a
+// server whose sessions are writable by default. That is what the Supabase session
+// pooler gives the reader: it drops startup options such as default_transaction_read_only.
+const runReaderReadOnlyCases = (databaseUrl) => {
+  const summary = {};
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-reader-read-only-'));
+  const runScript = (label, sql) => {
+    const file = path.join(directory, `${label}.sql`);
+    fs.writeFileSync(file, sql);
+    return spawnSync('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose', '-Atq', databaseUrl, '-f', file], {
+      encoding: 'utf8', env: buildPsqlEnv(label), timeout: 180_000,
+    });
+  };
+  const count = () => runPsql({ databaseUrl, label: 'reader-receipt-count', sql: 'SELECT count(*) FROM public.mobile_support_incidents;' });
+  try {
+    assert.equal(runPsql({ databaseUrl, label: 'reader-session-writable',
+      sql: "SELECT current_setting('default_transaction_read_only');" }), 'off');
+    summary['reader-session-writable-by-default'] = 'passed';
+
+    const read = runScript('reader-snapshot', readOnlyScript(SNAPSHOT_SQL));
+    assert.equal(read.status, 0, read.stderr);
+    const [proof, ...rest] = read.stdout.trim().split('\n');
+    assert.equal(proof, READ_ONLY_PROOF);
+    const snapshot = JSON.parse(rest.join('\n'));
+    assert.ok(Array.isArray(snapshot.receipts) && snapshot.receipts.length > 0, 'snapshot lists receipts');
+    summary['reader-snapshot-confirmed-read-only'] = 'passed';
+
+    const before = count();
+    const write = runScript('reader-write', readOnlyScript('DELETE FROM public.mobile_support_incidents;'));
+    assert.notEqual(write.status, 0, 'a write inside the reader transaction succeeded');
+    assert.match(write.stderr, /ERROR:\s+25006:/, write.stderr);
+    assert.equal(count(), before);
+    summary['reader-write-refused-25006'] = 'passed';
+
+    // If someone weakens the opening line, the guard stops the script before the read.
+    const weakened = readOnlyScript(SNAPSHOT_SQL).replace(/^BEGIN[^\n]*/, 'BEGIN;');
+    assert.notEqual(weakened, readOnlyScript(SNAPSHOT_SQL));
+    const guarded = runScript('reader-guard', weakened);
+    assert.notEqual(guarded.status, 0, 'the guard let a writable transaction read');
+    assert.match(guarded.stderr, /ERROR:\s+P0001: incident reader transaction is not read-only/, guarded.stderr);
+    assert.equal(guarded.stdout.trim(), '');
+    summary['reader-guard-stops-writable-transaction'] = 'passed';
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+  return summary;
+};
+
 const main = async () => {
   const baseName = process.env.HISTORY_RLS_DATABASE_NAME;
   const databaseName = baseName ? `${baseName}_incident` : baseName;
@@ -666,7 +716,7 @@ const main = async () => {
       .match(/\b(ALTER\s+TABLE|GRANT|REVOKE)\b[^;]*\bstorage\.\w+/gi);
     assert.equal(ownerOnly, null, `storage migration uses owner-only statements: ${ownerOnly}`);
     runPsql({ databaseUrl, label: `migration-${STORAGE_MIGRATION}`, sql: `BEGIN;\n${storageSql}\nCOMMIT;` });
-    const summary = { ...receiptSummary, ...runStorageCases(databaseUrl) };
+    const summary = { ...receiptSummary, ...runStorageCases(databaseUrl), ...runReaderReadOnlyCases(databaseUrl) };
     process.stdout.write(`${JSON.stringify({ casesPassed: Object.values(summary).filter((v) => v === 'passed').length,
       ...summary, storageEvidence: 'local PostgreSQL policy model only; hosted/API gates remain open' })}\n`);
   } finally {
@@ -683,4 +733,4 @@ if (require.main === module) {
 
 module.exports = { INCIDENT_MIGRATION, RECEIPTS_MIGRATION, STORAGE_MIGRATION,
   ENVELOPE_FIXTURE, STORAGE_ROW_FIXTURE, fixtureSql, storagePolicyFixtureSql, installDefaultPrivileges, runCases,
-  runUpgradeCases, runV1BoundaryCases, runV2IdentityCases, runV2ValidationCases, runQuotaCases, runV2GrantCases, runStorageCases };
+  runUpgradeCases, runV1BoundaryCases, runV2IdentityCases, runV2ValidationCases, runQuotaCases, runV2GrantCases, runStorageCases, runReaderReadOnlyCases };

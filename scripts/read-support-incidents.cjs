@@ -24,7 +24,8 @@ const HELP = `Usage: node scripts/read-support-incidents.cjs [options]
   --fetch <handle>          Download latest bundle and companion screenshot
   --resolve <handle>        SELECT server row existence; existence is not convergence
   --help                    No database access
-Access: .env then .env.local through sqlite-staging validation. psql uses the
+Access: .env then .env.local through sqlite-staging validation. Every query runs
+in a READ ONLY transaction that the database must confirm. psql uses the
 SQLite DB password; only --fetch requires SUPABASE_SECRET_KEY_SQLITE for Storage.
 Exit 0: successful read (attachments may be unavailable); 1: failed/unsupported
 operation; 2: contested registry ownership. Filtered and targeted runs do not
@@ -90,10 +91,24 @@ const subprocessEnv = (env, password) => {
   if (password.includes('\0')) throw new Error('Invalid staging password.');
   // Do not inherit routing, service or alternate credential files from libpq.
   const clean = Object.fromEntries(['PATH', 'LANG', 'LC_ALL', 'TMPDIR'].filter(key => env[key] !== undefined).map(key => [key, env[key]]));
+  // No PGOPTIONS: the Supabase session pooler silently ignores startup options
+  // (verified 2026-10-30), so read-only mode and timeouts live in the transaction.
   return { ...clean, PGPASSWORD: password, PGPASSFILE: os.devNull, PGSERVICEFILE: os.devNull,
-    PGSSLMODE: 'require', PGCONNECT_TIMEOUT: '10', PGAPPNAME: 'masi-incident-reader',
-    PGOPTIONS: '-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=10000' };
+    PGSSLMODE: 'require', PGCONNECT_TIMEOUT: '10', PGAPPNAME: 'masi-incident-reader' };
 };
+// Every query runs in a READ ONLY transaction. The guard aborts before the read
+// unless the database itself reports read-only, and the reported value is
+// printed first so the caller can check it too. ROLLBACK: nothing is kept.
+const READ_ONLY_PROOF = 'transaction_read_only=on';
+const readOnlyScript = sql => [
+  'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;',
+  "SET LOCAL statement_timeout = '30s';",
+  "SET LOCAL lock_timeout = '10s';",
+  "DO $guard$ BEGIN IF current_setting('transaction_read_only') <> 'on' THEN RAISE EXCEPTION 'incident reader transaction is not read-only'; END IF; END $guard$;",
+  "SELECT 'transaction_read_only=' || current_setting('transaction_read_only');",
+  sql,
+  'ROLLBACK;',
+].join('\n');
 const SNAPSHOT_SQL = `SELECT jsonb_build_object(
   'snapshotAt', statement_timestamp(),
   'receipts', coalesce(jsonb_agg(to_jsonb(i) || jsonb_build_object(
@@ -109,11 +124,14 @@ const queryJson = (runner, psql, connection, childEnv, sql, variables = {}) => {
   for (const [key, value] of Object.entries(variables)) args.push('-v', `${key}=${value}`);
   args.push('-f', '-');
   const result = runner(psql, args, {
-    input: sql, encoding: 'utf8', env: childEnv, timeout: 60_000, maxBuffer: 256 * 1024 * 1024,
+    input: readOnlyScript(sql), encoding: 'utf8', env: childEnv, timeout: 60_000, maxBuffer: 256 * 1024 * 1024,
   });
   // Never forward database output on failures: it can contain credentials or row bodies.
   if (result.error || result.status !== 0 || result.signal) throw new Error('psql failed or exceeded process bounds.');
-  try { return JSON.parse(result.stdout); }
+  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+  const newline = stdout.indexOf('\n');
+  if (newline < 0 || stdout.slice(0, newline) !== READ_ONLY_PROOF) throw new Error('Database did not confirm a read-only transaction.');
+  try { return JSON.parse(stdout.slice(newline + 1)); }
   catch { throw new Error('Invalid or truncated psql JSON.'); }
 };
 const readRegistry = (cwd, ref, env, gitRunner) => {
@@ -373,4 +391,4 @@ const runCli = async (argv, {
   } catch { error('Incident read failed; no coverage claim.'); return 1; }
 };
 if (require.main === module) runCli(process.argv.slice(2)).then(code => { process.exitCode = code; });
-module.exports = { runCli };
+module.exports = { runCli, READ_ONLY_PROOF, SNAPSHOT_SQL, readOnlyScript };

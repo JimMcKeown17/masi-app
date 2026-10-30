@@ -37,6 +37,8 @@ const commitRegistry = (records = {}) => {
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
 };
 const record = (id, fields = '', prose = '') => `---\nid: ${id}\n${fields}\n---\n${prose}\n`;
+// psql prints the database's read-only confirmation before the JSON result.
+const psqlOut = value => `transaction_read_only=on\n${typeof value === 'string' ? value : JSON.stringify(value)}`;
 beforeEach(() => {
   cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-reader-'));
   fs.writeFileSync(path.join(cwd, '.env.local'), [
@@ -53,7 +55,7 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(cwd, { recursive: true, force: true }));
 const run = async (rows = [], argv = [], extra = {}) => {
   const output = []; const diagnostics = [];
-  const runner = jest.fn(() => ({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: rows }) }));
+  const runner = jest.fn(() => ({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }));
   const code = await require(readerPath).runCli(['--json', ...argv], {
     cwd, env: { PATH: process.env.PATH }, psql: '/fixture/psql', spawnSync: runner,
     log: text => output.push(text), error: text => diagnostics.push(text), ...extra,
@@ -69,7 +71,8 @@ test('one complete SQL snapshot joins both identities and enumerates over 1,000 
   expect(result.runner).toHaveBeenCalledTimes(1);
   const [, args, options] = result.runner.mock.calls[0];
   expect(args).toEqual(expect.arrayContaining(['-X', '-w', '-Atq', 'ON_ERROR_STOP=1', '-f', '-']));
-  expect(options.input.match(/;/g)).toHaveLength(1);
+  const data = options.input.slice(options.input.indexOf('SELECT jsonb_build_object('), options.input.lastIndexOf('ROLLBACK;'));
+  expect(data.match(/;/g)).toHaveLength(1);
   expect(options.input).toMatch(/statement_timestamp\(\)/);
   expect(options.input).toMatch(/LEFT JOIN auth.users/);
   expect(options.input).toMatch(/LEFT JOIN public.users/);
@@ -79,7 +82,7 @@ test('one complete SQL snapshot joins both identities and enumerates over 1,000 
 });
 
 test('a failed psql process cannot turn plausible partial JSON into coverage or expose secrets', async () => {
-  const result = await run([], [], { spawnSync: () => ({ status: 1, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] }), stderr: 'fixture-password private-server-detail' }) });
+  const result = await run([], [], { spawnSync: () => ({ status: 1, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: [] }), stderr: 'fixture-password private-server-detail' }) });
   expect(result.code).toBe(1);
   expect(result.output).toEqual([]);
   expect(result.diagnostics.join(' ')).not.toMatch(/fixture-password|private-server-detail/);
@@ -110,7 +113,9 @@ test('validates the checkout session pooler and removes hostile inherited libpq 
   expect(result.code).toBe(0);
   const [, args, options] = result.runner.mock.calls[0];
   expect(args[args.indexOf('--dbname') + 1]).toBe(`postgresql://postgres.${PROJECT}@aws-0-eu-west-2.pooler.supabase.com:5432/postgres?sslmode=require`);
-  expect(options.env).toMatchObject({ PGPASSWORD: 'fixture-password', PGCONNECT_TIMEOUT: '10', PGOPTIONS: '-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=10000' });
+  expect(options.env).toMatchObject({ PGPASSWORD: 'fixture-password', PGCONNECT_TIMEOUT: '10' });
+  // The session pooler ignores startup options, so none are sent; the transaction carries them.
+  expect(options.env).not.toHaveProperty('PGOPTIONS');
   expect(options.env).not.toHaveProperty('PGHOSTADDR');
   expect(options.env).not.toHaveProperty('PGSERVICE');
   expect(options.env).not.toHaveProperty('HOME');
@@ -154,16 +159,48 @@ test('dotenv shell syntax stays literal password data and an empty set is an exa
 });
 
 test.each([
-  { status: 0, stdout: '{"snapshotAt":' },
-  { status: 0, stdout: '{}' },
-  { status: 0, stdout: '{"snapshotAt":"bad","receipts":[]}' },
+  { status: 0, stdout: psqlOut('{"snapshotAt":') },
+  { status: 0, stdout: psqlOut('{}') },
+  { status: 0, stdout: psqlOut('{"snapshotAt":"bad","receipts":[]}') },
   { status: null, error: new Error('ETIMEDOUT fixture-password') },
-  { status: 0, error: new Error('ENOBUFS'), stdout: '{"snapshotAt":"2026-10-29T16:00:00Z","receipts":[]}' },
+  { status: 0, error: new Error('ENOBUFS'), stdout: psqlOut('{"snapshotAt":"2026-10-29T16:00:00Z","receipts":[]}') },
 ])('invalid or bounded-process results cannot claim coverage %#', async processResult => {
   const result = await run([], [], { spawnSync: () => processResult });
   expect(result.code).toBe(1);
   expect(result.output).toEqual([]);
   expect(result.diagnostics.join(' ')).not.toContain('fixture-password');
+});
+
+test('every psql script reads inside a READ ONLY transaction that the database confirms first', async () => {
+  const rows = [receipt()]; const handle = (await run(rows)).data.conditions[0].handle;
+  const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: psqlOut('[]') });
+  const result = await run(rows, ['--resolve', handle], { spawnSync: runner });
+  expect(result.code).toBe(0);
+  expect(runner).toHaveBeenCalledTimes(2);
+  for (const [, , options] of runner.mock.calls) {
+    const lines = options.input.split('\n');
+    expect(lines[0]).toBe('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;');
+    expect(lines).toEqual(expect.arrayContaining(["SET LOCAL statement_timeout = '30s';", "SET LOCAL lock_timeout = '10s';"]));
+    const guard = options.input.indexOf("IF current_setting('transaction_read_only') <> 'on' THEN RAISE EXCEPTION");
+    const proof = options.input.indexOf("SELECT 'transaction_read_only=' || current_setting('transaction_read_only');");
+    const read = options.input.search(/SELECT (?:jsonb_build_object|coalesce)\(/);
+    expect(guard).toBeGreaterThan(0);
+    expect(proof).toBeGreaterThan(guard);
+    expect(read).toBeGreaterThan(proof);
+    expect(options.input.trimEnd().endsWith('ROLLBACK;')).toBe(true);
+    expect(options.input).not.toMatch(/\bCOMMIT\b/i);
+    expect(options.env).not.toHaveProperty('PGOPTIONS');
+  }
+});
+
+test.each([
+  ['the database reports a writable transaction', `transaction_read_only=off\n${JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })}`],
+  ['the confirmation line is missing', JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })],
+  ['only the confirmation arrives', 'transaction_read_only=on'],
+])('a read the database did not confirm as read-only fails closed: %s', async (_, stdout) => {
+  const result = await run([], [], { spawnSync: () => ({ status: 0, stdout }) });
+  expect(result.code).toBe(1);
+  expect(result.output).toEqual([]);
 });
 
 test('malformed receipt rows fail the entire snapshot instead of quietly omitting them', async () => {
@@ -346,7 +383,7 @@ test('fetch downloads the latest bundle-bearing receipt with its own companion s
 test('resolve binds the server id and selects fixed sync columns instead of a local or nested RPC id', async () => {
   const rows = [receipt({ payload: { table: 'assessments', recordId: 'local-record-id', serverRecordId: '43000000-0000-0000-0000-000000000001', wirePayload: { p_assessment: { id: '43000000-0000-0000-0000-000000000001' } } } })];
   const handle = (await run(rows)).data.conditions[0].handle;
-  const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: JSON.stringify([{ id: rows[0].payload.serverRecordId, created_at: '2026-10-29T10:00:00Z' }]) });
+  const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: psqlOut([{ id: rows[0].payload.serverRecordId, created_at: '2026-10-29T10:00:00Z' }]) });
   const result = await run(rows, ['--resolve', handle], { spawnSync: runner });
   expect(result.code).toBe(0);
   expect(runner).toHaveBeenCalledTimes(2);
@@ -356,7 +393,9 @@ test('resolve binds the server id and selects fixed sync columns instead of a lo
   expect(options.input).toContain('WHERE "id" = :\'record_id\'::uuid');
   expect(options.input).not.toContain('local-record-id');
   expect(options.input).not.toContain(rows[0].payload.serverRecordId);
-  expect(options.input).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|CALL|DO)\b/);
+  const lookup = options.input.split('\n').find(line => line.startsWith('SELECT coalesce('));
+  expect(lookup).toContain('FROM public."assessments"');
+  expect(lookup).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|CALL|DO)\b/);
   expect(result.data.resolve).toMatchObject({ status: 'present', serverRecordId: rows[0].payload.serverRecordId, rows: [{ id: rows[0].payload.serverRecordId }], limitation: 'Existence is not UI visibility, correct relationships, recovery, or convergence.' });
 });
 
@@ -444,15 +483,17 @@ test.each([
 });
 
 test.each([
-  [{ status: 0, stdout: '[]' }, 'absent', 0],
+  [{ status: 0, stdout: psqlOut('[]') }, 'absent', 0],
   [{ status: 1, stderr: 'fixture-password' }, 'indeterminate', 1],
   [{ status: null, error: new Error('timeout') }, 'indeterminate', 1],
-  [{ status: 0, stdout: '[truncated' }, 'indeterminate', 1],
-  [{ status: 0, stdout: '{"error":"failed"}' }, 'indeterminate', 1],
-  [{ status: 0, stdout: '[{"id":"wrong"}]' }, 'indeterminate', 1],
+  [{ status: 0, stdout: psqlOut('[truncated') }, 'indeterminate', 1],
+  [{ status: 0, stdout: psqlOut('{"error":"failed"}') }, 'indeterminate', 1],
+  [{ status: 0, stdout: psqlOut('[{"id":"wrong"}]') }, 'indeterminate', 1],
+  [{ status: 0, stdout: 'transaction_read_only=off\n[]' }, 'indeterminate', 1],
+  [{ status: 0, stdout: '[]' }, 'indeterminate', 1],
 ])('resolve zero rows and failed queries retain distinct outcomes %#', async (lookup, status, code) => {
   const rows = [receipt()]; const handle = (await run(rows)).data.conditions[0].handle;
-  const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce(lookup);
+  const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce(lookup);
   const result = await run(rows, ['--resolve', handle], { spawnSync: runner });
   expect(result.code).toBe(code);
   expect(result.data.resolve.status).toBe(status);
@@ -479,7 +520,7 @@ test('both colliding handles resolve and fetch their own condition even when dis
   for (const condition of conditions) {
     const row = rows.find(item => item.repeat_key === condition.key.split('/').at(-1));
     const download = jest.fn(async () => ({ data: { arrayBuffer: async () => Buffer.from('{}') } }));
-    const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: JSON.stringify([{ id: row.payload.serverRecordId }]) });
+    const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: psqlOut([{ id: row.payload.serverRecordId }]) });
     const result = await run(rows, ['--fetch', condition.handle, '--resolve', condition.handle, '--actor', 'nobody'], { spawnSync: runner, createStorageClient: () => ({ storage: { from: () => ({ download }) } }) });
     expect(result.code).toBe(0);
     expect(result.data.conditions).toEqual([]);
@@ -510,7 +551,7 @@ test('resolve mappings select only actual synced-table columns and never fall ba
   for (const { table, columns } of tables.filter(item => item.table !== 'letter_mastery')) {
     const rows = [receipt({ payload: { table, serverRecordId: '43000000-0000-0000-0000-000000000001', recordId: 'local-id', wirePayload: null, wirePayloadError: 'serialization failed' } })];
     const handle = (await run(rows)).data.conditions[0].handle;
-    const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: '[]' });
+    const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: psqlOut('[]') });
     const result = await run(rows, ['--resolve', handle], { spawnSync: runner });
     expect(result.data.resolve.status).toBe('absent');
     const sql = runner.mock.calls[1][2].input;
@@ -521,7 +562,7 @@ test('resolve mappings select only actual synced-table columns and never fall ba
 });
 
 test('human output includes snapshot, EA, provenance and safe target diagnostics; help is import safe', async () => {
-  const stdout = []; const stderr = []; const runner = jest.fn(() => ({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [receipt()] }) }));
+  const stdout = []; const stderr = []; const runner = jest.fn(() => ({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: [receipt()] }) }));
   const code = await require(readerPath).runCli([], { cwd, env: { PATH: process.env.PATH }, psql: '/fixture/psql', spawnSync: runner, log: text => stdout.push(text), error: text => stderr.push(text) });
   expect(code).toBe(0);
   expect(stdout.join(' ')).toContain(`Snapshot: ${SNAPSHOT}`);
@@ -542,7 +583,7 @@ test('a remaining twelve-hex collision refuses coverage rather than guessing a h
     jest.isolateModules(() => { isolated = require(readerPath); });
     const log = jest.fn(); const error = jest.fn();
     const code = await isolated.runCli(['--json'], { cwd, env: { PATH: process.env.PATH }, psql: '/fixture/psql',
-      spawnSync: () => ({ status: 0, stdout: JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [receipt(), receipt({ repeat_key: 'install:second' })] }) }), log, error });
+      spawnSync: () => ({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: [receipt(), receipt({ repeat_key: 'install:second' })] }) }), log, error });
     expect(code).toBe(1);
     expect(log).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith('Incident read failed; no coverage claim.');
