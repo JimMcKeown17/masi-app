@@ -197,6 +197,9 @@ test.each([
   ['the database reports a writable transaction', `transaction_read_only=off\n${JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })}`],
   ['the confirmation line is missing', JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })],
   ['only the confirmation arrives', 'transaction_read_only=on'],
+  ['the proof text arrives on the second line', `NOTICE: something\ntransaction_read_only=on\n${JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })}`],
+  ['the proof line carries extra text', `transaction_read_only=on trailing\n${JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })}`],
+  ['two result documents follow the proof', `transaction_read_only=on\n${JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })}\n${JSON.stringify({ snapshotAt: SNAPSHOT, receipts: [] })}`],
 ])('a read the database did not confirm as read-only fails closed: %s', async (_, stdout) => {
   const result = await run([], [], { spawnSync: () => ({ status: 0, stdout }) });
   expect(result.code).toBe(1);
