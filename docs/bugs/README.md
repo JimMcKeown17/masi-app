@@ -22,6 +22,14 @@ Sweep phone incident receipts and report what is unrecorded.
 | ID | Title | Severity | Priority | Diagnosis | Delivery | Verification | Known users | Cause confidence | Updated | Record |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 <!-- Rows are added newest first. -->
+| MA-BUG-20261030-008 | Device-gate and smoke-test receipts (deliberate, not a bug) | S4 (0) | P3 | CONFIRMED | NO_PRODUCT_CHANGE | NOT_TESTED | 0 | 95% | 2026-10-30 | [record](records/MA-BUG-20261030-008-device-gate-and-smoke-test-receipts.md) |
+| MA-BUG-20261030-007 | The Android photo picker asks for Done when attaching one screenshot | S3 (1) | P3 | HYPOTHESIS | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 40% | 2026-10-30 | [record](records/MA-BUG-20261030-007-android-photo-picker-shows-done-step.md) |
+| MA-BUG-20261030-006 | Send diagnostics text sits almost on the footer divider | S3 (1) | P3 | HYPOTHESIS | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 50% | 2026-10-30 | [record](records/MA-BUG-20261030-006-send-diagnostics-text-crowds-footer.md) |
+| MA-BUG-20261030-005 | Diagnostics report a stale release label, no commit and no Android version code | S3 (2) | P2 | CONFIRMED | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 85% | 2026-10-30 | [record](records/MA-BUG-20261030-005-diagnostic-release-identity-stale.md) |
+| MA-BUG-20261030-004 | Upload failures keep the server's message but drop its detail | S3 (2) | P2 | PROBABLE | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 80% | 2026-10-30 | [record](records/MA-BUG-20261030-004-upload-errors-drop-server-detail.md) |
+| MA-BUG-20261030-003 | "Remove screenshot" is styled unlike "Replace screenshot" | S3 (1) | P3 | CONFIRMED | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 90% | 2026-10-30 | [record](records/MA-BUG-20261030-003-screenshot-actions-styled-differently.md) |
+| MA-BUG-20261030-002 | Report a problem hides "Remove screenshot" while the keyboard is open | S3 (1) | P3 | HYPOTHESIS | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 30% | 2026-10-30 | [record](records/MA-BUG-20261030-002-remove-screenshot-hidden-with-keyboard-open.md) |
+| MA-BUG-20261030-001 | On Android, layouts stay shrunk after the keyboard closes | S2 (4) | P2 | PROBABLE | FIX_APPROVED | NOT_TESTED | 1 (test) | 70% | 2026-10-30 | [record](records/MA-BUG-20261030-001-android-keyboard-leaves-layout-shrunk.md) |
 
 ## Intake channels
 
@@ -83,9 +91,9 @@ current blockage, release uptake, or recovery.
 
 | Channel | Last full sweep | Seen | Unrecorded | Notes |
 | --- | --- | --- | --- | --- |
-| Field reports | never | unknown | unknown | unknown |
-| Phone incident receipts | never | unknown | unknown | unknown |
-| Sentry | never | unknown | unknown | unknown |
+| Field reports | never | 3 Profile reports | 0 | Profile `ea_report` receipts were read in the phone sweep below (3, all gate tests, claimed by 008). Reports outside the app (messages, calls) have no sweep yet. Records 001–007 come from Claude's A03s device-gate observations on 2026-10-30. |
+| Phone incident receipts | 2026-10-30T23:08:55.076884+00:00 | 10 receipts, 10 conditions | 0 | First full sweep: one unfiltered snapshot, `coverage.complete: true`, exit 0. Reader from `fix/incident-reader-and-first-sweep` (read-only transaction fix, ahead of main `f002e08`); registry read at `origin/main` `f002e08` (empty), then rechecked at this branch's HEAD. All ten were deliberate tests, claimed by exact key in 008. Next sweep passes `--review-since 2026-10-30T22:58:55Z`. |
+| Sentry | never | unknown | unknown | Not searched: no read-only Sentry connector in this session. |
 
 Update after intake or a sweep. State scope, time window, counts, and limits.
 Store the exact reader `snapshotAt` as Last full sweep only after a successful
