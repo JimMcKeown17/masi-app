@@ -17,7 +17,7 @@ not status.
 
 Jim confirmed on 2026-08-27 that no staff are currently using the Masi app, while staff want to go
 live soon. On 2026-10-28 Jim confirmed there is still no field cohort, and set the next step:
-Masi's EAs retest the SQLite app from November 2026, starting from the 1.4.0 pilot builds. Use
+Masi's EAs retest the SQLite app from November 2026, starting from the 1.5.0 pilot builds. Use
 this window for root-cause schema, identity, authorization, sync, and operational
 changes that would become much more expensive after trusted work accumulates on phones. "No active
 users" does not prove that no old binaries, test records, credentials, or legacy-backend automation
@@ -328,16 +328,15 @@ not establish hosted apply, native/device or field proof.
   screenshot preflight. Preserve original returned type/extension; no forced resize/conversion dependency.
   Feedback reads the captured incident reference after a sync attempt; a missing
   row returns `unknown` and cannot claim saved/sent.
-- [ ] Orchestrator reviews the installed skill artifacts and final integrated
-  diff. Unit/integration suites and the controller's disposable PostgreSQL
-  harness run are complete; final type/release checks
-  remain separate.
-- [ ] Hosted apply through guarded SQLite staging helper after harness success,
-  then independent read-only schema/function/grant/policy read-back and the
-  separately identified pilot-shaped authenticated v1 smoke. Record final v1
-  definition md5; migration files do not prove hosted state.
-- [ ] Native build with the declared `expo-image-picker` dependency and old-binary
-  OTA compatibility; Galaxy A03s at default text size: online/offline reports/
+- [x] Orchestrator reviewed the installed skill artifacts and the final integrated
+  diff; final whole-branch Codex review approved (2026-10-29). Types and content pass.
+- [x] Hosted apply through the guarded SQLite staging helper, read-only
+  schema/function/grant/policy read-back and the pilot-shaped authenticated v1
+  smoke (2026-10-29; v1 md5 `fc9fa2bc52e4f58060057884769435eb`, build log).
+- [ ] Native 1.5.0 pilot build with `expo-image-picker` (a native change, so the
+  version moved from 1.4.0; DEPLOYMENT.md rule). Because the runtime is now 1.5.0,
+  OTAs from `main` no longer reach 1.4.0 binaries; the picker preflight stays as
+  defence. Galaxy A03s at default text size: Galaxy A03s at default text size: online/offline reports/
   diagnostics, screenshots and formats,
   force-quit/retry, exact receipt fetch/resolve, capture/sign-out/account-switch
   fencing, keyboard/footer/toasts and pixel-level UI acceptance. iPhone smoke

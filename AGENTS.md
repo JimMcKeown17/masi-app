@@ -107,7 +107,7 @@ Prefer behavior/integration-style tests through public repository, context, serv
 
 ## Deployment Status — Multiple App Versions in the Wild
 
-The app launched in early March 2026 and was field tested on the legacy backend. **As of 2026-10-28 no field cohort runs the app (Jim).** Masi's EAs retest the SQLite app from November 2026, starting from the 1.4.0 pilot builds (iOS 25, Android 54). From then on, several versions will again be in use across iOS and Android devices, and users do not update immediately. Release steps: `DEPLOYMENT.md`.
+The app launched in early March 2026 and was field tested on the legacy backend. **As of 2026-10-28 no field cohort runs the app (Jim).** Masi's EAs retest the SQLite app from November 2026, starting from the 1.5.0 pilot builds (the first with field diagnostics). From then on, several versions will again be in use across iOS and Android devices, and users do not update immediately. Release steps: `DEPLOYMENT.md`.
 
 **Rule: prefer backwards-compatible changes wherever possible.**
 
