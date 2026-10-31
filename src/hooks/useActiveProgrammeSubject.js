@@ -5,25 +5,39 @@ import { useSignedInEA } from '../context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../services/activeProgrammeGate';
 import { programmeSubject } from '../utils/programmeSubject';
 
+// The last known subject per signed-in EA, so a newly mounted screen starts resolved
+// instead of rendering literacy pieces for a moment and then removing them.
+const lastKnown = new WeakMap();
+
+function initialState(handle) {
+  return lastKnown.has(handle)
+    ? { handle, subject: lastKnown.get(handle), loading: false }
+    : { handle, subject: null, loading: true };
+}
+
 export function useActiveProgrammeSubject() {
   const { handle } = useSignedInEA();
   const { user } = useAuth();
-  const [state, setState] = useState({ handle: null, subject: null, loading: true });
+  const [state, setState] = useState(() => initialState(handle));
   useFocusEffect(useCallback(() => {
     let active = true;
     const canPublish = () => active && handle.isCurrent();
     // Keep the last known subject while refreshing, so screens never blink on refocus.
-    if (canPublish()) setState(prev => (prev.handle === handle ? prev : { handle, subject: null, loading: true }));
+    if (canPublish()) setState(prev => (prev.handle === handle ? prev : initialState(handle)));
     (async () => {
       try {
         const gate = await getActiveProgrammeGate({ handle, userId: user.id });
-        if (canPublish()) setState({ handle, subject: programmeSubject(gate.programme), loading: false });
+        if (!canPublish()) return;
+        const subject = programmeSubject(gate.programme);
+        lastKnown.set(handle, subject);
+        setState({ handle, subject, loading: false });
       } catch {
-        if (canPublish()) setState({ handle, subject: null, loading: false });
+        if (canPublish()) setState(prev => (prev.handle === handle && !prev.loading
+          ? prev : { handle, subject: null, loading: false }));
       }
     })();
     return () => { active = false; };
   }, [handle, user.id]));
-  const subject = state.handle === handle ? state.subject : null;
-  return { subject, isMaths: subject === 'maths', loading: state.handle !== handle || state.loading };
+  const current = state.handle === handle ? state : initialState(handle);
+  return { subject: current.subject, isMaths: current.subject === 'maths', loading: current.loading };
 }

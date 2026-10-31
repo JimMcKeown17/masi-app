@@ -1,3 +1,4 @@
+import { useActiveProgrammeSubject } from '../../hooks/useActiveProgrammeSubject';
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { colors } from '../../constants/colors';
@@ -16,6 +17,9 @@ import { FAB_OVERHANG } from '../../components/navigation/LockedBottomTabBar';
 import { compareGroups, getGroupDotColor } from '../../utils/groupHelpers';
 
 export default function ClassDetailScreen({ route, navigation }) {
+  const { isMaths: maths, loading: subjectLoading } = useActiveProgrammeSubject();
+  // Literacy-only actions stay hidden until the first programme read settles.
+  const isMaths = maths || subjectLoading;
   const { classId } = route.params;
   const { classes, schools, loading, getChildrenInClass } = useClasses();
   const { groups, childrenGroups } = useChildren();
@@ -89,9 +93,9 @@ export default function ClassDetailScreen({ route, navigation }) {
     return <View style={[listGroupItemFrame(index, childrenInClass.length), styles.rowFrame]}>
       {index > 0 ? <ListGroupDivider inset={68} /> : null}
       <ClassChildRow child={child} groupName={group?.name} groupColor={group ? getGroupDotColor(groupIndex) : undefined}
-        onPressResults={() => navigation.navigate('ChildResults', { child, classItem })}
+        onPressResults={isMaths ? undefined : () => navigation.navigate('ChildResults', { child, classItem })}
         onPressGroup={() => openGroupPicker(child)}
-        onPressLetterTracker={() => navigation.navigate('LetterTracker', { child, classItem })}
+        onPressLetterTracker={isMaths ? undefined : () => navigation.navigate('LetterTracker', { child, classItem })}
         onPressEdit={() => navigation.navigate('EditChild', { childId: child.id })} />
     </View>;
   };

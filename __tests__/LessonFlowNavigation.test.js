@@ -16,6 +16,7 @@ import LessonScreen from '../src/screens/lessons/LessonScreen';
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('expo-updates', () => ({ channel: null }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({
+  user: { id: require('../test-support/defaultTestHandle').getDefaultTestHandle().userId },
   profile: { jobTitleCode: require('../src/constants/jobTitles').JOB_TITLE_CODES.LITERACY_COACH },
 }) }));
 let mockRoster;

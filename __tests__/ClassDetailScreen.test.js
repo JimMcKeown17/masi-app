@@ -1,3 +1,6 @@
+jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({ useActiveProgrammeSubject: jest.fn() }));
+import { useActiveProgrammeSubject } from '../src/hooks/useActiveProgrammeSubject';
+beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false }));
 const mockUseClasses = jest.fn();
 const mockUseChildren = jest.fn();
 
@@ -266,4 +269,26 @@ test('loading to loaded to loading on the same screen preserves hook order and c
 test.each([null, undefined, '', '  \t '])('missing home language %p is shown as Not set', (home_language) => {
   mockUseClasses.mockReturnValue({ ...loadedState([]), classes: [{ ...classItem, home_language }] });
   expect(renderClassDetail().getByText('Language: Not set')).toBeTruthy();
+});
+
+test('numeracy rows have no letter tracker and no results tap', () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
+  const screen = renderClassDetail();
+  expect(screen.getByText('Amahle Dlamini')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'View results for Amahle Dlamini' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Letter tracker for Amahle Dlamini' })).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Assign group to Amahle Dlamini' }));
+  expect(screen.getByTestId('group-picker')).toHaveTextContent(child.id);
+  fireEvent.press(screen.getByRole('button', { name: 'Edit Amahle Dlamini' }));
+  expect(navigation.navigate).toHaveBeenCalledWith('EditChild', { childId: child.id });
+  expect(navigation.navigate).not.toHaveBeenCalledWith('ChildResults', expect.anything());
+  expect(navigation.navigate).not.toHaveBeenCalledWith('LetterTracker', expect.anything());
+});
+
+test('literacy actions stay hidden until the first programme read settles', () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: true });
+  const screen = renderClassDetail();
+  expect(screen.getByText('Amahle Dlamini')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Letter tracker for Amahle Dlamini' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'View results for Amahle Dlamini' })).toBeNull();
 });
