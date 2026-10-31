@@ -5817,6 +5817,13 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-10-28 | **No field cohort runs the app (Jim).** The 1.4.0 pilot builds (iOS 25, Android 54) are the baseline for every later TestFlight build and Play download; Masi's EAs retest from November 2026. | DEPLOYMENT.md's isolation rules protected a legacy cohort that no longer uses the app. | Any legacy-app user turns up, or the November retest group changes. |
 | 2026-10-28 | **Every `pilot` build submits itself: iOS to App Store Connect, Android to Play internal testing with `releaseStatus: completed` (Jim's choice).** The Play key lives on EAS, never in the repository. | Internal testing reaches testers in minutes with no Google review; manual AAB uploads were slow and error-prone. Limit: 100 testers. | The EA retest group exceeds 100 testers (move to closed testing, `alpha`), or production release begins. |
 | 2026-10-28 | **One Google Play service account per app, all in Cloud project `masinyusane-play-publishing` (Jim's call).** Masi uses `eas-submit-masi`, never Zazi iZandi's `eas-submit-zazi`. | Service account emails cannot be renamed, so a shared one names the wrong app in Play's records. Separate accounts can be revoked and rotated one app at a time. EAS would have allowed reuse. | Masinyusane publishes enough apps that per-app accounts become a burden. |
+| 2026-10-31 | **Maths assessment: subject comes from the programme code** (`src/utils/programmeSubject.js`: `numeracy` → maths), not from the Battery. | A numeracy EA whose phone cannot resolve the maths Battery must still see no literacy screens. One helper; no other file compares programme codes. | A second numeracy-like programme, or Head Office wanting per-programme subject config. |
+| 2026-10-31 | **Prerequisites chain in one evaluation pass** (`evaluateBatteryState`): a Question auto-skipped in this pass gates its dependants. | Without it a child gated out of Addition 1 was offered Addition 2 for one screen. No WelaPLUS or EGRA expectation changed. | A Battery that needs a dependant to run although its prerequisite was skipped. |
+| 2026-10-31 | **One EGMA form per language; draft id, then a deliberate freeze** (`masi-egma-en-2026-1-draft`, `masi_maths@2026.1-draft`). | Pilot builds submit themselves, so shipping cannot be the freeze. The freeze adds `@2026.1`, supersedes the draft and moves the default by migration. | Partner approval and the spec §10 gates 1–3. |
+| 2026-10-31 | **Maths materials simplified to `number_card` (with page) and `counters`;** counters have no footer line. | The Number Card is generated from the pack, so a page number is enough; counters are loose objects. | A second printed maths card. |
+| 2026-10-31 | **Only a known maths subject is shared across screens** (one handle-scoped record in `programmeSubject.js`); every screen confirms reading itself; a failed read prefers known maths and, with nothing known, falls back to literacy. | Three review rounds showed cached or failed reads acting as permission to enter literacy routes. Hiding literacy is the safe direction, so only it may be cached; literacy EAs are never locked out by a read error. | Field reports of a numeracy EA reaching a literacy screen, or of literacy controls appearing late. |
+| 2026-10-31 | **Number Card pages follow the order the app asks for them:** Read numbers 1, Read big numbers 2, Which is more? 3, Bigger number 4, Missing number 5, Addition 1 6, Addition 2 7, Subtraction 1 8, Subtraction 2 9. `content/egma/verify.cjs` pins pack order = page order. | The A03 run showed spec §9 numbered the pages against §4.2's Question order, so an EA flipped 1 → 3 → 2 and 6 → 8 → 7. The form is still a draft and nothing is printed, so it changed in place (hash re-pinned). | Any reordering of Questions, or a second printed card. |
+| 2026-10-31 | **Partner approval is not a release gate for the maths assessment** (Jim). Spec §10 gate 1, the ROADMAP item, CONTEXT, ADR 0012, the pack README and two pack notes now say so; the pack hash moved to `6f69090d…` (notes only, no item or copy change; the Number Card is unchanged). | Jim, merging PR #133: "We do not need that now." The English copy check, curriculum mapping, the timed pass with the printed Number Card and the freeze remain. | The partner offers an SA-adapted EGMA or asks to review items (a new form id if items change). |
 
 ---
 
@@ -5980,6 +5987,8 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-10-21 | Lesson plan A3: teaching-quality Check 2 must skip null `session_reading_level` once C11's derived value is written. | C3 updates `documentation/teaching-quality-analytics.md` with its save path. A3 supplies `deriveSessionReadingLevel` only and changes no session writer or analytics consumer. | No ticked blends means no measured blending level, not the displayed tier. |
 | 2026-10-21 | Lesson plan A3: on-device cost and UI proof remain C3 gates; the Step 8 release-build/test-pack wording also needs controller artifact clarification under C12. | Carry the 500 ms picker / 300 ms attendance thresholds, smooth scrolling, 6 pairs, Galaxy A03s (360dp)/iPhone and 1.0x/1.3x text into C3. The candidate pack remains developer-preview-only; do not enable it in pilot/production. Adversarial-review result has an explicit controller placeholder in Verification. | Node/Jest timings are not device performance, release approval or field evidence. |
 | 2026-10-27 | **An app that receives a default battery edition it does not contain shows a dead tap.** After staging moved literacy to `wela_plus_full@2026.1`, apps built before PR #108 got `batteryFor(...) === null`, and `AssessmentChildSelectScreen` returns early with no message. Every future edition move (e.g. 2027.1) will hit installed older apps the same way. | Open. The coupling was avoided this time by holding the TestFlight build until #108 merged. | An unknown edition should say "Update the app to run this assessment", not silently do nothing; consider `minimum app version` on the programme default. |
+| 2026-10-31 | **Branch review (not shipped): a cached or failed programme read could open literacy routes for a numeracy EA** after a literacy-to-numeracy move under the same sign-in: Record's lesson picker resuming a retained literacy draft, Class Detail's letter tracker, Assessments' Full EGRA and quick tests after a failed read. Found by Codex adversarial review rounds 1–3 on `feat/egma-maths-assessment`; never in a build, so no MA-BUG record. | Commits `a80674dd`, `d200acda`, `5e2b87e8`: only known maths is cached, per signed-in EA; each screen confirms reading itself; failed reads never downgrade maths. Regression tests drive the real hook with Record, Assessments and Home. Accepted: (1) a screen that already confirmed reading can show a literacy control for one local read after a refocus that follows a move; (2) a numeracy EA's very first programme read failing falls back to literacy (plan decision), and a retained literacy draft could then open, though its save is refused by the programme-assignment guard. | A cache that makes screens look right can quietly become permission. Cache only the safe direction, and let flow entry wait for a confirmed read. |
+| 2026-10-31 | **A03 device gate (branch only, not shipped): seven copy and layout faults in the maths assessment.** Number Card pages out of Question order; oral Questions told the EA to "point to the next one" with nothing to point at; Count aloud's no-answer rule contradicted "Stop at the first mistake"; "Use the relation and number" jargon; worked examples ("2 + / 1") and the practice line ("1 2 _ 4") broke across lines, with a tiny blank; Finger flash repeated its answer under the prompt; the correction panel said "Change Item 5" with the tile half hidden and no current mark. Never in a build anyone used, so no MA-BUG record (policy question open with Jim). | Fixed in the commit after `c27df51e`: draft-pack copy and page edits with no-break spaces, numeric practice items kept together with a "___" blank, Finger flash gloss dropped, panel title "Change item 5" with "6 + 2 · Marked: Just knew". Tests: pack page order, page text, materials wording, no-break spaces, practice formatting, panel detail. Each fix re-checked on the emulator at 360 dp. | Read a spec end to end in the order the EA meets it; two sections can each be right and still disagree. |
 
 ---
 
@@ -7808,3 +7817,128 @@ matches migrations by version only, so it treated ours as applied.
 - **Lesson:** a branch's migration applied to shared staging before merge reserves that version
   for everyone. Hand-picked `YYYYMMDD120000` versions collide between parallel branches;
   `supabase migration new` timestamps would not.
+
+### 2026-10-31 — Maths assessment (EGMA): build of plan Tasks 0–14 (`feat/egma-maths-assessment`)
+
+Spec `docs/superpowers/specs/2026-10-31-egma-maths-assessment-design.md` (approved by Jim
+2026-10-31: English only for now, stop at 4 accepted for now, numeracy EAs see only numeracy
+screens); plan `docs/superpowers/plans/2026-10-31-egma-maths-assessment.md`; ADR 0012. Codex
+(`gpt-6.1-sol`, high) built each task; Claude reviewed each diff and committed. Two worktrees ran
+in parallel: the engine track (Tasks 1–9, 12) and the host track (Tasks 10, 11, 13), cherry-picked
+together.
+
+- **Baseline (Task 0):** `npm ci`; `npx jest --silent` 464 suites / 7,377 tests; types clean;
+  content 5/5.
+- **Content pack (Task 1):** 17 Questions, 161 items, each with `skill`, `band` and `source`;
+  `verify.cjs` adds 13 checks (pinned hash, counts, bands including written-out numbers in word
+  problems, answers, the Subtraction 1 inverse, printed toolkit items). Review fixed draft
+  instruction copy that broke the plain-words rule ("Put out a counters" used a letter as a
+  variable; take-away said to cover the first group before taking away; Read numbers to 20 and
+  Which is more? carried three-digit rules) and re-pinned the hash.
+- **Engine (Tasks 2–8):** chained prerequisites in one pass; step reducer choices and `set`;
+  DecisionBar choices and correcting mode (default render pinned by snapshot); sum tiles at word
+  geometry; SequentialCapture choices, re-open and the observation step; strategies, `withRate`
+  and `validateMathsResult`; MathsGridQuestion and MathsCardsQuestion; the adapter, which
+  re-validates the form at load, and `masi_maths@2026.1-draft` registered. The gate-chain test
+  runs through the real Battery (Add with counters 3 → Addition 1, Addition 2 and Word problems
+  skipped in one pass).
+- **Host (Tasks 9–11, 13):** "Not ready yet" skip label; Number Card and counters materials; rate in
+  score text ("14 / 20 · 18 per minute"); `INVALID_QUESTION_RESULT` refused before any write and
+  fatal on the Battery screen. `mathsRun.integration.test.js` re-stores the outbox payloads into a
+  second migrated database: `inserted: 17`, `present: 0`, metadata and derived deep-equal
+  (including rate 17.9). Literacy surfaces hidden for numeracy on 11 screens. Migration
+  `20261031120000_numeracy_maths_draft_default.sql` written, **not applied**.
+- **Review fixes beyond the plan:** the subject hook first reset to "loading" on every focus, and
+  each screen mounted it fresh, so literacy pieces blinked for literacy EAs and appeared then
+  vanished for numeracy EAs. The cache added to fix that became the three review-round defect
+  (Bug and Gap Register, same date).
+- **Number Card (Task 12):** checked in headless Chrome: 9 A4 pages, one per sheet. Review
+  embedded Andika (it had fallen back to Comic Sans), boxed each pair (the two numbers sat half a
+  page apart) and drew the blanks as digit-sized boxes.
+- **Codex adversarial reviews (`gpt-6-astra`, base `origin/main`):** round 1, 1 finding (Record
+  opened the lesson flow from a cached subject); round 2, 3 findings (failed reads, Home, Class
+  Detail's tracker); round 3, 3 findings (Assessments after a failed read, screens not sharing
+  known maths, retained screens). All of them were one root cause, cached or failed state used as
+  permission, fixed in `a80674dd`, `d200acda` and `5e2b87e8` with RED-checked regressions. Round
+  3 found no defect in maths capture, chained prerequisites, validation or the round trip. The
+  loop stopped after round 3; residual windows are recorded as accepted in the Bug and Gap
+  Register.
+- **Final gates (Node 20.19.4):** `npx jest --silent` **483 suites / 7,757 tests**;
+  `npm run test:types` exit 0; `npm run test:content` **18 / 18**; `npm run test:integration`
+  **95 suites / 1,350 tests**.
+- **Parallel-run flake:** two suites (`LessonWrapUp.save`, `signedInTree`) failed once while two
+  Codex jobs ran Jest at the same time, then passed serially and in every later full run. Treated
+  as CPU contention, not a defect.
+- **Not done (needs Jim's go):** the staging precondition query and migration push, the EAS
+  preview build and A03 device gate, the partner approval of draft content, and the freeze (plan
+  appendix). Merge waits for Jim.
+
+#### 2026-10-31 follow-up: migration, preview build, A03 device gate and fixes
+
+Jim's go (2026-10-31): migrate, EAS preview build, check on the A03, push and open the PR if all
+checks out; partner approval skipped for now.
+
+- **Migration:** `npm run sqlite:staging:dry-run` listed only
+  `20261031120000_numeracy_maths_draft_default.sql`; `npm run sqlite:staging:push` applied it to
+  `segygjzpujphwvrubusm`. Read back: the numeracy programme defaults to `masi_maths` /
+  `2026.1-draft`; literacy is unchanged (`wela_plus_full` / `2026.1`).
+- **Staging tester:** `npm run testers:provision` created `test+numeracy@masinyusane.org` (Thandi
+  Numeracy, numeracy coach, school SCH-00276 Aaron Gqadu, programme numeracy, no classes). The
+  password lives only in the session scratchpad. Part of it was printed once in a screen dump
+  while signing in on the A03 (the tap missed the password field, so the text went into the email
+  box); rotate it before the tester is shared.
+- **EAS preview build:** Android `da780968-80d6-4020-b0c6-1e5e3ccec651`, versionCode 56, from
+  commit `c27df51e`. It cannot replace the Play-installed app on the A03 without wiping test
+  accounts' data, so the A03 ran this branch's JavaScript through the installed `.kbtest` debug app
+  and Metro on port 8082 (`adb reverse`), 360 dp (`wm density 320`). The APK itself was installed
+  on the emulator (720×1600 at 320 dpi; a one-day-old debug build of another session was removed
+  to make room): it signed in, loaded the class from the server, and showed both children's runs
+  in Assessment history with "2 / 20 · 2 per minute".
+- **A03 device gate (Samsung SM-A037U, 360 dp, default text):**
+  - Literacy EA ("Test", Aaron Gqadu) on this branch: Home and Assess unchanged (WelaPLUS, Full
+    EGRA, Letter Sounds, stats bar).
+  - Numeracy tester: first-class setup, class EGMA2A with 3 children; Home "Numeracy · Aaron
+    Gqadu"; Assess shows only "Maths assessment · All 17 Questions · English"; the class rows,
+    Edit Child and Insights show no literacy pieces; Record says "Session forms for Numeracy are
+    coming soon."
+  - Child 1, all 17 Questions: count-aloud stop after one mistake ("Lwazi Mbeki made a mistake.
+    The test has stopped."); 4-in-a-row stop on Bigger number and Addition 2; tap-to-change with
+    its notice; 3 × 3 Read numbers grid; 5 × 4 Read big numbers timed out to "2 / 20 · 2 per
+    minute"; sum tiles with muted "= 4" answers, 2 × 10 pages; the choice bar ("Counted from 1",
+    "Started from the first number", "Just knew", Incorrect) and its re-open; the strategy step
+    after End (Addition 1, Subtraction 1), after a stop (Addition 2) and after Finish
+    (Subtraction 2, Word problems); "Couldn't tell" clears the other chips and they clear it;
+    rate "5 / 20 · 5 per minute" after End, which spec §6 intends.
+  - Child 2, gates: Read numbers 2 / 9 → Read big numbers "Not ready yet"; Add with counters
+    0 / 6 → Addition 1, Addition 2 and Word problems "Not ready yet" in one pass; Take away 0 / 6 →
+    Subtraction 1 and 2 skipped; Skip question with "Child is tired".
+  - A wrong turn worth knowing: one run of Read big numbers looked like the clock had started
+    before Start. It hadn't. A stale `uiautomator` dump showed the intro after the tap had already
+    started the clock (the screenshot read 58 s), and a minute of investigation used it up. Trust
+    screenshots, not dumps, on the A03.
+- **Staging read-back** (read-only `psql` via the IPv4 session pooler inside `BEGIN READ ONLY …
+  ROLLBACK`; the CLI `db query` hung without interactive auth): 34 assessments for the tester (17
+  per child) with the right scores, stop reasons, `correct_per_minute` / `seconds_remaining` on
+  the timed Questions and `strategies` on Core arithmetic; `assessment_items.metadata` carries
+  `skill`, `band`, `reached` and `strategy`, including the re-chosen `count_on` on "6 + 2".
+- **Found on the A03 and fixed** (Bug and Gap Register, same date): see the row. Codex
+  (`gpt-6.1-sol`, high) built the fixes; Claude reviewed the diff and re-checked each on the
+  emulator at 360 dp with the debug app on Metro: Number Card pages 2 and 3, Count aloud's new
+  wording, Finger flash tiles with no repeated answer, "like 3 − 1" on one line, "1 2 ___ 4",
+  and the correction panel "Change item 2" / "3 + 2 · Marked: Incorrect", "2 + 1 · Marked: Just
+  knew". The draft pack hash is now `4bcd2abce95d1ac193ab840c9d8c3e845af6d1a77b340b55d80fd45642a32b35`.
+- **Seen, not this branch:** on a brand-new EA's first sign-in, Home shows "No active programme ·
+  Contact your supervisor to be assigned." for about 20 seconds until the first download lands.
+  The programme gate and Home's empty state are unchanged on this branch, so this is main's
+  behaviour; it needs an MA-BUG record on main.
+- **Phone hand-back:** density reset to 280, the 8082 tunnel removed (Zazi's 8081 left), the
+  `.kbtest` Metro setting cleared, Zazi app in front; the `.kbtest` app is now signed in as the
+  numeracy tester, and the literacy "Test" account's one unsent item waits for its next sign-in.
+- **Gates after the fixes (Node 20.19.4):** `npx jest --silent` **483 suites / 7,759 tests**;
+  `npm run test:types` exit 0; `npm run test:content` **21 / 21**; `npm run test:integration`
+  **95 suites / 1,350 tests**. Codex's own default-worker run hit the known `LessonWrapUp.save`
+  timing flake once (17/17 alone; whole suite green serially); this run was clean.
+- **Partner approval dropped as a gate (Jim, at merge):** docs and pack notes updated, hash
+  re-pinned to `6f69090dbc90acf86c21fc7b794e353adc26fcf37ed6afdae24737f94c6f8731`;
+  `npm run test:content` 21 / 21; EGMA, Number Card and Battery Jest suites 6 / 256 passed;
+  `node scripts/number-card.cjs masi-egma-en-2026-1-draft` left the card unchanged.

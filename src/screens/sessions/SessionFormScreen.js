@@ -1,5 +1,6 @@
+import { useActiveProgrammeSubject } from '../../hooks/useActiveProgrammeSubject';
 import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
@@ -8,7 +9,12 @@ import { JOB_TITLE_CODES } from '../../constants/jobTitles';
 import LessonPickerScreen from '../lessons/LessonPickerScreen';
 
 export default function SessionFormScreen({ navigation }) {
+  const { isMaths, loading } = useActiveProgrammeSubject();
   const { profile, refreshProfile } = useAuth();
+
+  if (loading) {
+    return <View style={styles.container}><ActivityIndicator color={colors.primary} /></View>;
+  }
 
   if (!profile) {
     return (
@@ -19,14 +25,14 @@ export default function SessionFormScreen({ navigation }) {
     );
   }
 
-  if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH) {
+  if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH && !isMaths) {
     return <LessonPickerScreen navigation={navigation} />;
   }
 
   return (
     <View style={styles.container}>
       <Text style={styles.message}>
-        Session forms for {profile?.jobTitleName || 'your role'} are coming soon.
+        Session forms for {isMaths ? 'Numeracy' : profile?.jobTitleName || 'your role'} are coming soon.
       </Text>
     </View>
   );

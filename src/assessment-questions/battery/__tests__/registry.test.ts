@@ -185,3 +185,25 @@ test('new runs resolve superseded WelaPLUS to 2026.1 while saved runs retain 202
     [undefined, undefined], ['wela_plus_full', null], [null, '2026.1'], ['', ''],
   ]) expect(batteryForNewRun(code, version)).toBeNull();
 });
+
+// Draft maths resolves by exact identity, with no language or frozen-version fallback.
+import { MASI_MATHS_2026_1_DRAFT, egmaItemSetFor } from '../../egma';
+import { validateMathsResult } from '../../egma/validateMathsResult';
+
+test('the draft maths battery resolves for saved and new assessments', () => {
+  expect(batteryFor('masi_maths','2026.1-draft')).toBe(MASI_MATHS_2026_1_DRAFT);
+  expect(batteryForNewRun('masi_maths','2026.1-draft')).toBe(MASI_MATHS_2026_1_DRAFT);
+  expect(batteryFor('masi_maths','2026.1')).toBeNull();
+  expect(egmaItemSetFor('toString','masi-egma-en-2026-1-draft','en')).toBeNull();
+  expect(egmaItemSetFor('egma_addition_l1','unknown','en')).toBeNull();
+});
+test('every maths Question has exact bundled provenance and valid skip results', () => {
+  for (const q of MASI_MATHS_2026_1_DRAFT.questions) {
+    expect(bundledItemSetFor(q.question_code,q.question_version,'en')).toBe(egmaItemSetFor(q.question_code,q.question_version,'en'));
+    expect(bundledItemSetFor(q.question_code,q.question_version,'en')).not.toBeNull();
+    expect(bundledItemSetFor(q.question_code,q.question_version,'xh')).toBeNull();
+    const result=skippedResult(q,'en','skipped_prerequisite_unmet');
+    expect(validateResult(result)).toEqual({valid:true,errors:[]});
+    expect(validateMathsResult(result)).toEqual({valid:true,errors:[]});
+  }
+});

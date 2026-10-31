@@ -1,5 +1,8 @@
+jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({ useActiveProgrammeSubject: jest.fn() }));
+import { useActiveProgrammeSubject } from '../src/hooks/useActiveProgrammeSubject';
+beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false }));
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { colors } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
@@ -45,3 +48,29 @@ test('the literacy coach code renders the picker with navigation', () => {
   const screen = render(<SessionFormScreen navigation={navigation} />);
   expect(screen.getByTestId('lesson-picker-stub').props.navigation).toBe(navigation);
 });
+
+test.each([JOB_TITLE_CODES.LITERACY_COACH, 'tutor'])('a %s in numeracy gets coming soon', jobTitleCode => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
+  mockUseAuth.mockReturnValue({ profile: { jobTitleCode, jobTitleName: 'Tutor' } });
+  const screen = render(<SessionFormScreen />);
+  expectMessageFrame(screen, 'Session forms for Numeracy are coming soon.');
+  expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
+});
+test('SessionForm shows the lesson flow fallback when the subject is unknown', () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false });
+  mockUseAuth.mockReturnValue({ profile: { jobTitleCode: JOB_TITLE_CODES.LITERACY_COACH } });
+  const screen = render(<SessionFormScreen />);
+  expect(screen.getByTestId('lesson-picker-stub')).toBeTruthy();
+});
+test('loading shows a spinner, not the picker', () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: true });
+  mockUseAuth.mockReturnValue({ profile: { jobTitleCode: JOB_TITLE_CODES.LITERACY_COACH } });
+  const screen = render(<SessionFormScreen />);
+  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+  expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
+  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false });
+  screen.rerender(<SessionFormScreen />);
+  expect(screen.getByTestId('lesson-picker-stub')).toBeTruthy();
+  expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+});
+

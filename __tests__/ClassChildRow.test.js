@@ -20,7 +20,7 @@ const child = { id: 'child-1', first_name: 'Amahle', last_name: 'Dlamini', age: 
 const fullMotion = { tier: 'high', reduceMotion: false, motionLevel: 'full' };
 const renderRow = (props = {}) => render(
   <MotionProvider value={fullMotion}>
-    <ClassChildRow child={child} groupName="Group 1" groupColor="#1565C0" {...props} />
+    <ClassChildRow child={child} groupName="Group 1" groupColor="#1565C0" onPressResults={jest.fn()} onPressLetterTracker={jest.fn()} {...props} />
   </MotionProvider>
 );
 beforeEach(() => jest.spyOn(ReactNative, 'useWindowDimensions').mockReturnValue({ width: 390, height: 844, scale: 1, fontScale: 1 }));
@@ -101,4 +101,22 @@ test('the child name wraps at enlarged system font size', () => {
   ReactNative.useWindowDimensions.mockReturnValue({ width: 390, height: 844, scale: 1, fontScale: 1.3 });
   ui.rerender(<MotionProvider value={fullMotion}><ClassChildRow child={child} groupName="Group 1" /></MotionProvider>);
   expect(ui.getByText('Amahle Dlamini').props.numberOfLines).toBeUndefined();
+});
+
+test('without tracker or results handlers the row has 2 buttons and a plain name', () => {
+  const onPressGroup = jest.fn();
+  const onPressEdit = jest.fn();
+  const ui = renderRow({ onPressResults: undefined, onPressLetterTracker: undefined, onPressGroup, onPressEdit });
+  expect(ui.getAllByRole('button')).toHaveLength(2);
+  expect(ui.queryByRole('button', { name: /View results|Letter tracker/ })).toBeNull();
+  const name = ui.getByText('Amahle Dlamini');
+  for (let parent = name.parent; parent; parent = parent.parent) {
+    expect(parent.props.accessibilityRole).not.toBe('button');
+    expect(parent.props.onPress).toBeUndefined();
+  }
+  expect(ui.UNSAFE_getAllByType('Ionicons').some(node => node.props.name === 'chevron-forward')).toBe(false);
+  fireEvent.press(ui.getByRole('button', { name: 'Change group for Amahle Dlamini, currently Group 1' }));
+  fireEvent.press(ui.getByRole('button', { name: 'Edit Amahle Dlamini' }));
+  expect(onPressGroup).toHaveBeenCalledTimes(1);
+  expect(onPressEdit).toHaveBeenCalledTimes(1);
 });

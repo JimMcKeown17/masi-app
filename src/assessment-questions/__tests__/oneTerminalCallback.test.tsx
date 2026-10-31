@@ -4,6 +4,9 @@ import * as Q from '../index';
 import * as F from '../testFixtures';
 
 const CASES: Array<[string, React.ComponentType<any>, unknown, Record<string, unknown>]> = [
+  ['MathsGrid', Q.MathsGridQuestion, F.FIXTURE_MATHS_GRID_TIMED_EN, { durationSec: 60 }],
+  ['MathsCounters', Q.MathsCardsQuestion, F.FIXTURE_MATHS_CARDS_COUNTERS_EN, {}],
+  ['MathsPlain', Q.MathsCardsQuestion, F.FIXTURE_MATHS_CARDS_PLAIN_EN, {}],
   ['LetterSounds', Q.LetterSoundsQuestion, F.FIXTURE_LETTER_SOUNDS_EN, { durationSec: 60 }],
   ['ListenAndAnswerStory', Q.ListenAndAnswerStoryQuestion, F.FIXTURE_LISTEN_AND_ANSWER_STORY_EN, {}],
   ['FirstSound', Q.ListenFirstSoundQuestion, F.FIXTURE_FIRST_SOUND_EN, {}],

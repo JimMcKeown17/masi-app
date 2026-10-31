@@ -19,7 +19,7 @@ const styles = StyleSheet.create({
 export function PagedGrid({ pages, pageIndex, testID, groupTestID, renderTile, layout, variant }: {
   pages: ReadonlyArray<Page>;
   pageIndex: number;
-  variant: 'letter' | 'word' | 'picture';
+  variant: 'letter' | 'word' | 'picture' | 'sum';
   testID?: string;
   groupTestID?: (cardRow: number) => string;
   // Unmeasured dimensions stay undefined: equal-flex widths and natural tile heights

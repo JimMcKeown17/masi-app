@@ -1,3 +1,4 @@
+import { markingSentence } from '../../battery/markingSentence';
 import { flatCopy, nestedCopy, reviewLine, endMessage } from '../captureCopy';
 
 test('flat copy names and positions words', () => {
@@ -20,4 +21,14 @@ test('review line emphasizes the marked count', () => {
 });
 test('end message excludes the unmarked tail', () => {
   expect(endMessage(2, 5)).toBe("2 marked. The 3 not marked won't count towards the score.");
+});
+
+test.each([
+  ['number', 'Number'], ['pair', 'Pair'], ['problem', 'Problem'], ['item', 'Item'],
+] as const)('flat copy names and positions %s items', (noun, name) => {
+  const copy = flatCopy(noun, 9);
+  expect(copy.noun).toBe(noun);
+  expect(markingSentence(noun)).toBe(`Mark each ${noun} Correct or Incorrect. The black ring shows which ${noun} you're on.`);
+  expect(copy.itemName(2)).toBe(`${name} 3`);
+  expect(copy.position(2)).toEqual([{ text: `${name} ` }, { text: '3 of 9', strong: true }]);
 });

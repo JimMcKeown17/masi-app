@@ -567,3 +567,40 @@ test.each(['resolve', 'reject'])('real Battery Close and navigation Back during 
   }
   expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
 });
+
+const mathsBattery = jest.requireActual('../src/assessment-questions').MASI_MATHS_2026_1_DRAFT;
+test.each(mathsBattery.questions.map((question, index) => ({ question, index })))(
+  'every maths Question reaches capture with its exact item set: $question.question_code', async ({ question, index }) => {
+    const actual = jest.requireActual('../src/assessment-questions');
+    run = { ...run, battery_code: mathsBattery.battery_code, battery_version: mathsBattery.battery_version, language: 'en',
+      results: mathsBattery.questions.slice(0, index).map(previous => {
+        const count = actual.egmaItemSetFor(previous.question_code, previous.question_version, 'en').items.length;
+        return { id: previous.question_code, question_code: previous.question_code, stopped_reason: 'completed', score: count, total_items: count, derived: {} };
+      }) };
+    questionComponentFor.mockImplementation(actual.questionComponentFor);
+    const screen = renderHost({ runId: ID, questionCode: question.question_code });
+    await screen.findByRole('button', { name: 'Start' });
+    expect(screen.getByText(question.instructions.en)).toBeTruthy();
+    expect(bundledItemSetFor).toHaveBeenCalledWith(question.question_code, question.question_version, 'en');
+    expect(bundledItemSetFor).toHaveReturnedWith(actual.egmaItemSetFor(question.question_code, question.question_version, 'en'));
+    expect(screen.queryByTestId('missing-item-set-en')).toBeNull();
+    if (question.materials?.item === 'counters') {
+      expect(screen.getByText('Counters')).toBeTruthy(); expect(screen.queryByText(/^Footer:/)).toBeNull();
+    }
+    if (question.materials?.item === 'number_card') expect(screen.getByText(`Footer: Number Card 2026.1 · EN · page ${question.materials.page}`)).toBeTruthy();
+  },
+);
+
+test('an invalid result is fatal, not retried', async () => {
+  repositories.assessments.saveQuestionResult.mockRejectedValueOnce(Object.assign(new Error('invalid'), { code: 'INVALID_QUESTION_RESULT' }));
+  const screen = await ready(renderHost()); const complete = mockQuestionProps.onComplete;
+  fireEvent.press(screen.getByRole('button', { name: 'Finish test' }));
+  await screen.findByTestId('assessment-closed');
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  expect(within(screen.getByTestId('assessment-closed')).getAllByRole('button')).toHaveLength(1);
+  act(() => complete(result));
+  fireEvent.press(screen.getByRole('button', { name: 'Back to assessment' }));
+  expect(screen.routeNames()).toEqual(['BatteryOverview']);
+  expect(repositories.assessments.saveQuestionResult).toHaveBeenCalledTimes(1);
+  expect(mockSync).not.toHaveBeenCalled();
+});

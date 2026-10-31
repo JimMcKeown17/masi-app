@@ -9,6 +9,11 @@ Run host (PR #101), Full EGRA (#104), step-by-step marking (#107) and WelaPLUS 2
 `src/screens/assessments/battery/`. Package publication, printed materials, calibration and field
 validation remain open. Start with `documentation/ROADMAP.md` §7–8 and the
 [2026-10-26 spec](../superpowers/specs/2026-10-26-egra-content-and-skip-rules-design.md).
+**2026-10-31:** the package now covers numeracy too. The Maths Battery (`masi_maths`, EGMA) is
+built from `content/egma/` by `src/assessment-questions/egma/` and renders through two new
+Questions, `MathsGridQuestion` and `MathsCardsQuestion`. `SequentialCapture` gained opt-in
+per-item strategy choices and an end-of-task observation step
+([spec](../superpowers/specs/2026-10-31-egma-maths-assessment-design.md), ADR 0012).
 Everything below this paragraph is the 2026-10-09 briefing and is historical in places: there is
 no `markingPolarity` prop (marking is step by step), and some files it names have since moved or
 been deleted.
@@ -21,7 +26,7 @@ Four Codex adversarial reviews on 2026-05-29 surfaced 35 findings total — 18 i
 
 ## What this is
 
-A modular open-source React Native component library that implements the **WelaPLUS** literacy assessment battery as 11 self-contained Question components. Each Question is a pure capture component (knows language, content, scoring, UI; knows nothing about children, EAs, programmes, storage). The components are designed so Masi can use them inside its existing offline-first SQLite/Supabase app, **and** any other literacy NGO can install the package, supply their own item content, and host it against their own backend.
+A modular open-source React Native component library that implements the **WelaPLUS** literacy assessment battery as 11 self-contained Question components (since 2026-10-31 it also carries the EGMA maths Battery; see the status note above). Each Question is a pure capture component (knows language, content, scoring, UI; knows nothing about children, EAs, programmes, storage). The components are designed so Masi can use them inside its existing offline-first SQLite/Supabase app, **and** any other literacy NGO can install the package, supply their own item content, and host it against their own backend.
 
 This is not a backend-only design or a paper-replacement scanner. It is **in-app, EA-marked-live or EA-marked-from-paper** assessment, with photo capture for paper-marked Questions as a backup/audit channel.
 
