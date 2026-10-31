@@ -2187,7 +2187,7 @@ first real sweeps, field convergence and no-recurrence remain independent gates.
 ## Website reporting functions (`masi_reporting_*_v1`, 2026-10-31)
 
 The Masi website's Django backend reads app data **only** through nine functions created by
-`supabase/migrations/20261031120000_masi_reporting_v1.sql`. Spec: `masi-web-nextjs`
+`supabase/migrations/20261031180000_masi_reporting_v1.sql`. Spec: `masi-web-nextjs`
 `docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`. Plan A:
 `docs/superpowers/plans/2026-10-31-masi-reporting-functions-plan.md`.
 
