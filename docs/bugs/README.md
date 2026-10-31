@@ -29,7 +29,7 @@ Sweep phone incident receipts and report what is unrecorded.
 | MA-BUG-20261030-004 | Upload failures keep the server's message but drop its detail | S3 (2) | P2 | PROBABLE | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 80% | 2026-10-30 | [record](records/MA-BUG-20261030-004-upload-errors-drop-server-detail.md) |
 | MA-BUG-20261030-003 | "Remove screenshot" is styled unlike "Replace screenshot" | S3 (1) | P3 | CONFIRMED | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 90% | 2026-10-30 | [record](records/MA-BUG-20261030-003-screenshot-actions-styled-differently.md) |
 | MA-BUG-20261030-002 | Report a problem hides "Remove screenshot" while the keyboard is open | S3 (1) | P3 | HYPOTHESIS | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 30% | 2026-10-30 | [record](records/MA-BUG-20261030-002-remove-screenshot-hidden-with-keyboard-open.md) |
-| MA-BUG-20261030-001 | On Android, layouts stay shrunk after the keyboard closes | S2 (4) | P2 | CONFIRMED | FIXED_IN_CODE | LOCAL_TESTED | 1 (test) | 95% | 2026-10-30 | [record](records/MA-BUG-20261030-001-android-keyboard-leaves-layout-shrunk.md) |
+| MA-BUG-20261030-001 | On Android, layouts stay shrunk after the keyboard closes | S2 (4) | P2 | CONFIRMED | FIXED_IN_CODE | E2E_REPRO_CLOSED | 1 (test) | 95% | 2026-10-30 | [record](records/MA-BUG-20261030-001-android-keyboard-leaves-layout-shrunk.md) |
 
 ## Intake channels
 

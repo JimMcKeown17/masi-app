@@ -81,7 +81,8 @@ test('an explicitly disabled caller remains disabled on Android', async () => {
   expect(style(screen).paddingBottom).toBe(0);
 });
 
-test('mounting with a visible zero-height keyboard enables avoidance', async () => {
+// Only the enabled flag is checked: RN pads after the next keyboard event, wrapped or not.
+test('mounting while a zero-height keyboard is open starts the wrapper enabled', async () => {
   jest.replaceProperty(Platform, 'OS', 'android');
   await emit('keyboardDidShow', 500, 0);
   const screen = render(<KeyboardAvoidingView testID="avoider" behavior="padding" />);

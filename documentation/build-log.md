@@ -7641,3 +7641,35 @@ local tests from device/release verification. No commits, dependency changes,
 generated Android changes, releases or hosted mutations in the build. A03s sheet/Edit child,
 floating keyboard and iOS physical-device gates remain open. The supplied Android
 15 emulator coordinates were replayed locally; this session did not run a device.
+
+#### 2026-10-31 follow-up: Codex review and A03s device check
+
+- **Codex adversarial review** (gpt-6-astra, against `fix/incident-reader-and-first-sweep`):
+  approve, no material findings. It ran RN 0.81.5's real keyboard emitter and component in
+  memory (its sandbox could not start Jest). Notes accepted as known limits, not regressions:
+  a transient negative height after two shows before the native layout arrives (identical in
+  unwrapped RN); resizing an already-open keyboard may send no new event on API 30+. One fair
+  catch: the "mounting with a visible zero-height keyboard" test checked only the `enabled`
+  flag, so it is renamed to say that. RN pads only after the next keyboard event, wrapped or
+  not. Wrapper suite 11/11 after the rename.
+- **Device check, Galaxy A03s (Android 13).** A debug build of this branch was installed
+  beside Play build 55 by adding `applicationIdSuffix '.kbtest'` to the generated, gitignored
+  `android/app/build.gradle`. Build 55 and its data were untouched. Gradle needed
+  `JAVA_HOME=/opt/homebrew/opt/openjdk@17`; the shell default is Java 8 and failed. Metro ran
+  from the worktree with `adb reverse tcp:8081`. Login, tap Email, then Back:
+  - with `KeyboardAvoidingView` imported from `react-native` (temporary local edit, reverted):
+    the Sign in panel stayed **129 px** higher after the keyboard closed;
+  - with the app wrapper, over two cycles: the screenshot below the status bar matched the
+    pre-keyboard one exactly, apart from the focused Email field's ring.
+  Evidence: `docs/bugs/evidence/MA-BUG-20261030-001/a03s-login-keyboard-cycle-stock-vs-fix.png`,
+  with the autofill strip blanked. Record 001 is now `E2E_REPRO_CLOSED`.
+- **Correction:** the A03s is 280 dpi (scale 1.75, no density override). The record's
+  "130 px = 65 dp" assumed scale 2; it is about 74 dp. The px match holds: status bar about
+  46 px plus nav bar about 83 px ≈ 129 px.
+- **Dead end on the first attempt:** I tapped while the app was still on its splash screen, so
+  Back left the app. The rerun waited for a red pixel on the Login panel before tapping.
+- **Shared phone:** a Zazi session was testing on the same A03 at the same time. We agreed
+  turns over cross-session messages. Two agents tapping one phone corrupts both tests, so
+  check before driving a shared device.
+- **Still open:** Change password, Report a problem and Edit child (the height path) on the
+  A03s need a signed-in session (Jim types the password), and the iPhone smoke.
