@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a least-privilege reporting role and eight versioned, read-only reporting functions to
+**Goal:** Add a least-privilege reporting role and nine versioned, read-only reporting functions to
 `masi-app-sqlite`, proven on a disposable PostgreSQL 17 harness. The Masi website's Django backend
 reads Masi App data through these functions only.
 
 **Architecture:**
 - One new migration creates `masi_reporting_reader` (LOGIN, no password, no table privileges) and
-  eight `STABLE SECURITY DEFINER` functions.
+  nine `STABLE SECURITY DEFINER` SQL functions with `BEGIN ATOMIC` bodies.
 - Each function returns one `jsonb` document whose shape is pinned below (the A→B contract).
 - A new harness replays every migration onto a disposable database, seeds a fixture covering the
   spec's edge cases, and asserts exact outputs, caps and privileges.
@@ -17,7 +17,7 @@ reads Masi App data through these functions only.
 (`scripts/*-postgres-harness.cjs` pattern), Jest for `createTesters.js`.
 
 **Spec:** `/Users/jimmckeown/Development/masi-app-dashboard-web/docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`
-(sections 4.1, 4.2, 5, 6, 7, 11, 13). Plans B (Django) and C (website) consume this plan's
+(rev 3: sections 4.1, 4.2, 5, 6, 7, 11, 13). Plans B (Django) and C (website) consume this plan's
 contract.
 
 ## Global Constraints
@@ -25,17 +25,28 @@ contract.
 - Migration file: `supabase/migrations/20261031120000_masi_reporting_v1.sql`. It is unapplied, so
   tasks append to it. Once applied to hosted it is never edited; a change becomes `_v2`.
 - Every function:
-  - `LANGUAGE sql` (or `plpgsql` only where a cap check needs `RAISE`), `STABLE`,
-    `SECURITY DEFINER`, `SET search_path = ''`, every name schema-qualified;
+  - `LANGUAGE sql` with a `BEGIN ATOMIC … END` body (never plpgsql, never `$$` string bodies),
+    `STABLE`, `SECURITY DEFINER`, `SET search_path = ''`, every name schema-qualified. It
+    references no user-defined function (built-ins only). Verified 2026-10-31 on local PG17: a
+    `BEGIN ATOMIC` body records user-function references in `pg_depend` and records none for
+    built-ins. A `STABLE` definer calling a volatile writer DOES write, which is why the audit
+    exists.
   - `REVOKE ALL ON FUNCTION … FROM PUBLIC, anon, authenticated, service_role;`
     `GRANT EXECUTE … TO masi_reporting_reader;`
   - returns `jsonb` with top-level keys `function_version` (the function name) and
     `generated_at` (`now()`), plus the keys listed in its contract.
 - SAST day for a timestamp is `(ts AT TIME ZONE 'Africa/Johannesburg')::date`. `session_date` and
   `assessment_date` are already dates.
-- Argument errors raise SQLSTATE `22023` with message `invalid_argument:<name>`. Cap breaches raise
-  SQLSTATE `P0413` with message `too_much_data:<function>`. Nothing truncates silently, except the
-  "latest N of total" detail lists, which return both `total` and `rows`.
+- Refusals are documents, not exceptions. Pure SQL cannot `RAISE`, so:
+  - a bad argument (null array, `p_from > p_to`, span over the limit) returns `{function_version,
+    generated_at, error: "invalid_argument", argument: "<p_name>"}`;
+  - a cap breach returns `{function_version, generated_at, error: "too_much_data", row_count:
+    <n>}` and no rows. Count first with the same predicate, then branch with `CASE`.
+
+  Nothing truncates silently, except the "latest N of total" detail lists, which return both
+  `total` and `rows`.
+- **Eligible result** = an `assessments` row with `stopped_reason IS NULL OR stopped_reason NOT
+  LIKE 'skipped\_%'`.
 - Role: `CREATE ROLE masi_reporting_reader LOGIN NOINHERIT;` (guarded by `IF NOT EXISTS`, no
   password), `ALTER ROLE masi_reporting_reader SET default_transaction_read_only = on;`,
   `ALTER ROLE masi_reporting_reader SET statement_timeout = '15s';`,
@@ -76,15 +87,20 @@ masi_reporting_accounts_v1() -> {
 
 masi_reporting_roster_v1(p_user_ids uuid[]) -> {
   function_version, generated_at,
-  rows: [{user_id, child_id, programme_code, school_id?, class_id, grade?,
-          assessed_this_year, last_assessment_date?}]          -- by user_id, child_id
+  rows: [{user_id, child_id, programme_code, school_id?, class_id, grade?}]   -- by user_id, child_id
+}                                                              -- cap: 100,000 rows
+
+masi_reporting_assessed_children_v1(p_author_ids uuid[], p_from date, p_to date) -> {   -- span <= 366
+  function_version, generated_at, from, to,
+  rows: [{child_id, last_assessment_date}]     -- children with >=1 ELIGIBLE result by these authors in range; by child_id
 }                                                              -- cap: 100,000 rows
 
 masi_reporting_daily_v1(p_user_ids uuid[], p_from date, p_to date) -> {   -- span <= 120 days
   function_version, generated_at, from, to,
   sessions:    [{user_id, day, programme_code, sessions, present_attendances, ungrouped_sessions}],   -- ungrouped = group_id IS NULL
   clock:       [{user_id, day, entries, completed_minutes, auto_clock_outs}],
-  assessments: [{user_id, day, programme_code?, question_results, battery_runs_completed, children_assessed}]
+  assessments: [{user_id, day, programme_code?, question_results, skipped_results, battery_runs_completed, children_assessed}]
+               -- question_results and children_assessed count ELIGIBLE rows only; skipped_results counts skipped_* rows
 }   -- non-zero rows only, each ordered by user_id, day, programme_code; cap 200,000 rows in total
 
 masi_reporting_ea_detail_v1(p_user_id uuid, p_from date, p_to date) -> {   -- span <= 120 days
@@ -144,16 +160,17 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
 - `class_children` = distinct children with an open membership in a non-archived class that has
   an active `class_ea_assignments` row for the user. `active_classes` counts those classes.
   `active_groups` = `group_ea_assignments` with `unassigned_at IS NULL` on non-archived groups.
-- `assessed_this_year` = there exists an `assessments` row for the child with `assessment_date`
-  between the active academic year's `starts_on` and `ends_on`. It is false when no year is
-  active. `last_assessment_date` = the child's max `assessment_date` overall.
+- `assessed_children_v1` filters `assessments.user_id = ANY(p_author_ids)`, eligible results only,
+  and `assessment_date BETWEEN p_from AND p_to`. `last_assessment_date` is the max date within
+  that range.
 - `ever_*` and `last_*_date` cover all time. `last_clock_date` = SAST date of the max
   `sign_in_time`.
 - `last_data_received_at` = greatest of:
   - max `sessions.updated_at` where `user_id = u`;
   - max `assessments.updated_at` where `user_id = u`;
   - max `battery_runs.updated_at` where `user_id = u`;
-  - max `letter_mastery.updated_at` where `changed_by = u`;
+  - max `letter_mastery_corrections.received_at` where `changed_by = u` (the immutable receipt
+    ledger; never `letter_mastery.updated_at`);
   - max `mobile_support_incidents.received_at` where `reporter_id = u`.
 
   `time_entries` is deliberately excluded (spec section 6).
@@ -178,7 +195,7 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
 - Clock: the day is the SAST date of `sign_in_time`. `completed_minutes` = floor of
   `(sign_out_time - sign_in_time)` in minutes, for rows with `sign_out_time`.
   `duration_minutes` is the same, per row, else null.
-- `question_results` = `assessments` rows (any `battery_run_id`). `battery_runs_completed` counts
+- `question_results` = eligible `assessments` rows (any `battery_run_id`). `battery_runs_completed` counts
   `battery_runs` with `status = 'completed'` on the SAST date of `completed_at`, attributed to
   `battery_runs.user_id` and `programme_id`. `children_assessed` = distinct `child_id` among that
   user-day's assessments. The assessment day is `assessment_date`; its `programme_code` comes from
@@ -260,11 +277,20 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
     implementer from the replayed schema, written as a literal array, and each entry gets its
     own refusal case, e.g. `reader-submit-assessment-refused` (expect an error SQLSTATE, not
     success);
+  - `audit-atomic-bodies`: every `public.masi_reporting_%_v1` has `prosqlbody IS NOT NULL`;
+  - `audit-no-user-function-deps`: `SELECT count(*) FROM pg_depend d JOIN pg_proc f ON f.oid =
+    d.objid WHERE f.proname LIKE 'masi\_reporting\_%' AND d.refclassid =
+    'pg_proc'::regclass` = 0;
+  - `audit-denylist`: `pg_get_functiondef(oid)` contains none of `nextval`, `setval`,
+    `set_config`, `pg_advisory`, `lo_`, `pg_notify`, `dblink`, `pg_terminate_backend`,
+    `pg_cancel_backend`, `pg_reload_conf`, `pg_read_file`, `pg_ls_dir`, `pg_stat_reset`;
+  - `audit-negative-control`: a scratch `public.masi_reporting_probe_v0()` definer with a `BEGIN
+    ATOMIC` body selecting `private.close_overdue_time_entries()` makes the dependency query
+    return 1; drop it afterwards;
   - `reader-login-no-password`: `pg_authid.rolpassword IS NULL` and `rolcanlogin` is true;
   - `reader-role-settings`: `pg_db_role_setting` contains `default_transaction_read_only=on` and
     `statement_timeout=15s`;
-  - `stable-blocks-writes`: create a scratch `STABLE` SQL function containing an `INSERT` and
-    expect error `0A000` (INSERT is not allowed in a non-volatile function).
+  - (no "STABLE blocks writes" case: STABLE is not a boundary; the audit cases above are.)
 
 - [ ] **Step 2: Run the harness and verify it fails**
 
@@ -284,7 +310,7 @@ git add supabase/migrations/20261031120000_masi_reporting_v1.sql scripts/reporti
 git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
 ```
 
-### Task 2: `roster_v1` and `daily_v1`
+### Task 2: `roster_v1`, `assessed_children_v1` and `daily_v1`
 
 **Files:**
 - Modify: `supabase/migrations/20261031120000_masi_reporting_v1.sql`
@@ -293,6 +319,7 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
 **Interfaces:**
 - Consumes: Task 1 fixture and helpers.
 - Produces: `public.masi_reporting_roster_v1(uuid[])`,
+  `public.masi_reporting_assessed_children_v1(uuid[], date, date)`,
   `public.masi_reporting_daily_v1(uuid[], date, date)`.
 
 - [ ] **Step 1: Extend the fixture and add failing cases.** Fixture additions:
@@ -317,8 +344,16 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
   - `roster-ea-a`: rows for EA_A are exactly C1 and C2 (C3–C6 excluded);
   - `roster-move`: EA_MOVE has no C7 row;
   - `roster-shared`: C1 appears for EA_A and EA_B;
-  - `roster-assessed`: C1 `assessed_this_year = true`, C2 `true` (assessed by EA_B within the
-    year);
+  - `assessed-eligible`: `assessed_children_v1({EA_A,EA_B}, 2026-01-15, 2026-12-15)` returns C1
+    and C2;
+  - `assessed-skipped-only`: child C8, whose only result is `skipped_child_refused`, is absent;
+    a genuine zero score (C9, `score` 0, `stopped_reason` `completed`) is present;
+  - `assessed-author-filter`: a result for C10 by EA_TEST is absent when EA_TEST is not in
+    `p_author_ids`, present when it is;
+  - `assessed-range`: C11 assessed 2026-01-20 and 2026-10-20 appears for range Jan 1–31 (last
+    date 01-20) and Oct 1–31 (last date 10-20), and not for range Mar 1–31;
+  - `received-mastery-ledger`: EA_A's superseded `letter_mastery_corrections` row received now
+    sets `last_data_received_at` even though `letter_mastery.changed_by` is EA_B;
   - `accounts-delivery-count`: EA_A `counts.delivery_children = 2`;
   - `daily-sessions`: EA_MOVE literacy sessions appear under `programme_code` `literacy` on their
     dates;
@@ -326,16 +361,17 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
   - `daily-clock-minutes`: 07:00–15:30 gives `completed_minutes` 510;
   - `daily-assessments`: EA_A 2026-10-20 has `question_results` 2, `battery_runs_completed` 1,
     `children_assessed` 1;
-  - `daily-range-invalid`: `p_from > p_to` raises `22023`;
-  - `daily-span-cap`: 121 days raises `22023`;
-  - `daily-null-ids`: `p_user_ids` NULL raises `22023`.
+  - `daily-skipped-separate`: a skipped row counts in `skipped_results`, not `question_results`;
+  - `daily-range-invalid`: `p_from > p_to` returns `error = invalid_argument`, argument `p_from`;
+  - `daily-span-cap`: 121 days returns `invalid_argument`;
+  - `daily-null-ids`: `p_user_ids` NULL returns `invalid_argument`.
 
 - [ ] **Step 2: Run and verify the new cases fail** (same command, database `masi_reporting_t2`).
   Expected: FAIL at `roster-ea-a`.
-- [ ] **Step 3: Implement both functions** per the contract. Enforce the row cap with
-  `plpgsql`: count first, then `RAISE ... USING ERRCODE = 'P0413'`.
+- [ ] **Step 3: Implement `roster_v1`, `assessed_children_v1` and `daily_v1`** per the contract,
+  with the cap as a counted `CASE` branch.
 - [ ] **Step 4: Run and verify everything passes.**
-- [ ] **Step 5: Commit** `feat(reporting): roster_v1 and daily_v1`.
+- [ ] **Step 5: Commit** `feat(reporting): roster, assessed children and daily functions`.
 
 ### Task 3: `ea_detail_v1`
 
@@ -381,14 +417,16 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
     has `summary` "Save button hidden", `has_screenshot` true when `screenshot_path` is set;
   - `incidents-kinds-filter`: `p_kinds` `{ea_report}` returns only that kind;
   - `incidents-user-filter`: a receipt from a user outside `p_user_ids` is absent;
-  - `*-span-cap` for each function (93, 367, 93 and 91 days raise `22023`);
-  - `sessions-row-cap`: a function-local cap check, proven by temporarily calling with a fixture
-    of 20,001 sessions created by `generate_series` in a separate disposable database
-    (`masi_reporting_cap`), expecting `P0413`.
+  - `*-span-cap` for each function (93, 367, 93 and 91 days return `invalid_argument`);
+  - `sessions-row-cap`: in a separate disposable database (`masi_reporting_cap`) seeded with
+    20,001 sessions via `generate_series`, the function returns `error = too_much_data`,
+    `row_count` 20001, and no `rows` key;
+  - `assessments-skipped-labelled`: skipped rows are present in `assessments_v1` with their
+    `stopped_reason` (detail and CSV show them).
 - [ ] **Step 2: Verify the failures.**
 - [ ] **Step 3: Implement** the four functions.
 - [ ] **Step 4: Verify everything passes**, including all Task 1 privilege cases, which now
-  enumerate eight functions.
+  enumerate nine functions.
 - [ ] **Step 5: Commit** `feat(reporting): sessions, assessments, time entries and incidents functions`.
 
 ### Task 5: Stamp test accounts in `createTesters.js`
@@ -412,7 +450,8 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
 - Modify: `documentation/rls-sync-contract-map.md`. Add a "Website reporting functions
   (`masi_reporting_*_v1`)" section covering:
   - the role and its grants, and that the role has no password (set out of band);
-  - the eight functions with one line each;
+  - the nine functions with one line each, and the body audit rule (`BEGIN ATOMIC`, no
+    user-function dependencies);
   - the "never edit; add `_v2`" rule;
   - deploy order (functions → Django → website);
   - harness command and result.
