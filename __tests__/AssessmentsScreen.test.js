@@ -234,7 +234,7 @@ test.each([
   ['unknown battery code', { default_battery_code: 'unknown', default_battery_version: BATTERY.battery_version }],
   ['unknown battery version', { default_battery_code: BATTERY.battery_code, default_battery_version: 'unknown' }],
 ])('%s: no battery card, quick rows still shown', async (_label, programme) => {
-  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme });
+  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: { ...programme, code: 'literacy' } });
   const screen = renderTab();
   await screen.findByRole('header', { name: 'Quick assessments' });
   expect(screen.queryByText(BATTERY.title)).toBeNull();
@@ -524,4 +524,31 @@ test('unfinished EGRA assessment uses its own four-Question total and resumes in
   const screen = renderTab();
   fireEvent.press(await screen.findByRole('button', { name: 'Lwazi Mbeki, English FAL EGRA 2 · 2 of 4 done · Tue 14:05 · KWY-2M4' }));
   expect(screen.navigation.navigate).toHaveBeenCalledWith('BatteryOverview', { runId: RUN_ID });
+});
+
+const mathsProgramme = { code: 'numeracy', default_battery_code: 'masi_maths', default_battery_version: '2026.1-draft' };
+test('a numeracy EA sees the Maths card and no stats, Full EGRA or quick assessments', async () => {
+  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: mathsProgramme });
+  batteryForNewRun.mockReturnValue({ ...BATTERY, battery_code: 'masi_maths', battery_version: '2026.1-draft',
+    title: 'Maths assessment', languages: ['en'], fixedLanguage: 'en' });
+  const screen = renderTab();
+  await screen.findByRole('header', { name: 'Maths assessment' });
+  expect(screen.getAllByRole('header').map(node => node.props.children)).toEqual(['Maths assessment']);
+  expect(screen.queryByText('Avg score')).toBeNull();
+  expect(screen.queryByText('Letter Sounds')).toBeNull();
+  expect(mockGetLetterResults).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'Start an assessment' }));
+  expect(screen.navigation.navigate).toHaveBeenCalledWith('AssessmentChildSelect', {
+    batteryCode: 'masi_maths', batteryVersion: '2026.1-draft',
+  });
+});
+test('a numeracy EA on a build without the Battery sees only the update note', async () => {
+  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: mathsProgramme });
+  const screen = renderTab();
+  await screen.findByText('Your programme uses a newer assessment. Update the app to start it.');
+  expect(screen.queryAllByRole('header')).toHaveLength(0);
+  expect(screen.UNSAFE_queryAllByType(SurfaceCard)).toHaveLength(0);
+  expect(screen.queryByText('Avg score')).toBeNull();
+  expect(screen.queryByText('Letter Sounds')).toBeNull();
+  expect(mockGetLetterResults).not.toHaveBeenCalled();
 });

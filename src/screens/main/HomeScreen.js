@@ -1,3 +1,4 @@
+import { isMathsProgramme } from '../../utils/programmeSubject';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,6 +65,8 @@ export default function HomeScreen({ navigation }) {
   const [statsFailed, setStatsFailed] = useState(false); // the latest load rejected
   const [assessmentDismissedOn, setAssessmentDismissedOn] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [subjectReady, setSubjectReady] = useState(false);
+  const [isMaths, setIsMaths] = useState(false);
   const [lessonDraft, setLessonDraft] = useState(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -87,6 +90,18 @@ export default function HomeScreen({ navigation }) {
   const loadStats = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setNow(new Date());
+    const programmeGatePromise = getActiveProgrammeGate({ handle, userId: user.id });
+    // Publish the subject independently of statistics, so a failed stats load
+    // cannot keep a retained literacy draft visible after a programme change.
+    void programmeGatePromise.then(gate => {
+      if (seq !== loadSeqRef.current || !handle.isCurrent()) return;
+      setIsMaths(isMathsProgramme(gate.programme));
+      setSubjectReady(true);
+    }, () => {
+      if (seq !== loadSeqRef.current || !handle.isCurrent()) return;
+      setIsMaths(false);
+      setSubjectReady(true);
+    });
     // Draft availability is independent of statistics, including their failures and timing.
     void (async () => {
       try {
@@ -103,17 +118,18 @@ export default function HomeScreen({ navigation }) {
       const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
       const [assessmentCounts, dailyGoal, sessions, programmeGate, dismissedOn] = await Promise.all([
         // The repository counts non-skipped letter results in the active academic year, from any EA.
-        assessmentsRepository.getAssessmentCountsSince({ userId: user.id }),
+        programmeGatePromise.then(gate => isMathsProgramme(gate.programme)
+          ? null : assessmentsRepository.getAssessmentCountsSince({ userId: user.id })),
         getSessionsTodayGoal({ handle, userId: user.id }),
         sessionsRepository.getSessions({
           userId: user.id, recordedByUserId: user.id, sinceDate: recentCutoff, order: 'desc',
         }),
-        getActiveProgrammeGate({ handle, userId: user.id }),
+        programmeGatePromise,
         homeAttention.getAssessmentDismissedOn(),
       ]);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
       setWeekCounts(getWeekSessionCounts(sessions));
-      setCoverage(getCoverageFromCounts(assessableChildren, assessmentCounts));
+      setCoverage(isMathsProgramme(programmeGate.programme) ? null : getCoverageFromCounts(assessableChildren, assessmentCounts));
       setSessionGoal(dailyGoal);
       setProgrammeName(programmeGate.programme?.name || '');
       setHasActiveProgramme(Boolean(programmeGate.hasActiveProgramme));
@@ -141,15 +157,15 @@ export default function HomeScreen({ navigation }) {
     }, [loadStats])
   );
   const attentionItems = useMemo(() => deriveHomeAttentionItems({
-    lessonInProgress: lessonDraft instanceof LessonDraftCorruptError
+    lessonInProgress: !subjectReady || isMaths ? null : lessonDraft instanceof LessonDraftCorruptError
       ? { draftId: lessonDraft.draftId, childNames: [] }
       : lessonInProgressFromDraft(lessonDraft, childrenList),
     needsAttentionCount,
     autoClockOut: autoClockOutNotice,
-    coverage,
+    coverage: !subjectReady || isMaths ? null : coverage,
     assessmentDismissedOn,
     now,
-  }), [lessonDraft, childrenList, needsAttentionCount, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
+  }), [subjectReady, isMaths, lessonDraft, childrenList, needsAttentionCount, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
 
   const openItem = useCallback((item) => item.params
     ? navigation.navigate(item.route, item.params) : navigation.navigate(item.route), [navigation]);
