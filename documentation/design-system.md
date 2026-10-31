@@ -503,6 +503,13 @@ The sheet measures its panel to determine slide distance (window height until me
 the exit animation, and ignores touches/hides accessibility content as soon as `visible` becomes
 false. Cancelling an old animation cannot unmount a newly reopened sheet. See motion below.
 
+All `src/` consumers use the app-owned `common/KeyboardAvoidingView`. On Android,
+keyboardDidShow/Hide event type gates RN avoidance; keyboard height does not
+indicate visibility (floating keyboards can report zero). While inactive, height
+behavior is omitted as well as disabled, restoring the caller's original flex
+layout without remounting children. iOS and other platforms retain RN props and
+behavior. See MA-BUG-20261030-001 and `KeyboardAvoidingView.test.js`.
+
 With `keyboardAvoiding=true`, `KeyboardAvoidingView` uses `behavior="padding"` on **both**
 platforms. Its wrapper fills the overlay (`flex: 1`, `justifyContent: 'flex-end'`, width 100%)
 with top padding `insets.top + spacing.sm`. The panel keeps flexbox anchoring; never position it

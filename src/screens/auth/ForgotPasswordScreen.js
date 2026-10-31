@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import KeyboardAvoidingView from '../../components/common/KeyboardAvoidingView';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
