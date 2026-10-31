@@ -259,3 +259,24 @@ test.each([
   expect(frame).toHaveStyle({ height: frameHeight, justifyContent: 'flex-start' });
   expect(r.getByTestId('grid')).toHaveStyle({ justifyContent: 'center' });
 });
+
+
+test.each([420, 300, 100])('sum tiles use word geometry at %s dp', height => {
+  const pages = paginate(rowsFromLengths([10, 10, 2]), WORD_PAGE_LAYOUT);
+  const geometry = (variant: 'word' | 'sum') => {
+    const r = render(<PagedGrid pages={pages} pageIndex={0} variant={variant} layout={WORD_PAGE_LAYOUT} testID="grid"
+      renderTile={(position, size) => <MarkTile variant={variant} state="idle" text="6 + 2" gloss="8" accessibilityLabel={`item ${position}`} {...size} />} />);
+    fireEvent(r.getByTestId('grid'), 'layout', { nativeEvent: { layout: { width: 360, height } } });
+    const tile = r.getByLabelText('item 0');
+    const row = parentView(parentView(tile));
+    const frame = parentView(parentView(row));
+    const result = { tile: StyleSheet.flatten(tile.props.style), frame: StyleSheet.flatten(frame.props.style) };
+    r.unmount();
+    return result;
+  };
+  const word = geometry('word'), sum = geometry('sum');
+  expect(sum.tile.width).toBe(word.tile.width);
+  expect(sum.tile.height).toBe(word.tile.height);
+  expect(sum.frame.height).toBe(word.frame.height);
+  if (height === 100) expect(sum.tile.height).toBe(40);
+});

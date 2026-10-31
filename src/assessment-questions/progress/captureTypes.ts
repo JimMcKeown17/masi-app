@@ -19,7 +19,7 @@ export interface CaptureCopy {
 }
 
 export type CaptureBody =
-  | { kind: 'grid'; rows: number[][]; layout: PageLayout; variant: 'letter' | 'word' | 'picture'; testID: string;
+  | { kind: 'grid'; rows: number[][]; layout: PageLayout; variant: 'letter' | 'word' | 'picture' | 'sum'; testID: string;
       rowTestID?: (cardRow: number) => string; labelFor?: (page: Page, count: number) => ReadonlyArray<LinePart> }
   | { kind: 'cards'; testID: string }
   | { kind: 'groups'; testID: string; card: boolean; variant: 'letter' | 'pill'; tileWidth?: number;

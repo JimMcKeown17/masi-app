@@ -105,3 +105,56 @@ test('review has Finish, Back and optional Skip, with no decisions or End link',
   r.rerender(<DecisionBar {...callbacks} mode="review" onFinish={onFinish} />);
   expect(r.queryByText('Skip question')).toBeNull();
 });
+
+const choices = [
+  { key: 'count_all', label: 'Counted from 1' },
+  { key: 'count_on', label: 'Started from the first number' },
+  { key: 'known', label: 'Just knew' },
+];
+
+test.each(['deciding', 'review'] as const)('default buttons are unchanged (%s)', mode => {
+  const r = render(<DecisionBar {...props()} mode={mode} onSkip={jest.fn()} onFinish={jest.fn()} />);
+  expect(r.toJSON()).toMatchSnapshot();
+});
+
+test('choices replace Correct with one marked button per choice, then Incorrect', () => {
+  const callbacks = props(), onChoose = jest.fn();
+  const r = render(<DecisionBar {...callbacks} correctChoices={choices} onChoose={onChoose} />);
+  const decisions = r.getByTestId('letter-decisions');
+  expect(decisions).toHaveStyle({ flexDirection: 'column', gap: tokens.space.md });
+  expect(within(decisions).getAllByRole('button').map(b => b.props.accessibilityLabel)).toEqual([
+    ...choices.map(c => c.label), 'Incorrect',
+  ]);
+  expect(r.queryByText('Correct')).toBeNull();
+  for (const choice of choices) {
+    const button = r.getByTestId(`letter-choice-${choice.key}`);
+    expect(button).toHaveAccessibleName(choice.label);
+    expect(button).toHaveStyle({ backgroundColor: tokens.color.marked, minHeight: 52 });
+    fireEvent.press(button);
+    expect(onChoose).toHaveBeenLastCalledWith(choice.key);
+  }
+  expect(onChoose).toHaveBeenCalledTimes(3);
+  expect(callbacks.onCorrect).not.toHaveBeenCalled();
+  fireEvent.press(r.getByText('Incorrect'));
+  expect(callbacks.onIncorrect).toHaveBeenCalledTimes(1);
+});
+
+test('two choices keep the decision row horizontal', () => {
+  const r = render(<DecisionBar {...props()} correctChoices={choices.slice(0, 2)} onChoose={jest.fn()} />);
+  expect(r.getByTestId('letter-decisions')).toHaveStyle({ flexDirection: 'row' });
+});
+
+test.each(['deciding', 'review'] as const)('correcting shows the title and Cancel, and hides Back, End and Skip (%s)', mode => {
+  const onCancel = jest.fn();
+  const r = render(<DecisionBar {...props()} mode={mode} onSkip={jest.fn()} correctChoices={choices}
+    onChoose={jest.fn()} correcting={{ title: 'Change Item 2', onCancel }} />);
+  expect(r.getByRole('header', { name: 'Change Item 2' })).toBeTruthy();
+  expect(r.getAllByRole('button').map(b => b.props.accessibilityLabel)).toEqual([
+    ...choices.map(c => c.label), 'Incorrect', 'Cancel',
+  ]);
+  expect(r.queryByText('Back')).toBeNull();
+  expect(r.queryByText('Finish')).toBeNull();
+  expect(r.queryByTestId('letter-navigation')).toBeNull();
+  fireEvent.press(r.getByRole('button', { name: 'Cancel' }));
+  expect(onCancel).toHaveBeenCalledTimes(1);
+});

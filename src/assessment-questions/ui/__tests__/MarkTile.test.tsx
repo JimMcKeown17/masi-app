@@ -3,7 +3,7 @@ import { Dimensions, StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { AssessmentThemeProvider } from '../../theme/AssessmentTheme';
 import { tokens } from '../../theme/tokens';
-import { MarkTile, type TileState } from '../MarkTile';
+import { MarkTile, GRID_TILE_HEIGHTS, type TileState } from '../MarkTile';
 import { ContentText, UiText, toneColor } from '../Text';
 import { Icon } from '../Icon';
 
@@ -163,3 +163,18 @@ test.each([[1, 2 * 18], [1.15, 2 * 18 * 1.15], [2, 2 * 18 * 1.2]])(
     } finally { spy.mockRestore(); }
   },
 );
+
+
+test('sum tile shows its answer on the same line, muted', () => {
+  const r = render(<MarkTile variant="sum" state="idle" text="6 + 2" gloss="8" accessibilityLabel="sum" />);
+  expect(r.getByLabelText('sum')).toHaveStyle({ height: GRID_TILE_HEIGHTS.word });
+  expect(GRID_TILE_HEIGHTS.sum).toBe(GRID_TILE_HEIGHTS.word);
+  const content = r.UNSAFE_getByType(ContentText);
+  expect(content.props).toMatchObject({ size: 'tileWord', fit: true });
+  expect(content.findByType(UiText).props.children).toBe('  = 8');
+  expect(r.getByText('  = 8')).toHaveStyle({ color: tokens.color.muted });
+  expect(r.getByLabelText('sum')).toHaveTextContent('6 + 2  = 8');
+  r.rerender(<MarkTile variant="sum" state="correct" text="6 + 2" gloss="8" accessibilityLabel="sum" height={40} />);
+  expect(r.getByLabelText('sum')).toHaveStyle({ height: 40 });
+  expect(r.getByText('  = 8')).toHaveStyle({ color: tokens.color.onPrimary });
+});
