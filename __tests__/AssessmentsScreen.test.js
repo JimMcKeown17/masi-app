@@ -24,6 +24,7 @@ import ListRow from '../src/components/common/ListRow';
 import SurfaceCard from '../src/components/common/SurfaceCard';
 import { STANDALONE_TESTS } from '../src/utils/assessmentRegistry';
 import AssessmentsScreen from '../src/screens/main/AssessmentsScreen';
+import { rememberProgrammeSubject } from '../src/utils/programmeSubject';
 import SelectSheet from '../src/components/common/SelectSheet';
 
 test.each([true, false])('Full EGRA is offered after the default card when present (default: %s)', async hasDefault => {
@@ -129,6 +130,7 @@ beforeEach(() => {
   jest.setSystemTime(new Date(2026, 9, 23, 15, 0));
   jest.clearAllMocks();
   mockHandle.isCurrent.mockReturnValue(true);
+  rememberProgrammeSubject(mockHandle, null); // known maths is per handle; start each test clean
   mockGetUnfinishedRuns.mockResolvedValue([]);
   mockGetChildNames.mockResolvedValue({});
   batteryFor.mockImplementation((...args) => jest.requireActual('../src/assessment-questions').batteryFor(...args));
@@ -547,6 +549,22 @@ test('a numeracy EA on a build without the Battery sees only the update note', a
   expect(screen.queryAllByRole('header')).toHaveLength(0);
   expect(screen.UNSAFE_queryAllByType(SurfaceCard)).toHaveLength(0);
   expect(screen.queryByText('Avg score')).toBeNull();
+  expect(screen.queryByText('Letter Sounds')).toBeNull();
+  expect(mockGetLetterResults).not.toHaveBeenCalled();
+});
+
+test('a failed programme read never reopens literacy assessments for a known numeracy EA', async () => {
+  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: mathsProgramme });
+  const first = renderTab();
+  await first.findByRole('header', { name: 'Maths assessment' });
+  first.unmount();
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  mockGate.mockRejectedValue(new Error('read failed'));
+  const screen = renderTab();
+  await waitFor(() => expect(mockGate).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(screen.queryAllByRole('header')).toHaveLength(0);
+  expect(screen.queryByText('Quick assessments')).toBeNull();
   expect(screen.queryByText('Letter Sounds')).toBeNull();
   expect(mockGetLetterResults).not.toHaveBeenCalled();
 });

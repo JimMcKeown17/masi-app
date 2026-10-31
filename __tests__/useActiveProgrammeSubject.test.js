@@ -75,3 +75,16 @@ test('a failed read never turns a known maths EA back to literacy on a new scree
   await act(async () => {});
   expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false });
 });
+test('a retained screen prefers maths confirmed elsewhere when its own refresh fails', async () => {
+  mockGate.mockResolvedValue({ programme: { code: 'literacy' } });
+  const insights = renderHook(useActiveProgrammeSubject);
+  await waitFor(() => expect(insights.result.current.subject).toBe('reading'));
+  const insightsFocus = mockFocus;
+  // Head Office moves the EA; another screen confirms numeracy.
+  mockGate.mockResolvedValue({ programme: { code: 'numeracy' } });
+  const children = renderHook(useActiveProgrammeSubject);
+  await waitFor(() => expect(children.result.current.subject).toBe('maths'));
+  mockGate.mockRejectedValue(new Error('read failed'));
+  await act(async () => { insightsFocus(); });
+  expect(insights.result.current).toEqual({ subject: 'maths', isMaths: true, loading: false });
+});

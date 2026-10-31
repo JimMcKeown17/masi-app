@@ -1,4 +1,4 @@
-import { isMathsProgramme } from '../../utils/programmeSubject';
+import { isKnownMaths, isMathsProgramme, rememberProgrammeSubject } from '../../utils/programmeSubject';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,11 +95,13 @@ export default function HomeScreen({ navigation }) {
     // cannot keep a retained literacy draft visible after a programme change.
     void programmeGatePromise.then(gate => {
       if (seq !== loadSeqRef.current || !handle.isCurrent()) return;
-      setIsMaths(isMathsProgramme(gate.programme));
+      setIsMaths(rememberProgrammeSubject(handle, gate.programme) === 'maths');
       setSubjectReady(true);
     }, () => {
-      // A failed read keeps what Home knew; it never turns a known numeracy EA back to literacy.
+      // A failed read keeps what Home knew and prefers maths known by any screen; it never
+      // turns a known numeracy EA back to literacy.
       if (seq !== loadSeqRef.current || !handle.isCurrent()) return;
+      if (isKnownMaths(handle)) setIsMaths(true);
       setSubjectReady(true);
     });
     // Draft availability is independent of statistics, including their failures and timing.

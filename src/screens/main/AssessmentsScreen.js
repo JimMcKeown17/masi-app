@@ -1,4 +1,4 @@
-import { isMathsProgramme } from '../../utils/programmeSubject';
+import { isKnownMaths, isMathsProgramme, rememberProgrammeSubject } from '../../utils/programmeSubject';
 import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import React, { useState, useCallback, useRef } from 'react';
@@ -56,17 +56,19 @@ export default function AssessmentsScreen({ navigation }) {
         let gate;
         try {
           gate = await getActiveProgrammeGate({ handle, userId: user.id });
+          rememberProgrammeSubject(handle, gate.programme);
         } catch (error) {
           if (!canPublish()) return;
           console.error('Error resolving active programme gate:', error);
-          // Preserve the existing usable quick-assessment fallback on a gate read error.
-          gate = { hasActiveProgramme: true, programme: null };
+          // Preserve the existing usable quick-assessment fallback on a gate read error, unless
+          // any screen already knows this EA is in maths: then no literacy surface opens.
+          gate = { hasActiveProgramme: true, programme: null, knownMaths: isKnownMaths(handle) };
         }
         if (!canPublish()) return;
         setProgrammeGate(gate);
         setGateChecking(false);
         const loadStats = async () => {
-          if (isMathsProgramme(gate.programme)) { setStats(null); return; }
+          if (isMathsProgramme(gate.programme) || gate.knownMaths) { setStats(null); return; }
           try {
             const [results, academicYears] = await Promise.all([
               assessmentsRepository.getLetterResults({ userId: user.id }),
@@ -128,7 +130,7 @@ export default function AssessmentsScreen({ navigation }) {
   }
 
   const programme = programmeGate.programme;
-  const isMaths = isMathsProgramme(programme);
+  const isMaths = isMathsProgramme(programme) || programmeGate.knownMaths === true;
   const battery = batteryForNewRun(programme?.default_battery_code, programme?.default_battery_version);
   const languages = battery ? languageList(battery.fixedLanguage ? [battery.fixedLanguage] : battery.languages) : '';
   const egra = FULL_EGRA_2026_1;

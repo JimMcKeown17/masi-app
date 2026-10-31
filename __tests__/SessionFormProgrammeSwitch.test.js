@@ -5,9 +5,12 @@ import React from 'react';
 import { act, render } from '@testing-library/react-native';
 import { JOB_TITLE_CODES } from '../src/constants/jobTitles';
 import SessionFormScreen from '../src/screens/sessions/SessionFormScreen';
+import { rememberProgrammeSubject } from '../src/utils/programmeSubject';
 
 const mockGate = jest.fn();
-const mockHandle = { isCurrent: () => true };
+// A fresh handle per test: known maths is recorded per signed-in EA handle.
+let mockHandle;
+beforeEach(() => { mockHandle = { isCurrent: () => true }; mockPickerMounts.mockClear(); });
 jest.mock('../src/context/SignedInEAContext', () => ({ useSignedInEA: () => ({ handle: mockHandle }) }));
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({
   user: { id: 'ea-1' }, profile: { jobTitleCode: require('../src/constants/jobTitles').JOB_TITLE_CODES.LITERACY_COACH },
@@ -45,6 +48,16 @@ test('a failed programme read never reopens the lesson flow for a known numeracy
   await first.findByText('Session forms for Numeracy are coming soon.');
   first.unmount();
   mockPickerMounts.mockClear();
+  mockGate.mockRejectedValue(new Error('read failed'));
+  const screen = render(<SessionFormScreen navigation={{}} />);
+  await act(async () => {});
+  expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
+  expect(mockPickerMounts).not.toHaveBeenCalled();
+});
+
+test('maths confirmed on another screen covers a failed first read on Record', async () => {
+  // Home or Assessments confirmed numeracy for this sign-in; Record's own first read fails.
+  rememberProgrammeSubject(mockHandle, { code: 'numeracy' });
   mockGate.mockRejectedValue(new Error('read failed'));
   const screen = render(<SessionFormScreen navigation={{}} />);
   await act(async () => {});

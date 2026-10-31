@@ -3,15 +3,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useSignedInEA } from '../context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../services/activeProgrammeGate';
-import { programmeSubject } from '../utils/programmeSubject';
+import { isKnownMaths, rememberProgrammeSubject } from '../utils/programmeSubject';
 
-// Signed-in EAs last confirmed as maths. Only maths is cached: hiding literacy is always safe,
-// so a newly mounted screen can start from it, while a cached "reading" could open a literacy
-// route after Head Office moved the EA to numeracy. Every screen confirms reading itself.
-const knownMaths = new WeakSet();
-
+// Only maths is shared across screens: hiding literacy is always safe, so a newly mounted
+// screen can start from it, while a shared "reading" could open a literacy route after Head
+// Office moved the EA to numeracy. Every screen confirms reading with its own read.
 function initialState(handle) {
-  return knownMaths.has(handle)
+  return isKnownMaths(handle)
     ? { handle, subject: 'maths', loading: false }
     : { handle, subject: null, loading: true };
 }
@@ -29,15 +27,13 @@ export function useActiveProgrammeSubject() {
       try {
         const gate = await getActiveProgrammeGate({ handle, userId: user.id });
         if (!canPublish()) return;
-        const subject = programmeSubject(gate.programme);
-        if (subject === 'maths') knownMaths.add(handle); else knownMaths.delete(handle);
-        setState({ handle, subject, loading: false });
+        setState({ handle, subject: rememberProgrammeSubject(handle, gate.programme), loading: false });
       } catch {
-        // A failed read keeps what this screen knew; with nothing known it settles as unknown
-        // (today's literacy behaviour), and it never turns a known maths EA back to literacy.
+        // A failed read prefers maths known by any screen, then what this screen knew; with
+        // nothing known it settles as unknown (today's literacy behaviour).
         if (!canPublish()) return;
-        setState(prev => (prev.handle === handle && !prev.loading
-          ? prev : { ...initialState(handle), loading: false }));
+        setState(prev => (isKnownMaths(handle) || prev.handle !== handle || prev.loading
+          ? { ...initialState(handle), loading: false } : prev));
       }
     })();
     return () => { active = false; };
