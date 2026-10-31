@@ -7682,6 +7682,141 @@ floating keyboard and iOS physical-device gates remain open. The supplied Androi
 - **Still open:** Change password, Report a problem and Edit child (the height path) on the
   A03s need a signed-in session (Jim types the password), and the iPhone smoke.
 
+### 2026-10-31 — Website reporting functions for the Masi App dashboard (`feat/dashboard-reporting-access`)
+
+Jim asked (2026-10-30, overnight) for a Masi App dashboard on the Masi website, with an App Ops
+workspace, modelled on Zazi iZandi's Programme and App Ops workspaces. Approved spec (Codex rev 3):
+`masi-web-nextjs` `docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`. This repo
+carries Plan A of 3: `docs/superpowers/plans/2026-10-31-masi-reporting-functions-plan.md`. Plans B
+(Django) and C (website) live in their own repos. Codex (gpt-6.1-sol, high) built; Claude reviewed
+every diff, ran every harness, and committed. Codex gpt-6-astra ran the adversarial reviews.
+
+#### Decision Register
+
+| Decision | Why |
+|---|---|
+| The website reads app data only through nine versioned `masi_reporting_*_v1` functions in this repo | The SQL sits beside the schema it reads; a schema change that breaks reporting fails this repo's harness, not the website. `_v1` is never edited after a hosted apply; a change becomes `_v2`. |
+| A dedicated `masi_reporting_reader` LOGIN role with **no password in the migration**, no table privileges, EXECUTE on the nine functions only, and no service-role fallback | Least privilege: a leaked website credential can only run reviewed read-only functions. The service-role key could write every table and was rejected (spec rev 2). |
+| `BEGIN ATOMIC` SQL bodies plus a harness body audit (no `pg_depend` reference to any user function; a denylist of volatile side-effect built-ins; a negative control) | Spec review round 2: `STABLE` is not a write barrier. Confirmed locally on 2026-10-31: a `STABLE` definer calling a volatile writer does insert a row, and `pg_depend` records that call. |
+| Refusals are documents (`error: too_much_data` / `invalid_argument`), never truncation | Pure SQL cannot `RAISE`. Django maps them to 413/400. |
+| "Last data received" uses only server-stamped clocks: `sessions`/`assessments`/`battery_runs.updated_at`, `letter_mastery_corrections.received_at`, receipt `received_at` | Phone `created_at` survives upload; `time_entries.updated_at` is server-stamped only on update, so clock uploads are excluded and labelled (spec Q8). |
+| "Assessments" = `completed_battery_runs`; coverage = eligible (non-`skipped_*`) results by Facts authors | Plan review round 1: abandoned and in-progress batteries keep saved questions. |
+
+#### Verification
+
+| Check | Result |
+|---|---|
+| `npm run verify:reporting:postgres` (disposable local PG17, port 55432, `PGTZ=UTC`), Task 1 RED | Migration absent: fails at `accounts-shape` ("function does not exist") |
+| Same, Tasks 1–4 GREEN | **121/121 cases**: shape, receipt-source isolation (exact timestamps), roster predicates (ended enrolment, exited membership, archived class/child, programme transfer, shared child), eligible/author/range coverage, SAST boundaries at 00:30 SAST, score fields (`derived.max`), completed vs abandoned batteries, legacy nulls, all-role EXECUTE denials on the nine functions, no table privileges, executable-function set, body audit with negative control, role settings, exact-limit and limit+1 for every cap |
+| Mutation: dropping `e.ended_at IS NULL` from `roster_v1` | Fails `roster-ea-a`; restored byte-identical |
+| `MASI_REPORTING_KEEP=1 … DATABASE_NAME=masi_history_rls_reporting_keep` | Last line `RETAINED masi_history_rls_reporting_keep`; 9 functions present from a fresh connection; the cap database removed |
+| `npx jest __tests__/testerProvisioning.test.js` (Task 5: new testers stamped `app_metadata.is_test_account`) | RED 1 failed / 5 passed; GREEN **6/6** |
+
+#### Review findings, dead ends and surprises
+
+- Spec: 3 Codex rounds (10, then 8, then 0 findings). Plans: A needed 2 rounds (7 findings, then
+  clean); B and C needed 3.
+- Codex's sandbox cannot reach local Postgres, so Codex wrote the SQL and harness and the
+  orchestrator ran every PG17 pass. The orchestrator fixed three fixture defects: a NOT NULL
+  `report_id` on the seeded receipt; a session group set by an UPDATE, which
+  `sessions_prevent_identity_change` forbids (the session is now re-inserted with its group, as a
+  phone would); and a cap decoy that reused an assigned group (one active EA per group).
+- Only one non-reporting function is EXECUTE-able by the reader: `private.set_updated_at()`, a
+  PUBLIC trigger function. It is unreachable because the reader has no USAGE on `private`. All
+  write RPCs were already revoked from PUBLIC by earlier migrations.
+
+#### Still open (Jim's rollout steps; nothing applied to hosted)
+
+1. Merge, then apply the migration to `masi-app-sqlite` with the isolated staging helper; verify the
+   functions and grants read-only.
+2. Set the reader password out of band (`ALTER ROLE masi_reporting_reader PASSWORD …`) and verify a
+   real login through the session pooler as `masi_reporting_reader.segygjzpujphwvrubusm` (spec risk
+   R1; there is no fallback).
+3. Stamp or list existing staging tester accounts (`MASI_APP_TEST_EMAILS` on Render); new testers
+   are stamped `is_test_account` by `createTesters.js`.
+
+### 2026-10-31 — Reporting code-review corrections (Codex: cross-year memberships, test flag)
+
+- Edited the unpublished `20261031120000_masi_reporting_v1.sql` in place. Current-class
+  projections in roster and assessment exports now choose one open membership in a non-archived
+  class by `enrolled_at DESC, class_id ASC LIMIT 1`. Assessment exports retain battery-run class
+  precedence. Removed unused membership/class joins and class columns from the detail assessment
+  source; delivery eligibility and `count(DISTINCT child_id)` remain unchanged.
+- Test-account flags compare case-folded JSON text to `true`, with null falling back to false;
+  arbitrary strings such as `yes` never undergo a boolean cast.
+- Extended the PostgreSQL harness with C12, open K1/2026 and K3/2025 memberships (2025 inactive),
+  and one standalone quick test on October 24. Assertions require a single K1 roster/export row,
+  one occurrence in detail with assessment total 9, and delivery count 3. Added seven metadata
+  cases: JSON true, strings `true`/`TRUE`, false, `yes`, null and absent.
+- Orchestrator follow-ups:
+  - The C12 quick test (2026-10-24) correctly raises EA_A's week-of-2026-10-19
+    `question_results` from 7 to 8, so that expectation was updated.
+  - The per-child `LATERAL` membership pick timed out the 100,001-child roster cap case: psql was
+    killed at the 180 s harness limit, since bulk rows in one transaction have no statistics. It
+    was rewritten set-based (`DISTINCT ON (child_id)` once, then a join).
+- Verification (local PG17, `PGTZ=UTC`): **131/131 cases** in 1 min 52 s. The KEEP run printed
+  `RETAINED masi_history_rls_reporting_keep` (refreshed with these functions). Nothing applied to
+  hosted.
+
+#### Code review outcome (2026-10-31)
+
+Codex code review took two rounds:
+- Round 1: needs-attention. Cross-year memberships duplicated rows; the string "true" was not
+  recognised as a test flag. Both fixed in `4a4bf67`.
+- Round 2: **approve**, no material findings.
+
+Local only; the hosted apply and the real reader login remain Jim's rollout steps.
+
+**2026-10-31, PR #131 CI fix.** The first CI run failed in the history-authorization harness:
+`column a.last_sign_in_at does not exist`. The reporting harness had added `raw_app_meta_data`,
+`last_sign_in_at` and `email_confirmed_at` to its own copy of the `auth.users` stand-in, not to the
+shared `bootstrapSql`. Every other harness replays every migration, so all of them would have hit
+the same error. CI didn't catch it earlier because `verify:reporting:postgres` had no CI step.
+- Fix: the three real Supabase columns now live in the shared stand-in, and CI runs the reporting
+  harness.
+- Local, on a fresh PG17 set up like CI: all 11 `verify:*:postgres` harnesses exit 0, and
+  reporting is 131/131.
+
+**Pre-apply Codex live-apply review.** One high finding: Supabase CLI 2.109.1's statement splitter
+ends a `BEGIN ATOMIC` body at the first `END` that isn't inside brackets. In this file that is a
+`CASE … END`, so `db push` would send broken function bodies.
+- It fails safely: `ExecBatch` runs the whole file as one implicit transaction, so nothing is
+  half-applied.
+- `db push --dry-run` does not catch it.
+- The fix is upstream ("respect atomic END boundaries", first released in v2.118.0). The splitter
+  was ported to check: v2.109.1 gives 53 statements (9 stray `END`s), v2.122.0 gives the correct 44.
+- The SQL is unchanged.
+
+The review found nothing else: no superuser-only steps, API roles lose EXECUTE in the same
+transaction, no long locks.
+
+**Pre-apply evidence (2026-10-31).**
+- **Rolled-back rehearsal on `masi-app-sqlite`:** psql 17.5, session pooler, `BEGIN; \i migration; checks; ROLLBACK`.
+  - The role was created LOGIN, NOINHERIT, connlimit -1, with `{default_transaction_read_only=on,statement_timeout=15s}`.
+  - 9 SECURITY DEFINER functions.
+  - 0 EXECUTE for `anon`/`authenticated`/`service_role`.
+  - 0 table privileges for the reader.
+  - 0 other `public` SECURITY DEFINER functions the reader can execute.
+  - `accounts_v1` ran on staging data.
+  - After the rollback, the role and functions were gone.
+- **CLI:** Jim upgraded the Homebrew Supabase CLI to 2.122.0. A real `supabase db push --db-url` to a
+  disposable PG17 (harness bootstrap plus default privileges) applied all 39 migrations. This file
+  was recorded with 44 statements, and the 9 functions work.
+
+### 2026-10-31 — Reporting migration renamed to `20261031180000` (`fix/reporting-migration-version`)
+
+After #131 merged (`f373f0b`), `sqlite:staging:dry-run` said "Remote database is up to date". A
+read-only look at `supabase_migrations.schema_migrations` showed why: version `20261031120000` was
+already recorded on `masi-app-sqlite` as `numeracy_maths_draft_default`. That migration comes from
+the unmerged `feat/egma-maths-assessment` branch and was applied to staging separately. The CLI
+matches migrations by version only, so it treated ours as applied.
+- **Not applied:** no `masi_reporting_reader` role and no reporting functions exist on staging.
+- **Fix:** the numeracy migration keeps its version, which staging already records. Ours is
+  renamed to `20261031180000`, the SQL is byte-identical, and the contract map path is updated.
+- **Lesson:** a branch's migration applied to shared staging before merge reserves that version
+  for everyone. Hand-picked `YYYYMMDD120000` versions collide between parallel branches;
+  `supabase migration new` timestamps would not.
+
 ### 2026-10-31 — Maths assessment (EGMA): build of plan Tasks 0–14 (`feat/egma-maths-assessment`)
 
 Spec `docs/superpowers/specs/2026-10-31-egma-maths-assessment-design.md` (approved by Jim

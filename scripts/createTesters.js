@@ -188,6 +188,8 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
       email: row.email,
       password: row.password,
       email_confirm: true,
+      // The website dashboard excludes test accounts from every figure by default.
+      app_metadata: { is_test_account: true },
     });
     if (createError) {
       return { status: 'error', reason: `auth create failed: ${createError.message}` };

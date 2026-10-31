@@ -103,5 +103,12 @@ jobs:
           HISTORY_RLS_DATABASE_NAME: masi_history_rls_ci
           HISTORY_RLS_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
         run: npm run verify:letter-order:postgres
+      - name: Website reporting PostgreSQL harness
+        env:
+          PGTZ: UTC
+          MASI_REPORTING_ADMIN_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          MASI_REPORTING_DATABASE_NAME: masi_history_rls_reporting_ci
+          MASI_REPORTING_DISPOSABLE_CONFIRM: I_UNDERSTAND_THIS_IS_DISPOSABLE
+        run: npm run verify:reporting:postgres
       - name: Integration suite (file-backed SQLite)
         run: npm run test:integration
