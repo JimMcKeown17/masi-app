@@ -11,7 +11,9 @@ export function StopCard({ childName, stopRule, onSave, onUndo }: {
   return (
     <ConfirmSheet testID="stop-card"
       title={stopRule.kind === 'consecutive_wrong'
-        ? `${childName ?? 'The child'} got ${stopRule.stop_at} in a row wrong. The test has stopped.`
+        ? stopRule.stop_at === 1
+          ? `${childName ?? 'The child'} made a mistake. The test has stopped.`
+          : `${childName ?? 'The child'} got ${stopRule.stop_at} in a row wrong. The test has stopped.`
         : `${childName ?? 'The child'} got every item in the first row wrong. The test has stopped.`}
       confirmLabel="Save result" onConfirm={onSave}>
       <TextLink label="Undo last mark" onPress={onUndo} />
