@@ -15,15 +15,15 @@ severity_components:
 severity_override: none
 priority: P2
 
-diagnosis_state: PROBABLE
-delivery_state: NO_FIX_PROPOSED
-verification_state: NOT_TESTED
+diagnosis_state: CONFIRMED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
-root_cause_confidence_pct: 80
-confidence_basis: Hosted receipt shows only "stale_version"; the server raises MV001 with a detail carrying both versions, and offlineSync.errorMessage reads only error.message.
+root_cause_confidence_pct: 95
+confidence_basis: Hosted receipt shows only "stale_version"; the server raises MV001 with a detail carrying both versions, and offlineSync.errorMessage reads only error.message. A test that runs the real MV001 error shape through the sync engine with real SQLite stored only the message before the fix and the detail after it.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-30T23:30:00Z
+updated_at_utc: 2026-10-31T02:06:37Z
 first_observed_at: 2026-10-30T16:57:26Z
 last_observed_at: 2026-10-30T16:57:26Z
 
@@ -50,7 +50,8 @@ field_report_ids: []
 support_incident_keys: []
 support_incident_signatures: []
 evidence_paths: []
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/126
 
 data_safety_status: the server copy was kept correctly; only diagnostic detail is lost
 workaround_status: read the stored row_version with --resolve or SQL
@@ -138,17 +139,18 @@ Exactly the steps above, A03s gate 5 on 2026-10-30.
 
 ## Root cause
 
-Probable: the client keeps only `error.message` when recording a failure, so
-any server detail is lost before the receipt is built.
+The recorded-failure formatter retained only message/code, dropping PostgREST details and hint before SQLite and terminalPayload. Real SQLite sync-path tests reproduce the MV001 loss.
 
 ## Suggested fix
 
-Keep `details` and `hint` alongside the message in `lastError` (bounded
-length), so every terminal receipt carries the server's full account.
+Added a dedicated recordedFailure formatter; preserve message plus nonempty details/hint and bound persisted reasons to 2,048 UTF-8 bytes. Keep errorMessage for console/preflight. Code-based retry classification and legacy RLS-heal fallback are preserved.
 
 ## Verification plan
 
-- [ ] Unit test with the real MV001 error shape.
+- [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
+- [ ] A03s and iPhone acceptance checks (2026-10-31).
+
+- [x] Unit test with the real MV001 error shape.
 - [ ] Repeat gate 5 on a device and read the receipt.
 
 ## Timeline
@@ -157,6 +159,7 @@ length), so every terminal receipt carries the server's full account.
 | --- | --- | --- | --- |
 | 2026-10-30T16:57:44Z | Phone | Receipt received | `ut:d59e852f` |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep; source traced |
+| 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #126; RED → GREEN evidence in build log; device checks pending |
 
 ## Open questions
 

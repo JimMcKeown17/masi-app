@@ -49,6 +49,6 @@ const styles = StyleSheet.create({
     padding: spacing.ms, gap: spacing.xs },
   label: { ...typeRoles.textSectionLabel, color: colors.textSecondary },
   question: { ...typeRoles.textSmall, color: colors.text },
-  footer: { borderTopWidth: 0, paddingTop: spacing.lg },
+  footer: { borderTopWidth: 0, paddingTop: spacing.sm },
   footerRuled: { borderTopWidth: 1 },
 });

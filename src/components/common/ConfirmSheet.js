@@ -43,6 +43,6 @@ export default function ConfirmSheet({
 const styles = StyleSheet.create({
   body: { ...typeRoles.textParagraph, color: colors.textSecondary },
   accessory: { marginBottom: spacing.md },
-  footer: { borderTopWidth: 0, paddingTop: spacing.lg },
+  footer: { borderTopWidth: 0, paddingTop: spacing.sm },
   actions: { gap: spacing.ms },
 });

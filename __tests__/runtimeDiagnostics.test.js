@@ -30,15 +30,9 @@ jest.mock('expo-updates', () => ({
   isEmergencyLaunch: false,
 }));
 
-jest.mock('../src/utils/releaseMetadata', () => ({
-  getReleaseMetadata: () => ({
-    appVersion: '1.2.0',
-    gitCommit: 'abc1234',
-    supabaseTarget: 'sqlite-staging',
-    supabaseProjectId: 'segygjzpujphwvrubusm',
-  }),
-}));
-
+jest.mock('expo-constants', () => ({ expoConfig: {
+  version: '1.2.0', extra: { gitCommit: 'abc1234', supabaseTarget: 'sqlite-staging', supabaseProjectId: 'segygjzpujphwvrubusm' },
+} }));
 jest.mock('../src/db/migrations', () => ({
   CURRENT_SCHEMA_VERSION: 8,
 }));
@@ -52,6 +46,7 @@ describe('getRuntimeDiagnostics', () => {
         id: 'org.masinyusane.masi',
         version: '1.2.0',
         build: '47',
+        releaseLabel: '1.2.0 (47)', gitCommit: 'abc1234',
       }),
       device: expect.objectContaining({
         manufacturer: 'Google',

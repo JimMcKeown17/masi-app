@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+jest.mock('expo-application', () => ({ nativeBuildVersion: '55' }));
 import { requireCurrentHandle } from '../src/session/signedInHandle';
 let mockWrittenContent;
 
@@ -25,9 +27,10 @@ jest.mock('expo-constants', () => ({
     version: '1.2.0',
     runtimeVersion: { policy: 'appVersion' },
     ios: { buildNumber: '1' },
-    android: { versionCode: 1 },
+    android: {},
     updates: { url: 'https://u.expo.dev/test-project' },
     extra: {
+      gitCommit: 'abc1234',
       supabaseTarget: 'sqlite-staging',
       supabaseProjectId: 'segygjzpujphwvrubusm',
     },
@@ -91,6 +94,7 @@ describe('debug database export metadata', () => {
        'correction-k', 'other-ea', 'mastery-programme', 'terminal',
        '2026-10-20T08:00:00.123456+00:00', 'server-correction-k')`);
 
+    jest.replaceProperty(Platform, 'OS', 'android');
     const result = await exportDatabase({ handle: requireCurrentHandle() });
 
     expect(result).toEqual({ success: true });
@@ -99,8 +103,9 @@ describe('debug database export metadata', () => {
     expect(exported.content_diagnostics.previewContentAllowed).toBe(false);
     expect(exported.sqlite_refactor_build).toBe('plan-6');
     expect(exported.app_version).toBe('1.2.0');
+    expect(exported.android_version_code).toBe(55);
     expect(exported.releaseMetadata).toEqual(expect.objectContaining({
-      appVersion: '1.2.0',
+      appVersion: '1.2.0', androidVersionCode: 55, releaseLabel: '1.2.0 (55)', gitCommit: 'abc1234',
       supabaseTarget: 'sqlite-staging',
       supabaseProjectId: 'segygjzpujphwvrubusm',
     }));

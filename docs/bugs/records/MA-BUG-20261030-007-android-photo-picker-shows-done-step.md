@@ -15,15 +15,15 @@ severity_components:
 severity_override: none
 priority: P3
 
-diagnosis_state: HYPOTHESIS
-delivery_state: NO_FIX_PROPOSED
+diagnosis_state: CONFIRMED
+delivery_state: NO_PRODUCT_CHANGE
 verification_state: NOT_TESTED
 
-root_cause_confidence_pct: 40
-confidence_basis: The app requests single selection (expo-image-picker 17.0.11 uses PickVisualMedia when allowsMultipleSelection is false), so the Done bar appears to come from the system picker; not compared on another Android version.
+root_cause_confidence_pct: 95
+confidence_basis: The A03s routes the picker request to Google's system photo picker (com.google.android.photopicker). Opened from adb with a plain single-pick intent, with no app involved, it shows the same ✕ 1 / Preview / Done bar after one tap.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-30T23:30:00Z
+updated_at_utc: 2026-10-31T02:05:00Z
 first_observed_at: 2026-10-30T16:47:00Z
 last_observed_at: 2026-10-30T16:47:00Z
 
@@ -117,6 +117,16 @@ The A03s observation above.
 
 ## Observed facts
 
+- 2026-10-31, A03s: `cmd package query-activities -a android.provider.action.PICK_IMAGES`
+  resolves to `com.google.android.photopicker/com.android.photopicker.MainActivity`
+  (the updatable system photo picker), ahead of the older MediaProvider picker.
+- `adb shell am start -a android.provider.action.PICK_IMAGES -t 'image/*'` sends
+  the plain single-pick intent, with no `EXTRA_PICK_IMAGES_MAX` and no app
+  involved. Tapping one photo marked it "Selected" and showed "1 photos or videos
+  selected", Preview and Done; the picker stayed open. The UI was read with
+  uiautomator only; no screenshot was taken, because the gallery holds
+  children's images.
+
 - `src/utils/supportScreenshot.js` calls the picker with
   `allowsMultipleSelection: false`.
 - expo-image-picker 17.0.11 `ImageLibraryContract.kt` builds a
@@ -126,20 +136,24 @@ The A03s observation above.
 
 | Hypothesis | Evidence for | Evidence against | Confidence | Next discriminating check |
 | --- | --- | --- | ---: | --- |
-| The system photo picker version on this phone always confirms single picks with Done | App requests single selection | Not compared on another phone | 40% | Try the same flow on the emulator (Android 15) or another phone |
-| The library requests multiple selection somewhere else | None | Source above | 5% | Log the intent action |
+| The system photo picker version on this phone always confirms single picks with Done | App requests single selection; the system picker shows Done for a plain single-pick intent sent from adb | None | 95% | Not needed |
+| The library requests multiple selection somewhere else | None | Source above; reproduced without the app | <5% | Not needed |
 
 ## Root cause
 
-Unknown; likely the operating system's picker.
+The phone's system photo picker asks for Done even for a single pick. Masi
+requests a single image correctly.
 
 ## Suggested fix
 
-None unless another device shows the app is at fault.
+No product change (Jim asked for the small bugs to be fixed, 2026-10-31; this one
+is the operating system's). The only app-side alternative is expo-image-picker's
+`legacy: true` (the older document picker), which would trade the privacy-scoped
+system picker for a clunkier file browser; not worth it for one tap.
 
 ## Verification plan
 
-- [ ] Compare on a second Android version.
+- [x] Reproduce without the app (system picker, single-pick intent, A03s).
 
 ## Timeline
 
@@ -147,7 +161,8 @@ None unless another device shows the app is at fault.
 | --- | --- | --- | --- |
 | 2026-10-30T16:47:00Z | Claude | Observed during A03s gate 3 | Screenshot kept privately |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
+| 2026-10-31T02:00:00Z | Claude | Reproduced without the app | adb single-pick intent to the system picker shows Done; no product change |
 
 ## Open questions
 
-- Does Android 14 or 15 return immediately for a single pick?
+- None.

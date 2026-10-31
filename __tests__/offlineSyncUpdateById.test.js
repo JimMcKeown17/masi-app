@@ -13,6 +13,7 @@ import {
 import { initializeTestDatabase, closeDefaultTestHandle } from '../test-support/testDatabase';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { terminalPayload, utf8Bytes } from '../src/services/incidentPayloads';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
 
 const HEAD_OFFICE = 'head-office-1';
@@ -93,6 +94,27 @@ describe('edits are sent as UPDATE by id (spec §6.5)', () => {
       sign_in_location_status: 'timeout', sign_out_lat: null, sign_out_lon: null, sign_out_location_status: 'unavailable',
     } });
     expect(await db.getAllAsync("select * from sync_outbox where table_name = 'time_entries'")).toEqual([]);
+  });
+
+  test.each([null, 'Reload the record', '界'.repeat(3000)])('MV001 keeps server detail and bounded hint %p in outbox and receipt', async hint => {
+    const child = await seedHeadOfficeChild(db);
+    await enqueue(db, 'children', child.id, 'update', child);
+    const details = 'children id=child-ho-1 incoming row_version=2 stored row_version=10';
+    const { supabaseClient } = createSupabaseMock({ updateResults: { children: {
+      data: null, error: { message: 'stale_version', code: 'MV001', details, hint },
+    } } });
+    const engine = createOutboxSyncEngine({ enqueueRequest: task => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
+    await engine.syncAll();
+    const row = await createSyncOutboxRepository({ database: db }).getById('children:child-ho-1:update');
+    expect(row).toMatchObject({ status: 'terminal', error_code: 'MV001' });
+    expect(row.last_error).toContain('stale_version | details: ' + details);
+    expect(terminalPayload(row).lastError).toBe(row.last_error);
+    // A diagnostic suffix must never make an MV001 terminal look like healable RLS.
+    await db.runAsync("update sync_outbox set last_error = last_error || ' | hint: row-level security 42501' where id = ?", row.id);
+    expect(await engine.requeueTerminalRlsFailures('user-1')).toBe(0);
+    if (hint) expect(row.last_error).toContain(' | hint: ' + (hint.length < 100 ? hint : '界'));
+    else expect(row.last_error).not.toContain('hint:');
+    expect(utf8Bytes(row.last_error)).toBeLessThanOrEqual(2048);
   });
 
   test('a Head Office-created child edit is an UPDATE without provenance columns', async () => {

@@ -1,7 +1,20 @@
+const { execFileSync } = require('child_process');
 const { resolveSupabaseProjectConfig } = require('./config/supabaseProjectConfig');
 const { resolvePreviewContentBuildConfig } = require('./config/previewContentConfig');
 
 const GALLERY_PROFILES = ['development', 'preview'];
+
+// Evaluated for both builds and updates so the manifest identifies its source.
+const gitCommit = () => {
+  if (process.env.EAS_BUILD_GIT_COMMIT_HASH) return process.env.EAS_BUILD_GIT_COMMIT_HASH;
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: __dirname, encoding: 'utf8', timeout: 1000, stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() || null;
+  } catch {
+    return null;
+  }
+};
 
 module.exports = () => {
   const supabaseConfig = resolveSupabaseProjectConfig();
@@ -85,6 +98,7 @@ module.exports = () => {
         favicon: './assets/favicon.png',
       },
       extra: {
+        gitCommit: gitCommit(),
         questionGallery: GALLERY_PROFILES.includes(process.env.EAS_BUILD_PROFILE),
         ...supabaseConfig,
         ...resolvePreviewContentBuildConfig(),

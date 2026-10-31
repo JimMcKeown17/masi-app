@@ -7673,3 +7673,177 @@ floating keyboard and iOS physical-device gates remain open. The supplied Androi
   check before driving a shared device.
 - **Still open:** Change password, Report a problem and Edit child (the height path) on the
   A03s need a signed-in session (Jim types the password), and the iPhone smoke.
+
+### 2026-10-31 — First-sweep small bugs (`fix/first-sweep-small-bugs`)
+
+Implemented locally, uncommitted, using Node v20.19.4. No Supabase CLI, EAS, network,
+package/dependency or native-project commands/changes. Existing branch retained. Record 007
+changed concurrently after the initially clean status; Codex did not edit it. Record 008 untouched.
+
+- **#124 / MA-BUG-002 and 003:** ReportProblemSheet now renders Replace and Remove in
+  one spacing.sm (8 dp) flex row, matching default-brand tertiary buttons, image-outline
+  and trash-outline icons, full screenshot accessibility labels. Before attachment,
+  Attach a screenshot is unchanged. Picker/sending guards and removal are tested.
+  BrandButton already forwards accessibilityLabel; no pass-through change needed.
+  Tertiary controls have no minWidth, 2 dp horizontal padding, 20 dp icons and 8 dp
+  icon gaps; 15 dp labels Replace/Remove fit the 312 dp body of a 360 dp sheet by
+  source inspection. Jest does not measure native text/Yoga; physical acceptance remains open.
+- **#125 / MA-BUG-006:** BottomSheet supplies spacing.md body padding only with a footer,
+  for both body modes; caller bodyContentStyle composes last. Removed BlendPoolSheet's
+  redundant bottom padding. Reduced ConfirmSheet/SkipNoticeSheet footer padding 24→8
+  and ChangePasswordSheet 16→0 to preserve their body-to-action spacing. Confirm's
+  accessory margin separates body elements, so it stays. Updated design-system Sheets.
+- **#126 / MA-BUG-004:** Dedicated recordedFailure keeps nonempty details and hint;
+  errorMessage remains concise for console and preflight callers. No existing outbox
+  last_error/reason cap was found (SQLite TEXT). Reused incidentPayloads.truncateUtf8
+  and the existing diagnostics 2,048-byte string budget; stored reasons include policy
+  prefixes within that cap. Real SQLite public sync-path tests use MV001/stale_version,
+  version detail, null/nonempty hint and an oversized multibyte hint. terminalPayload
+  copies the stored lastError, verified through its public builder.
+- **#127 / MA-BUG-005:** Installed Application.nativeBuildVersion wins on its platform,
+  with config fallback (Android remains numeric; iOS string). Commit comes from extra.
+  app.config uses EAS_BUILD_GIT_COMMIT_HASH, otherwise execFileSync git rev-parse HEAD
+  in the checkout with a 1,000 ms timeout and quiet stderr; failure returns null.
+  releaseLabel and buildMessage both derive version (build), or version without build.
+  AppReleaseInfo does not display buildMessage, so no UI removal is needed; preserve
+  the exported field for compatibility. Deleted unused constants/releaseMetadata.json.
+
+RED evidence, before the corresponding implementation:
+
+| Slice | Failing assertion / output | RED count |
+| --- | --- | --- |
+| #124 | Unable to find an element with text: Replace, at getByText('Replace') | 1 failed, 21 passed, 22 total |
+| #125 | paddingBottom: Expected 16, Received 0, for scrollable and plain footer bodies | 2 failed, 32 passed, 34 total |
+| #126 | Expected substring stale_version followed by details: children id=child-ho-1 incoming row_version=2 stored row_version=10; received Server has a newer version of this record (stale_version): stale_version | 3 failed, 17 passed, 20 total |
+| #127 metadata | Expected native build 55, extra commit and 1.5.0 (55); received null build, unknown commit and sqlite-critical-hardening | 2 failed, 1 passed, 3 total |
+| #127 config | Expected EAS/local SHA or null-on-git-failure; Received undefined for extra.gitCommit | 3 failed, 3 total |
+
+The first plain-body test traversal was corrected to select the host View; the retained
+RED above is the discriminating spacing assertion, not that test-harness error.
+
+Error reason consumer trace (source inspection): offlineSync finalizers store last_error
+and propagate lastSyncError to domain rows; syncOutboxRepository maps last_error to
+failed item reason; SyncStatusScreen renders item.reason; debugDump exports lastError
+with optional export-size markers; terminalPayload/backlogPayload copy stored values.
+OfflineContext passes result/count status, and syncStatusPresenter/homeAttention derive
+needs-attention copy from counts/status, without parsing diagnostic prose. The incident
+reader displays payloads/uses table and record identity, not message equality. No exact
+stale_version match or end-anchored message match was found. classifyError/dispositionFor
+use error.code. Special foreign_owner equality is unchanged. The legacy RLS healer did
+match /row-level security|42501/i; it now prefers stored error_code, retaining text fallback
+only for missing/OTHER legacy codes and preserving the authenticated-denial prefix guard.
+A regression adds RLS-looking hint text to an MV001 terminal and proves it cannot be healed.
+
+Server source check: supabase/migrations/20261030120000_incident_receipts.sql validates
+schema-2 envelope keys and allows unrestricted nested diagnostic content. No releaseLabel
+or gitCommit nested allowlist found under supabase/. Field names/envelope shape unchanged.
+No live database, publication, device or hosted receipt proof is claimed. Contract-map and
+LEARNING updates explain diagnostic prose versus stable policy codes.
+
+Footer sheet source audit:
+
+| Footer sheet | Before → after body edge to divider (dp) | Footer top padding before → after | Decision |
+| --- | --- | --- | --- |
+| ConfirmSheet | No divider; body-to-actions 24 → 24 | 24 → 8 | Shared 16 replaces part of footer gap; accessory margin 16 remains between body elements. |
+| SelectSheet | 0 → 16 (when footer supplied) | 8 → 8 | Keep search/list and row interior padding; footer-free mode unchanged. |
+| SkipNoticeSheet | No divider normally; body-to-actions 24 → 24; scrolling divider 0 → 16 | 24 → 8 | Keep list card interior padding and inter-body margins. |
+| BlendPoolSheet | 16 → 16 | 8 → 8 | Remove tiles paddingBottom 16; shared body padding replaces it. |
+| MakeGroupSheet | 0 → 16 | 8 → 8 | Note margin separates error from list; retained. |
+| OtherLetterSheet | 0 → 16 | 8 → 8 | Grid has no bottom compensation. |
+| ChangePasswordSheet | No divider; body-to-actions 16 → 16 | 16 → 0 | Shared 16 replaces footer spacing; field/note margins retained. |
+| ReportProblemSheet | 0 → 16 | 8 → 8 | Attachment marginTop is internal and retained. |
+| SendDiagnosticsSheet | 0 → 16 | 8 → 8 | Root fix supplies the missing pre-divider space. |
+| LetterTrackerBottomSheet | Grid 0 → 16 | 8 → 8 | Keep intrinsic missing-state text padding 16 and loading-area padding 32. |
+| LessonWrapUpScreen date sheet | 0 → 16 | 8 → 8 | Calendar month/week gaps are internal and retained. |
+| QuestionGalleryRunScreen | 0 → 16 | 8 → 8 | Result stack gap separates body elements; retained. |
+
+Gaps are source-defined container spacing, not measured glyph-to-divider distances. Text
+descenders, row interiors (SelectSheet rows have 16 dp vertical padding), empty-state
+padding, button padding and the 1 dp divider are excluded. In LetterTracker's missing
+state, preserved text interior padding makes the text-to-divider inset 16 → 32 dp;
+loading-area interior padding makes its content inset 32 → 48 dp. Those are intrinsic
+state containers rather than footer compensation. The default grid receives exactly one
+16 dp footer spacer. Footer top padding lies below a divider and cannot replace padding above it.
+
+Additional local fit evidence: fontTools measured the installed Figtree 800 face at the
+actual 15 dp textButton size. Glyph advances: Replace 55.875 dp, Remove 57.150 dp;
+including two 20 dp icons, their 8 dp gaps, button padding and row gap gives 185.025 dp
+within the 312 dp body. This is font/source proof, not a native screenshot/device pass.
+
+Verification (every JavaScript command prefixed with
+PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH):
+
+- Each changed/new test file and direct-name render/config consumers: 36 suites,
+  630 tests passed, 0 snapshots (serial targeted run).
+- Additional SelectSheet and MakeGroupSheet roster consumers: 2 suites, 18 tests
+  passed. Combined targeted coverage: 38 distinct suites, 648 tests passed.
+- Full npm test -- --silent: 465 suites, 7,388 tests, 14 snapshots passed;
+  0 failed (144.584 s).
+- npm run test:types: exit 0, no TypeScript diagnostics.
+- git diff --check: exit 0, no whitespace errors.
+- Follow-up changed tests (ChangePasswordSheet, offlineSyncUpdateById, debugExport):
+  3 suites, 66 tests passed, including code-based RLS-heal regression.
+
+Exact targeted per-file counts (all passed):
+
+| Test file | Passed |
+| --- | ---: |
+| AppNavigator.headers.test.js | 38 |
+| BatteryOverviewScreen.test.js | 76 |
+| BottomSheet.test.js | 34 |
+| ChangePasswordSheet.test.js | 35 |
+| ClassDetailScreen.test.js | 20 |
+| ConfirmSheet.test.js | 9 |
+| EditChildScreen.test.js | 18 |
+| GroupPickerBottomSheet.test.js | 7 |
+| LessonWrapUp.save.test.js | 17 |
+| LessonWrapUpScreen.test.js | 35 |
+| LetterTrackerBottomSheet.plan5.test.js | 3 |
+| LetterTrackerBottomSheet.test.js | 15 |
+| ProfileDiagnostics.test.js | 22 |
+| ProfileScreen.layout.test.js | 40 |
+| ProfileScreen.releaseMetadata.test.js | 13 |
+| QuestionGalleryScreen.test.js | 30 |
+| SelectSheet.test.js | 15 |
+| SkipNoticeSheet.test.js | 7 |
+| Toast.test.js | 21 |
+| assessmentScope.test.js | 16 |
+| debugExport.test.js | 11 |
+| domainTextInputAudit.test.js | 4 |
+| lessonRosterSheets.test.js | 3 |
+| letterOrderAgreement.test.js | 4 |
+| offlineSyncUpdateById.test.js | 20 |
+| previewContentConfig.test.js | 28 |
+| profileCaptureModeToggle.test.js | 1 |
+| profileComponents.test.js | 11 |
+| questionGallery.test.js | 20 |
+| releaseCommitConfig.test.js | 3 |
+| releaseGateConfig.test.js | 8 |
+| releaseMetadata.test.js | 3 |
+| runtimeDiagnostics.test.js | 1 |
+| sentryBuildConfig.test.js | 5 |
+| sessionCompleteNavigation.test.js | 3 |
+| supabaseProjectConfig.test.js | 8 |
+| task5ActionsBinding.test.js | 4 |
+| task5AuthRaces.test.js | 40 |
+
+Records 002–006 and registry rows now link issues #124–127 and state FIXED_IN_CODE /
+LOCAL_TESTED. 003–006 are CONFIRMED. 002 stays HYPOTHESIS: the row removes the symptom
+on paper, but keyboard-open geometry has not been accepted on A03s.
+
+Open gates for 2026-10-31: A03s keyboard-open screenshot row and all footer-sheet visuals;
+iPhone sheet/keyboard and accessibility smoke; repeat MV001 device gate and inspect
+its receipt detail; inspect a bundle from the next installed build/update for build,
+commit and derived identity. No device/release/hosted checks were run in this session.
+
+#### Claude review and MA-BUG-20261030-007
+
+- **Review of the Codex diff.**
+  - **Healer change:** the RLS healer now prefers the stored `error_code`. I checked it. Real auth-loss denials are stored as `42501` (`dispositionFor` → `normalizeErrorCode`), so they still heal. `UPDATE_NOT_APPLIED` text never mentioned row-level security, so the old rule never healed it either. Without the change, a server `details` string containing "42501" could make an unrelated terminal row healable. Accepted.
+  - **`extra.gitCommit`:** safe for OTA compatibility, because `runtimeVersion` uses the `appVersion` policy, not a fingerprint.
+  - **Profile release info:** it shows `Version x (Build y)` from expo-application, not `releaseLabel`, so the derived label duplicates nothing on screen.
+  - **Records 004–006:** confidence raised (95/95/90) to match their tests.
+- **MA-BUG-20261030-007 (the photo picker's Done step): not an app bug.**
+  - On the A03s, `android.provider.action.PICK_IMAGES` resolves to Google's updatable system picker (`com.google.android.photopicker`).
+  - `adb shell am start -a android.provider.action.PICK_IMAGES -t 'image/*'` sent a plain single-pick intent with no app involved. One tap showed "Selected", "1 photos or videos selected", Preview and Done, and the picker stayed open. The UI was read with uiautomator only, with no screenshot taken, because the gallery holds children's images.
+  - Record 007: CONFIRMED / NO_PRODUCT_CHANGE. The only app-side option, expo-image-picker `legacy: true`, would swap the privacy-scoped picker for a file browser to save one tap.

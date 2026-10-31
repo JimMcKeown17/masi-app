@@ -1,5 +1,5 @@
 import React from 'react';
-import { BackHandler, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { BackHandler, KeyboardAvoidingView, ScrollView, StyleSheet } from 'react-native';
 import { act, fireEvent } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import ReportProblemSheet from '../src/components/profile/ReportProblemSheet';
@@ -215,4 +215,33 @@ test('attaching a screenshot passes original-format metadata with the report', a
   expect(onSubmit).toHaveBeenCalledWith({ message: 'Please see the screenshot', screenshotFile: {
     uri: 'file:///private/picker/shot.heic', extension: 'heic', mimeType: 'image/heic', fileSize: 1234,
   } });
+});
+
+test('attached screenshot actions share a row, accessible names and lifecycle guards', async () => {
+  mockNativeModule.mockReturnValue({});
+  mockLauncher.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///private/shot.png', mimeType: 'image/png' }] });
+  const sending = deferred();
+  const screen = render(<ReportProblemSheet visible handle={handle} onClose={jest.fn()} onSubmit={() => sending.promise} />);
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Attach a screenshot' })); });
+  expect(screen.getByText('Replace')).toBeTruthy();
+  expect(screen.getByText('Remove')).toBeTruthy();
+  const row = screen.getByTestId('screenshot-actions');
+  expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: 8 });
+  expect(row.findByProps({ accessibilityLabel: 'Replace screenshot', accessibilityRole: 'button' })).toBeTruthy();
+  expect(row.findByProps({ accessibilityLabel: 'Remove screenshot', accessibilityRole: 'button' })).toBeTruthy();
+  const picking = deferred();
+  mockLauncher.mockReturnValueOnce(picking.promise);
+  fireEvent.press(screen.getByRole('button', { name: 'Replace screenshot' }));
+  expect(screen.getByRole('button', { name: 'Replace screenshot' }).props.accessibilityState).toMatchObject({ disabled: true, busy: true });
+  expect(screen.getByRole('button', { name: 'Remove screenshot' })).toBeDisabled();
+  await act(async () => picking.resolve({ canceled: true }));
+  fireEvent.press(screen.getByRole('button', { name: 'Remove screenshot' }));
+  expect(screen.queryByText('Screenshot attached.')).toBeNull();
+  mockLauncher.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///private/shot.png', mimeType: 'image/png' }] });
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Attach a screenshot' })); });
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Test report');
+  fireEvent.press(screen.getByRole('button', { name: 'Send' }));
+  expect(screen.getByRole('button', { name: 'Replace screenshot' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Remove screenshot' })).toBeDisabled();
+  await act(async () => sending.resolve({ error: 'Retry' }));
 });

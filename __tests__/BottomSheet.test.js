@@ -362,3 +362,21 @@ test('Android sheet restores zero avoidance padding after keyboard dismissal', a
   await act(async () => emitter.emit('keyboardDidHide', event(842, 0)));
   expect(StyleSheet.flatten(wrapper().props.style)).toEqual(before);
 });
+
+test.each([true, false])('footer owns body bottom spacing (scrollable %s), with caller overrides last', scrollable => {
+  const bodyStyle = sheet => {
+    if (scrollable) return sheet.UNSAFE_getByType(ScrollView).props.contentContainerStyle;
+    let body = sheet.getByText('Body content').parent;
+    while (body.type !== 'View') body = body.parent;
+    return body.props.style;
+  };
+  for (const footer of [undefined, <Text>Footer</Text>]) {
+    const sheet = renderSheet({ scrollable, footer });
+    const body = bodyStyle(sheet);
+    expect(StyleSheet.flatten(body).paddingBottom ?? 0).toBe(footer ? spacing.md : 0);
+    sheet.unmount();
+  }
+  const sheet = renderSheet({ scrollable, footer: <Text>Footer</Text>, bodyContentStyle: { paddingBottom: 7 } });
+  const body = bodyStyle(sheet);
+  expect(StyleSheet.flatten(body).paddingBottom).toBe(7);
+});

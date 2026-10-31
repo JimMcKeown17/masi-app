@@ -72,15 +72,19 @@ export default function ReportProblemSheet({ visible, onClose, onSubmit, handle 
     <TextField label="What went wrong?" value={message} onChangeText={(text) => { setMessage(text); setError(null); setFormError(null); }} multiline error={error} disabled={pending} />
     {picker ? <View style={styles.attachment}>
       {screenshotFile ? <Text style={styles.caption}>Screenshot attached.</Text> : null}
-      <BrandButton label={screenshotFile ? 'Replace screenshot' : 'Attach a screenshot'} icon="image-outline"
-        variant="tertiary" disabled={pending} loading={picking} onPress={attach} />
-      {screenshotFile ? <BrandButton label="Remove screenshot" variant="tertiary" tone="ink" disabled={pending || picking}
-        onPress={() => setScreenshotFile(null)} /> : null}
+      {screenshotFile ? <View testID="screenshot-actions" style={styles.screenshotActions}>
+        <BrandButton label="Replace" accessibilityLabel="Replace screenshot" icon="image-outline"
+          variant="tertiary" disabled={pending} loading={picking} onPress={attach} />
+        <BrandButton label="Remove" accessibilityLabel="Remove screenshot" icon="trash-outline"
+          variant="tertiary" disabled={pending || picking} onPress={() => setScreenshotFile(null)} />
+      </View> : <BrandButton label="Attach a screenshot" icon="image-outline"
+        variant="tertiary" disabled={pending} loading={picking} onPress={attach} />}
     </View> : null}
   </BottomSheet>;
 }
 const styles = StyleSheet.create({
   actions: { gap: spacing.sm },
+  screenshotActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   attachment: { marginTop: spacing.md },
   caption: { ...typeRoles.textCaption, color: colors.textSecondary },
 });

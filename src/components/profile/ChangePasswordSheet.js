@@ -246,6 +246,6 @@ const styles = StyleSheet.create({
   hint: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   hintText: { ...typeRoles.textCaption, color: colors.textSecondary, flex: 1 },
   formError: { marginTop: spacing.ms },
-  footer: { borderTopWidth: 0, paddingTop: spacing.md },
+  footer: { borderTopWidth: 0, paddingTop: 0 },
   actions: { gap: spacing.sm },
 });
