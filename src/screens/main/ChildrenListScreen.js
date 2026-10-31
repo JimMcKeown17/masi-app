@@ -1,3 +1,4 @@
+import { useActiveProgrammeSubject } from '../../hooks/useActiveProgrammeSubject';
 import { useAssessableChildren } from '../../hooks/useAssessableChildren';
 import { useAssessmentHistoryStatus } from '../../services/assessmentHistoryStatus';
 import { useSignedInEA } from '../../context/SignedInEAContext';
@@ -31,18 +32,18 @@ import { FAB_OVERHANG } from '../../components/navigation/LockedBottomTabBar';
 import ClassRow from '../../components/children/ClassRow';
 
 // Keep this component type stable so filtering and background pulls preserve the input.
-function ChildrenListHeader({ isLoading, tabStats, hasClasses, searchTerm, onSearch, showClasses, onAssess, onSyncNow }) {
+function ChildrenListHeader({ isMaths, isLoading, tabStats, hasClasses, searchTerm, onSearch, showClasses, onAssess, onSyncNow }) {
   const hasBanner = Boolean(describeSyncBanner(useOffline()));
   return <View>
     {!isLoading && tabStats ? <View style={styles.statBarWrapper}>
       <StatBar items={[
         { label: 'Children', value: tabStats.childrenCount, accessibilityLabel: countLabel(tabStats.childrenCount, 'child', 'children') },
         { label: 'Classes', value: tabStats.classCount, accessibilityLabel: countLabel(tabStats.classCount, 'class', 'classes') },
-        {
+        ...(!isMaths ? [{
           label: 'Unassessed', value: tabStats.unassessedCount,
           onPress: tabStats.unassessedCount > 0 ? onAssess : undefined,
           accessibilityLabel: `${countLabel(tabStats.unassessedCount, 'unassessed child', 'unassessed children')}${tabStats.unassessedCount > 0 ? '. Open Assess' : ''}`,
-        },
+        }] : []),
       ]} />
     </View> : null}
     {hasClasses ? <View style={styles.gutter}>
@@ -54,6 +55,7 @@ function ChildrenListHeader({ isLoading, tabStats, hasClasses, searchTerm, onSea
 }
 
 export default function ChildrenListScreen({ navigation }) {
+  const { isMaths, loading: subjectLoading } = useActiveProgrammeSubject();
   const { pageVersion, runVersion } = useAssessmentHistoryStatus();
   const { repositories } = useSignedInEA();
   const { assessments: assessmentsRepository, academicYears: academicYearsRepository } = repositories;
@@ -108,16 +110,20 @@ export default function ChildrenListScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      if (subjectLoading) return;
+      let active = true;
       const loadStats = async () => {
         const [results, academicYears] = await Promise.all([
-          assessmentsRepository.getLetterResults({ userId: user.id }),
+          isMaths ? [] : assessmentsRepository.getLetterResults({ userId: user.id }),
           academicYearsRepository.getAll(),
         ]);
         const activeAcademicYear = academicYears.find(year => year.is_active === true || year.is_active === 1) ?? null;
+        if (!active) return;
         setTabStats(getChildrenTabStats(children, assessableChildren, classes, results, activeAcademicYear));
       };
       loadStats();
-    }, [children, assessableChildren, classes, user.id, pageVersion, runVersion])
+      return () => { active = false; };
+    }, [isMaths, subjectLoading, children, assessableChildren, classes, user.id, pageVersion, runVersion])
   );
 
   // Count-aware landing: jump a single-class EA directly into that class. Keys off
@@ -255,7 +261,7 @@ export default function ChildrenListScreen({ navigation }) {
 
   return <View style={styles.container}>
     <FlatList data={filteredClasses} keyExtractor={item => item.id} renderItem={renderClass}
-      ListHeaderComponent={<ChildrenListHeader isLoading={isLoading} tabStats={tabStats} hasClasses={hasClasses}
+      ListHeaderComponent={<ChildrenListHeader isMaths={isMaths || subjectLoading} isLoading={isLoading} tabStats={tabStats} hasClasses={hasClasses}
         searchTerm={searchTerm} onSearch={setSearchTerm} showClasses={filteredClasses.length > 0 || noMatch}
         onAssess={() => navigation.navigate('MainTabs', { screen: 'Assessments' })}
         onSyncNow={() => syncNow({ force: true })} />}

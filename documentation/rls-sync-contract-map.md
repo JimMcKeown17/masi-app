@@ -476,6 +476,29 @@ Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, co
 
 Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
+### Maths Question metadata and derived keys (2026-10-31)
+
+Maths results (`question_code` starting `maths_` or `egma_`, Battery `masi_maths`) use the same
+`submit_assessment` family write as every other Question. **The server checks only that `metadata`
+and `derived` are objects. The phone enforces the values** with `validateMathsResult`
+(`src/assessment-questions/egma/validateMathsResult.ts`), which `saveQuestionResult` runs beside
+`validateResult`. A failure throws `INVALID_QUESTION_RESULT` before any SQLite write or outbox row,
+and the Battery screen treats it as fatal, not retryable.
+
+| Key | Where | Values |
+|---|---|---|
+| `metadata.skill` | every maths item | a skill key from spec §8.1 (`count_aloud`, `read_numbers`, `add`, …) |
+| `metadata.band` | every maths item | `5 \| 10 \| 20 \| 50 \| 100 \| 1000` |
+| `metadata.reached` | every item (shared rule) | `false` items are not evidence |
+| `metadata.strategy` | reached correct items of `maths_add_counters` and `maths_take_away_counters` only | `count_all \| count_on \| known` |
+| `derived.strategies` | non-skipped Core arithmetic results only (`egma_addition_l1/l2`, `egma_subtraction_l1/l2`, `egma_word_problems`) | `[]` when `total_correct = 0`; `['not_seen']`; or a non-empty, duplicate-free subset of `head \| fingers \| counters \| paper` |
+| `derived.correct_per_minute`, `derived.seconds_remaining` | timed maths results (`egma_number_id`, `egma_addition_l1`, `egma_subtraction_l1`) | rate rounded to 0.1, scaled only when completed early; integer seconds, 0 unless completed |
+
+`score` stays `derived.total_correct`. History pull re-stores these objects unchanged; the
+real-SQLite test `__tests__/mathsRun.integration.test.js` proves save → outbox → history re-store
+into a second database round-trips them exactly. Results whose `question_version` ends in `-draft`
+are development data; readers should ignore them.
+
 ## Letter mastery: one current record, the most recently made correction wins (Assessment Results Plan 2)
 
 **Server and phone schema, repository, sync, readers and both write surfaces implemented.

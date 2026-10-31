@@ -44,6 +44,8 @@ const MATERIAL_LABELS = {
   reading_card: 'Reading Card',
   picture_cards: 'Picture Cards',
   writing_sheet: 'Writing Sheet',
+  number_card: 'Number Card',
+  counters: 'Counters',
 };
 const SKIP_LABELS = new Map([
   ...MANUAL_SKIP_REASONS.map(({ reason, label }) => [reason, label]),
@@ -86,8 +88,10 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
         if (result.stopped_reason === 'skipped_prerequisite_unmet') {
           skipCause = skipCauseFor(battery, decidedResults, question.question_code);
           if (skipCause?.kind === 'first_row') label = TRIGGER_LABELS[skipCause.trigger];
-          else if (skipCause?.kind === 'prerequisite' && skipCause.depends_on === 'oral_reading') {
-            label = 'No story words read';
+          else if (skipCause?.kind === 'prerequisite') {
+            const unmetLabel = battery.prerequisites[question.question_code]?.unmet_label;
+            if (unmetLabel) label = unmetLabel;
+            else if (skipCause.depends_on === 'oral_reading') label = 'No story words read';
           }
         }
         detail = label;
@@ -97,6 +101,9 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
         const max = result.derived?.max ?? result.derived?.questions_asked ?? result.total_items;
         if (max === 0) scoreText = '—';
         else if (result.score != null && max != null) scoreText = `${result.score} / ${max}`;
+        if (scoreText !== null && typeof result.derived?.correct_per_minute === 'number') {
+          scoreText += ` · ${Math.round(result.derived.correct_per_minute)} per minute`;
+        }
       }
     } else {
       const isNext = readOnlyReason === null && question === state.nextQuestion;
@@ -127,6 +134,10 @@ export function buildRunView(battery, run, { activeProgrammeId, childAssigned })
 export function materialsLine(question, language, battery) {
   if (!question.materials) return null;
   const item = MATERIAL_LABELS[question.materials.item];
+  if (question.materials.item === 'counters') return { item, side: null, footer: null };
+  if (question.materials.item === 'number_card') return {
+    item, side: null, footer: `${battery.numberCard} · ${language.toUpperCase()} · page ${question.materials.page}`,
+  };
   const side = question.materials.side ? `side ${question.materials.side}` : null;
   const cardTitle = question.materials.item === 'reading_card' && battery.readingCard
     ? battery.readingCard : `${battery.title} ${battery.battery_version}`;

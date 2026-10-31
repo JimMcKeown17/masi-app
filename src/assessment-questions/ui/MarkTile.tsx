@@ -6,7 +6,7 @@ import { ContentText, UiText, type Tone } from './Text';
 import { Icon } from './Icon';
 
 export type TileState = 'idle' | 'current' | 'correct' | 'incorrect' | 'notReached';
-export type TileVariant = 'letter' | 'word' | 'pill' | 'promptCard' | 'picture';
+export type TileVariant = 'letter' | 'word' | 'pill' | 'promptCard' | 'picture' | 'sum';
 
 const looks: Record<TileState, ViewStyle> = {
   idle: { backgroundColor: tokens.color.surface, borderColor: tokens.color.line, borderWidth: 1 },
@@ -16,7 +16,7 @@ const looks: Record<TileState, ViewStyle> = {
   incorrect: { backgroundColor: tokens.color.error, borderColor: tokens.color.error, borderWidth: 1 },
 };
 
-export const GRID_TILE_HEIGHTS = { letter: 60, word: 58, picture: 88 } as const;
+export const GRID_TILE_HEIGHTS = { letter: 60, word: 58, sum: 58, picture: 88 } as const;
 
 // Reserve both caption lines even for one-line labels, scaled like the caption text itself
 // (OS font scale, capped by its maxFontSizeMultiplier of 1.2), so every letter shares one baseline.
@@ -27,6 +27,7 @@ const styles = StyleSheet.create({
   tile: { borderRadius: tokens.radius.tile, alignItems: 'center', justifyContent: 'center', padding: tokens.space.sm, gap: tokens.space.xs },
   letter: { height: GRID_TILE_HEIGHTS.letter, alignSelf: 'stretch' },
   word: { height: GRID_TILE_HEIGHTS.word, alignSelf: 'stretch' },
+  sum: { height: GRID_TILE_HEIGHTS.sum, alignSelf: 'stretch' },
   pill: { minHeight: 48, paddingHorizontal: 14 },
   promptCard: { minHeight: 72, alignSelf: 'stretch', padding: tokens.space.lg },
   promptMark: { position: 'absolute', right: 10, top: tokens.space.sm },
@@ -39,7 +40,7 @@ const styles = StyleSheet.create({
 });
 
 const contentSize = {
-  letter: 'tileLetter', word: 'tileWord', pill: 'markingWord', promptCard: 'promptCard', picture: 'tileWord',
+  letter: 'tileLetter', word: 'tileWord', sum: 'tileWord', pill: 'markingWord', promptCard: 'promptCard', picture: 'tileWord',
 } as const;
 
 export function MarkTile({ variant, state, text, gloss, caption, accessibilityLabel, onPress, testID, width, height }: {
@@ -61,7 +62,7 @@ export function MarkTile({ variant, state, text, gloss, caption, accessibilityLa
   const tone: Tone = filled ? 'onInk' : state === 'notReached' ? 'notReached' : 'ink';
   const style = [styles.tile, styles[variant], looks[state], width === undefined ? undefined : { width },
     variant === 'promptCard' && state === 'notReached' ? { opacity } : undefined,
-    height !== undefined && (variant === 'letter' || variant === 'word' || variant === 'picture') ? { height } : undefined];
+    height !== undefined && (variant === 'letter' || variant === 'word' || variant === 'picture' || variant === 'sum') ? { height } : undefined];
   const accessibility = { accessible: true, accessibilityLabel, accessibilityState: { selected: state === 'current' }, testID };
   const content = <>
     {variant === 'promptCard' && filled && <View testID="tile-mark" pointerEvents="none" accessible={false} style={styles.promptMark}>
@@ -70,7 +71,9 @@ export function MarkTile({ variant, state, text, gloss, caption, accessibilityLa
     {state === 'current' && <View testID="current-ring" pointerEvents="none" accessible={false}
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.currentRing} />}
     {variant === 'picture' && caption !== undefined && <View testID="picture-caption" style={[styles.pictureCaption, { height: captionHeight }]}><UiText variant="caption" tone={filled ? 'onInk' : 'muted'} align="center" numberOfLines={2} ellipsizeMode="clip" maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.6} style={styles.content}>{caption}</UiText></View>}
-    <ContentText size={contentSize[variant]} tone={tone} fit={variant === 'letter' || variant === 'word' || variant === 'picture'} style={styles.content}>{text}</ContentText>
+    {variant === 'sum' ? <ContentText size="tileWord" tone={tone} fit style={styles.content}>
+      {text}{gloss !== undefined && <UiText variant="caption" tone={filled ? 'onInk' : 'muted'}>{`  = ${gloss}`}</UiText>}
+    </ContentText> : <ContentText size={contentSize[variant]} tone={tone} fit={variant === 'letter' || variant === 'word' || variant === 'picture'} style={styles.content}>{text}</ContentText>}
     {variant === 'promptCard' && gloss !== undefined && <UiText variant="caption" tone={filled ? 'onInk' : 'muted'} align="center">{gloss}</UiText>}
   </>;
   return onPress

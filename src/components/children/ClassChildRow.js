@@ -14,16 +14,21 @@ export default function ClassChildRow({
   const { fontScale } = useWindowDimensions();
   const name = [child.first_name, child.last_name].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
   const groupLabel = groupName != null ? `Change group for ${name}, currently ${groupName}` : `Assign group to ${name}`;
+  const nameContent = <>
+    <Avatar label={getInitials(child.first_name, child.last_name)} size={40} />
+    <View style={styles.nameRow}>
+      <Text style={styles.name} numberOfLines={fontScale > 1 ? undefined : 1}>{name}</Text>
+      {onPressResults ? <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} /> : null}
+    </View>
+  </>;
   return (
     <View style={styles.row}>
       <View style={styles.content}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`View results for ${name}`} onPress={onPressResults} style={({ pressed }) => [styles.results, pressed && styles.pressed]}>
-          <Avatar label={getInitials(child.first_name, child.last_name)} size={40} />
-          <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={fontScale > 1 ? undefined : 1}>{name}</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-          </View>
-        </Pressable>
+        {onPressResults ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`View results for ${name}`} onPress={onPressResults} style={({ pressed }) => [styles.results, pressed && styles.pressed]}>
+            {nameContent}
+          </Pressable>
+        ) : <View style={styles.results}>{nameContent}</View>}
         <View testID="child-row-meta" style={styles.meta}>
           {child.age ? <Text style={styles.age}>{`Age ${child.age}`}</Text> : null}
           <GroupChip groupName={groupName} color={groupColor} onPress={onPressGroup} accessibilityLabel={groupLabel} />
@@ -36,9 +41,9 @@ export default function ClassChildRow({
         ) : null}
       </View>
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Letter tracker for ${name}`} onPress={onPressLetterTracker} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+        {onPressLetterTracker ? <Pressable accessibilityRole="button" accessibilityLabel={`Letter tracker for ${name}`} onPress={onPressLetterTracker} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           <MaterialCommunityIcons name="format-letter-case" size={22} color={colors.text} />
-        </Pressable>
+        </Pressable> : null}
         <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${name}`} onPress={onPressEdit} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           <Ionicons name="create-outline" size={24} color={colors.text} />
         </Pressable>

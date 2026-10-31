@@ -1,3 +1,6 @@
+jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({ useActiveProgrammeSubject: jest.fn() }));
+import { useActiveProgrammeSubject } from '../src/hooks/useActiveProgrammeSubject';
+beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false }));
 import { StyleSheet } from 'react-native';
 import { colors } from '../src/constants/colors';
 import ListGroup from '../src/components/common/ListGroup';
@@ -44,4 +47,17 @@ test('shows grouped action rows with canvas ink tiles and no duplicate Insights 
     expect(StyleSheet.flatten(tile.findByType('View').props.style).backgroundColor).toBe(colors.background);
     expect(tile.findByType('Ionicons').props.color).toBe(colors.text);
   });
+});
+
+test('numeracy shows only the shared Session count and Session history rows', () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
+  const navigation = { navigate: jest.fn() };
+  const screen = render(<InsightsScreen navigation={navigation} />);
+  expect(screen.getAllByRole('button').map(node => node.props.accessibilityLabel))
+    .toEqual(['Open Session count', 'Open Session history']);
+  expect(screen.queryByText('Letter mastery')).toBeNull();
+  expect(screen.queryByText('Assessment scores')).toBeNull();
+  fireEvent.press(screen.getByLabelText('Open Session count'));
+  fireEvent.press(screen.getByLabelText('Open Session history'));
+  expect(navigation.navigate.mock.calls).toEqual([['SessionCountRanking'], ['SessionHistory']]);
 });

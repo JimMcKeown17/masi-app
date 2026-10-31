@@ -48,3 +48,35 @@ test('gate: undecided prerequisite → gated question stays undecided, no autoSk
   expect(s.autoSkips).toEqual([]);
   expect(s.undecided).toContain('q3');
 });
+
+test('chained prerequisite skips in the same pass', () => {
+  const battery: BatteryConfig = {
+    ...LINEAR,
+    questions: [q('q0'), q('q1'), q('q2'), q('q3')],
+    prerequisites: {
+      q1: { depends_on: 'q0', minScore: 5, on_unmet_reason: 'skipped_prerequisite_unmet' },
+      q2: { depends_on: 'q1', minScore: 1, on_unmet_reason: 'skipped_prerequisite_unmet' },
+      q3: { depends_on: 'q2', minScore: 1, on_unmet_reason: 'skipped_prerequisite_unmet' },
+    },
+  };
+  const results = [{ question_code: 'q0', stopped_reason: 'completed', score: 0 }];
+  const s = evaluateBatteryState(battery, results);
+  expect(s.autoSkips).toEqual(['q1', 'q2', 'q3'].map(question_code => ({
+    question_code, reason: 'skipped_prerequisite_unmet', trigger: null,
+  })));
+  expect(s.nextQuestion).toBeNull();
+  expect(s.undecided).toEqual([]);
+  expect(s.decided).toEqual(['q0']);
+  expect(s.eligibleToFinalize).toBe(false); // auto-skips still need to be persisted
+  expect(results).toEqual([{ question_code: 'q0', stopped_reason: 'completed', score: 0 }]);
+});
+
+test('a decided dependency still gates as before', () => {
+  const s = evaluateBatteryState(GATED, [
+    { question_code: 'q1', stopped_reason: 'completed', score: 4 },
+    { question_code: 'q2', stopped_reason: 'completed', score: 3 },
+  ]);
+  expect(s.autoSkips).toEqual([{ question_code: 'q3', reason: 'skipped_prerequisite_unmet', trigger: null }]);
+  expect(s.nextQuestion).toBeNull();
+  expect(s.eligibleToFinalize).toBe(false);
+});

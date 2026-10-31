@@ -247,8 +247,9 @@ comprehension, on the shared reading sets. One Battery, `egra@2026.1`, in isiXho
 Language), Afrikaans or isiZulu, opening in the child's class language (the language sheet offers
 the four when the class has none; any other class language shows “Not available in … yet”).
 English First Additional Language classes get the Home Language content. It is offered alongside
-the programme default to every EA with an active programme (Jim, 2026-10-25). It has no
-first-row skip rule; only Story comprehension auto-skips.
+the programme default to every literacy EA with an active programme (Jim, 2026-10-25); numeracy
+EAs never see it (Jim, 2026-10-31). It has no first-row skip rule; only Story comprehension
+auto-skips.
 
 **Reading Card 2026.3**:
 The one printed reading card per language that WelaPLUS 2026.1, Full EGRA 2026.1 and the quick
@@ -256,6 +257,54 @@ tests share: side A letters, side B words, side C story, and (English and isiXho
 for the WelaPLUS sentences. Footers read `Reading Card 2026.3 · XH · side A`. Its printed first
 rows are load-bearing, because the first-row stop and the skip rule read them. Brief:
 `documentation/welaplus-printout-pack.md`.
+
+**Maths Battery**:
+The numeracy programme's one assessment, `masi_maths`, titled "Maths assessment": 17 Questions in
+English, nine **early number Questions** first, then the eight **Core EGMA Questions** they gate.
+It is built from the EGMA content pack (`content/egma/`, one form per language) by
+`src/assessment-questions/egma/adapter.ts`. The draft identity `masi_maths@2026.1-draft` (form
+`masi-egma-en-2026-1-draft`) is used until the freeze; the freeze then adds
+`masi_maths@2026.1` and supersedes the draft. It is English only for now and uses `fixedLanguage`,
+so children in any class can take it. Spec:
+`docs/superpowers/specs/2026-10-31-egma-maths-assessment-design.md`; ADR 0012.
+_Avoid_: "EGMA" for the whole Battery (EGMA is only the eight Core Questions), "maths test".
+
+**Early number Question**:
+One of the nine Masi-authored maths Questions that come before Core EGMA and match the partner's
+Weeks 1–4 skills: Count aloud, Finger flash, Count out counters, Read numbers to 20, Which is
+more?, Before and after, Add with counters, Take away with counters, Make 5 and make 10. Codes
+start `maths_`. They stop after 3 wrong in a row (Count aloud stops at the first mistake). The two
+counters Questions record how the child got each correct answer (`metadata.strategy`).
+_Avoid_: "pre-EGMA", "floor tasks", "subitising" (EA copy says Finger flash).
+
+**Core EGMA Question**:
+One of the eight toolkit Questions (RTI EGMA, 2014): Read big numbers, Bigger number, Missing
+number, Addition 1 and 2, Subtraction 1 and 2, and Word problems. Codes start `egma_`. Each is
+gated by an early number Question (or its level 1) and shows "Not ready yet" when skipped that
+way. They stop after 4 wrong in a row, including the three 60-second Questions (a deviation from
+the toolkit, accepted for now by Jim on 2026-10-31). Addition, Subtraction and Word problems end
+with a **strategy observation**.
+_Avoid_: "EGMA subtask" in EA copy; numbering them ("Task 6").
+
+**Number Card**:
+The printed card for the Maths Battery, nine A4 pages of numerals only, generated from the pack by
+`scripts/number-card.cjs` (`design/number-card/`). Each Question that needs it names its page
+("Number Card 2026.1 · EN · page 6"). It carries no answers and no words.
+_Avoid_: "reading card" for maths, "stimulus sheet".
+
+**Band**:
+The number range a maths item works in: the smallest of 5, 10, 20, 50, 100 and 1000 at or above
+the largest number in the item. Every maths item is saved with `metadata.skill` and
+`metadata.band`, so one result is evidence for a `{skill, band}` cell in the numeracy tracker.
+_Avoid_: "level" or "rung" (levels are Core EGMA's 1 and 2; "rung" is not EA language).
+
+**Strategy observation**:
+How a child worked out answers. Per item on the two counters Questions ("Counted from 1",
+"Started from the first number", "Just knew", saved as `count_all | count_on | known`), and once at
+the end of each Core arithmetic Question ("In their head", "Fingers", "Counters", "Paper",
+"Couldn't tell", saved as `derived.strategies`). It is not asked when nothing was correct. EA copy
+never says "counting on".
+_Avoid_: "method", "strategy score".
 
 **Skip rule**:
 A Battery's automatic skip of later Questions when a trigger Question's saved first row is all
@@ -393,7 +442,8 @@ The EA who made a change, stamped on its outbox row from the signed-in EA handle
 - **Acceptance gate is itemized-merge (Option B).** When Head Office stages a new grouping version, the EA sees a banner on next sync. Tapping it opens a review screen that surfaces a per-child decision **only for children whose current grouping row was last written by the EA** — for office-only rows, the office's new placement is applied with the bulk accept. For EA-edited children, the EA picks "Keep my edit" or "Use office's placement" per child. An EA who has made no edits sees a one-tap "Accept all" path. No deadline, no auto-apply: staged versions wait indefinitely until the EA decides. The EA can decline a staged version; declined staged versions remain in `staged` status until HO replaces them with a newer one. There is no preview-of-staging: the staged version is the first thing the EA hears about a regrouping.
 - **1000 Stories uses a synthetic one-row-per-class group.** The schema's "every child has a group, every session has a group" invariant is preserved by giving each 1000-Stories class exactly one `groups` row, named `"{class_name} (Whole class)"`. The group is **plumbing**, not an EA-facing entity: the future group editor hides 1000 Stories (or renders it read-only with the roster); to add or remove a child from 1000 Stories the EA uses the **enrollment** UI (`child_programme_enrollments`), never the group editor. Membership in the synthetic group is maintained by a database trigger on `child_programme_enrollments` insert (programme = `one_thousand_stories`), so new mid-term children automatically gain membership. The trigger must exist in both SQLite (for EA-side local enrollments) and Postgres (for the future HO NextJS dashboard). See `docs/adr/0002-thousand-stories-synthetic-whole-class-group.md` for the trade-off and considered alternatives.
 - **ECD pair persistence.** Core Literacy (ECD) pairs **persist across sessions in the real world** — EAs work with the same pair repeatedly, not random children per day. For the May 2026 go-live the seed source contains real office-assigned pair data because the cohort is mid-year and pairs have been in use for months. The seed loads those pairs verbatim. A broader "random partition at start of a new academic year for fresh ECD intakes" feature is a separate post-go-live consideration, scoped to genuinely new ECD cohorts with no prior pair data.
-- **One canonical Battery per Programme, set by Masi admin.** Each Programme has at most one Assessment Battery configured against it (e.g., `core_literacy_r3` → `wela_plus_full`); when an EA starts a Run, the app derives the Battery from the EA's one active Programme. EAs do not see a Battery picker today. The schema must keep this forward-compatible with a future multi-Battery-per-Programme world (e.g., a `programme_batteries` join table), but the v1 UI exposes only the default. **2026-10-23:** EGRA forms are the first additional Batteries. They are offered next to the default through an EGRA form picker (planned after WelaPLUS Plan 3), and the default Battery itself is unchanged. **2026-10-26:** the picker is gone; the one additional Battery is Full EGRA 2026.1 in four languages, and the literacy default moves to WelaPLUS 2026.1 by migration (`20261026120000_welaplus_2026_1_default.sql`).
+- **One canonical Battery per Programme, set by Masi admin.** Each Programme has at most one Assessment Battery configured against it (e.g., `core_literacy_r3` → `wela_plus_full`); when an EA starts a Run, the app derives the Battery from the EA's one active Programme. EAs do not see a Battery picker today. The schema must keep this forward-compatible with a future multi-Battery-per-Programme world (e.g., a `programme_batteries` join table), but the v1 UI exposes only the default. **2026-10-23:** EGRA forms are the first additional Batteries. They are offered next to the default through an EGRA form picker (planned after WelaPLUS Plan 3), and the default Battery itself is unchanged. **2026-10-26:** the picker is gone; the one additional Battery is Full EGRA 2026.1 in four languages, and the literacy default moves to WelaPLUS 2026.1 by migration (`20261026120000_welaplus_2026_1_default.sql`). **2026-10-31:** the numeracy programme's default becomes the Maths Battery (`masi_maths@2026.1-draft`, migration `20261031120000_numeracy_maths_draft_default.sql`, which keeps any Head Office choice); numeracy EAs are not offered Full EGRA.
+- **Numeracy EAs see only numeracy screens (Jim, 2026-10-31).** The subject comes from the EA's active programme code through `src/utils/programmeSubject.js` (`numeracy` → maths, anything else → reading); no other file compares programme codes. For maths, the app hides the Assessments stats, Full EGRA and the quick tests, Home's "children to assess" and any retained literacy lesson draft (kept, not deleted), the Children Unassessed stat, the class row's letter tracker and results tap, Edit Child's reading level (saved unchanged), Insights' Letter mastery and Assessment scores, and Record's lesson flow ("Session forms for Numeracy are coming soon."). Literacy-only pieces stay hidden until the screen's own programme read confirms reading. Only a known maths subject is cached across screens (hiding literacy is always safe); a cached "reading" is never reused, because it could open a literacy route after Head Office moves the EA to numeracy. A failed read keeps what was known and never turns a maths EA back to literacy; a first-ever failed read falls back to literacy behaviour so literacy EAs are never locked out.
 - **Multiple Battery Runs per child are allowed; latest-in-Window is canonical.** The app does not block re-running a Battery on the same child in the same Window. All Runs are kept for audit. Roll-up reporting (leaderboards, programme dashboards) uses the most-recent Run inside the relevant Window for each child. Out-of-Window Runs are **progress checks** and are excluded from windowed reporting.
 - **Story Writing (WelaPLUS 2024.1 Q11; Q12 in 2026.1) ships with both EA-rubric scoring in-app *and* HQ rubric scoring on paper, for calibration.** The Masi-flavored 4-dimension rubric UX (Meaning Making / Spelling / Length / Vocab) is the v1 experiment: HQ continues to score the paper artifact, and Masi product retains the option to compare EA-vs-HQ deltas to decide whether holistic-rubric Questions are safe to move into the app long-term. The `assessments` row carries both `ea_rubric_total` and an optional `hq_rubric_total` (both /16, both NULL for every other Question) for Story Writing specifically. See ADR-0004 for the full calibration column shape.
 - **Letter Sounds stops when the whole first row is wrong (since 2026-10-26).** The standalone quick test, WelaPLUS 2026.1 Q1 and Full EGRA share the 2026.3 item-set rule (`first_row_all_wrong`, the first 10 letters) and the stop card described under **Stop rule**. The hard stop at ten consecutive wrong marks belongs to the older `letter_sounds@2026.2` sets (WelaPLUS 2024.1 Q1 and earlier quick tests) and still governs runs saved or resumed on them. The old whole-row warning stays superseded by the [Assessment Results design](docs/superpowers/specs/2026-10-19-assessment-results-and-letter-test-design.md); other Questions keep their own declared mechanics.

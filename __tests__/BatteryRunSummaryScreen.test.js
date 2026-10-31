@@ -398,3 +398,14 @@ test('an unavailable completed form still offers Back to Assess after finalizati
   expect(screen.queryByRole('button', { name: 'Assess next child' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Back to Assess' })).toBeTruthy();
 });
+
+test('the summary row reads the rate', async () => {
+  const battery = jest.requireActual('../src/assessment-questions').MASI_MATHS_2026_1_DRAFT;
+  run = { ...run, battery_code: battery.battery_code, battery_version: battery.battery_version, language: 'en',
+    results: battery.questions.map(question => ({ id: question.question_code, question_code: question.question_code,
+      stopped_reason: 'completed', score: 14, total_items: 20, derived: question.question_code === 'egma_number_id' ? { correct_per_minute: 17.9 } : {} })) };
+  const screen = renderSummary();
+  await screen.findByText('Maths assessment · English · 17 of 17 decided');
+  fireEvent.press(screen.getByRole('button', { name: 'Show all 17' }));
+  expect(screen.getByRole('text', { name: '5. Read big numbers, Done, 14 / 20 · 18 per minute' })).toBeTruthy();
+});

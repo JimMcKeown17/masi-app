@@ -1,5 +1,5 @@
 import {
-  LETTER_PAGE_LAYOUT, WORD_PAGE_LAYOUT, paginate, pageIndexOf, pageLabel, rowsFromLengths,
+  LETTER_PAGE_LAYOUT, WORD_PAGE_LAYOUT, THREE_BY_THREE_LAYOUT, paginate, pageIndexOf, pageLabel, rowsFromLengths,
 } from '../paginate';
 
 const lengths = (rows: ReadonlyArray<{ positions: number[] }>) => rows.map(row => row.positions.length);
@@ -134,4 +134,12 @@ describe.each(['columns', 'capacity'] as const)('invalid %s', field => {
       new Error('paginate: columns and capacity must be positive integers'),
     );
   });
+});
+
+
+test('THREE_BY_THREE_LAYOUT puts 9 items on one page', () => {
+  expect(THREE_BY_THREE_LAYOUT).toEqual({ columns: 3, capacity: 9, breakAtCardRow: true });
+  const pages = paginate(rowsFromLengths([9]), THREE_BY_THREE_LAYOUT);
+  expect(pages).toHaveLength(1);
+  expect(pages[0].displayRows.map(row => row.positions)).toEqual([[0,1,2],[3,4,5],[6,7,8]]);
 });

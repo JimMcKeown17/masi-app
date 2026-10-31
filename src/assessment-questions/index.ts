@@ -38,3 +38,9 @@ export * from './egra';
 export { ReadingComprehensionQuestion } from './questions/ReadingComprehensionQuestion';
 export type { ReadingComprehensionItemSet } from './questions/ReadingComprehensionQuestion/types';
 export { ConfirmPanel } from './ui/ConfirmSheet';
+
+export * from './egma';
+export { MathsGridQuestion } from './questions/MathsGridQuestion';
+export { MathsCardsQuestion } from './questions/MathsCardsQuestion';
+export type { MathsCaptureItem, MathsGridItemSet } from './questions/MathsGridQuestion/types';
+export type { MathsCardsItemSet } from './questions/MathsCardsQuestion/types';

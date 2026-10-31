@@ -431,3 +431,30 @@ test.each([
   expect(skipNoticeFor({ battery: WELA_PLUS_FULL_2026_1, view: state }).body)
     .toBe(`This child got ${wrong} wrong. So this child won't be asked to ${activity}. This is normal. Carry on with the next Question.`);
 });
+
+const maths = require('../src/assessment-questions').MASI_MATHS_2026_1_DRAFT;
+const mathsView = results => buildRunView(maths, { ...run, language: 'en', results }, access);
+
+test('a gated-out maths Question reads Not ready yet', () => {
+  const state = mathsView([{ question_code: 'maths_add_counters', stopped_reason: 'completed', score: 3, total_items: 6 },
+    savedSkip('egma_addition_l1')]);
+  expect(state.rows.find(row => row.question.question_code === 'egma_addition_l1')).toMatchObject({ state: 'skipped', detail: 'Not ready yet' });
+});
+test('a timed maths result shows the rate', () => {
+  expect(mathsView([{ question_code: 'egma_number_id', stopped_reason: 'completed', score: 14, total_items: 20,
+    derived: { correct_per_minute: 17.9 } }]).rows[4].scoreText).toBe('14 / 20 · 18 per minute');
+});
+test('two equal raw scores with different early finishes show different rates', () => {
+  const { withRate } = require('../src/assessment-questions/egma/rate');
+  const rows = [30000, 45000].map(duration_ms => {
+    const result = withRate({ question_code: 'egma_number_id', stopped_reason: 'completed', duration_ms, derived: { total_correct: 14 } }, 60);
+    return mathsView([{ ...result, score: 14, total_items: 20 }]).rows[4].scoreText;
+  });
+  expect(rows).toEqual(['14 / 20 · 28 per minute', '14 / 20 · 19 per minute']);
+});
+test('number card materials line names the page', () => {
+  expect(materialsLine(maths.questions[4], 'en', maths)).toEqual({ item: 'Number Card', side: null, footer: 'Number Card 2026.1 · EN · page 2' });
+});
+test('counters have no footer', () => {
+  expect(materialsLine(maths.questions[2], 'en', maths)).toEqual({ item: 'Counters', side: null, footer: null });
+});

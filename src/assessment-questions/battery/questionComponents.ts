@@ -1,3 +1,5 @@
+import { MathsGridQuestion } from '../questions/MathsGridQuestion';
+import { MathsCardsQuestion } from '../questions/MathsCardsQuestion';
 import type React from 'react';
 import { ReadingComprehensionQuestion } from '../questions/ReadingComprehensionQuestion';
 import { LetterSoundsQuestion } from '../questions/LetterSoundsQuestion';
@@ -19,6 +21,24 @@ export interface QuestionEntry {
 }
 
 const components = new Map<string, QuestionEntry>([
+  ['maths_count_aloud', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_quick_see', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_count_out', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_read_numbers', { Component: MathsGridQuestion, extraProps: {} }],
+  ['egma_number_id', { Component: MathsGridQuestion, extraProps: {} }],
+  ['maths_which_more', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['egma_number_discrimination', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_neighbours', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['egma_missing_number', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_add_counters', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_take_away_counters', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['maths_make_five_ten', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['egma_addition_l1', { Component: MathsGridQuestion, extraProps: {} }],
+  ['egma_addition_l2', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['egma_subtraction_l1', { Component: MathsGridQuestion, extraProps: {} }],
+  ['egma_subtraction_l2', { Component: MathsCardsQuestion, extraProps: {} }],
+  ['egma_word_problems', { Component: MathsCardsQuestion, extraProps: {} }],
+
   ['reading_comprehension', { Component: ReadingComprehensionQuestion, extraProps: {} }],
   ['oral_reading', { Component: ReadPassageQuestion, extraProps: {} }],
   ['letter_sounds', { Component: LetterSoundsQuestion, extraProps: {} }],

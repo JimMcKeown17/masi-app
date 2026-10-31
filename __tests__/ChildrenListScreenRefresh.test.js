@@ -1,3 +1,6 @@
+jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({
+  useActiveProgrammeSubject: () => ({ subject: 'reading', isMaths: false, loading: false }),
+}));
 jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
 import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
 beforeEach(() => useAssessableChildren.mockImplementation(() => {
