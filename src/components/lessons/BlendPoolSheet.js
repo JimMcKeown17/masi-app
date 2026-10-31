@@ -18,5 +18,5 @@ export default function BlendPoolSheet({ visible, onDismiss, title, pool, select
   </BottomSheet>;
 }
 const styles = StyleSheet.create({
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingBottom: spacing.md },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

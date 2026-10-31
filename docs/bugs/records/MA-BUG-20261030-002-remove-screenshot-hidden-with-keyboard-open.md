@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: HYPOTHESIS
-delivery_state: NO_FIX_PROPOSED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 30
 confidence_basis: Plausible code path only; the sheet's scroll area is its only shrinkable region and the keyboard takes most of the screen.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-30T23:30:00Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:47:00Z
 last_observed_at: 2026-10-30T16:47:00Z
 
@@ -51,7 +51,8 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261030-002/a03s-report-problem-keyboard-open.png
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/124
 
 data_safety_status: no data risk
 workaround_status: close the keyboard, then tap Remove screenshot
@@ -131,17 +132,19 @@ The A03s observation above.
 
 ## Root cause
 
-Unknown.
+The hidden-control mechanism remains a hypothesis. Separate stacked actions consumed an extra button row; the matched row removes that symptom on paper. Keyboard-open visibility still needs the A03s check.
 
 ## Suggested fix
 
-No fix proposed. Options to weigh: put Replace and Remove on one row, or move
-the attachment block above the text field.
+Implemented one flex row with matched tertiary Replace/Remove buttons, icons and explicit screenshot accessibility labels. Picker/sending guards remain covered by local behavior tests.
 
 ## Verification plan
 
+- [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
+- [x] A03s acceptance check (2026-10-31); iPhone still open.
+
 - [ ] Reproduce on the A03s after the MA-BUG-20261030-001 fix lands.
-- [ ] Decide the layout with Jim before changing it.
+- [x] Decide the layout with Jim before changing it.
 
 ## Timeline
 
@@ -149,6 +152,8 @@ the attachment block above the text field.
 | --- | --- | --- | --- |
 | 2026-10-30T16:47:00Z | Claude | Observed during A03s gate 3 | Screenshot |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
+| 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #124; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | With a screenshot attached and the keyboard open, Replace and Remove stay visible above the footer; Remove clears the attachment. The original mechanism was never reproduced, so diagnosis stays HYPOTHESIS; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
 
 ## Open questions
 

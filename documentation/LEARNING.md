@@ -2453,3 +2453,14 @@ and children, so dismissal does not reset form state. The regression lays out a
 hides at 842; repeated cycles verify restored geometry through the real RN code.
 Jest proves this causal calculation, while physical-device rendering remains a
 separate gate.
+
+### 2026-10-31 — Diagnostic prose is not an error identity
+
+An upload error has two jobs: its stable code drives policy, while its message,
+detail and hint explain what happened. MV001 already rejected stale edits correctly,
+but keeping only `stale_version` discarded the versions needed to investigate.
+Recorded failures now retain bounded detail and hint; console/preflight formatting
+stays concise. The auth-restore healer prefers stored error codes so diagnostic prose
+cannot turn an unrelated terminal failure into a retry. Its text fallback remains for
+legacy rows without a meaningful code. Local SQLite tests prove retention and policy;
+a device receipt is still a separate acceptance gate.

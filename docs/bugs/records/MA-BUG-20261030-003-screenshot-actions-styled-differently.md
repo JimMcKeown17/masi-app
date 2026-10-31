@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: NO_FIX_PROPOSED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 90
 confidence_basis: The two buttons are declared with different BrandButton variants, tones and icons in ReportProblemSheet.js:75-78.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-30T23:30:00Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:48:00Z
 last_observed_at: 2026-10-30T16:48:00Z
 
@@ -51,7 +51,8 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261030-003/a03s-report-problem-screenshot-actions.png
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/124
 
 data_safety_status: no data risk
 workaround_status: not needed
@@ -124,16 +125,16 @@ The A03s observation above.
 
 ## Root cause
 
-The sheet declares the two attachment actions with different BrandButton
-props. A destructive action may deserve a different tone; the current pair has
-no deliberate relationship.
+Different tone, icon and alignment props made the attachment actions inconsistent; local component behavior tests confirm the old layout and the new matched row.
 
 ## Suggested fix
 
-No fix proposed. A design call for Jim: one row of two matching actions, or
-Remove as a quiet destructive variant with an icon.
+Implemented Replace and Remove in one spacing.sm row, both default brand tertiary buttons with image-outline/trash-outline and full accessible labels.
 
 ## Verification plan
+
+- [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
+- [x] A03s acceptance check (2026-10-31); iPhone still open.
 
 - [ ] Agree the treatment, then check on the A03s and an iPhone.
 
@@ -143,7 +144,10 @@ Remove as a quiet destructive variant with an icon.
 | --- | --- | --- | --- |
 | 2026-10-30T16:48:00Z | Claude | Observed during A03s gate 3 | Screenshot |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
+| 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #124; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T02:40:00Z | Claude | Review fix | The opener stays mounted (Attach → Replace) and Remove returns focus to Attach, after the Codex review |
+| 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s; gap widened | Matched red Replace/Remove pair on one row. On device the 8 dp row gap was barely wider than the 8 dp icon-label gap, so the pair read as one run; row gap raised to `spacing.lg` (24 dp); A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
 
 ## Open questions
 
-- Which treatment does Jim want for a destructive secondary action in sheets?
+- Treatment chosen by Claude (matched brand tertiary row, 24 dp apart), not yet reviewed by Jim; checked on the A03s 2026-10-31, iPhone open.

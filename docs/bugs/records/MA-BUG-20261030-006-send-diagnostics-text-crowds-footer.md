@@ -15,15 +15,15 @@ severity_components:
 severity_override: none
 priority: P3
 
-diagnosis_state: HYPOTHESIS
-delivery_state: NO_FIX_PROPOSED
-verification_state: NOT_TESTED
+diagnosis_state: CONFIRMED
+delivery_state: FIXED_IN_CODE
+verification_state: DEVICE_VERIFIED
 
-root_cause_confidence_pct: 50
-confidence_basis: BottomSheet's body content has horizontal padding only, so a body whose last element has no bottom margin meets the footer divider directly; other sheets not yet checked.
+root_cause_confidence_pct: 90
+confidence_basis: BottomSheet's body content has horizontal padding only, so a body whose last element has no bottom margin meets the footer divider directly. An audit of all 12 footer sheets found 0 dp gaps in 9 and per-sheet compensation in the rest; the A03s check on 2026-10-31 measured ≈18 dp above the divider (was ≈4 dp).
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-30T23:30:00Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:45:00Z
 last_observed_at: 2026-10-30T16:45:00Z
 
@@ -51,7 +51,8 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261030-006/a03s-send-diagnostics-sheet.png
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/125
 
 data_safety_status: no data risk
 workaround_status: not needed
@@ -125,16 +126,18 @@ The A03s observation above.
 
 ## Root cause
 
-Unknown until other sheets are compared; the shared body padding is the lead.
+BottomSheet supplied no bottom padding to either body variant; footer top padding lives below its divider. Local tests confirm 0 dp before the divider without a caller spacer.
 
 ## Suggested fix
 
-No fix proposed. If confirmed, give `BottomSheet`'s body a bottom padding when
-a footer is present, rather than patching this one sheet.
+Shared spacing.md body bottom padding when footer exists; caller bodyContentStyle remains last. Remove BlendPoolSheet bottom compensation and reduce existing no-divider footer padding so it does not stack. Preserve ConfirmSheet accessory-to-body spacing.
 
 ## Verification plan
 
-- [ ] Compare sheets with footers on the A03s.
+- [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
+- [x] A03s acceptance check (2026-10-31); iPhone still open.
+
+- [x] Compare sheets with footers on the A03s (Send diagnostics, Report a problem, Change password).
 
 ## Timeline
 
@@ -142,7 +145,9 @@ a footer is present, rather than patching this one sheet.
 | --- | --- | --- | --- |
 | 2026-10-30T16:45:00Z | Claude | Observed during A03s gate 1 | Screenshot |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
+| 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #125; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | Send diagnostics: text descender to divider 32 px (≈18 dp; was ≈4 dp), divider to Send 15 px; Report a problem and Change password balanced; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
 
 ## Open questions
 
-- Which other sheets end their body without a bottom margin?
+- Footer-sheet source audit completed; gap table in build log. A03s checked 2026-10-31; iPhone open.
