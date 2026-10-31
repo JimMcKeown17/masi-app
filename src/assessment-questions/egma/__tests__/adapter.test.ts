@@ -6,12 +6,12 @@ const form = getEgmaAssessment('masi-egma-en-2026-1-draft')!;
 const rows = [
   ['maths_count_aloud','Count aloud',null,null], ['maths_quick_see','Finger flash',null,null],
   ['maths_count_out','Count out counters',null,{item:'counters'}], ['maths_read_numbers','Read numbers to 20',null,{item:'number_card',page:1}],
-  ['egma_number_id','Read big numbers',60,{item:'number_card',page:3}], ['maths_which_more','Which is more?',null,{item:'number_card',page:2}],
+  ['egma_number_id','Read big numbers',60,{item:'number_card',page:2}], ['maths_which_more','Which is more?',null,{item:'number_card',page:3}],
   ['egma_number_discrimination','Bigger number',null,{item:'number_card',page:4}], ['maths_neighbours','Before and after',null,null],
   ['egma_missing_number','Missing number',null,{item:'number_card',page:5}], ['maths_add_counters','Add with counters',null,{item:'counters'}],
   ['maths_take_away_counters','Take away with counters',null,{item:'counters'}], ['maths_make_five_ten','Make 5 and make 10',null,null],
-  ['egma_addition_l1','Addition 1',60,{item:'number_card',page:6}], ['egma_addition_l2','Addition 2',null,{item:'number_card',page:8}],
-  ['egma_subtraction_l1','Subtraction 1',60,{item:'number_card',page:7}], ['egma_subtraction_l2','Subtraction 2',null,{item:'number_card',page:9}],
+  ['egma_addition_l1','Addition 1',60,{item:'number_card',page:6}], ['egma_addition_l2','Addition 2',null,{item:'number_card',page:7}],
+  ['egma_subtraction_l1','Subtraction 1',60,{item:'number_card',page:8}], ['egma_subtraction_l2','Subtraction 2',null,{item:'number_card',page:9}],
   ['egma_word_problems','Word problems',null,{item:'counters'}],
 ];
 
@@ -42,10 +42,7 @@ test('the battery matches the spec', () => {
     ['egma_addition_l2','egma_addition_l1',1], ['egma_subtraction_l1','maths_take_away_counters',4],
     ['egma_subtraction_l2','egma_subtraction_l1',1], ['egma_word_problems','maths_add_counters',4],
   ].map(([code,depends_on,minScore]) => [code,{depends_on,minScore,on_unmet_reason:'skipped_prerequisite_unmet',unmet_label:'Not ready yet'}])));
-  for (const question of form.questions) {
-    const copy = battery.questions.find(q => q.question_code === question.questionCode)!.instructions!.en;
-    expect(copy).toBe(question.instructions + (question.practiceItems.length ? ` Practice first (not scored): ${question.practiceItems.join(', ')}` : ''));
-  }
+
 });
 
 test('stop rules use the named constants', () => {
@@ -55,7 +52,7 @@ test('stop rules use the named constants', () => {
 });
 
 test.each([
-  ['maths_count_aloud','Counts to 5',undefined], ['maths_quick_see','3 fingers','3'],
+  ['maths_count_aloud','Counts to 5',undefined], ['maths_quick_see','3 fingers',undefined],
   ['maths_count_out','Give 4',undefined], ['maths_read_numbers','3',undefined],
   ['maths_which_more','2   4','4'], ['maths_neighbours','after 3','4'],
   ['egma_missing_number','5  6  7  __','8'], ['maths_add_counters','2 + 1','3'],
@@ -85,4 +82,16 @@ test.each([
   const copy = JSON.parse(JSON.stringify(form)); mutate(copy);
   expect(() => adaptEgmaForm(copy)).toThrow(TypeError);
   expect(() => adaptEgmaForm(copy)).toThrow(`${form.id}:`);
+});
+
+test('numeric practice stays together with a visible blank while spoken practice can wrap', () => {
+  const copy = JSON.parse(JSON.stringify(form));
+  copy.questions[8].practiceItems = ['1 2 _ 4', '2 + 1', '3 − 1', '3 | 8'];
+  const { battery } = adaptEgmaForm(copy);
+  const missing = battery.questions.find(q => q.question_code === 'egma_missing_number')!;
+  expect(missing.instructions!.en).toBe(copy.questions[8].instructions +
+    ' Practice first (not scored): 1\u00a02\u00a0___\u00a04, 2\u00a0+\u00a01, 3\u00a0−\u00a01, 3\u00a0|\u00a08');
+  const words = battery.questions.find(q => q.question_code === 'egma_word_problems')!;
+  const source = form.questions.find(q => q.questionCode === 'egma_word_problems')!;
+  expect(words.instructions!.en).toBe(source.instructions + ' Practice first (not scored): ' + source.practiceItems.join(', '));
 });

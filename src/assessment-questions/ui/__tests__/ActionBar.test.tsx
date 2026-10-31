@@ -144,11 +144,12 @@ test('two choices keep the decision row horizontal', () => {
   expect(r.getByTestId('letter-decisions')).toHaveStyle({ flexDirection: 'row' });
 });
 
-test.each(['deciding', 'review'] as const)('correcting shows the title and Cancel, and hides Back, End and Skip (%s)', mode => {
+test.each(['deciding', 'review'] as const)('correcting shows the title, muted current mark and Cancel, and hides Back, End and Skip (%s)', mode => {
   const onCancel = jest.fn();
   const r = render(<DecisionBar {...props()} mode={mode} onSkip={jest.fn()} correctChoices={choices}
-    onChoose={jest.fn()} correcting={{ title: 'Change Item 2', onCancel }} />);
-  expect(r.getByRole('header', { name: 'Change Item 2' })).toBeTruthy();
+    onChoose={jest.fn()} correcting={{ title: 'Change item 2', detail: '4 + 3 · Marked: Incorrect', onCancel }} />);
+  expect(r.getByRole('header', { name: 'Change item 2' })).toBeTruthy();
+  expect(r.getByText('4 + 3 · Marked: Incorrect')).toHaveStyle({ color: tokens.color.muted });
   expect(r.getAllByRole('button').map(b => b.props.accessibilityLabel)).toEqual([
     ...choices.map(c => c.label), 'Incorrect', 'Cancel',
   ]);

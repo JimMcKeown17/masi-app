@@ -8,7 +8,7 @@ import { PrimaryButton, SecondaryButton, TextLink } from './Button';
 export function DecisionBar({ testIDPrefix: p, onCorrect, onIncorrect, onBack, backDisabled, onEnd, endLabel = 'End test', onSkip, mode = 'deciding', onFinish, correctChoices, onChoose, correcting }: {
   correctChoices?: ReadonlyArray<{ key: string; label: string }>;
   onChoose?: (key: string) => void;
-  correcting?: { title: string; onCancel: () => void };
+  correcting?: { title: string; detail: string; onCancel: () => void };
   mode?: 'deciding' | 'review';
   onFinish?: () => void;
   testIDPrefix: string;
@@ -24,7 +24,10 @@ export function DecisionBar({ testIDPrefix: p, onCorrect, onIncorrect, onBack, b
     const stacked = (correctChoices?.length ?? 0) > 2;
     return (
       <BottomBar>
-        {correcting && <UiText variant="heading" accessibilityRole="header">{correcting.title}</UiText>}
+        {correcting && <>
+          <UiText variant="heading" accessibilityRole="header">{correcting.title}</UiText>
+          <UiText variant="body" tone="muted">{correcting.detail}</UiText>
+        </>}
         {mode === 'review' && !correcting
           ? <PrimaryButton label="Finish" testID={`${p}-finish`} onPress={() => onFinish?.()} />
           : <View testID={`${p}-decisions`} style={{ flexDirection: stacked ? 'column' : 'row', gap: tokens.space.md }}>

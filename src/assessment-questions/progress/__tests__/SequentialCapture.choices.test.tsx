@@ -46,7 +46,8 @@ test('tapping a reached tile opens correcting mode; Wrong → Right saves the ch
   const r = setup(); r.start(); r.press('Incorrect');
   expect(r.getByTestId('tile-0')).toHaveAccessibleName('a, incorrect. Double-tap to change');
   r.tap(0);
-  expect(r.getByRole('header', { name: 'Change Item 1' })).toBeTruthy();
+  expect(r.getByRole('header', { name: 'Change item 1' })).toBeTruthy();
+  expect(r.getByText('a · Marked: Incorrect')).toBeTruthy();
   expect(r.queryByText('Back')).toBeNull(); expect(r.queryByText('Skip question')).toBeNull();
   r.press('Just knew');
   expect(r.getByTestId('tile-1')).toHaveAccessibleName('b, current');
@@ -127,4 +128,18 @@ test('the active deadline still expires while correcting', () => {
   const r = setup({ durationSec: 60 }); r.start(); r.press('Counted from 1'); r.tap(0); r.advance(60000);
   expect(r.result()).toMatchObject({ stopped_reason: 'timer', duration_ms: 60000 });
   expect(r.result().items[0].metadata?.strategy).toBe('count_all');
+});
+
+test('correction identifies the sum and current choice using the capture noun', () => {
+  const r = setup({ items: [
+    { item_key: '1', prompt: '6 + 2' }, { item_key: '2', prompt: '4 + 3' },
+  ], copy: flatCopy('number', 2), body: { kind: 'grid', rows: [[0,1]], layout: THREE_BY_THREE_LAYOUT, variant: 'word', testID: 'grid' } });
+  r.start(); r.press('Just knew'); r.press('Incorrect');
+  r.tap(0);
+  expect(r.getByRole('header', { name: 'Change number 1' })).toBeTruthy();
+  expect(r.getByText('6 + 2 · Marked: Just knew')).toBeTruthy();
+  r.press('Counted from 1'); r.tap(0);
+  expect(r.getByText('6 + 2 · Marked: Counted from 1')).toBeTruthy();
+  r.press('Cancel'); r.tap(1);
+  expect(r.getByText('4 + 3 · Marked: Incorrect')).toBeTruthy();
 });

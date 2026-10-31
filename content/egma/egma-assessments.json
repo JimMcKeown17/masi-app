@@ -21,7 +21,7 @@
         {
           "questionCode": "maths_count_aloud",
           "title": "Count aloud",
-          "instructions": "Say: \"Count for me. Start at one.\" Mark each checkpoint the child passes without a mistake. Stop at the first mistake. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Say: \"Count for me. Start at one.\" Mark each step the child reaches without a mistake. Stop at the first mistake. If the child stops for about 5 seconds, mark the next step wrong. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child.",
           "items": [
             {
               "id": "1",
@@ -76,7 +76,7 @@
         {
           "questionCode": "maths_quick_see",
           "title": "Finger flash",
-          "instructions": "Say: \"How many fingers?\" Hold your fingers up for about 2 seconds, then hide them. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Say: \"How many fingers?\" Hold your fingers up for about 2 seconds, then hide them. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
           "items": [
             {
               "id": "1",
@@ -146,7 +146,7 @@
         {
           "questionCode": "maths_count_out",
           "title": "Count out counters",
-          "instructions": "Say: \"Give me N counters.\" Use the number on each item for N. Mark correct only if the child stops at N. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Say: \"Give me N counters.\" Use the number on each item for N. Mark correct only if the child stops at N. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
           "items": [
             {
               "id": "1",
@@ -328,7 +328,7 @@
         {
           "questionCode": "egma_number_id",
           "title": "Read big numbers",
-          "instructions": "Ask the child to read each number on Number Card page 3. The child must say the number with its place value. \"Nine-nine\" for 99 is wrong. For three-digit numbers they must say \"hundred\". Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Ask the child to read each number on Number Card page 2. The child must say the number with its place value. \"Nine-nine\" for 99 is wrong. For three-digit numbers they must say \"hundred\". Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
           "items": [
             {
               "id": "1",
@@ -513,12 +513,12 @@
           ],
           "practiceItems": [],
           "timeLimitSeconds": 60,
-          "numberCardPage": 3
+          "numberCardPage": 2
         },
         {
           "questionCode": "maths_which_more",
           "title": "Which is more?",
-          "instructions": "Ask: \"Which is more?\" Use Number Card page 2. The child must say the bigger number, not point. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Ask: \"Which is more?\" Use Number Card page 3. The child must say the bigger number, not point. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
           "items": [
             {
               "id": "1",
@@ -613,7 +613,7 @@
           ],
           "practiceItems": [],
           "timeLimitSeconds": null,
-          "numberCardPage": 2
+          "numberCardPage": 3
         },
         {
           "questionCode": "egma_number_discrimination",
@@ -730,7 +730,7 @@
         {
           "questionCode": "maths_neighbours",
           "title": "Before and after",
-          "instructions": "Say: \"What number comes after 3?\" or \"What number comes just before 5?\" Use the relation and number on each item. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Say: \"What number comes after 3?\" or \"What number comes just before 5?\" Use the word and number on each item. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
           "items": [
             {
               "id": "1",
@@ -991,7 +991,7 @@
         {
           "questionCode": "maths_add_counters",
           "title": "Add with counters",
-          "instructions": "Each item shows two numbers, like 2 + 1. Put out the first number of counters and cover them with your hand. Say: \"There are 2 under my hand.\" Put out the second number of counters next to your hand. Say: \"How many altogether?\" Mark how the child got each correct answer. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Each item shows two numbers, like 2 + 1. Put out the first number of counters and cover them with your hand. Say: \"There are 2 under my hand.\" Put out the second number of counters next to your hand. Say: \"How many altogether?\" Mark how the child got each correct answer. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
           "items": [
             {
               "id": "1",
@@ -1067,7 +1067,7 @@
         {
           "questionCode": "maths_take_away_counters",
           "title": "Take away with counters",
-          "instructions": "Each item shows two numbers, like 3 − 1. Put out the first number of counters. Say: \"Watch.\" Take the second number away and cover them with your hand. Say: \"How many are left?\" Mark how the child got each correct answer. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Each item shows two numbers, like 3 − 1. Put out the first number of counters. Say: \"Watch.\" Take the second number away and cover them with your hand. Say: \"How many are left?\" Mark how the child got each correct answer. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
           "items": [
             {
               "id": "1",
@@ -1143,7 +1143,7 @@
         {
           "questionCode": "maths_make_five_ten",
           "title": "Make 5 and make 10",
-          "instructions": "Use one hand for 5 and two hands for 10. Show the number of fingers up on each item. Say: \"How many fingers are down?\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Use one hand for 5 and two hands for 10. Show the number of fingers up on each item. Say: \"How many fingers are down?\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
           "items": [
             {
               "id": "1",
@@ -1449,7 +1449,7 @@
         {
           "questionCode": "egma_addition_l2",
           "title": "Addition 2",
-          "instructions": "Use Number Card page 8. Give the child pencil and paper. Say: \"You don't have to read the sum out loud.\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Use Number Card page 7. Give the child pencil and paper. Say: \"You don't have to read the sum out loud.\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
           "items": [
             {
               "id": "1",
@@ -1509,12 +1509,12 @@
           ],
           "practiceItems": [],
           "timeLimitSeconds": null,
-          "numberCardPage": 8
+          "numberCardPage": 7
         },
         {
           "questionCode": "egma_subtraction_l1",
           "title": "Subtraction 1",
-          "instructions": "Use Number Card page 7. Say: \"You don't have to read it out loud.\" Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "instructions": "Use Number Card page 8. Say: \"You don't have to read it out loud.\" Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
           "items": [
             {
               "id": "1",
@@ -1739,7 +1739,7 @@
           ],
           "practiceItems": [],
           "timeLimitSeconds": 60,
-          "numberCardPage": 7
+          "numberCardPage": 8
         },
         {
           "questionCode": "egma_subtraction_l2",

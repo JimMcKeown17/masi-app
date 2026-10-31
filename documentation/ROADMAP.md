@@ -961,9 +961,9 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   numeracy screens. Before the numeracy pilot (spec §10):
   - the partner approves the early number items, the authored Addition and Subtraction 1 items
     6–20, the word problems and the instruction copy; an English copy check follows;
-  - the staging precondition (no field EA holds numeracy), then push migration
-    `20261031120000_numeracy_maths_draft_default.sql` (Jim's go);
-  - the A03 device gate at 360 dp, and a timed pass with real counters and the printed Number Card;
+  - done 2026-10-31: the default migration is on staging, and the A03 device gate at 360 dp passed
+    (build log); still open: a timed pass with real counters and the printed, laminated Number
+    Card (pages now follow the Question order);
   - the freeze (plan appendix): rename the form to `masi-egma-en-2026-1`, add `masi_maths@2026.1`,
     supersede the draft, a second default migration, and the freeze upgrade tests.
 - [ ] **Later maths work:** an isiXhosa form (a new form in the same pack); an alternate Core EGMA

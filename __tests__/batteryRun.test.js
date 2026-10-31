@@ -453,7 +453,7 @@ test('two equal raw scores with different early finishes show different rates', 
   expect(rows).toEqual(['14 / 20 · 28 per minute', '14 / 20 · 19 per minute']);
 });
 test('number card materials line names the page', () => {
-  expect(materialsLine(maths.questions[4], 'en', maths)).toEqual({ item: 'Number Card', side: null, footer: 'Number Card 2026.1 · EN · page 3' });
+  expect(materialsLine(maths.questions[4], 'en', maths)).toEqual({ item: 'Number Card', side: null, footer: 'Number Card 2026.1 · EN · page 2' });
 });
 test('counters have no footer', () => {
   expect(materialsLine(maths.questions[2], 'en', maths)).toEqual({ item: 'Counters', side: null, footer: null });

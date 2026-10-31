@@ -30,7 +30,7 @@ Use the helper rather than importing raw JSON. It deeply freezes the catalog and
 - Finger flash uses `fingers` with `mode: 'flash'`; Make 5 and make 10 uses `mode: 'make'` and `total`. `count_out` is its own kind, as in the plan's public type contract.
 - Word problems store phrase segments without pause tokens; join with ` (pause) ` for the read-aloud script. `problemType` uses descriptive snake-case keys. Their spelling is a pack decision; wording and answers come from Appendix A.
 - Practice examples are instruction strings, never scored items. Word-problem practice includes the assessor answer `(2)`.
-- The three timed Questions have a 60-second limit: Number Identification, Addition 1 and Subtraction 1. Number Card pages 1–9 each appear once. Stop rules, gates, strategy capture and result persistence belong to the adapter and engine, outside this pack.
+- The three timed Questions have a 60-second limit: Number Identification, Addition 1 and Subtraction 1. Number Card pages 1–9 each appear once, in Question order. Stop rules, gates, strategy capture and result persistence belong to the adapter and engine, outside this pack.
 
 ## Band rule
 
@@ -64,4 +64,4 @@ With Node 20, run from the repository root:
 PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content
 ```
 
-The JSON SHA-256 is `91667d89d6927e9b6c523ff5d667e027d2af6d4f8cdcd078028075f64493c350`. Pin it only after finalizing and reviewing the transcription. The verifier checks the hash, counts, ids, bands, answers, either-addend inverse rule, exact Appendix A content, Question contracts, immutable reads and no-fallback lookup. Deliberately wrong band and inverse examples prove those checks reject invalid content. The same command retains the EGRA hash check. These are content and API checks; device administration, printed card layout, scoring integration and curriculum approval remain later gates.
+The JSON SHA-256 is `4bcd2abce95d1ac193ab840c9d8c3e845af6d1a77b340b55d80fd45642a32b35`. Pin it only after finalizing and reviewing the transcription. The verifier checks the hash, counts, ids, bands, answers, either-addend inverse rule, exact Appendix A content, Question contracts, immutable reads and no-fallback lookup. Deliberately wrong band and inverse examples prove those checks reject invalid content. The same command retains the EGRA hash check. These are content and API checks; device administration, printed card layout, scoring integration and curriculum approval remain later gates.

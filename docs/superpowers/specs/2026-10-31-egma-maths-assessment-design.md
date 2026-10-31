@@ -558,13 +558,13 @@ scores). Like letter evidence, these results are read live and never written as 
 One card for all languages: numerals, `+`, `−`, and blank boxes only. The pages are:
 
 1. Read numbers to 20
-2. Which is more?
-3. Read big numbers
+2. Read big numbers
+3. Which is more?
 4. Bigger number
 5. Missing number
 6. Addition 1
-7. Subtraction 1
-8. Addition 2
+7. Addition 2
+8. Subtraction 1
 9. Subtraction 2
 
 The builder writes a script that generates a printable A4 HTML card from the pack, at

@@ -43,8 +43,8 @@ const timed = new Set(['egma_number_id','egma_addition_l1','egma_subtraction_l1'
 const arithmetic = new Set<string>(CORE_ARITHMETIC_CODES);
 const counters = new Set(['maths_count_out','maths_add_counters','maths_take_away_counters','egma_word_problems']);
 const pages: Partial<Record<MathsQuestionCode, number>> = {
-  maths_read_numbers:1, maths_which_more:2, egma_number_id:3, egma_number_discrimination:4, egma_missing_number:5,
-  egma_addition_l1:6, egma_subtraction_l1:7, egma_addition_l2:8, egma_subtraction_l2:9,
+  maths_read_numbers:1, maths_which_more:3, egma_number_id:2, egma_number_discrimination:4, egma_missing_number:5,
+  egma_addition_l1:6, egma_subtraction_l1:8, egma_addition_l2:7, egma_subtraction_l2:9,
 };
 const numberWords: Record<string, number> = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12 };
 const record = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -56,7 +56,7 @@ function display(item: EgmaItem): Pick<MathsCaptureItem, 'prompt' | 'gloss'> {
     case 'sequence': return {prompt:item.slots.map(n=>n===null?'__':String(n)).join('  '),gloss:String(item.answer)};
     case 'equation': case 'counters': return {prompt:`${item.a} ${item.op==='+'?'+':'−'} ${item.b}`,gloss:String(item.answer)};
     case 'checkpoint': return {prompt:`Counts to ${item.upTo}`};
-    case 'fingers': return item.mode==='flash' ? {prompt:`${item.shown} fingers`,gloss:String(item.answer)}
+    case 'fingers': return item.mode==='flash' ? {prompt:`${item.shown} fingers`}
       : {prompt:`${item.shown} up`,gloss:`${item.answer} down`};
     case 'count_out': return {prompt:`Give ${item.target}`};
     case 'neighbour': return {prompt:`${item.relation} ${item.n}`,gloss:String(item.answer)};
@@ -163,7 +163,7 @@ export function adaptEgmaForm(form: EgmaForm): {
     languages:['en'],fixedLanguage:'en',numberCard:'Number Card 2026.1',
     questions:form.questions.map(question=>({
       question_code:question.questionCode,question_version:form.id,title:question.title,
-      instructions:{en:question.instructions+(question.practiceItems.length?` Practice first (not scored): ${question.practiceItems.join(', ')}`:'')},
+      instructions:{en:question.instructions+(question.practiceItems.length?` Practice first (not scored): ${question.practiceItems.map(item => /^[0-9 _+−|]+$/.test(item) ? item.replace(/ /g, '\u00a0').replace(/_/g, '___') : item).join(', ')}`:'')},
       ...(question.timeLimitSeconds===null?{}:{durationSec:question.timeLimitSeconds}),
       materials:question.numberCardPage!==null?{item:'number_card',page:question.numberCardPage}:counters.has(question.questionCode)?{item:'counters'}:null,
     })),

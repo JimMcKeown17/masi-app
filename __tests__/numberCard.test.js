@@ -63,12 +63,12 @@ test('the card uses A4 print CSS and the prescribed table layouts', () => {
   const rowCells = page => [...pages.find(section => section.page === page).body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)]
     .map(([, row]) => [...row.matchAll(/<td\b[^>]*>/g)].length);
   expect(rowCells(1)).toEqual([3, 3, 3]);
-  expect(rowCells(2)).toEqual(Array(9).fill(2));
-  expect(rowCells(3)).toEqual([5, 5, 5, 5]);
+  expect(rowCells(3)).toEqual(Array(9).fill(2));
+  expect(rowCells(2)).toEqual([5, 5, 5, 5]);
   expect(rowCells(4)).toEqual(Array(10).fill(2));
   expect(rowCells(5)).toEqual(Array(10).fill(4));
-  for (const page of [6, 7]) expect(rowCells(page)).toEqual(Array(10).fill(2));
-  for (const page of [8, 9]) expect(rowCells(page)).toEqual([2, 2, 2]);
+  for (const page of [6, 8]) expect(rowCells(page)).toEqual(Array(10).fill(2));
+  for (const page of [7, 9]) expect(rowCells(page)).toEqual([2, 2, 2]);
 });
 
 test('the committed HTML matches the generator', () => {

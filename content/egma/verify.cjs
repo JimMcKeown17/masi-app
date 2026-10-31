@@ -9,7 +9,7 @@ const { egmaCatalog, listEgmaAssessments, getEgmaAssessment } = require('./index
 const questions = () => getEgmaAssessment('masi-egma-en-2026-1-draft').questions;
 const question = code => questions().find(q => q.questionCode === code);
 const allItems = () => questions().flatMap(q => q.items);
-const PINNED_SHA256 = '91667d89d6927e9b6c523ff5d667e027d2af6d4f8cdcd078028075f64493c350';
+const PINNED_SHA256 = '4bcd2abce95d1ac193ab840c9d8c3e845af6d1a77b340b55d80fd45642a32b35';
 
 function numbers(item) {
   switch (item.kind) {
@@ -105,8 +105,8 @@ test('printed items match the toolkit', () => {
     ['egma_subtraction_l2', [[19,6],[25,7],[26,14],[59,37],[64,26]]],
   ]) assert.deepEqual(question(code).items.slice(0,5).map(i => [i.a,i.b]), values);
 });
-test('number card pages are 1..9, each used once', () => {
-  assert.deepEqual(questions().filter(q => q.numberCardPage !== null).map(q => q.numberCardPage).sort((a,b) => a-b), [1,2,3,4,5,6,7,8,9]);
+test('number card pages follow pack order with no gaps', () => {
+  assert.deepEqual(questions().filter(q => q.numberCardPage !== null).map(q => q.numberCardPage), [1,2,3,4,5,6,7,8,9]);
 });
 test('unknown ids and languages return nothing', () => {
   assert.equal(getEgmaAssessment('unknown'), null);
@@ -164,8 +164,8 @@ test('Question order, titles, skills, sources, timing and pages match the agreed
     ['maths_quick_see','Finger flash','quick_see',null,null],
     ['maths_count_out','Count out counters','count_out',null,null],
     ['maths_read_numbers','Read numbers to 20','read_numbers',null,1],
-    ['egma_number_id','Read big numbers','read_numbers',60,3],
-    ['maths_which_more','Which is more?','compare_numbers',null,2],
+    ['egma_number_id','Read big numbers','read_numbers',60,2],
+    ['maths_which_more','Which is more?','compare_numbers',null,3],
     ['egma_number_discrimination','Bigger number','compare_numbers',null,4],
     ['maths_neighbours','Before and after','number_neighbours',null,null],
     ['egma_missing_number','Missing number','number_patterns',null,5],
@@ -173,8 +173,8 @@ test('Question order, titles, skills, sources, timing and pages match the agreed
     ['maths_take_away_counters','Take away with counters','subtract_objects',null,null],
     ['maths_make_five_ten','Make 5 and make 10','number_bonds',null,null],
     ['egma_addition_l1','Addition 1','add',60,6],
-    ['egma_addition_l2','Addition 2','add',null,8],
-    ['egma_subtraction_l1','Subtraction 1','subtract',60,7],
+    ['egma_addition_l2','Addition 2','add',null,7],
+    ['egma_subtraction_l1','Subtraction 1','subtract',60,8],
     ['egma_subtraction_l2','Subtraction 2','subtract',null,9],
     ['egma_word_problems','Word problems','word_problems',null,null],
   ];
@@ -191,4 +191,25 @@ test('Question order, titles, skills, sources, timing and pages match the agreed
   assert.deepEqual(question('egma_number_discrimination').practiceItems,['3 | 8']);
   assert.deepEqual(question('egma_missing_number').practiceItems,['1 2 _ 4']);
   assert.deepEqual(question('egma_word_problems').practiceItems,['You have one sweet. (pause) I give you one more. (pause) How many sweets do you have now? (2)']);
+});
+
+test('Number Card instruction pages match the page supplied', () => {
+  for (const q of questions().filter(q => q.numberCardPage !== null))
+    assert.ok(q.instructions.includes(`Number Card page ${q.numberCardPage}`), q.questionCode);
+});
+
+test('spoken instructions use steps and match the materials in use', () => {
+  assert.equal(question('maths_count_aloud').instructions, 'Say: "Count for me. Start at one." Mark each step the child reaches without a mistake. Stop at the first mistake. If the child stops for about 5 seconds, mark the next step wrong. The child may answer in any language you understand. Never say "correct" or "wrong" to the child.');
+  for (const code of ['maths_quick_see','maths_count_out','maths_neighbours','maths_add_counters','maths_take_away_counters','maths_make_five_ten']) {
+    assert.ok(question(code).instructions.endsWith('mark the item wrong and go to the next one.'), code);
+  }
+  for (const q of questions().filter(q => q.numberCardPage !== null))
+    assert.ok(q.instructions.endsWith('mark the item wrong and point to the next one.'), q.questionCode);
+  assert.ok(question('maths_neighbours').instructions.includes('Use the word and number on each item.'));
+});
+
+test('worked number sentences stay together in instructions', () => {
+  assert.ok(question('maths_add_counters').instructions.includes('2\u00a0+\u00a01'));
+  assert.ok(question('maths_take_away_counters').instructions.includes('3\u00a0−\u00a01'));
+  for (const q of questions()) assert.doesNotMatch(q.instructions, /\d [ +−] \d/, q.questionCode);
 });

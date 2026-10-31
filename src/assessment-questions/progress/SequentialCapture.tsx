@@ -301,7 +301,11 @@ export function SequentialCapture({
           onFinish={() => { if (phaseRef.current === 'review' && correctingPositionRef.current === null) finish('completed'); }} endLabel={`End ${endNoun}`}
           correctChoices={choices} onChoose={key => handleMark(true, key)}
           correcting={correctingPosition === null ? undefined : {
-            title: `Change ${copy.itemName(correctingPosition)}`, onCancel: closeCorrection,
+            title: `Change ${copy.itemName(correctingPosition).toLowerCase()}`,
+            detail: `${cardItems[correctingPosition].prompt} · Marked: ${state.decisions[correctingPosition]
+              ? choices?.find(choice => choice.key === state.choices[correctingPosition])?.label ?? 'Correct'
+              : 'Incorrect'}`,
+            onCancel: closeCorrection,
           }}
           onCorrect={() => handleMark(true)}
           onIncorrect={() => handleMark(false)}
