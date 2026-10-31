@@ -5,6 +5,7 @@ import { renderWithProviders as render } from '../test-support/renderWithProvide
 import ReportProblemSheet from '../src/components/profile/ReportProblemSheet';
 import SendDiagnosticsSheet from '../src/components/profile/SendDiagnosticsSheet';
 import { StaleActorError } from '../src/session/staleActor';
+import { spacing } from '../src/constants/colors';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 const handle = { userId: 'ea-1', epoch: 1, isCurrent: () => true };
@@ -238,7 +239,7 @@ test('attached screenshot actions share a row, accessible names and lifecycle gu
   expect(screen.getByText('Replace')).toBeTruthy();
   expect(screen.getByText('Remove')).toBeTruthy();
   const row = screen.getByTestId('screenshot-actions');
-  expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: 8 });
+  expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: spacing.lg });
   expect(row.findByProps({ accessibilityLabel: 'Replace screenshot', accessibilityRole: 'button' })).toBeTruthy();
   expect(row.findByProps({ accessibilityLabel: 'Remove screenshot', accessibilityRole: 'button' })).toBeTruthy();
   const picking = deferred();

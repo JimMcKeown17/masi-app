@@ -99,7 +99,7 @@ export default function ReportProblemSheet({ visible, onClose, onSubmit, handle 
 }
 const styles = StyleSheet.create({
   actions: { gap: spacing.sm },
-  screenshotActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  screenshotActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   attachment: { marginTop: spacing.md },
   caption: { ...typeRoles.textCaption, color: colors.textSecondary },
 });

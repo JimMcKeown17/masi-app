@@ -17,13 +17,13 @@ priority: P3
 
 diagnosis_state: HYPOTHESIS
 delivery_state: FIXED_IN_CODE
-verification_state: LOCAL_TESTED
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 30
 confidence_basis: Plausible code path only; the sheet's scroll area is its only shrinkable region and the keyboard takes most of the screen.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T02:06:37Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:47:00Z
 last_observed_at: 2026-10-30T16:47:00Z
 
@@ -141,7 +141,7 @@ Implemented one flex row with matched tertiary Replace/Remove buttons, icons and
 ## Verification plan
 
 - [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
-- [ ] A03s and iPhone acceptance checks (2026-10-31).
+- [x] A03s acceptance check (2026-10-31); iPhone still open.
 
 - [ ] Reproduce on the A03s after the MA-BUG-20261030-001 fix lands.
 - [x] Decide the layout with Jim before changing it.
@@ -153,6 +153,7 @@ Implemented one flex row with matched tertiary Replace/Remove buttons, icons and
 | 2026-10-30T16:47:00Z | Claude | Observed during A03s gate 3 | Screenshot |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #124; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | With a screenshot attached and the keyboard open, Replace and Remove stay visible above the footer; Remove clears the attachment. The original mechanism was never reproduced, so diagnosis stays HYPOTHESIS; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
 
 ## Open questions
 

@@ -17,13 +17,13 @@ priority: P3
 
 diagnosis_state: CONFIRMED
 delivery_state: FIXED_IN_CODE
-verification_state: LOCAL_TESTED
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 90
-confidence_basis: BottomSheet's body content has horizontal padding only, so a body whose last element has no bottom margin meets the footer divider directly. An audit of all 12 footer sheets found 0 dp gaps in 9 and per-sheet compensation in the rest; the A03s look is still to be checked.
+confidence_basis: BottomSheet's body content has horizontal padding only, so a body whose last element has no bottom margin meets the footer divider directly. An audit of all 12 footer sheets found 0 dp gaps in 9 and per-sheet compensation in the rest; the A03s check on 2026-10-31 measured ≈18 dp above the divider (was ≈4 dp).
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T02:06:37Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:45:00Z
 last_observed_at: 2026-10-30T16:45:00Z
 
@@ -135,9 +135,9 @@ Shared spacing.md body bottom padding when footer exists; caller bodyContentStyl
 ## Verification plan
 
 - [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
-- [ ] A03s and iPhone acceptance checks (2026-10-31).
+- [x] A03s acceptance check (2026-10-31); iPhone still open.
 
-- [ ] Compare sheets with footers on the A03s.
+- [x] Compare sheets with footers on the A03s (Send diagnostics, Report a problem, Change password).
 
 ## Timeline
 
@@ -146,7 +146,8 @@ Shared spacing.md body bottom padding when footer exists; caller bodyContentStyl
 | 2026-10-30T16:45:00Z | Claude | Observed during A03s gate 1 | Screenshot |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #125; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | Send diagnostics: text descender to divider 32 px (≈18 dp; was ≈4 dp), divider to Send 15 px; Report a problem and Change password balanced; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
 
 ## Open questions
 
-- Footer-sheet source audit completed; gap table in build log. Device visual checks remain open.
+- Footer-sheet source audit completed; gap table in build log. A03s checked 2026-10-31; iPhone open.

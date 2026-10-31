@@ -17,13 +17,13 @@ priority: P3
 
 diagnosis_state: CONFIRMED
 delivery_state: FIXED_IN_CODE
-verification_state: LOCAL_TESTED
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 90
 confidence_basis: The two buttons are declared with different BrandButton variants, tones and icons in ReportProblemSheet.js:75-78.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T02:06:37Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:48:00Z
 last_observed_at: 2026-10-30T16:48:00Z
 
@@ -134,7 +134,7 @@ Implemented Replace and Remove in one spacing.sm row, both default brand tertiar
 ## Verification plan
 
 - [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
-- [ ] A03s and iPhone acceptance checks (2026-10-31).
+- [x] A03s acceptance check (2026-10-31); iPhone still open.
 
 - [ ] Agree the treatment, then check on the A03s and an iPhone.
 
@@ -146,7 +146,8 @@ Implemented Replace and Remove in one spacing.sm row, both default brand tertiar
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #124; RED → GREEN evidence in build log; device checks pending |
 | 2026-10-31T02:40:00Z | Claude | Review fix | The opener stays mounted (Attach → Replace) and Remove returns focus to Attach, after the Codex review |
+| 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s; gap widened | Matched red Replace/Remove pair on one row. On device the 8 dp row gap was barely wider than the 8 dp icon-label gap, so the pair read as one run; row gap raised to `spacing.lg` (24 dp); A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
 
 ## Open questions
 
-- Treatment settled by Jim: matched brand tertiary row; device appearance pending.
+- Treatment chosen by Claude (matched brand tertiary row, 24 dp apart), not yet reviewed by Jim; checked on the A03s 2026-10-31, iPhone open.

@@ -7862,3 +7862,34 @@ commit and derived identity. No device/release/hosted checks were run in this se
   - a repeat of gate 5 to read the MV001 detail in its receipt.
   
   iPhone smoke after that.
+
+#### 2026-10-31 follow-up: A03s device checks
+
+Galaxy A03s, `.kbtest` debug build on Metro from this worktree (`2fa92cf`), signed in as
+`test@masinyusane.org`, default text size. The phone was claimed from the Zazi session first.
+
+| Check | Result |
+|---|---|
+| Change password, keyboard open → closed (two cycles, two fields) | Pass: sheet flush to the bottom; pixel diff against the first cycle limited to the focus ring and clock |
+| Report a problem, keyboard closed after typing | Pass: flush; no page showing below the sheet |
+| Edit child, two keyboard cycles (Age, First name) | Pass: pixel-identical to the pre-keyboard screen except the focused field's border; Save changes visible |
+| Screenshot row with the keyboard open (002) | Pass: Replace and Remove visible above the footer; Remove clears the attachment and Attach returns |
+| Screenshot row look (003) | Matched red pair, but the 8 dp row gap was barely wider than each button's own 8 dp icon-label gap, so the pair read as one run of text. **Changed:** row gap `spacing.sm` → `spacing.lg` (24 dp). Rechecked on the phone; the test now asserts the token. ProfileDiagnostics + BottomSheet 2 suites / 57 tests pass |
+| Footer spacing (006) | Pass: Send diagnostics text descender to divider 32 px ≈ 18 dp (was ≈ 4 dp); divider to Send 15 px |
+| Upload failure detail (004): gate 5 repeated | Pass. Wi-Fi off (`cmd wifi`), age edit of test child `83f09838…` saved locally; server copy raised to `row_version` 10 through the isolated helper (`project_ref=segygjzpujphwvrubusm`); Wi-Fi on. Sync log and receipt `d96747fb` (`ut:0123d1be`): `… (stale_version): stale_version \| details: children id=83f09838-… incoming row_version=3 stored row_version=10`. The pull then restored the server copy (age 6) and Home shows "1 item needs attention". Conditions key on table/record/operation/outbox time/class/code, not text, so the detail cannot fragment them |
+| Release identity (005) | Partial. Profile "Version 1.5.0 (Build 1)"; receipt `6049e8f2` has `releaseLabel` "1.5.0 (1)", `buildNumber` 1 (yesterday's said "sqlite-critical-hardening"). `gitCommit` still "unknown": this debug APK has no dev client, so expo-constants reads the `assets/app.config` embedded at build time (unzipped from the installed APK: no `gitCommit`; it was built before this fix). Metro's manifest and `expo config` both carry `2fa92cf…`. EAS builds embed the config on the build server where `EAS_BUILD_GIT_COMMIT_HASH` is set; check the commit on the next real build, not a build made for this |
+| TalkBack focus | Stopped at Jim's direction ("Talkback is not a concern of mine"). One adb tap activated Remove without a double-tap, so that run proved nothing; TalkBack was turned off again |
+
+**New finding, recorded as MA-BUG-20261031-001 (not fixed here):** with the keyboard open, Edit
+child's scroll area ends 157 px (= 90 dp at scale 1.75) above the keyboard, exactly its
+`keyboardVerticalOffset={90}`. Same prop on Add child, Create class and Edit class. iOS likely
+needs an offset (status bar + header ≈ 91 dp), so the fix waits for an iPhone check.
+
+Also seen, not recorded: Sync status showed "Last Synced: Never" beside "All saved and synced"
+after a Metro reload. Unverified on a release build.
+
+**Staging left behind:** test child `83f09838…` has `preferred_name = 'HO edit (A03 gate 5 repeat)'`,
+`row_version = 10`; one diagnostics and one upload-failure receipt from `test@masinyusane.org`.
+`.kbtest` keeps its failed outbox row ("1 item needs attention").
+
+**Open:** iPhone smoke for #124–#127; the commit in a bundle from the next EAS build (005).
