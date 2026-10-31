@@ -385,6 +385,7 @@ git commit -m "test(numeracy): verify curriculum structure, editions and plain w
 - Consumes: Task 2's `checkCurriculum`, `broken`, and the error format.
 - Produces (internal):
   - `expectedComesAfter(curriculum, step): string[]`: the rule-derived prerequisites, in no particular order.
+  - `applyOrderOverride(expected: string[], override?: { add?: string[], remove?: string[] }) → string[]`: exported from verify.cjs; checkCurriculum and the bundled-content test both use it.
   - `ORDER_OVERRIDES = Object.freeze({})`: shape `{ [stepKey]: { add?: string[], remove?: string[] } }`. This is how the partner overrides a single arrow (spec §4.2): the JSON change and the override entry land in the same commit, so the deviation is visible in review.
   - `checkOrder(curriculum, overrides): string[]`, `checkTicks(curriculum): string[]`.
   - `checkCurriculum(curriculum, { orderOverrides = ORDER_OVERRIDES } = {})` now also runs both.
@@ -433,7 +434,8 @@ test('order: the expected arrows follow the four rules', () => {
     'skip_count.10s': ['count_aloud.100', 'skip_count.5s'],
   };
   for (const [key, want] of Object.entries(cases)) assert.deepEqual(sorted(expectedComesAfter(c, step(key))), sorted(want), key);
-  for (const key of listStepKeys(c)) assert.deepEqual(sorted(step(key).comes_after), sorted(expectedComesAfter(c, step(key))), key);
+  // the bundled content is checked WITH its declared overrides applied, so an accepted partner change passes
+  for (const key of listStepKeys(c)) assert.deepEqual(sorted(step(key).comes_after), sorted(applyOrderOverride(expectedComesAfter(c, step(key)), ORDER_OVERRIDES[key])), key);
 });
 
 test('order: a missing or extra arrow is caught unless an override records it', () => {
@@ -442,6 +444,11 @@ test('order: a missing or extra arrow is caught unless an override records it', 
   assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('compare.5'); }).join('\n'), /add\.10.*unexpected "compare\.5"/);
   const c = structuredClone(getCurriculum()); drop(c);
   assert.deepEqual(checkCurriculum(c, { orderOverrides: { 'add.10': { remove: ['count.10'] } } }), []);
+});
+
+test('order: the documented partner edit (JSON change plus override entry) passes every content check', () => {
+  // clone, drop count.10 from add.10, declare the override, then run the same checks test:content runs on bundled content
+  // (checkCurriculum and the override-aware per-step comparison); an undeclared change to another step still fails
 });
 
 test('order: an unknown key or a loop is caught', () => {
