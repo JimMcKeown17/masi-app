@@ -529,8 +529,6 @@ test('unfinished EGRA assessment uses its own four-Question total and resumes in
 const mathsProgramme = { code: 'numeracy', default_battery_code: 'masi_maths', default_battery_version: '2026.1-draft' };
 test('a numeracy EA sees the Maths card and no stats, Full EGRA or quick assessments', async () => {
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: mathsProgramme });
-  batteryForNewRun.mockReturnValue({ ...BATTERY, battery_code: 'masi_maths', battery_version: '2026.1-draft',
-    title: 'Maths assessment', languages: ['en'], fixedLanguage: 'en' });
   const screen = renderTab();
   await screen.findByRole('header', { name: 'Maths assessment' });
   expect(screen.getAllByRole('header').map(node => node.props.children)).toEqual(['Maths assessment']);
@@ -543,7 +541,7 @@ test('a numeracy EA sees the Maths card and no stats, Full EGRA or quick assessm
   });
 });
 test('a numeracy EA on a build without the Battery sees only the update note', async () => {
-  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: mathsProgramme });
+  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: { ...mathsProgramme, default_battery_version: '2099.1' } });
   const screen = renderTab();
   await screen.findByText('Your programme uses a newer assessment. Update the app to start it.');
   expect(screen.queryAllByRole('header')).toHaveLength(0);
