@@ -15,9 +15,19 @@ import { endMessage, reviewLine } from './captureCopy';
 import { PositionLine } from '../ui/PositionLine';
 import { FlipNotice } from '../ui/FlipNotice';
 import { tokens } from '../theme/tokens';
-import { paginate, pageIndexOf, PageIndicator, DecisionBar, QuestionIntro, ConfirmSheet, Canvas } from '../ui';
+import { paginate, pageIndexOf, PageIndicator, DecisionBar, QuestionIntro, ConfirmSheet, Canvas, ObservationPanel } from '../ui';
 
-type Phase = 'intro' | 'active' | 'review' | 'end-confirmation' | 'skip-picker' | 'finished';
+type Phase = 'intro' | 'active' | 'review' | 'end-confirmation' | 'skip-picker' | 'observation' | 'finished';
+
+/** Choices are capture state, so stale source metadata cannot supply a strategy. */
+function captureMetadata(item: CaptureItem, reached: boolean, strategy: string | undefined, choicesMode: boolean) {
+  const metadata: Record<string, unknown> = { ...item.metadata, reached };
+  if (choicesMode) {
+    delete metadata.strategy;
+    if (strategy !== undefined) metadata.strategy = strategy;
+  }
+  return metadata;
+}
 
 /** Keep card positions distinct even when prompts or item keys repeat. */
 export function buildSequentialCard(promptRows: ReadonlyArray<ReadonlyArray<CaptureItem>>): { items: CaptureItem[]; rows: number[][] } {
@@ -33,7 +43,7 @@ export function buildSequentialCard(promptRows: ReadonlyArray<ReadonlyArray<Capt
 export function SequentialCapture({
   language, itemSet, items: cardItems, body, copy, stopRule, testIDPrefix,
   instructions, durationSec, childName, allowSkip = true, onItemMarked, onStart, onComplete,
-  endNoun = 'question', intro, aboveBody, finalizeResult,
+  endNoun = 'question', intro, aboveBody, finalizeResult, choices, observation,
 }: QuestionProps & {
   itemSet: ItemSetMeta;
   items: ReadonlyArray<CaptureItem>;
@@ -44,12 +54,17 @@ export function SequentialCapture({
   intro?: { startLabel?: string; testID?: string; content?: React.ReactNode };
   aboveBody?: React.ReactNode;
   finalizeResult?: (base: Result) => Result;
+  choices?: ReadonlyArray<{ key: string; label: string }>;
+  observation?: { options: ReadonlyArray<{ key: string; label: string; exclusive?: boolean }> };
 }) {
   const [phase, setPhase] = useState<Phase>('intro');
   const phaseRef = useRef<Phase>('intro');
   const [state, setState] = useState(initStepState);
   const stateRef = useRef(state);
   const hasFinishedRef = useRef(false);
+  const pendingResultRef = useRef<Result | null>(null);
+  const [correctingPosition, setCorrectingPosition] = useState<number | null>(null);
+  const correctingPositionRef = useRef<number | null>(null);
   const startTimeMsRef = useRef<number | null>(null);
   const stopTimeMsRef = useRef<number | null>(null);
   const gridRows = body.kind === 'grid' ? body.rows : undefined;
@@ -78,16 +93,22 @@ export function SequentialCapture({
     return Math.max(0, deadline - (stopTimeMsRef.current ?? monotonicNow()));
   }, [getDeadlineMs]);
 
+  const emitResult = useCallback((base: Result) => {
+    transition('finished');
+    onComplete(finalizeResult ? finalizeResult(base) : base);
+  }, [onComplete, finalizeResult, transition]);
+
   const finish = useCallback((reason: StoppedReason) => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
-    transition('finished');
     const current = stateRef.current;
     const isSkipped = reason.startsWith('skipped_');
     const items: ResultItem[] = isSkipped ? [] : cardItems.map((item, position) => ({
       position, item_key: item.item_key, prompt: item.prompt,
       is_correct: position < current.cursor && current.decisions[position] === true,
-      metadata: { ...item.metadata, reached: position < current.cursor },
+      metadata: captureMetadata(item, position < current.cursor,
+        position < current.cursor && current.decisions[position] === true ? current.choices[position] : undefined,
+        choices !== undefined),
     }));
     const totalAttempted = isSkipped ? 0 : current.cursor;
     const totalCorrect = items.filter((item) => item.is_correct).length;
@@ -112,8 +133,16 @@ export function SequentialCapture({
         max_consecutive_wrong: current.maxConsecutiveWrong,
       },
     };
-    onComplete(finalizeResult ? finalizeResult(base) : base);
-  }, [durationSec, cardItems, itemSet, language, onComplete, finalizeResult, transition]);
+    if (observation && !isSkipped) {
+      if (totalCorrect > 0) {
+        pendingResultRef.current = base;
+        transition('observation');
+        return;
+      }
+      base.derived.strategies = [];
+    }
+    emitResult(base);
+  }, [durationSec, cardItems, itemSet, language, choices, observation, emitResult, transition]);
 
   const finishIfExpired = useCallback(() => {
     if (phaseRef.current !== 'active') return false;
@@ -136,7 +165,8 @@ export function SequentialCapture({
 
   const dispatch = useCallback((action: StepAction) => {
     if (hasFinishedRef.current || (phaseRef.current !== 'active' && phaseRef.current !== 'review')) return;
-    if (phaseRef.current === 'review' && action.type !== 'back' && action.type !== 'flip') return;
+    if (phaseRef.current === 'review' && action.type !== 'back' && action.type !== 'flip' && action.type !== 'set') return;
+    if (correctingPositionRef.current !== null && action.type !== 'set') return;
     if (!stateRef.current.stopped && finishIfExpired()) return;
     const wasReview = phaseRef.current === 'review';
     const previous = stateRef.current;
@@ -155,12 +185,12 @@ export function SequentialCapture({
     }
     stateRef.current = next;
     setState(next);
-    if (action.type === 'decide' || action.type === 'flip') {
+    if (action.type === 'decide' || action.type === 'flip' || action.type === 'set') {
       const position = action.type === 'decide' ? previous.cursor : action.position;
       const item = cardItems[position];
       const correct = next.decisions[position];
       onItemMarked?.({ position, item_key: item.item_key, prompt: item.prompt,
-        is_correct: correct, metadata: { ...item.metadata, reached: true } });
+        is_correct: correct, metadata: captureMetadata(item, true, correct ? next.choices[position] : undefined, choices !== undefined) });
       if (action.type === 'flip') {
         setNotice(previousNotice => ({ id: (previousNotice?.id ?? 0) + 1,
           text: `${copy.itemName(position)} changed to ${correct ? 'Correct' : 'Incorrect'}` }));
@@ -171,15 +201,41 @@ export function SequentialCapture({
       setReviewPage(pageIndexOf(pages, cardItems.length - 1));
       transition('review');
     }
-  }, [finishIfExpired, cardItems, stopRule, onItemMarked, copy, pages, transition]);
+  }, [finishIfExpired, cardItems, stopRule, onItemMarked, copy, pages, transition, choices]);
 
-  // Tile callbacks keep one identity while always reading the latest engine dispatch.
-  const dispatchRef = useRef(dispatch);
-  dispatchRef.current = dispatch;
-  const onTapPosition = useCallback((position: number) => dispatchRef.current({ type: 'flip', position }), []);
+  const closeCorrection = () => {
+    correctingPositionRef.current = null;
+    setCorrectingPosition(null);
+  };
+  const handleMark = (correct: boolean, choice?: string) => {
+    if (correctingPosition !== null) {
+      // A queued second tap on the old correction controls must not mark the cursor.
+      if (correctingPositionRef.current !== correctingPosition) return;
+      closeCorrection();
+      dispatch({ type: 'set', position: correctingPosition, correct, choice });
+    } else {
+      dispatch({ type: 'decide', correct, choice });
+    }
+  };
+
+  // One callback identity for memoised tiles; the ref reads the latest choices mode and dispatch.
+  const tapPositionRef = useRef<(position: number) => void>(() => {});
+  tapPositionRef.current = position => {
+    if (!choices) {
+      dispatch({ type: 'flip', position });
+      return;
+    }
+    const current = stateRef.current;
+    if (hasFinishedRef.current || (phaseRef.current !== 'active' && phaseRef.current !== 'review') ||
+      current.stopped || !Number.isInteger(position) || position < 0 || position >= current.cursor) return;
+    if (finishIfExpired()) return;
+    correctingPositionRef.current = position;
+    setCorrectingPosition(position);
+  };
+  const onTapPosition = useCallback((position: number) => tapPositionRef.current(position), []);
 
   const handleEnd = () => {
-    if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped) return;
+    if (hasFinishedRef.current || phaseRef.current !== 'active' || stateRef.current.stopped || correctingPositionRef.current !== null) return;
     if (finishIfExpired()) return;
     stopTimeMsRef.current = monotonicNow();
     transition('end-confirmation');
@@ -195,6 +251,17 @@ export function SequentialCapture({
     }}>{intro?.content}</QuestionIntro>;
   }
   if (phase === 'finished') return <View />;
+  if (phase === 'observation') {
+    return <ObservationPanel testID={`${testIDPrefix}-observation`}
+      title={`How did ${childName ?? 'the child'} work these out? Tick all you saw.`}
+      options={observation!.options} confirmLabel="Save" onConfirm={keys => {
+        const base = pendingResultRef.current;
+        if (phaseRef.current !== 'observation' || base === null) return;
+        // Claim before finalization/callback so queued confirmation taps cannot emit twice.
+        pendingResultRef.current = null;
+        emitResult({ ...base, derived: { ...base.derived, strategies: keys } });
+      }} />;
+  }
   if (phase === 'skip-picker') {
     return <SkipReasonPicker onChoose={finish} onCancel={() => transition(skipReturnPhaseRef.current)} />;
   }
@@ -220,7 +287,7 @@ export function SequentialCapture({
               : decision === true ? 'correct' : decision === false ? 'incorrect' : body.kind === 'cards' ? 'notReached' : 'idle';
             const tappable = position < state.cursor && (phase === 'active' || phase === 'review') && !state.stopped;
             const label = tileState === 'idle' || tileState === 'notReached' ? 'not reached' : tileState;
-            const hint = tappable ? `. Double-tap to change to ${decision ? 'incorrect' : 'correct'}` : '';
+            const hint = tappable ? choices ? '. Double-tap to change' : `. Double-tap to change to ${decision ? 'incorrect' : 'correct'}` : '';
             // The tile is one accessible element, so the gloss (answer guide, target word) must be spoken too.
             const gloss = item.gloss ? `, ${item.gloss}` : '';
             return { state: tileState, text: item.text ?? item.prompt, gloss: item.gloss, caption: item.caption,
@@ -231,13 +298,17 @@ export function SequentialCapture({
           ? reviewLine(cardItems.length, Object.values(state.decisions).filter(Boolean).length, copy.noun)
           : copy.position(state.cursor)} />}
         <DecisionBar testIDPrefix={testIDPrefix} mode={phase === 'review' ? 'review' : 'deciding'}
-          onFinish={() => { if (phaseRef.current === 'review') finish('completed'); }} endLabel={`End ${endNoun}`}
-          onCorrect={() => dispatch({ type: 'decide', correct: true })}
-          onIncorrect={() => dispatch({ type: 'decide', correct: false })}
+          onFinish={() => { if (phaseRef.current === 'review' && correctingPositionRef.current === null) finish('completed'); }} endLabel={`End ${endNoun}`}
+          correctChoices={choices} onChoose={key => handleMark(true, key)}
+          correcting={correctingPosition === null ? undefined : {
+            title: `Change ${copy.itemName(correctingPosition)}`, onCancel: closeCorrection,
+          }}
+          onCorrect={() => handleMark(true)}
+          onIncorrect={() => handleMark(false)}
           onBack={() => dispatch({ type: 'back' })} backDisabled={state.cursor === 0}
           onEnd={handleEnd}
           onSkip={allowSkip ? () => {
-            if (hasFinishedRef.current || (phaseRef.current !== 'active' && phaseRef.current !== 'review') || stateRef.current.stopped) return;
+            if (hasFinishedRef.current || (phaseRef.current !== 'active' && phaseRef.current !== 'review') || stateRef.current.stopped || correctingPositionRef.current !== null) return;
             if (finishIfExpired()) return;
             skipReturnPhaseRef.current = phaseRef.current;
             // The picker unmounts the notice; clearing it stops Cancel replaying an old one.
