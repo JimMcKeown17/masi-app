@@ -64,6 +64,7 @@ module.exports = {
     '<rootDir>/__tests__/sessionHistoryPullProductionRouting.test.js',
     '<rootDir>/__tests__/assessmentsRepository.test.js',
     '<rootDir>/__tests__/egraRun.integration.test.js',
+    '<rootDir>/__tests__/mathsRun.integration.test.js',
     '<rootDir>/__tests__/welaPlus2026Run.integration.test.js',
     '<rootDir>/__tests__/assessmentHistoryPage.test.js',
     '<rootDir>/__tests__/batteryRunHistoryMerge.test.js',

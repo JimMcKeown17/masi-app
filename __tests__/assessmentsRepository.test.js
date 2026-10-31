@@ -73,4 +73,17 @@ describe('assessmentsRepository', () => {
     expect(await f.db.getFirstAsync('select count(*) as count from assessment_items')).toEqual({ count: 0 });
     expect(await f.db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
+  test.each(['maths', 'common'])('an invalid %s result is refused before any write', async kind => {
+    const result = questionResult(2);
+    if (kind === 'maths') {
+      result.question_code = 'egma_addition_l1';
+      result.items.forEach(item => { item.metadata = { skill: 'add', band: 5, reached: true }; });
+      // Deliberately omit derived.strategies on a positive-score Core result.
+    } else delete result.question_version;
+    await expect(f.save(2, { result })).rejects.toMatchObject({ code: 'INVALID_QUESTION_RESULT', message: expect.stringContaining('Invalid Question result:') });
+    for (const table of ['assessments', 'assessment_items', 'sync_outbox']) {
+      expect(await f.db.getFirstAsync(`select count(*) as count from ${table}`)).toEqual({ count: 0 });
+    }
+  });
+
 });

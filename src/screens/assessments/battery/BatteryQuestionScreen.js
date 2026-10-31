@@ -18,7 +18,7 @@ import { isStaleActorError } from '../../../session/staleActor';
 import { LANGUAGE_LABELS } from '../../../utils/assessmentRegistry';
 import { buildRunView, materialsLine, runCode } from '../../../utils/batteryRun';
 
-const FATAL_CODES = ['RUN_NOT_WRITABLE', 'QUESTION_ALREADY_DECIDED'];
+const FATAL_CODES = ['RUN_NOT_WRITABLE', 'QUESTION_ALREADY_DECIDED', 'INVALID_QUESTION_RESULT'];
 
 export default function BatteryQuestionScreen({ navigation, route }) {
   const { runId, questionCode } = route.params;
