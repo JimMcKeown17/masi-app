@@ -7749,3 +7749,12 @@ every diff, ran every harness, and committed. Codex gpt-6-astra ran the adversar
 - Verification (local PG17, `PGTZ=UTC`): **131/131 cases** in 1 min 52 s. The KEEP run printed
   `RETAINED masi_history_rls_reporting_keep` (refreshed with these functions). Nothing applied to
   hosted.
+
+#### Code review outcome (2026-10-31)
+
+Codex code review took two rounds:
+- Round 1: needs-attention. Cross-year memberships duplicated rows; the string "true" was not
+  recognised as a test flag. Both fixed in `4a4bf67`.
+- Round 2: **approve**, no material findings.
+
+Local only; the hosted apply and the real reader login remain Jim's rollout steps.
