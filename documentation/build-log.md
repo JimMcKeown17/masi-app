@@ -7673,3 +7673,56 @@ floating keyboard and iOS physical-device gates remain open. The supplied Androi
   check before driving a shared device.
 - **Still open:** Change password, Report a problem and Edit child (the height path) on the
   A03s need a signed-in session (Jim types the password), and the iPhone smoke.
+
+### 2026-10-31 — Website reporting functions for the Masi App dashboard (`feat/dashboard-reporting-access`)
+
+Jim asked (2026-10-30, overnight) for a Masi App dashboard on the Masi website, with an App Ops
+workspace, modelled on Zazi iZandi's Programme and App Ops workspaces. Approved spec (Codex rev 3):
+`masi-web-nextjs` `docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`. This repo
+carries Plan A of 3: `docs/superpowers/plans/2026-10-31-masi-reporting-functions-plan.md`. Plans B
+(Django) and C (website) live in their own repos. Codex (gpt-6.1-sol, high) built; Claude reviewed
+every diff, ran every harness, and committed. Codex gpt-6-astra ran the adversarial reviews.
+
+#### Decision Register
+
+| Decision | Why |
+|---|---|
+| The website reads app data only through nine versioned `masi_reporting_*_v1` functions in this repo | The SQL sits beside the schema it reads; a schema change that breaks reporting fails this repo's harness, not the website. `_v1` is never edited after a hosted apply; a change becomes `_v2`. |
+| A dedicated `masi_reporting_reader` LOGIN role with **no password in the migration**, no table privileges, EXECUTE on the nine functions only, and no service-role fallback | Least privilege: a leaked website credential can only run reviewed read-only functions. The service-role key could write every table and was rejected (spec rev 2). |
+| `BEGIN ATOMIC` SQL bodies plus a harness body audit (no `pg_depend` reference to any user function; a denylist of volatile side-effect built-ins; a negative control) | Spec review round 2: `STABLE` is not a write barrier. Confirmed locally on 2026-10-31: a `STABLE` definer calling a volatile writer does insert a row, and `pg_depend` records that call. |
+| Refusals are documents (`error: too_much_data` / `invalid_argument`), never truncation | Pure SQL cannot `RAISE`. Django maps them to 413/400. |
+| "Last data received" uses only server-stamped clocks: `sessions`/`assessments`/`battery_runs.updated_at`, `letter_mastery_corrections.received_at`, receipt `received_at` | Phone `created_at` survives upload; `time_entries.updated_at` is server-stamped only on update, so clock uploads are excluded and labelled (spec Q8). |
+| "Assessments" = `completed_battery_runs`; coverage = eligible (non-`skipped_*`) results by Facts authors | Plan review round 1: abandoned and in-progress batteries keep saved questions. |
+
+#### Verification
+
+| Check | Result |
+|---|---|
+| `npm run verify:reporting:postgres` (disposable local PG17, port 55432, `PGTZ=UTC`), Task 1 RED | Migration absent: fails at `accounts-shape` ("function does not exist") |
+| Same, Tasks 1–4 GREEN | **121/121 cases**: shape, receipt-source isolation (exact timestamps), roster predicates (ended enrolment, exited membership, archived class/child, programme transfer, shared child), eligible/author/range coverage, SAST boundaries at 00:30 SAST, score fields (`derived.max`), completed vs abandoned batteries, legacy nulls, all-role EXECUTE denials on the nine functions, no table privileges, executable-function set, body audit with negative control, role settings, exact-limit and limit+1 for every cap |
+| Mutation: dropping `e.ended_at IS NULL` from `roster_v1` | Fails `roster-ea-a`; restored byte-identical |
+| `MASI_REPORTING_KEEP=1 … DATABASE_NAME=masi_history_rls_reporting_keep` | Last line `RETAINED masi_history_rls_reporting_keep`; 9 functions present from a fresh connection; the cap database removed |
+| `npx jest __tests__/testerProvisioning.test.js` (Task 5: new testers stamped `app_metadata.is_test_account`) | RED 1 failed / 5 passed; GREEN **6/6** |
+
+#### Review findings, dead ends and surprises
+
+- Spec: 3 Codex rounds (10, then 8, then 0 findings). Plans: A needed 2 rounds (7 findings, then
+  clean); B and C needed 3.
+- Codex's sandbox cannot reach local Postgres, so Codex wrote the SQL and harness and the
+  orchestrator ran every PG17 pass. The orchestrator fixed three fixture defects: a NOT NULL
+  `report_id` on the seeded receipt; a session group set by an UPDATE, which
+  `sessions_prevent_identity_change` forbids (the session is now re-inserted with its group, as a
+  phone would); and a cap decoy that reused an assigned group (one active EA per group).
+- Only one non-reporting function is EXECUTE-able by the reader: `private.set_updated_at()`, a
+  PUBLIC trigger function. It is unreachable because the reader has no USAGE on `private`. All
+  write RPCs were already revoked from PUBLIC by earlier migrations.
+
+#### Still open (Jim's rollout steps; nothing applied to hosted)
+
+1. Merge, then apply the migration to `masi-app-sqlite` with the isolated staging helper; verify the
+   functions and grants read-only.
+2. Set the reader password out of band (`ALTER ROLE masi_reporting_reader PASSWORD …`) and verify a
+   real login through the session pooler as `masi_reporting_reader.segygjzpujphwvrubusm` (spec risk
+   R1; there is no fallback).
+3. Stamp or list existing staging tester accounts (`MASI_APP_TEST_EMAILS` on Render); new testers
+   are stamped `is_test_account` by `createTesters.js`.
