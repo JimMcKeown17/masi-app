@@ -55,12 +55,27 @@ contract.
 - Node 20 for jest and harnesses:
   `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:/opt/homebrew/opt/postgresql@17/bin:$PATH`.
 - Harness target: `MASI_REPORTING_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres`,
-  `MASI_REPORTING_DATABASE_NAME=masi_reporting_<suffix>`,
-  `MASI_REPORTING_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE`. Reuse
-  `assertDisposableAdminTarget`, `buildDatabaseUrl`, `runPsql` and `bootstrapSql` from
-  `scripts/history-authorization-postgres-harness.cjs`. Replay migrations the way
-  `scripts/support-incident-postgres-harness.cjs` does, since it already handles the storage
-  migration.
+  `MASI_REPORTING_DATABASE_NAME=masi_history_rls_reporting_<suffix>`,
+  `MASI_REPORTING_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE`.
+  - The name **must** start with `masi_history_rls_`. The reused `assertDisposableAdminTarget`
+    hard-codes that prefix, and it is not changed.
+  - The harness passes its own env values into that helper's `{adminDatabaseUrl, databaseName,
+    confirmation}` arguments.
+  - Reuse `assertDisposableAdminTarget`, `buildDatabaseUrl`, `runPsql` and `bootstrapSql` from
+    `scripts/history-authorization-postgres-harness.cjs`.
+  - Replay migrations the way `scripts/support-incident-postgres-harness.cjs` does, since it
+    already handles the storage migration.
+  - Every psql session the harness opens runs with `PGTZ=UTC`, so a timezone bug cannot hide
+    behind a SAST session default.
+- **Retained database handoff (consumed by Plan B Task 7 and the local E2E pass):**
+  - With `MASI_REPORTING_KEEP=1`, a fully passing harness run skips its final `DROP DATABASE` and
+    prints `RETAINED <database name>` as its last line.
+  - On any failure it drops the database even when KEEP is set.
+  - Default behaviour is unchanged: always drop.
+  - The retained name is the given `MASI_REPORTING_DATABASE_NAME`; the convention is
+    `masi_history_rls_reporting_keep`.
+  - Manual teardown:
+    `psql postgresql://postgres@127.0.0.1:55432/postgres -c 'DROP DATABASE masi_history_rls_reporting_keep WITH (FORCE)'`.
 
 ## Contract (A→B): function outputs
 
@@ -109,8 +124,8 @@ masi_reporting_ea_detail_v1(p_user_id uuid, p_from date, p_to date) -> {   -- sp
                  grade?, present_count, letters_focused: text[]?, session_reading_level?, notes?}]},   -- latest 300
   time_entries: {total, rows: [{id, local_date, sign_in_time, sign_out_time?, duration_minutes?,
                  auto_clocked_out, sign_in_location_status?, sign_out_location_status?}]},              -- latest 200
-  assessments:  {total, rows: [{id, assessment_date, updated_at, battery_code?, battery_version?,
-                 question_code, language?, raw_score?, item_count?, score_max?, stopped_reason?,
+  assessments:  {total, rows: [{id, assessment_date, updated_at, battery_code?, battery_version?, battery_status?,
+                 question_code?, language?, raw_score?, item_count?, score_max?, stopped_reason?,
                  child_id, child_name}]},                                                                -- latest 200
   groups: [{group_id, name, programme_code, class_name?, grade?, members, last_session_date?}],         -- <= 100, by name
   weekly: [{week_start, sessions, clock_days, completed_hours, question_results}]                       -- exactly 12, oldest first
@@ -125,10 +140,13 @@ masi_reporting_sessions_v1(p_user_ids uuid[], p_from date, p_to date) -> {   -- 
 masi_reporting_assessments_v1(p_user_ids uuid[], p_from date, p_to date) -> {   -- span <= 366
   function_version, generated_at, from, to,
   rows: [{id, assessment_date, updated_at, user_id, child_id, child_first_name, child_last_name, battery_run_id?,
-          class_name?, grade?, school_id?, programme_code, battery_code?, battery_version?,
-          question_code, language?, raw_score?, item_count?, score_max?, stopped_reason?,
-          assessment_purpose?, window_label?}]
-}   -- by assessment_date, user_id, id; cap 50,000
+          class_name?, grade?, school_id?, programme_code, battery_code?, battery_version?, battery_status?,
+          question_code?, language?, raw_score?, item_count?, score_max?, stopped_reason?,
+          assessment_purpose?, window_label?}],
+  completed_battery_runs: [{id, user_id, child_id, programme_code, battery_code, battery_version, completed_day}]
+     -- battery_runs with status = 'completed', user_id = ANY(p_user_ids), SAST date of completed_at in [p_from, p_to];
+     -- by completed_day, id. This is the ONLY source for the "assessments" (completed batteries) count.
+}   -- cap 50,000 on rows + completed_battery_runs combined
 
 masi_reporting_time_entries_v1(p_user_ids uuid[], p_from date, p_to date) -> {   -- span <= 92
   function_version, generated_at, from, to,
@@ -138,11 +156,15 @@ masi_reporting_time_entries_v1(p_user_ids uuid[], p_from date, p_to date) -> {  
 
 masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestamptz, p_kinds text[]) -> {   -- span <= 90 days; p_kinds NULL = all
   function_version, generated_at, from, to,
-  rows: [{id, reporter_id, kind, repeat_key, report_id?, occurrence_count, first_seen_at, last_seen_at,
+  rows: [{id, reporter_id, kind, repeat_key, report_id?, occurrence_count, first_seen_at?, last_seen_at?,
           received_at, report_generation?, has_bundle, has_screenshot, app_version?, app_build?,
           update_id?, platform?, os_version?, summary?}]
 }   -- received_at in [p_from, p_to), by received_at desc, id; cap 5,000
 ```
+
+**Nullability:** `?` fields may be null, and consumers must accept null. `first_seen_at` and
+`last_seen_at` are null on receipts from the retained v1 RPC. `question_code` is null on legacy
+assessment rows. Never invent values for them.
 
 **Field derivations the implementer cannot infer:**
 
@@ -202,7 +224,8 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
   `assessments.programme_id`.
 - Score fields: `raw_score` = `score`; `item_count` = `total_items`; `score_max` =
   `(derived->>'max')::numeric` only when `jsonb_typeof(derived->'max') = 'number'`.
-  `battery_code`/`battery_version` come from the joined `battery_runs` row (null for quick tests).
+  `battery_code`/`battery_version`/`battery_status` come from the joined `battery_runs` row (null
+  for quick tests).
   `child_name` = `coalesce(nullif(preferred_name,''), first_name) || ' ' || last_name`.
 - `assessments_v1` class: `battery_runs.class_id` when present, else the child's open
   membership's class.
@@ -217,8 +240,8 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
    is today, so `last_data_received_at` must show today. Pinned in Task 1.
 2. **An EA moved to a new programme with a surviving direct child assignment.** That child leaves
    the delivery roster when the enrolment for the new programme is missing. Pinned in Task 2.
-3. **A session at 23:30 SAST** (21:30 UTC) belongs to that SAST date for clock and assessment
-   days. Pinned in Task 2.
+3. **A clock-in at 00:30 SAST on 2026-10-20** (2026-10-19 22:30 UTC) belongs to 2026-10-20 and is
+   included in an October-20-only range, under a UTC session time zone. Pinned in Task 2.
 4. **A Story Writing result with derived.max = 16 and total_items = 4** returns `score_max` 16
    and `item_count` 4. Pinned in Task 3.
 5. **The reader calling a write RPC** such as `submit_assessment` is refused. Pinned in Task 1.
@@ -252,6 +275,12 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
   - academic year 2026 active;
   - EA_A: literacy at school 1, assigned 2026-09-01. A session on 2026-10-20 with client
     `created_at` 2026-10-20T08:00Z, inserted at harness time, so `updated_at` = now();
+  - EA_LATE, whose **only** record is one session with `session_date` 2026-10-13 and client
+    `created_at` 2026-10-13T08:00Z, inserted at harness time. It has no receipts, assessments,
+    runs or corrections. Capture `now()` as `T_LATE` immediately after the insert;
+  - EA_LEDGER, whose **only** record is one `letter_mastery_corrections` row (`changed_by =
+    EA_LEDGER`, `received_at` = `T_LEDGER` fixed at `2026-10-29T09:00:00Z`) for child C1/letter
+    `s`, while the current `letter_mastery` row for C1/`s` has `changed_by = EA_B`;
   - EA_SUSP: banned until 2099;
   - EA_TEST: `raw_app_meta_data` `{"is_test_account": true}`;
   - EA_NOPROG: no assignment;
@@ -261,8 +290,12 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
   Cases (each `c.value(name, sql, expected)`, as in existing harnesses):
   - `accounts-shape`: the exact top-level keys;
   - `accounts-ea-a`: EA_A's `assignment.programme_code = 'literacy'`;
-  - `accounts-received-uses-server-time`: EA_A's `activity.last_data_received_at` is within 60 s
-    of `now()`, not `2026-10-20T08:00Z`;
+  - `accounts-received-uses-server-time`: EA_LATE's `activity.last_data_received_at` equals
+    `T_LATE` exactly (fails if `created_at` is used: it would be 2026-10-13T08:00Z);
+  - `accounts-received-ledger`: EA_LEDGER's `last_data_received_at` equals `2026-10-29T09:00:00Z`
+    exactly (fails if the ledger is omitted, giving null, or if current `letter_mastery`
+    ownership is used, giving EA_B);
+  - `accounts-received-never`: EA_NOPROG (no records) has `last_data_received_at` null;
   - `accounts-test-flag`: EA_TEST `auth.is_test_flag = true`;
   - `accounts-release`: EA_A `last_receipt.app_version = '1.5.0'`;
   - `accounts-noprog`: EA_NOPROG `assignment` is null;
@@ -294,7 +327,7 @@ masi_reporting_incidents_v1(p_user_ids uuid[], p_from timestamptz, p_to timestam
 
 - [ ] **Step 2: Run the harness and verify it fails**
 
-Run: `MASI_REPORTING_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres MASI_REPORTING_DATABASE_NAME=masi_reporting_t1 MASI_REPORTING_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE npm run verify:reporting:postgres`
+Run: `MASI_REPORTING_ADMIN_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres MASI_REPORTING_DATABASE_NAME=masi_history_rls_reporting_t1 MASI_REPORTING_DISPOSABLE_CONFIRM=I_UNDERSTAND_THIS_IS_DISPOSABLE npm run verify:reporting:postgres`
 Expected: FAIL at `accounts-shape` (function does not exist).
 
 - [ ] **Step 3: Implement the role and `masi_reporting_accounts_v1()`** in the migration, per the
@@ -336,7 +369,8 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
   - EA_A clock entries:
     - 2026-10-20 07:00–15:30 SAST;
     - one auto-closed (`auto_clocked_out=true`);
-    - one signed in 2026-10-20 23:30 SAST (21:30Z);
+    - one signed in 2026-10-20 00:30 SAST (2026-10-19T22:30Z);
+  - a battery run for C2 by EA_A completed at 2026-10-20 00:30 SAST (2026-10-19T22:30Z);
   - assessments: C1 by EA_A on 2026-10-20 (two question rows in one completed battery run), and
     C2 by EA_B on 2026-02-01.
 
@@ -357,7 +391,11 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
   - `accounts-delivery-count`: EA_A `counts.delivery_children = 2`;
   - `daily-sessions`: EA_MOVE literacy sessions appear under `programme_code` `literacy` on their
     dates;
-  - `daily-clock-sast`: the 23:30 SAST entry is on day 2026-10-20;
+  - `daily-clock-sast`: with `PGTZ=UTC`, `daily_v1({EA_A}, 2026-10-20, 2026-10-20)` contains the
+    00:30 SAST entry on day 2026-10-20, and `daily_v1({EA_A}, 2026-10-19, 2026-10-19)` does not
+    contain it;
+  - `daily-battery-sast`: the 00:30 SAST completion counts in `battery_runs_completed` on
+    2026-10-20, not 2026-10-19;
   - `daily-clock-minutes`: 07:00–15:30 gives `completed_minutes` 510;
   - `daily-assessments`: EA_A 2026-10-20 has `question_results` 2, `battery_runs_completed` 1,
     `children_assessed` 1;
@@ -366,7 +404,7 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
   - `daily-span-cap`: 121 days returns `invalid_argument`;
   - `daily-null-ids`: `p_user_ids` NULL returns `invalid_argument`.
 
-- [ ] **Step 2: Run and verify the new cases fail** (same command, database `masi_reporting_t2`).
+- [ ] **Step 2: Run and verify the new cases fail** (same command, database `masi_history_rls_reporting_t2`).
   Expected: FAIL at `roster-ea-a`.
 - [ ] **Step 3: Implement `roster_v1`, `assessed_children_v1` and `daily_v1`** per the contract,
   with the cap as a counted `CASE` branch.
@@ -418,13 +456,36 @@ git commit -m "feat(reporting): reader role and accounts_v1 with PG17 harness"
   - `incidents-kinds-filter`: `p_kinds` `{ea_report}` returns only that kind;
   - `incidents-user-filter`: a receipt from a user outside `p_user_ids` is absent;
   - `*-span-cap` for each function (93, 367, 93 and 91 days return `invalid_argument`);
-  - `sessions-row-cap`: in a separate disposable database (`masi_reporting_cap`) seeded with
-    20,001 sessions via `generate_series`, the function returns `error = too_much_data`,
-    `row_count` 20001, and no `rows` key;
+  - **Row caps, exact limit and limit + 1, for every bounded output.** These run in a separate
+    disposable database `masi_history_rls_reporting_cap`, seeded with `generate_series`. Each
+    pair asserts:
+    - at the limit: success, with exactly `limit` rows;
+    - at limit + 1: `error = too_much_data`, exact `row_count`, and no result arrays at all.
+
+    The caps are: `accounts_v1` 5,000 users; `roster_v1` 100,000; `assessed_children_v1`
+    100,000; `daily_v1` 200,000 rows across its three arrays combined; `sessions_v1` 20,000;
+    `assessments_v1` 50,000 rows + completed runs combined; `time_entries_v1` 20,000;
+    `incidents_v1` 5,000; `ea_detail_v1` `groups` 100. The counting predicate must be the same
+    user, date and kind predicate as the successful query, so the test seeds the overflow row
+    inside the filter (and one decoy outside it that must not count);
+  - `assessments-completed-runs`: for EA_A in range, `completed_battery_runs` contains the
+    completed run and excludes an `abandoned` run and an `in_progress` run, both with saved
+    question results. Those question rows still appear in `rows` with `battery_status`
+    `abandoned`/`in_progress`;
+  - `assessments-run-completed-out-of-range`: a run whose questions are dated 2026-10-20 but
+    which completed 2026-10-21 SAST is absent for range Oct 20–20 and present for Oct 21–21;
+  - `incidents-v1-receipt-nulls`: a receipt inserted the way the retained v1 RPC does (no
+    `first_seen_at`/`last_seen_at`) is returned with both null;
+  - `assessments-legacy-null-question`: a legacy row with `question_code` NULL is returned with
+    `question_code` null;
   - `assessments-skipped-labelled`: skipped rows are present in `assessments_v1` with their
     `stopped_reason` (detail and CSV show them).
 - [ ] **Step 2: Verify the failures.**
 - [ ] **Step 3: Implement** the four functions.
+- [ ] **Step 3b: Add the KEEP handoff** described in Global Constraints, with a case
+  `keep-retains`. Run with KEEP=1 and assert that the retained database exists and that the nine
+  functions are present (`SELECT count(*) FROM pg_proc WHERE proname LIKE 'masi\_reporting\_%\_v1'`
+  = 9) from a fresh psql connection.
 - [ ] **Step 4: Verify everything passes**, including all Task 1 privilege cases, which now
   enumerate nine functions.
 - [ ] **Step 5: Commit** `feat(reporting): sessions, assessments, time entries and incidents functions`.
