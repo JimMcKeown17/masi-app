@@ -5,15 +5,14 @@ import { useSignedInEA } from '../context/SignedInEAContext';
 import { getActiveProgrammeGate } from '../services/activeProgrammeGate';
 import { programmeSubject } from '../utils/programmeSubject';
 
-// The last known subject per signed-in EA, so a newly mounted screen starts resolved
-// instead of rendering literacy pieces for a moment and then removing them. A cached
-// subject is for display only: a programme can change under the same handle, so a screen
-// that enters a literacy flow must wait for `settled` (this mount's own read finished).
-const lastKnown = new WeakMap();
+// Signed-in EAs last confirmed as maths. Only maths is cached: hiding literacy is always safe,
+// so a newly mounted screen can start from it, while a cached "reading" could open a literacy
+// route after Head Office moved the EA to numeracy. Every screen confirms reading itself.
+const knownMaths = new WeakSet();
 
 function initialState(handle) {
-  return lastKnown.has(handle)
-    ? { handle, subject: lastKnown.get(handle), loading: false }
+  return knownMaths.has(handle)
+    ? { handle, subject: 'maths', loading: false }
     : { handle, subject: null, loading: true };
 }
 
@@ -21,30 +20,28 @@ export function useActiveProgrammeSubject() {
   const { handle } = useSignedInEA();
   const { user } = useAuth();
   const [state, setState] = useState(() => initialState(handle));
-  const [settledHandle, setSettledHandle] = useState(null);
   useFocusEffect(useCallback(() => {
     let active = true;
     const canPublish = () => active && handle.isCurrent();
-    // Keep the last known subject while refreshing, so screens never blink on refocus.
+    // Keep this screen's last subject while refreshing, so it never blinks on refocus.
     if (canPublish()) setState(prev => (prev.handle === handle ? prev : initialState(handle)));
     (async () => {
       try {
         const gate = await getActiveProgrammeGate({ handle, userId: user.id });
         if (!canPublish()) return;
         const subject = programmeSubject(gate.programme);
-        lastKnown.set(handle, subject);
+        if (subject === 'maths') knownMaths.add(handle); else knownMaths.delete(handle);
         setState({ handle, subject, loading: false });
-        setSettledHandle(handle);
       } catch {
+        // A failed read keeps what this screen knew; with nothing known it settles as unknown
+        // (today's literacy behaviour), and it never turns a known maths EA back to literacy.
         if (!canPublish()) return;
         setState(prev => (prev.handle === handle && !prev.loading
-          ? prev : { handle, subject: null, loading: false }));
-        setSettledHandle(handle);
+          ? prev : { ...initialState(handle), loading: false }));
       }
     })();
     return () => { active = false; };
   }, [handle, user.id]));
   const current = state.handle === handle ? state : initialState(handle);
-  return { subject: current.subject, isMaths: current.subject === 'maths', loading: current.loading,
-    settled: settledHandle === handle };
+  return { subject: current.subject, isMaths: current.subject === 'maths', loading: current.loading };
 }

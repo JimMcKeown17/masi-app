@@ -15,13 +15,13 @@ test('resolves the subject', async () => {
   mockGate.mockResolvedValue({ programme: { code: 'numeracy' } });
   const { result } = renderHook(useActiveProgrammeSubject);
   expect(result.current.loading).toBe(true);
-  await waitFor(() => expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false, settled: true }));
+  await waitFor(() => expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false }));
   expect(mockGate).toHaveBeenCalledWith({ handle: mockHandle, userId: 'ea' });
 });
 test('useActiveProgrammeSubject settles on error', async () => {
   mockGate.mockRejectedValue(new Error('read failed'));
   const { result } = renderHook(useActiveProgrammeSubject);
-  await waitFor(() => expect(result.current).toEqual({ subject: null, isMaths: false, loading: false, settled: true }));
+  await waitFor(() => expect(result.current).toEqual({ subject: null, isMaths: false, loading: false }));
 });
 test('a stale handle never publishes', async () => {
   let resolve;
@@ -29,7 +29,7 @@ test('a stale handle never publishes', async () => {
   const { result } = renderHook(useActiveProgrammeSubject);
   mockHandle.isCurrent.mockReturnValue(false);
   await act(async () => resolve({ programme: { code: 'numeracy' } }));
-  expect(result.current).toEqual({ subject: null, isMaths: false, loading: true, settled: false });
+  expect(result.current).toEqual({ subject: null, isMaths: false, loading: true });
 });
 test('a refocus keeps the known subject while it re-reads', async () => {
   mockGate.mockResolvedValue({ programme: { code: 'numeracy' } });
@@ -37,7 +37,7 @@ test('a refocus keeps the known subject while it re-reads', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false));
   mockGate.mockReturnValue(new Promise(() => {}));
   act(() => { mockFocus(); });
-  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false, settled: true });
+  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false });
 });
 test('a newly mounted screen starts from the last known subject', async () => {
   mockGate.mockResolvedValue({ programme: { code: 'numeracy' } });
@@ -46,8 +46,7 @@ test('a newly mounted screen starts from the last known subject', async () => {
   first.unmount();
   mockGate.mockReturnValue(new Promise(() => {}));
   const { result } = renderHook(useActiveProgrammeSubject);
-  // The cached subject is shown at once, but this mount has not read the programme yet.
-  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false, settled: false });
+  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false });
 });
 test('a failed re-read keeps the last known subject', async () => {
   mockGate.mockResolvedValue({ programme: { code: 'numeracy' } });
@@ -55,5 +54,24 @@ test('a failed re-read keeps the last known subject', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false));
   mockGate.mockRejectedValue(new Error('read failed'));
   await act(async () => { mockFocus(); });
-  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false, settled: true });
+  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false });
+});
+test('a confirmed reading subject is never reused by a new screen', async () => {
+  mockGate.mockResolvedValue({ programme: { code: 'literacy' } });
+  const first = renderHook(useActiveProgrammeSubject);
+  await waitFor(() => expect(first.result.current.loading).toBe(false));
+  first.unmount();
+  mockGate.mockReturnValue(new Promise(() => {}));
+  const { result } = renderHook(useActiveProgrammeSubject);
+  expect(result.current).toEqual({ subject: null, isMaths: false, loading: true });
+});
+test('a failed read never turns a known maths EA back to literacy on a new screen', async () => {
+  mockGate.mockResolvedValue({ programme: { code: 'numeracy' } });
+  const first = renderHook(useActiveProgrammeSubject);
+  await waitFor(() => expect(first.result.current.loading).toBe(false));
+  first.unmount();
+  mockGate.mockRejectedValue(new Error('read failed'));
+  const { result } = renderHook(useActiveProgrammeSubject);
+  await act(async () => {});
+  expect(result.current).toEqual({ subject: 'maths', isMaths: true, loading: false });
 });

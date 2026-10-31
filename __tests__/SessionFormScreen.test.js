@@ -1,6 +1,6 @@
 jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({ useActiveProgrammeSubject: jest.fn() }));
 import { useActiveProgrammeSubject } from '../src/hooks/useActiveProgrammeSubject';
-beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false, settled: true }));
+beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false }));
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
@@ -50,14 +50,14 @@ test('the literacy coach code renders the picker with navigation', () => {
 });
 
 test.each([JOB_TITLE_CODES.LITERACY_COACH, 'tutor'])('a %s in numeracy gets coming soon', jobTitleCode => {
-  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false, settled: true });
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
   mockUseAuth.mockReturnValue({ profile: { jobTitleCode, jobTitleName: 'Tutor' } });
   const screen = render(<SessionFormScreen />);
   expectMessageFrame(screen, 'Session forms for Numeracy are coming soon.');
   expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
 });
 test('SessionForm shows the lesson flow fallback when the subject is unknown', () => {
-  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false, settled: true });
+  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false });
   mockUseAuth.mockReturnValue({ profile: { jobTitleCode: JOB_TITLE_CODES.LITERACY_COACH } });
   const screen = render(<SessionFormScreen />);
   expect(screen.getByTestId('lesson-picker-stub')).toBeTruthy();
@@ -68,22 +68,9 @@ test('loading shows a spinner, not the picker', () => {
   const screen = render(<SessionFormScreen />);
   expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
   expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
-  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false, settled: true });
+  useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false });
   screen.rerender(<SessionFormScreen />);
   expect(screen.getByTestId('lesson-picker-stub')).toBeTruthy();
   expect(screen.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
 });
 
-test('a cached literacy subject never opens the lesson flow before this screen has read the programme', () => {
-  useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false, settled: false });
-  mockUseAuth.mockReturnValue({ profile: { jobTitleCode: JOB_TITLE_CODES.LITERACY_COACH } });
-  const screen = render(<SessionFormScreen navigation={{}} />);
-  expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
-  expect(screen.UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
-});
-test('a cached maths subject shows coming soon at once', () => {
-  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false, settled: false });
-  mockUseAuth.mockReturnValue({ profile: { jobTitleCode: JOB_TITLE_CODES.LITERACY_COACH } });
-  const screen = render(<SessionFormScreen />);
-  expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
-});

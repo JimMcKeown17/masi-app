@@ -38,3 +38,16 @@ test('after a move to numeracy, Record never opens the lesson flow from the cach
   expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
   expect(mockPickerMounts).not.toHaveBeenCalled();
 });
+
+test('a failed programme read never reopens the lesson flow for a known numeracy EA', async () => {
+  mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: 'numeracy' } });
+  const first = render(<SessionFormScreen navigation={{}} />);
+  await first.findByText('Session forms for Numeracy are coming soon.');
+  first.unmount();
+  mockPickerMounts.mockClear();
+  mockGate.mockRejectedValue(new Error('read failed'));
+  const screen = render(<SessionFormScreen navigation={{}} />);
+  await act(async () => {});
+  expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
+  expect(mockPickerMounts).not.toHaveBeenCalled();
+});

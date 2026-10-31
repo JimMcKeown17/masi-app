@@ -239,6 +239,22 @@ describe('HomeScreen', () => {
     expect(await mockGetActiveDraft()).toBe(lessonDraft);
   });
 
+  test('a failed refresh never turns a known numeracy EA back to literacy', async () => {
+    mockGetActiveDraft.mockResolvedValue(lessonDraft);
+    mockUseChildren.mockReturnValue({ children: lessonChildren });
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: 'numeracy' } });
+    const foreground = foregroundEvents();
+    const screen = renderHome();
+    await waitFor(() => expect(mockGetActiveProgrammeGate).toHaveBeenCalled());
+    await act(async () => {});
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+    mockGetActiveProgrammeGate.mockRejectedValue(new Error('read failed'));
+    await foreground();
+    await act(async () => {});
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+    expect(screen.queryByText(/children to assess/)).toBeNull();
+  });
+
   test('a lesson in progress is the first card and resumes with its draft id', async () => {
     mockGetActiveDraft.mockResolvedValue(lessonDraft);
     mockUseChildren.mockReturnValue({ children: lessonChildren });

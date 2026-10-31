@@ -98,8 +98,8 @@ export default function HomeScreen({ navigation }) {
       setIsMaths(isMathsProgramme(gate.programme));
       setSubjectReady(true);
     }, () => {
+      // A failed read keeps what Home knew; it never turns a known numeracy EA back to literacy.
       if (seq !== loadSeqRef.current || !handle.isCurrent()) return;
-      setIsMaths(false);
       setSubjectReady(true);
     });
     // Draft availability is independent of statistics, including their failures and timing.
