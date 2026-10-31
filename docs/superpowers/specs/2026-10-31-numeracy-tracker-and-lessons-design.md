@@ -475,6 +475,11 @@ lessons save `plan: null, plan_reason: 'past_date'`.
    **December**. Field EAs get numeracy only after the partner signs off and `2026.1` is frozen.
    The EGMA spec's precondition still applies: check that no field EA holds an active `numeracy`
    assignment before any staging migration.
+3. **EGMA freeze before December** (Jim, 2026-10-31). The EGMA form stays `-draft` while it is
+   tested in development, and is frozen to `masi-egma-en-2026-1` / `masi_maths@2026.1` before the
+   December trial, so trial EGMA results count as evidence on the tracker (§7.1). Until then the
+   tracker shows EA ticks only. The freeze waits on partner review of the questions, a timed pass
+   with the printed Number Cards, and Jim's go.
 
 What can run in parallel once this document is approved:
 
