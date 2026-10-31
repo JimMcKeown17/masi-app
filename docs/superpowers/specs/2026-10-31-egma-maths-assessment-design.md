@@ -113,7 +113,7 @@ as mastery evidence (§8).
 |---|---|
 | `battery_code` | `masi_maths` |
 | `battery_version` | `2026.1-draft` until the freeze, then `2026.1` (§5.2) |
-| Title (user-facing) | **Maths assessment**. The about line names EGMA: "Early number tasks and EGMA". The UI never says "run" (house rule). |
+| Title (user-facing) | **Maths assessment**. The card's subtitle is the existing "All 17 Questions · English · about 20 min" line (no separate about line; changed in the build, 2026-10-31). The UI never says "run" (house rule). |
 | `languages` / `fixedLanguage` | `['en']` / `'en'`, English only for now (Jim, 2026-10-31; §5.3) |
 | Materials | Number Card, 20 counters, pencil and paper |
 | Pack form | `masi-egma-en-2026-1-draft` until the freeze, then `masi-egma-en-2026-1` (§5.2), in `content/egma/` |
@@ -392,8 +392,9 @@ and `grid` bodies. Batteries, prerequisites, supersession and resume all work.
    `syncServerColumns.js:82-94`). No migration is needed.
 7. **Copy.** Widen the `flatCopy` noun union (`progress/captureCopy.ts:5`) with `number`, `pair`,
    `problem` and `item`. StopCard copy for `stop_at: 1` reads "{child} made a mistake. The test has
-   stopped.", not "got 1 in a row wrong" (`progress/StopCard.tsx:14`), and so does the host
-   "Stopped" line (`AssessmentResultsScreen.js:31`).
+   stopped.", not "got 1 in a row wrong" (`progress/StopCard.tsx:14`). Maths results never reach
+   the literacy `AssessmentResultsScreen`, so its "Stopped" line is unchanged (corrected in the
+   build, 2026-10-31).
 8. **Materials.** Add `number_card` and `counters` to `MaterialItem` (`types/BatteryConfig.ts:1`),
    plus an optional `page: number` on `Materials`, because the Number Card has more than four
    sides. Add an optional `numberCard` title on `BatteryConfig` (like `readingCard`), for example

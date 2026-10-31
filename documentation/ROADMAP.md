@@ -953,6 +953,24 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
     versions (2026-10-26 spec).
   - **Comparable and per-grade forms (later).** Baseline, midline and endline use the same form
     for now (Jim, 2026-10-25); experts may write comparable versions and per-grade forms later.
+- [ ] **Maths assessment (`masi_maths@2026.1-draft`): release gates and freeze.** Built on
+  `feat/egma-maths-assessment` (2026-10-31,
+  [spec](../docs/superpowers/specs/2026-10-31-egma-maths-assessment-design.md),
+  [plan](../docs/superpowers/plans/2026-10-31-egma-maths-assessment.md), ADR 0012): nine early
+  number Questions gate the eight Core EGMA Questions, English only, numeracy EAs see only
+  numeracy screens. Before the numeracy pilot (spec §10):
+  - the partner approves the early number items, the authored Addition and Subtraction 1 items
+    6–20, the word problems and the instruction copy; an English copy check follows;
+  - the staging precondition (no field EA holds numeracy), then push migration
+    `20261031120000_numeracy_maths_draft_default.sql` (Jim's go);
+  - the A03 device gate at 360 dp, and a timed pass with real counters and the printed Number Card;
+  - the freeze (plan appendix): rename the form to `masi-egma-en-2026-1`, add `masi_maths@2026.1`,
+    supersede the draft, a second default migration, and the freeze upgrade tests.
+- [ ] **Later maths work:** an isiXhosa form (a new form in the same pack); an alternate Core EGMA
+  form for midline/endline; maths coverage on Home and Assessments and a maths "% assessed"
+  stat; maths Child Results; the numeracy session form; and revisiting the 60-second stop rule
+  (stop at 4 was "accepted for now" by Jim; changing it needs a new Question and Battery
+  version).
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral, and the
   Word Reading quick-test result gives no praise (it follows the bands, 2026-10-27).
 - [ ] Keep score thresholds explicit in `assessment-score-bands-config.md` and runtime code until a
