@@ -22,6 +22,7 @@ Sweep phone incident receipts and report what is unrecorded.
 | ID | Title | Severity | Priority | Diagnosis | Delivery | Verification | Known users | Cause confidence | Updated | Record |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 <!-- Rows are added newest first. -->
+| MA-BUG-20261031-002 | First sign-in says "No active programme · Contact your supervisor" until the first download lands | S2 (4) | P2 | CONFIRMED | NO_FIX_PROPOSED | NOT_TESTED | 3 (test) | 75% | 2026-10-31 | [record](records/MA-BUG-20261031-002-first-sign-in-shows-no-active-programme.md) |
 | MA-BUG-20261030-008 | Device-gate and smoke-test receipts (deliberate, not a bug) | S4 (0) | P3 | CONFIRMED | NO_PRODUCT_CHANGE | NOT_TESTED | 0 | 95% | 2026-10-30 | [record](records/MA-BUG-20261030-008-device-gate-and-smoke-test-receipts.md) |
 | MA-BUG-20261030-007 | The Android photo picker asks for Done when attaching one screenshot | S3 (1) | P3 | HYPOTHESIS | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 40% | 2026-10-30 | [record](records/MA-BUG-20261030-007-android-photo-picker-shows-done-step.md) |
 | MA-BUG-20261030-006 | Send diagnostics text sits almost on the footer divider | S3 (1) | P3 | HYPOTHESIS | NO_FIX_PROPOSED | NOT_TESTED | 1 (test) | 50% | 2026-10-30 | [record](records/MA-BUG-20261030-006-send-diagnostics-text-crowds-footer.md) |
@@ -91,7 +92,7 @@ current blockage, release uptake, or recovery.
 
 | Channel | Last full sweep | Seen | Unrecorded | Notes |
 | --- | --- | --- | --- | --- |
-| Field reports | never | 3 Profile reports | 0 | Profile `ea_report` receipts were read in the phone sweep below (3, all gate tests, claimed by 008). Reports outside the app (messages, calls) have no sweep yet. Records 001–007 come from Claude's A03s device-gate observations on 2026-10-30. |
+| Field reports | never | 3 Profile reports | 0 | Profile `ea_report` receipts were read in the phone sweep below (3, all gate tests, claimed by 008). Reports outside the app (messages, calls) have no sweep yet. Records 001–007 come from Claude's A03s device-gate observations on 2026-10-30. MA-BUG-20261031-002 records issue #80/#94 plus two sightings from the 2026-10-31 EGMA device gate (targeted intake, not a sweep). |
 | Phone incident receipts | 2026-10-30T23:08:55.076884+00:00 | 10 receipts, 10 conditions | 0 | First full sweep: one unfiltered snapshot, `coverage.complete: true`, exit 0. Reader from `fix/incident-reader-and-first-sweep` (read-only transaction fix, ahead of main `f002e08`); registry read at `origin/main` `f002e08` (empty), then rechecked at this branch's HEAD. All ten were deliberate tests, claimed by exact key in 008. Next sweep passes `--review-since 2026-10-30T22:58:55Z`. |
 | Sentry | never | unknown | unknown | Not searched: no read-only Sentry connector in this session. |
 
