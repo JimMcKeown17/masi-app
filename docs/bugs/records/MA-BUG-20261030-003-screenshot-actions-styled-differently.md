@@ -145,6 +145,7 @@ Implemented Replace and Remove in one spacing.sm row, both default brand tertiar
 | 2026-10-30T16:48:00Z | Claude | Observed during A03s gate 3 | Screenshot |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #124; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T02:40:00Z | Claude | Review fix | The opener stays mounted (Attach → Replace) and Remove returns focus to Attach, after the Codex review |
 
 ## Open questions
 

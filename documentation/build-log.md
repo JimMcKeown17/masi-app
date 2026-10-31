@@ -7847,3 +7847,9 @@ commit and derived identity. No device/release/hosted checks were run in this se
   - On the A03s, `android.provider.action.PICK_IMAGES` resolves to Google's updatable system picker (`com.google.android.photopicker`).
   - `adb shell am start -a android.provider.action.PICK_IMAGES -t 'image/*'` sent a plain single-pick intent with no app involved. One tap showed "Selected", "1 photos or videos selected", Preview and Done, and the picker stayed open. The UI was read with uiautomator only, with no screenshot taken, because the gallery holds children's images.
   - Record 007: CONFIRMED / NO_PRODUCT_CHANGE. The only app-side option, expo-image-picker `legacy: true`, would swap the privacy-scoped picker for a file browser to save one tap.
+- **Codex adversarial review, round 1 (gpt-6-astra): needs-attention, one medium finding, accepted.**
+  - **Finding:** the screenshot row unmounted the "Attach a screenshot" button that opened the picker. A TalkBack or VoiceOver user would lose their place on return.
+  - **Fix:** one stable `screenshot-actions` row. The opener is relabelled Attach → Replace and never remounted; Remove is added beside it. When Remove unmounts itself, focus goes back to Attach on the next frame (`findNodeHandle` + `setAccessibilityFocus`, the BottomSheet pattern).
+  - **RED:** a mount tracker wrapped around the real BrandButton recorded `["Remove screenshot", "Replace screenshot"]` after attaching, when only Remove should mount. A first attempt compared host `.instance`, which is `null` in this renderer and proved nothing, so it was replaced.
+  - **GREEN:** `ProfileDiagnostics.test.js` 23/23; the suites rendering ReportProblemSheet, Profile or BottomSheet 18/18 suites, 335 tests; `npm run test:types` passes.
+  - The healer, config, release-metadata and spacing changes had no material findings.

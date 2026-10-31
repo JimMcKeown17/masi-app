@@ -1,5 +1,5 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, StyleSheet, Text, View, findNodeHandle } from 'react-native';
 import BottomSheet from '../common/BottomSheet';
 import TextField from '../common/TextField';
 import BrandButton from '../common/BrandButton';
@@ -17,18 +17,31 @@ export default function ReportProblemSheet({ visible, onClose, onSubmit, handle 
   const [screenshotFile, setScreenshotFile] = useState(null);
   const [picking, setPicking] = useState(false);
   const pickingRef = useRef(null);
+  const attachRef = useRef(null);
+  const [refocusAttach, setRefocusAttach] = useState(false);
   const running = useRef(null);
   const picker = visible ? availablePicker() : null;
   const reset = useCallback(() => {
     running.current = null;
     pickingRef.current = null;
     setMessage(''); setError(null); setFormError(null); setPending(false);
-    setScreenshotFile(null); setPicking(false);
+    setScreenshotFile(null); setPicking(false); setRefocusAttach(false);
   }, []);
   useLayoutEffect(() => {
     reset();
     return () => { running.current = null; pickingRef.current = null; };
   }, [visible, handle, reset]);
+  // Removing unmounts the focused Remove button; hand focus back to Attach.
+  useEffect(() => {
+    if (!refocusAttach) return undefined;
+    const frame = requestAnimationFrame(() => {
+      setRefocusAttach(false);
+      const node = findNodeHandle(attachRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [refocusAttach]);
+  const removeScreenshot = () => { setScreenshotFile(null); setRefocusAttach(true); };
   const dismiss = () => { reset(); onClose(); };
   const submit = async () => {
     if (!visible || !handle.isCurrent() || running.current || pickingRef.current) return;
@@ -72,13 +85,15 @@ export default function ReportProblemSheet({ visible, onClose, onSubmit, handle 
     <TextField label="What went wrong?" value={message} onChangeText={(text) => { setMessage(text); setError(null); setFormError(null); }} multiline error={error} disabled={pending} />
     {picker ? <View style={styles.attachment}>
       {screenshotFile ? <Text style={styles.caption}>Screenshot attached.</Text> : null}
-      {screenshotFile ? <View testID="screenshot-actions" style={styles.screenshotActions}>
-        <BrandButton label="Replace" accessibilityLabel="Replace screenshot" icon="image-outline"
+      {/* One stable row: the button that opens the picker is relabelled, never remounted, so a
+          screen reader keeps its place when the picker returns. */}
+      <View testID="screenshot-actions" style={styles.screenshotActions}>
+        <BrandButton ref={attachRef} label={screenshotFile ? 'Replace' : 'Attach a screenshot'}
+          accessibilityLabel={screenshotFile ? 'Replace screenshot' : 'Attach a screenshot'} icon="image-outline"
           variant="tertiary" disabled={pending} loading={picking} onPress={attach} />
-        <BrandButton label="Remove" accessibilityLabel="Remove screenshot" icon="trash-outline"
-          variant="tertiary" disabled={pending || picking} onPress={() => setScreenshotFile(null)} />
-      </View> : <BrandButton label="Attach a screenshot" icon="image-outline"
-        variant="tertiary" disabled={pending} loading={picking} onPress={attach} />}
+        {screenshotFile ? <BrandButton label="Remove" accessibilityLabel="Remove screenshot" icon="trash-outline"
+          variant="tertiary" disabled={pending || picking} onPress={removeScreenshot} /> : null}
+      </View>
     </View> : null}
   </BottomSheet>;
 }
