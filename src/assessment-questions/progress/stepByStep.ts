@@ -5,13 +5,15 @@ export type StopRule =
 export type StepState = {
   cursor: number;
   decisions: Record<number, boolean>;
+  choices: Record<number, string>;
   correctionCount: number;
   stopped: boolean;
   maxConsecutiveWrong: number;
 };
 
 export type StepAction =
-  | { type: 'decide'; correct: boolean }
+  | { type: 'decide'; correct: boolean; choice?: string }
+  | { type: 'set'; position: number; correct: boolean; choice?: string }
   | { type: 'flip'; position: number }
   | { type: 'back' }
   | { type: 'undoStop' };
@@ -20,6 +22,7 @@ export function initStepState(): StepState {
   return {
     cursor: 0,
     decisions: {},
+    choices: {},
     correctionCount: 0,
     stopped: false,
     maxConsecutiveWrong: 0,
@@ -32,14 +35,37 @@ export function stepReducer(
   ctx: { totalItems: number; stopRule: StopRule | null },
 ): StepState {
   switch (action.type) {
+    case 'set': {
+      if (state.stopped || !Number.isInteger(action.position) ||
+        action.position < 0 || action.position >= state.cursor) return state;
+
+      const choice = action.correct ? action.choice : undefined;
+      if (state.decisions[action.position] === action.correct &&
+        state.choices[action.position] === choice) return state;
+
+      const decisions = { ...state.decisions, [action.position]: action.correct };
+      const choices = { ...state.choices };
+      if (choice === undefined) delete choices[action.position];
+      else choices[action.position] = choice;
+      return {
+        ...state,
+        decisions,
+        choices,
+        correctionCount: state.correctionCount + 1,
+        maxConsecutiveWrong: longestConsecutiveWrong(decisions, state.cursor),
+      };
+    }
     case 'flip': {
       if (state.stopped || !Number.isInteger(action.position) ||
         action.position < 0 || action.position >= state.cursor) return state;
 
       const decisions = { ...state.decisions, [action.position]: !state.decisions[action.position] };
+      const choices = { ...state.choices };
+      delete choices[action.position];
       return {
         ...state,
         decisions,
+        choices,
         correctionCount: state.correctionCount + 1,
         maxConsecutiveWrong: longestConsecutiveWrong(decisions, state.cursor),
       };
@@ -48,12 +74,16 @@ export function stepReducer(
       if (state.stopped || state.cursor >= ctx.totalItems) return state;
 
       const decisions = { ...state.decisions, [state.cursor]: action.correct };
+      const choices = { ...state.choices };
+      if (action.correct && action.choice !== undefined) choices[state.cursor] = action.choice;
+      else delete choices[state.cursor];
       const cursor = state.cursor + 1;
       const run = consecutiveWrong(decisions, cursor);
       return {
         ...state,
         cursor,
         decisions,
+        choices,
         stopped: ctx.stopRule !== null && (ctx.stopRule.kind === 'consecutive_wrong'
           ? run >= ctx.stopRule.stop_at
           : cursor === ctx.stopRule.first_row_length &&
@@ -72,10 +102,13 @@ export function stepReducer(
   const cursor = state.cursor - 1;
   const decisions = { ...state.decisions };
   delete decisions[cursor];
+  const choices = { ...state.choices };
+  delete choices[cursor];
   return {
     ...state,
     cursor,
     decisions,
+    choices,
     correctionCount: state.correctionCount + 1,
     stopped: false,
     maxConsecutiveWrong: longestConsecutiveWrong(decisions, cursor),

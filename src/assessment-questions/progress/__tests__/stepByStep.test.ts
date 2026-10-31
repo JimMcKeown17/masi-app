@@ -10,7 +10,8 @@ const TOTAL_ITEMS = 60;
 
 const ctx = { totalItems: 5, stopRule: { kind: 'consecutive_wrong', stop_at: 3 } as const };
 const run = (...actions: StepAction[]) => actions.reduce((s, a) => stepReducer(s, a, ctx), initStepState());
-const D = (correct: boolean) => ({ type: 'decide', correct } as const);
+const D = (correct: boolean, choice?: string) => ({ type: 'decide', correct, choice } as const);
+const S = (position: number, correct: boolean, choice?: string) => ({ type: 'set', position, correct, choice } as const);
 
 test('flip inverts a marked item below the cursor and counts one correction', () => {
   const s = run(D(true), D(false), { type: 'flip', position: 0 });
@@ -56,6 +57,7 @@ function step(
   stopRule: StopRule | null = STOP_RULE,
 ): StepState {
   Object.freeze(state.decisions);
+  Object.freeze(state.choices);
   Object.freeze(state);
   return stepReducer(state, action, { totalItems: TOTAL_ITEMS, stopRule });
 }
@@ -78,11 +80,13 @@ describe('step-by-step marking', () => {
     expect(initial).toEqual({
       cursor: 0,
       decisions: {},
+      choices: {},
       correctionCount: 0,
       stopped: false,
       maxConsecutiveWrong: 0,
     });
     expect(initStepState().decisions).not.toBe(initial.decisions);
+    expect(initStepState().choices).not.toBe(initial.choices);
     expect(consecutiveWrong(initial.decisions, initial.cursor)).toBe(0);
 
     const ninth = decideMany(initial, false, 9);
@@ -219,5 +223,119 @@ describe('step-by-step marking', () => {
     expect(complete.decisions).not.toHaveProperty(String(TOTAL_ITEMS));
     expect(step(complete, { type: 'decide', correct: false })).toBe(complete);
     expect(step(complete, { type: 'decide', correct: true })).toBe(complete);
+  });
+});
+
+
+describe('per-item choices', () => {
+  test('decide with a choice records it', () => {
+    expect(run(D(true, 'count_on')).choices).toEqual({ 0: 'count_on' });
+  });
+
+  test('a wrong decide records no choice', () => {
+    expect(run(D(false, 'known')).choices).toEqual({});
+  });
+
+  test('set changes a reached item and its choice', () => {
+    const before = run(D(false));
+    const after = step(before, S(0, true, 'known'));
+    expect(after).toMatchObject({ cursor: 1, decisions: { 0: true }, choices: { 0: 'known' },
+      correctionCount: 1, maxConsecutiveWrong: 0, stopped: false });
+    expect(before.decisions).toEqual({ 0: false });
+    expect(before.choices).toEqual({});
+  });
+
+  test('set to wrong clears the choice', () => {
+    const before = run(D(true, 'count_on'), D(true, 'known'));
+    const after = step(before, S(0, false, 'count_all'));
+    expect(after).toMatchObject({ cursor: 2, decisions: { 0: false, 1: true }, choices: { 1: 'known' },
+      correctionCount: 1, maxConsecutiveWrong: 1 });
+    expect(after.choices).not.toHaveProperty('0');
+    expect(before.choices).toEqual({ 0: 'count_on', 1: 'known' });
+  });
+
+  test('set changes only the strategy on an already correct item', () => {
+    const before = run(D(true, 'count_all'));
+    const after = step(before, S(0, true, 'known'));
+    expect(after).toMatchObject({ cursor: 1, decisions: { 0: true }, choices: { 0: 'known' }, correctionCount: 1 });
+    expect(before.choices).toEqual({ 0: 'count_all' });
+  });
+
+  test('set without a choice clears a previous choice', () => {
+    const after = step(run(D(true, 'known')), S(0, true));
+    expect(after.choices).toEqual({});
+    expect(after.correctionCount).toBe(1);
+  });
+
+  test.each([D(true, 'known'), D(false)])('set with no change is a no-op (%p)', decision => {
+    const before = run(decision);
+    expect(step(before, S(0, decision.correct, decision.choice))).toBe(before);
+  });
+
+  test('set ignores a choice supplied with an unchanged wrong mark', () => {
+    const before = run(D(false));
+    expect(step(before, S(0, false, 'known'))).toBe(before);
+  });
+
+  test('set never stops', () => {
+    const oneWrong = { kind: 'consecutive_wrong', stop_at: 1 } as const;
+    const marked = step(initStepState(), D(true, 'known'), oneWrong);
+    const corrected = step(marked, S(0, false), oneWrong);
+    expect(corrected).toMatchObject({ cursor: 1, decisions: { 0: false }, choices: {},
+      correctionCount: 1, stopped: false, maxConsecutiveWrong: 1 });
+    expect(step(corrected, D(false), oneWrong).stopped).toBe(true);
+  });
+
+  test('set recomputes the longest wrong run across reached items', () => {
+    const before = run(D(false), D(true, 'known'), D(false));
+    const joined = step(before, S(1, false));
+    expect(joined.maxConsecutiveWrong).toBe(3);
+    expect(joined.stopped).toBe(false);
+    const split = step(joined, S(1, true, 'count_on'));
+    expect(split.maxConsecutiveWrong).toBe(1);
+    expect(split.correctionCount).toBe(2);
+  });
+
+  test.each([-1, 2, 1.5])('set outside [0,cursor) is ignored (%p)', position => {
+    const before = run(D(true, 'known'), D(true, 'count_on'));
+    expect(step(before, S(position, false))).toBe(before);
+  });
+
+  test('set while stopped is ignored', () => {
+    const stopped = run(D(false), D(false), D(false));
+    expect(stopped.stopped).toBe(true);
+    expect(step(stopped, S(0, true, 'known'))).toBe(stopped);
+  });
+
+  test('back clears the choice', () => {
+    const before = run(D(true, 'count_all'), D(true, 'count_on'));
+    const backed = step(before, { type: 'back' });
+    expect(backed).toMatchObject({ cursor: 1, decisions: { 0: true }, choices: { 0: 'count_all' }, correctionCount: 1 });
+    expect(backed.choices).not.toHaveProperty('1');
+    const remarked = step(backed, D(true, 'known'));
+    expect(remarked.choices).toEqual({ 0: 'count_all', 1: 'known' });
+    expect(before.choices).toEqual({ 0: 'count_all', 1: 'count_on' });
+  });
+
+  test('undoStop clears the choice of the undone item', () => {
+    // A normal wrong-answer stop has no choice on the last item. Seed one to
+    // prove the undo transition itself deletes it rather than carrying stale data.
+    const stopped = { ...run(D(true, 'count_all'), D(true, 'known')), stopped: true };
+    const undone = step(stopped, { type: 'undoStop' });
+    expect(undone).toMatchObject({ cursor: 1, decisions: { 0: true }, choices: { 0: 'count_all' },
+      correctionCount: 1, stopped: false });
+    expect(undone.choices).not.toHaveProperty('1');
+    expect(stopped.choices).toEqual({ 0: 'count_all', 1: 'known' });
+    const normalStop = run(D(true, 'known'), D(false), D(false), D(false));
+    expect(step(normalStop, { type: 'undoStop' }).choices).toEqual({ 0: 'known' });
+  });
+
+  test('flip clears the choice at that position', () => {
+    const before = run(D(true, 'known'), D(true, 'count_on'));
+    const flipped = step(before, { type: 'flip', position: 0 });
+    expect(flipped.choices).toEqual({ 1: 'count_on' });
+    expect(flipped.choices).not.toHaveProperty('0');
+    expect(step(flipped, { type: 'flip', position: 0 }).choices).toEqual({ 1: 'count_on' });
+    expect(before.choices).toEqual({ 0: 'known', 1: 'count_on' });
   });
 });
