@@ -7853,3 +7853,12 @@ commit and derived identity. No device/release/hosted checks were run in this se
   - **RED:** a mount tracker wrapped around the real BrandButton recorded `["Remove screenshot", "Replace screenshot"]` after attaching, when only Remove should mount. A first attempt compared host `.instance`, which is `null` in this renderer and proved nothing, so it was replaced.
   - **GREEN:** `ProfileDiagnostics.test.js` 23/23; the suites rendering ReportProblemSheet, Profile or BottomSheet 18/18 suites, 335 tests; `npm run test:types` passes.
   - The healer, config, release-metadata and spacing changes had no material findings.
+- **Codex adversarial review, round 2 (gpt-6-astra): approve, no material findings.** It confirmed in memory that the focus is deferred and is cancelled on close, on a handle change and on unmount. The suites it named (ProfileDiagnostics, BottomSheet, offlineSyncUpdateById, releaseMetadata, releaseCommitConfig, runtimeDiagnostics, debugExport, ChangePasswordSheet) were rerun here: 8 suites, 130 tests passed.
+- **Open for the A03s (Jim signs in to `.kbtest`; Metro from this worktree):**
+  - Change password, Report a problem and Edit child after the keyboard closes (from #123);
+  - the screenshot row with the keyboard open;
+  - footer sheet spacing;
+  - TalkBack: the picker return and Remove focus;
+  - a repeat of gate 5 to read the MV001 detail in its receipt.
+  
+  iPhone smoke after that.
