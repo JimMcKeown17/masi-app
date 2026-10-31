@@ -2184,6 +2184,42 @@ v2 identity/validation/quotas/grants and the local Storage policy model.
 Hosted apply/read-back, native build/old-binary OTA, default-text A03s/iPhone,
 first real sweeps, field convergence and no-recurrence remain independent gates.
 
+## Website reporting functions (`masi_reporting_*_v1`, 2026-10-31)
+
+The Masi website's Django backend reads app data **only** through nine functions created by
+`supabase/migrations/20261031120000_masi_reporting_v1.sql`. Spec: `masi-web-nextjs`
+`docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`. Plan A:
+`docs/superpowers/plans/2026-10-31-masi-reporting-functions-plan.md`.
+
+**Principal:** `masi_reporting_reader`.
+- `LOGIN`, `NOINHERIT`, created with **no password**; the password is set out of band at rollout.
+- `default_transaction_read_only = on`, `statement_timeout = 15s`.
+- Holds `USAGE` on `public` only, no table privileges, and `EXECUTE` on the nine functions only.
+  `anon`, `authenticated` and `service_role` cannot execute them.
+
+**Function rules:**
+- `LANGUAGE sql` with a `BEGIN ATOMIC` body, `STABLE SECURITY DEFINER`, owner `postgres`,
+  `SET search_path = ''`.
+- No reference to any user-defined function. The harness asserts this through `pg_depend`, with a
+  denylist and a negative control.
+- Refusals are documents: `error: too_much_data | invalid_argument`.
+- `_v1` is never edited after a hosted apply; a change ships as `_v2`.
+- Deploy order: functions → Django → website.
+
+| Function | Reads | Returns |
+| --- | --- | --- |
+| `accounts_v1()` | `users`, `auth.users`, `organizations`, `job_titles`, `staff_programme_assignments`, roster tables, activity tables, `letter_mastery_corrections`, `mobile_support_incidents` | Per-account identity, auth state, current assignment, delivery/class/group counts, activity and server-stamped "last data received", last reported release |
+| `roster_v1(user_ids)` | `child_ea_assignments` + the five `getMyChildren` predicates | EA × delivery-roster child |
+| `assessed_children_v1(author_ids, from, to)` | `assessments` (non-`skipped_*`) | Children with an eligible result in range |
+| `daily_v1(user_ids, from, to)` | `sessions`, `session_attendees`, `time_entries`, `assessments`, `battery_runs` | Per EA per SAST day facts |
+| `ea_detail_v1(user_id, from, to)` | as above, plus `groups`, `classes`, `children` | Latest-N lists with totals, current groups, 12 weekly buckets |
+| `sessions_v1`, `assessments_v1`, `time_entries_v1` | as named | Row-level exports (no GPS coordinates); `completed_battery_runs` |
+| `incidents_v1(user_ids, from, to, kinds)` | `mobile_support_incidents` | Receipts with release identity and a 2 KB summary; no payloads |
+
+**Harness:** `npm run verify:reporting:postgres` (disposable local PG17, `masi_history_rls_`
+prefix; `MASI_REPORTING_KEEP=1` retains the database for the Django and website end-to-end checks).
+121/121 cases on 2026-10-31. **A schema change to any table above must keep this harness green.**
+
 ## Table Contract Map
 
 ### Lesson save and local authority mirrors (C2–C3, 2026-10-22)

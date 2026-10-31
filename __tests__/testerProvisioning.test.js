@@ -140,3 +140,19 @@ describe('SQLite tester provisioning safety', () => {
     expect(result.stderr).not.toMatch(/password for new users/i);
   });
 });
+
+describe('tester account creation', () => {
+  test('marks new tester accounts as test accounts', async () => {
+    const { processRow } = require('../scripts/createTesters');
+    const createUser = jest.fn().mockResolvedValue({ data: null, error: { message: 'stop after create' } });
+    const admin = {
+      auth: { admin: { listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }), createUser } },
+    };
+    const row = { email: 'pilot@example.org', password: 'unique-temporary-password' };
+    await processRow(admin, row, {}, 'org-id');
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'pilot@example.org',
+      app_metadata: { is_test_account: true },
+    }));
+  });
+});
