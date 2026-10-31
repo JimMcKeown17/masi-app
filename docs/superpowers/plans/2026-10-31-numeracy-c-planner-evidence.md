@@ -386,7 +386,7 @@ Orchestrator commits: `git add src/numeracy/groupSteps.js __tests__/numeracyGrou
 
 ```js
 /** input = { curriculum, presentChildIds: string[], knownByChild: Map<childId, Map<stepKey, KnownState>>,
- *            history: Array<{ date: 'YYYY-MM-DD', taught: Array<{ slot, step_key, activity }> }>,
+ *            history: Array<{ date: 'YYYY-MM-DD', createdAt: string /* ISO, the session's created_at */, id: string /* session id */, taught: Array<{ slot, step_key, activity }> }>,
  *            activityCardCount: number,   // 2 in this release
  *            lessonDate: 'YYYY-MM-DD',
  *            complete: { history: boolean, ticks: boolean, evidence: boolean } }
@@ -405,6 +405,8 @@ Decisions this task fixes (D relies on them):
 - History entries dated after `lessonDate` are ignored; entries on `lessonDate` count.
 
 - [ ] **Step 1: Write the failing tests**
+
+History in the table below is shorthand: build each entry with a test helper `lesson(date, taught, { createdAt = `${date}T08:00:00.000Z`, id = `s-${date}` } = {})`.
 
 Defaults: `base = { curriculum: fixture, presentChildIds: ['c1','c2','c3'], knownByChild: new Map(), history: [], activityCardCount: 2, lessonDate: '2026-11-05', complete: { history: true, ticks: true, evidence: true } }`, all deep-frozen.
 `steps(plan)` → `plan.cards.map((c) => [c.slot, c.step_key])`. Every test also runs
@@ -427,6 +429,7 @@ step that isn't ready"). Child maps in these tests are hand-built `'ticked'` map
 | `no present children` | `presentChildIds: []` | `toEqual({ engine_version: 1, cards: [], reason: 'no_children', readySteps: [] })` |
 | `incomplete inputs still plan, and say so` | `complete.ticks: false` | `reason: 'incomplete_inputs'`; `cards` equal the complete-input plan's cards |
 | `retired steps and renamed activities in history are harmless` (Review Focus 3) | history 11-04 `[{ slot: 'activity', step_key: 'add.30', activity: 'Old game' }, { slot: 'activity', step_key: 'count.5', activity: 'Renamed' }]` | no throw; `count.5` card activity `'count.5 A'`; `read_numbers.5` ranks before `count.5` (count was taught 11-04) |
+| `two lessons on one day keep their order` | `activities: { 'finger_flash.5': [X 5, Y 5] }`; history (passed shuffled) 11-03 `createdAt 09:00` Y, 11-03 `createdAt 10:00` X | warm-up activity `Y` (X is the most recent, even though X is first in file order and both share a date); the same result with the two entries in either input order |
 | `history after the lesson date is ignored` | history 11-10 `count.5` `'count.5 A'` | `count.5` card activity `'count.5 A'`; activity order `['count.5','read_numbers.5']` |
 | `same input, same plan` | call twice on frozen input | results `toEqual` |
 
@@ -440,11 +443,13 @@ Expected: FAIL, cannot find `../src/numeracy/planLesson`.
 Ranking and rotation are the parts the tests don't name:
 
 ```js
-// history = entries with date <= lessonDate
-// lastTaught(skillKey) = newest history date with a taught item whose step_key's skill (text before
+// history = entries with date <= lessonDate, in any input order
+// recency key of an entry = the tuple (date, createdAt, id), compared in that order, so two lessons on
+//   one day still have an order (Codex plan review, 2026-10-31)
+// lastTaught(skillKey) = newest recency key of an entry with a taught item whose step_key's skill (text before
 //                        the first '.') is skillKey, else null
 // rank(skills) = never taught (null) first, then oldest lastTaught; ties keep curriculum order
-// lastDone(stepKey, name) = newest history date with a taught item of that step_key and activity name
+// lastDone(stepKey, name) = newest recency key of an entry with a taught item of that step_key and activity name
 // pickActivity(step, slot): candidates = step.activities, filtered to minutes <= 5 for 'warm_up'
 //   (all activities if none qualify); never done first, then oldest lastDone; ties keep file order
 // warm-up: top of rank(warm_up skills with a ready group step) → its group step;
