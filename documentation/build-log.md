@@ -7726,3 +7726,26 @@ every diff, ran every harness, and committed. Codex gpt-6-astra ran the adversar
    R1; there is no fallback).
 3. Stamp or list existing staging tester accounts (`MASI_APP_TEST_EMAILS` on Render); new testers
    are stamped `is_test_account` by `createTesters.js`.
+
+### 2026-10-31 — Reporting code-review corrections (Codex: cross-year memberships, test flag)
+
+- Edited the unpublished `20261031120000_masi_reporting_v1.sql` in place. Current-class
+  projections in roster and assessment exports now choose one open membership in a non-archived
+  class by `enrolled_at DESC, class_id ASC LIMIT 1`. Assessment exports retain battery-run class
+  precedence. Removed unused membership/class joins and class columns from the detail assessment
+  source; delivery eligibility and `count(DISTINCT child_id)` remain unchanged.
+- Test-account flags compare case-folded JSON text to `true`, with null falling back to false;
+  arbitrary strings such as `yes` never undergo a boolean cast.
+- Extended the PostgreSQL harness with C12, open K1/2026 and K3/2025 memberships (2025 inactive),
+  and one standalone quick test on October 24. Assertions require a single K1 roster/export row,
+  one occurrence in detail with assessment total 9, and delivery count 3. Added seven metadata
+  cases: JSON true, strings `true`/`TRUE`, false, `yes`, null and absent.
+- Orchestrator follow-ups:
+  - The C12 quick test (2026-10-24) correctly raises EA_A's week-of-2026-10-19
+    `question_results` from 7 to 8, so that expectation was updated.
+  - The per-child `LATERAL` membership pick timed out the 100,001-child roster cap case: psql was
+    killed at the 180 s harness limit, since bulk rows in one transaction have no statistics. It
+    was rewritten set-based (`DISTINCT ON (child_id)` once, then a join).
+- Verification (local PG17, `PGTZ=UTC`): **131/131 cases** in 1 min 52 s. The KEEP run printed
+  `RETAINED masi_history_rls_reporting_keep` (refreshed with these functions). Nothing applied to
+  hosted.

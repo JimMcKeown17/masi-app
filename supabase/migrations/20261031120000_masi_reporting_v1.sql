@@ -45,7 +45,7 @@ BEGIN ATOMIC
       'auth', pg_catalog.jsonb_build_object(
         'created_at', a.created_at, 'last_sign_in_at', a.last_sign_in_at,
         'email_confirmed_at', a.email_confirmed_at, 'banned_until', a.banned_until,
-        'is_test_flag', COALESCE(a.raw_app_meta_data->'is_test_account' = 'true'::jsonb, false)),
+        'is_test_flag', COALESCE(pg_catalog.lower(a.raw_app_meta_data->>'is_test_account') = 'true', false)),
       'assignment', (SELECT pg_catalog.jsonb_build_object(
         'programme_id', spa.programme_id, 'programme_code', p.code,
         'school_id', spa.school_id, 'assigned_at', spa.assigned_at)
@@ -117,14 +117,22 @@ STABLE
 SECURITY DEFINER
 SET search_path = ''
 BEGIN ATOMIC
-WITH rows AS (SELECT DISTINCT a.user_id, ch.id AS child_id, p.code AS programme_code, cl.school_id, cl.id AS class_id, cl.grade
+WITH current_class AS (
+-- One open membership per child (open memberships are unique per academic year, so a child can
+-- hold two): latest enrolled_at, then smallest class_id. Set-based, so it never degrades into a
+-- per-child loop.
+SELECT DISTINCT ON (m.child_id) m.child_id, c.id, c.school_id, c.grade
+FROM public.child_class_memberships m
+JOIN public.classes c ON c.id=m.class_id AND c.archived_at IS NULL
+WHERE m.exited_at IS NULL
+ORDER BY m.child_id, m.enrolled_at DESC, m.class_id ASC),
+rows AS (SELECT DISTINCT a.user_id, ch.id AS child_id, p.code AS programme_code, cl.school_id, cl.id AS class_id, cl.grade
 FROM public.child_ea_assignments a
 JOIN public.children ch ON ch.id=a.child_id AND ch.archived_at IS NULL
 JOIN public.staff_programme_assignments spa ON spa.user_id=a.user_id AND spa.ended_at IS NULL
 JOIN public.programmes p ON p.id=spa.programme_id
 JOIN public.child_programme_enrollments e ON e.child_id=ch.id AND e.programme_id=spa.programme_id AND e.ended_at IS NULL
-JOIN public.child_class_memberships m ON m.child_id=ch.id AND m.exited_at IS NULL
-JOIN public.classes cl ON cl.id=m.class_id AND cl.archived_at IS NULL
+JOIN current_class cl ON cl.child_id=ch.id
 WHERE a.user_id=ANY(p_user_ids) AND a.unassigned_at IS NULL)
 SELECT CASE
 
@@ -295,7 +303,7 @@ AND (t.sign_in_time AT TIME ZONE 'Africa/Johannesburg')::date BETWEEN p_from AND
 time_entries AS (SELECT id,local_date,sign_in_time,sign_out_time,duration_minutes,auto_clocked_out,sign_in_location_status,sign_out_location_status FROM clock_source),
 assessment_source AS (SELECT a.id, a.assessment_date, a.updated_at, a.user_id, a.child_id,
 ch.first_name AS child_first_name, ch.last_name AS child_last_name, a.battery_run_id,
-cl.name AS class_name, cl.grade, cl.school_id, p.code AS programme_code,
+p.code AS programme_code,
 b.battery_code, b.battery_version, b.status AS battery_status, a.question_code, a.language,
 a.score AS raw_score, a.total_items AS item_count,
 CASE WHEN pg_catalog.jsonb_typeof(a.derived->'max')='number' THEN (a.derived->>'max')::numeric END AS score_max,
@@ -303,8 +311,6 @@ a.stopped_reason, a.assessment_purpose, w.label AS window_label
 FROM public.assessments a JOIN public.children ch ON ch.id=a.child_id
 JOIN public.programmes p ON p.id=a.programme_id
 LEFT JOIN public.battery_runs b ON b.id=a.battery_run_id
-LEFT JOIN public.child_class_memberships m ON m.child_id=a.child_id AND m.exited_at IS NULL AND b.class_id IS NULL
-LEFT JOIN public.classes cl ON cl.id=COALESCE(b.class_id,m.class_id)
 LEFT JOIN public.assessment_windows w ON w.id=a.assessment_window_id
 WHERE a.user_id=p_user_id AND a.assessment_date BETWEEN p_from AND p_to),
 assessments AS (SELECT a.id,a.assessment_date,a.updated_at,a.battery_code,a.battery_version,a.battery_status,a.question_code,a.language,a.raw_score,a.item_count,a.score_max,a.stopped_reason,a.child_id,
@@ -439,7 +445,13 @@ a.stopped_reason, a.assessment_purpose, w.label AS window_label
 FROM public.assessments a JOIN public.children ch ON ch.id=a.child_id
 JOIN public.programmes p ON p.id=a.programme_id
 LEFT JOIN public.battery_runs b ON b.id=a.battery_run_id
-LEFT JOIN public.child_class_memberships m ON m.child_id=a.child_id AND m.exited_at IS NULL AND b.class_id IS NULL
+LEFT JOIN LATERAL (
+  SELECT m.class_id
+  FROM public.child_class_memberships m
+  JOIN public.classes c ON c.id=m.class_id AND c.archived_at IS NULL
+  WHERE m.child_id=a.child_id AND m.exited_at IS NULL AND b.class_id IS NULL
+  ORDER BY m.enrolled_at DESC, m.class_id ASC LIMIT 1
+) m ON true
 LEFT JOIN public.classes cl ON cl.id=COALESCE(b.class_id,m.class_id)
 LEFT JOIN public.assessment_windows w ON w.id=a.assessment_window_id
 WHERE a.user_id=ANY(p_user_ids) AND a.assessment_date BETWEEN p_from AND p_to),completed_battery_runs AS (SELECT b.id, b.user_id, b.child_id, p.code AS programme_code, b.battery_code, b.battery_version,

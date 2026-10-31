@@ -30,6 +30,8 @@ const UUID_EA_MOVE = '14000000-0000-0000-0000-000000000008';
 const UUID_EA_BULK = '14000000-0000-0000-0000-000000000009';
 const UUID_K1 = '34000000-0000-0000-0000-000000000001';
 const UUID_K2 = '34000000-0000-0000-0000-000000000002';
+const UUID_K3 = '34000000-0000-0000-0000-000000000003';
+const UUID_ASSESSMENT_C12 = '94000000-0000-0000-0000-000000000012';
 const UUID_G1 = '44000000-0000-0000-0000-000000000001';
 const childId = (n) => `54000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const runId = (n) => `74000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
@@ -48,6 +50,16 @@ const REPORTING_FUNCTIONS = [
 // EXECUTE is the PUBLIC-executable trigger function below; the reader has no USAGE on private and
 // trigger functions cannot be called directly. Each entry has a refusal case in runCases.
 const AUTH_GUARDED_ALLOWLIST = ['private.set_updated_at()'];
+// Exercise JSON types without coercing arbitrary strings to boolean.
+const TEST_FLAG_CASES = [
+  ['json-true', UUID_EA_TEST, { is_test_account: true }, 'true'],
+  ['string-true', UUID_EA_B, { is_test_account: 'true' }, 'true'],
+  ['string-uppercase', UUID_EA_LATE, { is_test_account: 'TRUE' }, 'true'],
+  ['false', UUID_EA_LEDGER, { is_test_account: false }, 'false'],
+  ['yes', UUID_EA_SUSP, { is_test_account: 'yes' }, 'false'],
+  ['null', UUID_EA_MOVE, { is_test_account: null }, 'false'],
+  ['absent', UUID_EA_A, {}, 'false'],
+];
 const T_LEDGER = '2026-10-29T09:00:00Z';
 const READER_SQL = (sql) => `BEGIN READ ONLY; SET LOCAL ROLE masi_reporting_reader; ${sql}\nROLLBACK;`;
 // runPsql and expectSqlState inherit PGTZ through their shared buildPsqlEnv.
@@ -59,7 +71,7 @@ function seedFixture(databaseUrl) {
   runPsql({ databaseUrl, label: 'reporting-fixture', sql: `
 INSERT INTO auth.users(id) VALUES ${ids.map((id) => `('${id}')`).join(',')};
 UPDATE auth.users SET banned_until = '2099-01-01T00:00:00Z' WHERE id = '${UUID_EA_SUSP}';
-UPDATE auth.users SET raw_app_meta_data = '{"is_test_account":true}' WHERE id = '${UUID_EA_TEST}';
+${TEST_FLAG_CASES.map(([, id, metadata]) => `UPDATE auth.users SET raw_app_meta_data = '${JSON.stringify(metadata)}'::jsonb WHERE id = '${id}';`).join('\n')}
 INSERT INTO public.schools(id,name,school_uid) VALUES
  ('${UUID_SCHOOL_1}','Reporting school 1','REPORTING-001'), ('${UUID_SCHOOL_2}','Reporting school 2',NULL);
 INSERT INTO public.users(id,first_name,last_name,organization_id,school_id)
@@ -67,6 +79,8 @@ VALUES ${ids.map((id, i) => `('${id}','Reporting','EA ${i}','${UUID_ORGANIZATION
 UPDATE public.academic_years SET is_active = false WHERE is_active AND label <> '2026';
 INSERT INTO public.academic_years(label,starts_on,ends_on,is_active) VALUES ('2026','2026-01-01','2026-12-31',true)
 ON CONFLICT(label) DO UPDATE SET starts_on=excluded.starts_on, ends_on=excluded.ends_on, is_active=true;
+INSERT INTO public.academic_years(label,starts_on,ends_on,is_active) VALUES ('2025','2025-01-01','2025-12-31',false)
+ON CONFLICT(label) DO UPDATE SET starts_on=excluded.starts_on, ends_on=excluded.ends_on, is_active=false;
 UPDATE public.programmes SET daily_session_target = CASE code WHEN 'literacy' THEN 3 WHEN 'numeracy' THEN 5 WHEN 'yeboneer' THEN 1 END
 WHERE code IN ('literacy','numeracy','yeboneer');
 INSERT INTO public.staff_programme_assignments(user_id,programme_id,school_id,assigned_at)
@@ -91,17 +105,18 @@ SELECT pg_catalog.now()::text;
 COMMIT;` });
   runPsql({ databaseUrl, label: 'reporting-task-2-4-fixture', sql: `
 INSERT INTO public.children(id,first_name,last_name,created_by)
-SELECT ('54000000-0000-0000-0000-' || lpad(n::text,12,'0'))::uuid,'Child',n::text,'${UUID_EA_A}' FROM generate_series(2,11) n;
+SELECT ('54000000-0000-0000-0000-' || lpad(n::text,12,'0'))::uuid,'Child',n::text,'${UUID_EA_A}' FROM generate_series(2,12) n;
 INSERT INTO public.classes(id,school_id,name,grade,academic_year_id) VALUES
 ('${UUID_K1}','${UUID_SCHOOL_1}','K1','R',(SELECT id FROM public.academic_years WHERE label='2026')),
-('${UUID_K2}','${UUID_SCHOOL_1}','K2','R',(SELECT id FROM public.academic_years WHERE label='2026'));
+('${UUID_K2}','${UUID_SCHOOL_1}','K2','R',(SELECT id FROM public.academic_years WHERE label='2026')),
+('${UUID_K3}','${UUID_SCHOOL_1}','K3','R',(SELECT id FROM public.academic_years WHERE label='2025'));
 INSERT INTO public.staff_programme_assignments(user_id,programme_id,assigned_at,ended_at)
 SELECT '${UUID_EA_MOVE}',id,'2026-09-01','2026-10-27' FROM public.programmes WHERE code='literacy';
 INSERT INTO public.staff_programme_assignments(user_id,programme_id,assigned_at)
 SELECT u,id,'2026-10-28' FROM public.programmes CROSS JOIN (VALUES ('${UUID_EA_B}'::uuid),('${UUID_EA_MOVE}'::uuid)) x(u)
 WHERE code=CASE WHEN u='${UUID_EA_MOVE}'::uuid THEN 'numeracy' ELSE 'literacy' END;
 INSERT INTO public.child_ea_assignments(user_id,child_id,assigned_at)
-SELECT '${UUID_EA_A}',id,'2026-01-01' FROM public.children WHERE id BETWEEN '${childId(1)}' AND '${childId(6)}';
+SELECT '${UUID_EA_A}',id,'2026-01-01' FROM public.children WHERE id BETWEEN '${childId(1)}' AND '${childId(6)}' OR id='${childId(12)}';
 INSERT INTO public.child_ea_assignments(user_id,child_id,assigned_at) VALUES ('${UUID_EA_B}','${UUID_C1}','2026-01-01'),('${UUID_EA_MOVE}','${childId(7)}','2026-01-01');
 INSERT INTO public.child_programme_enrollments(child_id,programme_id,enrolled_at,ended_at)
 SELECT c.id,p.id,'2026-01-01',CASE WHEN c.id='${childId(3)}' THEN '2026-10-01'::timestamptz END
@@ -109,6 +124,9 @@ FROM public.children c CROSS JOIN public.programmes p WHERE p.code='literacy';
 INSERT INTO public.child_class_memberships(child_id,class_id,academic_year_id,enrolled_at,exited_at)
 SELECT c.id,CASE WHEN c.id='${childId(5)}' THEN '${UUID_K2}'::uuid ELSE '${UUID_K1}'::uuid END,y.id,'2026-01-01',
 CASE WHEN c.id='${childId(4)}' THEN '2026-10-01'::timestamptz END FROM public.children c CROSS JOIN public.academic_years y WHERE y.label='2026';
+-- Open membership uniqueness is per child/year, so both memberships are legal.
+INSERT INTO public.child_class_memberships(child_id,class_id,academic_year_id,enrolled_at)
+SELECT '${childId(12)}','${UUID_K3}',id,'2025-01-01' FROM public.academic_years WHERE label='2025';
 UPDATE public.classes SET archived_at=now() WHERE id='${UUID_K2}';
 UPDATE public.children SET archived_at=now() WHERE id='${childId(6)}';
 INSERT INTO public.groups(id,name,programme_id,class_id) SELECT '${UUID_G1}','G1',id,'${UUID_K1}' FROM public.programmes WHERE code='literacy';
@@ -149,6 +167,9 @@ SELECT u,c,p.id,'letter_sounds',d,q,sc,4,j::jsonb,reason FROM public.programmes 
 ('${UUID_EA_A}','${UUID_C1}','2026-10-22','wela_plus_story_writing',12,'{"max":16,"ea_rubric_total":12}','completed'),
 ('${UUID_EA_A}','${UUID_C1}','2026-10-22',NULL,1,'{}',NULL)
 ) x(u,c,d,q,sc,j,reason) WHERE p.code='literacy';
+INSERT INTO public.assessments(id,user_id,child_id,programme_id,assessment_type,assessment_date,question_code,score,total_items,stopped_reason)
+SELECT '${UUID_ASSESSMENT_C12}','${UUID_EA_A}','${childId(12)}',id,'letter_sounds','2026-10-24','letter_sounds',1,4,'completed'
+FROM public.programmes WHERE code='literacy';
 INSERT INTO public.assessments(user_id,child_id,programme_id,assessment_type,assessment_date,question_code,battery_run_id)
 SELECT '${UUID_EA_A}','${UUID_C1}',p.id,'letter_sounds','2026-10-23','letter_sounds',b.id
 FROM public.programmes p CROSS JOIN public.battery_runs b WHERE p.code='literacy' AND b.id IN ('${runId(2)}','${runId(3)}');
@@ -185,6 +206,9 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
     `(a#>>'{activity,last_data_received_at}')::timestamptz = '${T_LEDGER}'::timestamptz`), 't');
   c.value('accounts-received-never', account(UUID_EA_NOPROG, "a#>'{activity,last_data_received_at}' = 'null'::jsonb"), 't');
   c.value('accounts-test-flag', account(UUID_EA_TEST, "a#>>'{auth,is_test_flag}'"), 'true');
+  for (const [name, id, , expected] of TEST_FLAG_CASES) {
+    c.value(`accounts-test-flag-${name}`, account(id, "a#>>'{auth,is_test_flag}'"), expected);
+  }
   c.value('accounts-release', account(UUID_EA_A, "a#>>'{last_receipt,app_version}'"), '1.5.0');
   c.value('accounts-noprog', account(UUID_EA_NOPROG, "a->'assignment' = 'null'::jsonb"), 't');
   const ids = (list) => `ARRAY[${list.map(id => `'${id}'::uuid`).join(',')}]`;
@@ -192,7 +216,10 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
     `public.masi_reporting_${fn}_v1(${ids(list)},'${from}','${to}')`;
   const detail = (id = UUID_EA_A) => `public.masi_reporting_ea_detail_v1('${id}','2026-10-01','2026-10-31')`;
   const check = (name, expression) => c.value(name, READER_SQL(`SELECT ${expression};`), 't');
-  check('roster-ea-a', `(SELECT jsonb_agg(r->>'child_id' ORDER BY r->>'child_id') FROM jsonb_array_elements(public.masi_reporting_roster_v1(${ids([UUID_EA_A])})->'rows') r)='${JSON.stringify([UUID_C1,childId(2)])}'::jsonb`);
+  check('roster-ea-a', `(SELECT jsonb_agg(r->>'child_id' ORDER BY r->>'child_id') FROM jsonb_array_elements(public.masi_reporting_roster_v1(${ids([UUID_EA_A])})->'rows') r)='${JSON.stringify([UUID_C1,childId(2),childId(12)])}'::jsonb`);
+  check('roster-multiple-years', `(SELECT jsonb_agg(r->>'class_id') FROM jsonb_array_elements(public.masi_reporting_roster_v1(${ids([UUID_EA_A])})->'rows') r WHERE r->>'child_id'='${childId(12)}' AND r->>'user_id'='${UUID_EA_A}')='["${UUID_K1}"]'::jsonb`);
+  check('assessments-multiple-years', `(SELECT jsonb_agg(r->>'class_name') FROM jsonb_array_elements(${call('assessments')}->'rows') r WHERE r->>'id'='${UUID_ASSESSMENT_C12}')='["K1"]'::jsonb`);
+  check('detail-multiple-years', `${detail()}#>>'{assessments,total}'='9' AND (SELECT count(*) FROM jsonb_array_elements(${detail()}#>'{assessments,rows}') r WHERE r->>'id'='${UUID_ASSESSMENT_C12}')=1`);
   check('roster-move', `public.masi_reporting_roster_v1(${ids([UUID_EA_MOVE])})->'rows'='[]'::jsonb`);
   check('roster-shared', `(SELECT count(*) FROM jsonb_array_elements(public.masi_reporting_roster_v1(${ids([UUID_EA_A,UUID_EA_B])})->'rows') r WHERE r->>'child_id'='${UUID_C1}')=2`);
   const assessed = (list,from='2026-01-15',to='2026-12-15') => call('assessed_children',list,from,to);
@@ -202,7 +229,7 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
   for (const [month,expected] of [['01','2026-01-20'],['10','2026-10-20'],['03',null]]) {
     check(`assessed-range-${month}`, expected ? `${assessed([UUID_EA_A,UUID_EA_B],`2026-${month}-01`,`2026-${month}-31`)}->'rows' @> '[{"child_id":"${childId(11)}","last_assessment_date":"${expected}"}]'::jsonb` : `NOT (${assessed([UUID_EA_A,UUID_EA_B],'2026-03-01','2026-03-31')}->'rows' @> '[{"child_id":"${childId(11)}"}]'::jsonb)`);
   }
-  c.value('accounts-delivery-count', account(UUID_EA_A,"a#>>'{counts,delivery_children}'"),'2');
+  c.value('accounts-delivery-count', account(UUID_EA_A,"a#>>'{counts,delivery_children}'"),'3');
   c.value('received-mastery-ledger', `BEGIN; INSERT INTO public.letter_mastery_corrections(correction_id,child_id,letter,language,confirmed,requested_at,effective_at,changed_by,received_at) VALUES(gen_random_uuid(),'${UUID_C1}','s','en',true,now(),now(),'${UUID_EA_A}',now()); ${account(UUID_EA_A,"(a#>>'{activity,last_data_received_at}')::timestamptz=now()")} ROLLBACK;`,'t');
   check('daily-sessions', `${call('daily',[UUID_EA_MOVE])}->'sessions' @> '[{"day":"2026-10-20","programme_code":"literacy","sessions":1},{"day":"2026-10-21","programme_code":"literacy","sessions":1}]'::jsonb`);
   check('daily-clock-sast', `${call('daily',[UUID_EA_A],'2026-10-20','2026-10-20')}->'clock' @> '[{"day":"2026-10-20","entries":2,"completed_minutes":510}]'::jsonb AND ${call('daily',[UUID_EA_A],'2026-10-19','2026-10-19')}->'clock'='[]'::jsonb`);
@@ -220,7 +247,7 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
   check('detail-unknown-user', `${detail('ffffffff-ffff-ffff-ffff-ffffffffffff')}#>>'{assessments,total}'='0' AND ${detail('ffffffff-ffff-ffff-ffff-ffffffffffff')}#>>'{sessions,total}'='0' AND ${detail('ffffffff-ffff-ffff-ffff-ffffffffffff')}#>>'{time_entries,total}'='0'`);
   check('sessions-rows', `${call('sessions')}->'rows' @> '[{"id":"${UUID_SESSION_A}","class_name":"K1","present_count":2}]'::jsonb`);
   check('roster-null-ids', "public.masi_reporting_roster_v1(NULL)->>'argument'='p_user_ids'");
-  check('detail-weekly-independent-of-from', `public.masi_reporting_ea_detail_v1('${UUID_EA_A}','2026-10-26','2026-10-31')->'weekly' @> '[{"week_start":"2026-10-19","sessions":1,"clock_days":2,"completed_hours":18.5,"question_results":7}]'::jsonb`);
+  check('detail-weekly-independent-of-from', `public.masi_reporting_ea_detail_v1('${UUID_EA_A}','2026-10-26','2026-10-31')->'weekly' @> '[{"week_start":"2026-10-19","sessions":1,"clock_days":2,"completed_hours":18.5,"question_results":8}]'::jsonb`);
   for (const activities of ['{"letters_focused":"s"}', '{"letters_focused":["s",1]}', '{}']) {
     c.value(`sessions-letters-defensive-${activities}`, `BEGIN; UPDATE public.sessions SET activities='${activities}' WHERE id='${UUID_SESSION_A}'; SET LOCAL ROLE masi_reporting_reader; SELECT ${call('sessions')}->'rows' @> '[{"id":"${UUID_SESSION_A}","letters_focused":null}]'::jsonb; ROLLBACK;`, 't');
   }
