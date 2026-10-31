@@ -344,3 +344,21 @@ test('a non-dismissible sheet hides its grab handle but keeps its space; a defau
   const normal = renderSheet({ onDismiss: jest.fn() });
   expect(normal.getByTestId('bottom-sheet-handle')).not.toHaveStyle({ opacity: 0 });
 });
+
+test('Android sheet restores zero avoidance padding after keyboard dismissal', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const emitter = require('react-native/Libraries/EventEmitter/RCTDeviceEventEmitter').default;
+  const sheet = renderSheet();
+  const wrapper = () => sheet.UNSAFE_getByType(KeyboardAvoidingView).findByType(View);
+  await act(async () => {
+    fireEvent(wrapper(), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 411, height: 914 } }, persist() {},
+    });
+  });
+  const before = StyleSheet.flatten(wrapper().props.style);
+  const event = (screenY, height) => ({ duration: 0, endCoordinates: { screenX: 0, screenY, width: 411, height } });
+  await act(async () => emitter.emit('keyboardDidShow', event(500, 414)));
+  expect(StyleSheet.flatten(wrapper().props.style).paddingBottom).toBe(414);
+  await act(async () => emitter.emit('keyboardDidHide', event(842, 0)));
+  expect(StyleSheet.flatten(wrapper().props.style)).toEqual(before);
+});

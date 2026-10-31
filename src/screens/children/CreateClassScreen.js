@@ -1,6 +1,7 @@
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
+import KeyboardAvoidingView from '../../components/common/KeyboardAvoidingView';
 import { Text } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';
 import BrandButton from '../../components/common/BrandButton';

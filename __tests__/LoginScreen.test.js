@@ -1,6 +1,7 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 import React from 'react';
-import { AccessibilityInfo, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet, TextInput } from 'react-native';
+import KeyboardAvoidingView from '../src/components/common/KeyboardAvoidingView';
 import { act, fireEvent, screen, within } from '@testing-library/react-native';
 import { AuthRetryableFetchError } from '@supabase/supabase-js';
 import { Snackbar } from 'react-native-paper';

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
+import KeyboardAvoidingView from '../../components/common/KeyboardAvoidingView';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { Text } from 'react-native-paper';
 import { colors, spacing } from '../../constants/colors';

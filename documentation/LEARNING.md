@@ -2433,3 +2433,23 @@ first real sweeps, causal field convergence and a no-recurrence window remain
 different evidence tiers. The orchestrator reconciles the final code and records
 their results in the build log. A green local test cannot stand in for a later
 field observation.
+
+
+## 2026-10-30 — Keyboard visibility and keyboard geometry answer different questions
+
+MA-BUG-20261030-001 came from treating Android's hide coordinates as an overlap
+measurement. RN 0.81.5 computes avoidance for both didShow and didHide, but the
+hide screenY excludes system bars while the edge-to-edge view includes them.
+The result is a persistent gap equal to the bars, plus a screen's vertical offset.
+Use the event type to decide whether avoidance applies; use RN's geometry only
+while it applies. Floating keyboards make this distinction essential: a show can
+report height zero and still represent a visible keyboard.
+
+Disabling RN's height behavior restores its initial measured height but retains
+flex: 0. The shared wrapper also omits that behavior while inactive, allowing
+the caller's original flex layout to return. Both branches render the same View
+and children, so dismissal does not reset form state. The regression lays out a
+914 dp view, shows at 500, reports the reduced height back through onLayout, and
+hides at 842; repeated cycles verify restored geometry through the real RN code.
+Jest proves this causal calculation, while physical-device rendering remains a
+separate gate.

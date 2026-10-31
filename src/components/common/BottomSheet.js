@@ -4,7 +4,6 @@ import {
   Animated,
   BackHandler,
   findNodeHandle,
-  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
   Text,
   useWindowDimensions,
 } from 'react-native';
+import KeyboardAvoidingView from './KeyboardAvoidingView';
 import { Portal } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, colors, shadows, spacing, tints } from '../../constants/colors';

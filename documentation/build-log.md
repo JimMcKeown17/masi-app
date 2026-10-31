@@ -5607,6 +5607,7 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
   plus Apple's automatic distribution for internal groups. External testers' groups still need
   each build added in App Store Connect.
 
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -7601,3 +7602,42 @@ screenshot was withheld from Git because its gallery thumbnails show children's 
 
 **Still open:** the keyboard fix (MA-BUG-20261030-001) on its own branch; the iPhone smoke on
 TestFlight 26; records 002–007 await decisions.
+
+### 2026-10-30 — MA-BUG-20261030-001 Android keyboard residue (`fix/keyboard-residue`)
+
+Codex (gpt-6.1-sol, high) built it from Claude's brief; Claude reviewed the diff. Diagnosis: React
+Native sends Android `keyboardDidHide` with `screenY` = the visible frame (window minus status and
+nav bars), and its `KeyboardAvoidingView` measures that like a show, so under edge-to-edge it keeps
+that difference. An Android 15 emulator probe logged `hide screenY 842.29` in a 914.29 dp window
+(72 dp = status 24 + nav 48) and `didShow` with `height: 0` for Gboard's floating keyboard, which is
+why visibility comes from the event type. The emulator could not run a full before/after: Gboard
+floated, and after disabling its hardware keyboard the 2 GB image hung (System UI and Messages ANRs).
+
+Implemented the app-owned `src/components/common/KeyboardAvoidingView.js` and
+migrated BottomSheet, Login, Forgot Password, Edit/Add Child and Create/Edit Class.
+Android avoidance is enabled only between didShow/didHide (initially
+Keyboard.isVisible), ANDed with caller enabled. Floating show height 0 or 48
+still counts as visible. Non-Android props pass through. Forgot Password retains
+its iOS-only opt-in. The same RN component and native View/children stay mounted.
+
+RED through real RN 0.81.5 and RCTDeviceEventEmitter: padding expected 0, received
+72 after hide screenY 842 with frame height 914; height with offset 90 expected
+914, received 752 after the reduced native frame was reported. The naive disabled
+height wrapper also failed exact style restoration: expected flex 1, received
+height 914/flex 0. Inactive Android height behavior is now omitted, restoring the
+original flex layout. Repeated cycles pass. An AST import guard first listed all
+seven consumers and now permits the RN import only in the app wrapper.
+
+All commands used `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`:
+
+- `npx jest __tests__/KeyboardAvoidingView.test.js __tests__/keyboardAvoidingImports.test.js __tests__/BottomSheet.test.js --runInBand --silent`: **3 suites / 44 tests passed**, exit 0.
+- Related-screen/component search (`rg -l 'BottomSheet|LoginScreen|ForgotPasswordScreen|EditChildScreen|AddChildScreen|CreateClassScreen|EditClassScreen' __tests__`) found 19 files. Running those plus the two new suites with `npx jest ... --runInBand --silent`: **21 suites / 281 tests passed**, exit 0.
+- `npm run test:types`: **passed**, exit 0.
+- Full `npm test -- --silent`: **464 suites / 7,377 tests / 14 snapshots passed**, exit 0 (162.873 s).
+- `git diff --check`: **passed**; index empty and protected paths unchanged.
+
+The bug record/registry now distinguish confirmed diagnosis, fixed in code and
+local tests from device/release verification. No commits, dependency changes,
+generated Android changes, releases or hosted mutations in the build. A03s sheet/Edit child,
+floating keyboard and iOS physical-device gates remain open. The supplied Android
+15 emulator coordinates were replayed locally; this session did not run a device.

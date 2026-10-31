@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  AccessibilityInfo, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text,
+  AccessibilityInfo, Platform, ScrollView, StyleSheet, Text,
   useWindowDimensions, View,
 } from 'react-native';
+import KeyboardAvoidingView from '../../components/common/KeyboardAvoidingView';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
