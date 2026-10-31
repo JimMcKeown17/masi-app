@@ -6,7 +6,9 @@ import { getActiveProgrammeGate } from '../services/activeProgrammeGate';
 import { programmeSubject } from '../utils/programmeSubject';
 
 // The last known subject per signed-in EA, so a newly mounted screen starts resolved
-// instead of rendering literacy pieces for a moment and then removing them.
+// instead of rendering literacy pieces for a moment and then removing them. A cached
+// subject is for display only: a programme can change under the same handle, so a screen
+// that enters a literacy flow must wait for `settled` (this mount's own read finished).
 const lastKnown = new WeakMap();
 
 function initialState(handle) {
@@ -19,6 +21,7 @@ export function useActiveProgrammeSubject() {
   const { handle } = useSignedInEA();
   const { user } = useAuth();
   const [state, setState] = useState(() => initialState(handle));
+  const [settledHandle, setSettledHandle] = useState(null);
   useFocusEffect(useCallback(() => {
     let active = true;
     const canPublish = () => active && handle.isCurrent();
@@ -31,13 +34,17 @@ export function useActiveProgrammeSubject() {
         const subject = programmeSubject(gate.programme);
         lastKnown.set(handle, subject);
         setState({ handle, subject, loading: false });
+        setSettledHandle(handle);
       } catch {
-        if (canPublish()) setState(prev => (prev.handle === handle && !prev.loading
+        if (!canPublish()) return;
+        setState(prev => (prev.handle === handle && !prev.loading
           ? prev : { handle, subject: null, loading: false }));
+        setSettledHandle(handle);
       }
     })();
     return () => { active = false; };
   }, [handle, user.id]));
   const current = state.handle === handle ? state : initialState(handle);
-  return { subject: current.subject, isMaths: current.subject === 'maths', loading: current.loading };
+  return { subject: current.subject, isMaths: current.subject === 'maths', loading: current.loading,
+    settled: settledHandle === handle };
 }

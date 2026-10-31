@@ -9,10 +9,12 @@ import { JOB_TITLE_CODES } from '../../constants/jobTitles';
 import LessonPickerScreen from '../lessons/LessonPickerScreen';
 
 export default function SessionFormScreen({ navigation }) {
-  const { isMaths, loading } = useActiveProgrammeSubject();
+  const { isMaths, loading, settled } = useActiveProgrammeSubject();
   const { profile, refreshProfile } = useAuth();
 
-  if (loading) {
+  // "Coming soon" is safe to show from a cached maths subject, but the lesson flow can resume a
+  // retained literacy draft, so it waits for this screen's own programme read.
+  if (loading || (!settled && !isMaths)) {
     return <View style={styles.container}><ActivityIndicator color={colors.primary} /></View>;
   }
 
