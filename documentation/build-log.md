@@ -7794,3 +7794,17 @@ transaction, no long locks.
 - **CLI:** Jim upgraded the Homebrew Supabase CLI to 2.122.0. A real `supabase db push --db-url` to a
   disposable PG17 (harness bootstrap plus default privileges) applied all 39 migrations. This file
   was recorded with 44 statements, and the 9 functions work.
+
+### 2026-10-31 — Reporting migration renamed to `20261031180000` (`fix/reporting-migration-version`)
+
+After #131 merged (`f373f0b`), `sqlite:staging:dry-run` said "Remote database is up to date". A
+read-only look at `supabase_migrations.schema_migrations` showed why: version `20261031120000` was
+already recorded on `masi-app-sqlite` as `numeracy_maths_draft_default`. That migration comes from
+the unmerged `feat/egma-maths-assessment` branch and was applied to staging separately. The CLI
+matches migrations by version only, so it treated ours as applied.
+- **Not applied:** no `masi_reporting_reader` role and no reporting functions exist on staging.
+- **Fix:** the numeracy migration keeps its version, which staging already records. Ours is
+  renamed to `20261031180000`, the SQL is byte-identical, and the contract map path is updated.
+- **Lesson:** a branch's migration applied to shared staging before merge reserves that version
+  for everyone. Hand-picked `YYYYMMDD120000` versions collide between parallel branches;
+  `supabase migration new` timestamps would not.

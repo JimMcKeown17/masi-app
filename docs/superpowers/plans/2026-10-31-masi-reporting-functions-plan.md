@@ -1,5 +1,9 @@
 # Masi reporting functions (Plan A of 3) Implementation Plan
 
+> **Status 2026-10-31:** the migration shipped in #131 as `20261031120000_masi_reporting_v1.sql` and was
+> renamed to `20261031180000_masi_reporting_v1.sql` before its first hosted apply, because
+> `20261031120000` was already taken on `masi-app-sqlite` by `numeracy_maths_draft_default`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a least-privilege reporting role and nine versioned, read-only reporting functions to
