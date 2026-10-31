@@ -7781,3 +7781,16 @@ ends a `BEGIN ATOMIC` body at the first `END` that isn't inside brackets. In thi
 
 The review found nothing else: no superuser-only steps, API roles lose EXECUTE in the same
 transaction, no long locks.
+
+**Pre-apply evidence (2026-10-31).**
+- **Rolled-back rehearsal on `masi-app-sqlite`:** psql 17.5, session pooler, `BEGIN; \i migration; checks; ROLLBACK`.
+  - The role was created LOGIN, NOINHERIT, connlimit -1, with `{default_transaction_read_only=on,statement_timeout=15s}`.
+  - 9 SECURITY DEFINER functions.
+  - 0 EXECUTE for `anon`/`authenticated`/`service_role`.
+  - 0 table privileges for the reader.
+  - 0 other `public` SECURITY DEFINER functions the reader can execute.
+  - `accounts_v1` ran on staging data.
+  - After the rollback, the role and functions were gone.
+- **CLI:** Jim upgraded the Homebrew Supabase CLI to 2.122.0. A real `supabase db push --db-url` to a
+  disposable PG17 (harness bootstrap plus default privileges) applied all 39 migrations. This file
+  was recorded with 44 statements, and the 9 functions work.
