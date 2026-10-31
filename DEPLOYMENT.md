@@ -95,7 +95,7 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 
 ```bash
 npx eas-cli@26.0.0 update --channel preview --environment preview --message "describe what changed"
-npx eas-cli@26.0.0 env:exec --environment preview 'npm run sentry:sourcemaps'
+npx eas-cli@26.0.0 env:exec preview 'npm run sentry:sourcemaps'
 ```
 
 After the field launch, use `production` for both the channel and the environment.

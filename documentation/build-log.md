@@ -7488,6 +7488,84 @@ review finding, and ran the device pass.
   back-to-back. Needs one app-wide choice.
 - No RLS, sync, schema or outbox change; `documentation/rls-sync-contract-map.md` untouched.
 
+### 2026-10-29 — One-tap clock-in merged (#118), sent to the pilot over the air, Galaxy A03s pass
+
+Jim approved filing the follow-up issues, merging #118 and running the A03s pass. #118 was
+squash-merged as `9128905`; `main` CI passed (run 40868799805). Filed #119 (the binding-audit probe
+file in `src/`) and #120 (cold start after token expiry logs `AuthUnavailableError` as an error).
+
+#### Decision Register
+
+| Decision | Why |
+|---|---|
+| Put #118 on the A03s with an OTA update on channel `preview` (Jim's choice), not Expo Go or a new build | The A03s's Expo Go is the SDK 58 client and cannot run this SDK 54 app. The pilot app came from Play, so a sideloaded APK would need an uninstall that wipes the EA databases. #118 is JS-only and DEPLOYMENT.md sends JS-only changes over the air. The update reaches every 1.4.0 pilot phone, iPhone TestFlight 25 included. |
+| Publish from a clean worktree at `9128905` after `npm ci`, only after `main` CI passed | The bundle must match `main`'s lockfile, not a node_modules copied from another worktree. |
+
+#### Release record
+
+- Update group `8886c876-5147-40fd-8111-1a7b8e42c595`, runtime `1.4.0`, commit `9128905`.
+  Android `01a1878d-05d3-7354-ae0f-7bbf5fcd600d`, iOS `01a1878d-05d3-75f5-b461-7757d7bbb1ca`.
+  Published with eas-cli 26.0.0 on Node 20.19.4. Builds 54 and 25 were built from `dffe22c`, and
+  `#117` changed no app code, so the update differs from them by #118 alone.
+- This is the first update on the `preview` channel, so a rollback means returning phones to the
+  bundle embedded in the build.
+- Sentry source maps uploaded for both bundles (`env:exec preview 'npm run sentry:sourcemaps'`).
+- The A03s downloaded the update on the first cold start and ran it on the second. Profile showed
+  `Update 01a1878d-05d3-7354-ae0f-7bbf5fcd600d`.
+
+#### Findings, dead ends and surprises
+
+- DEPLOYMENT.md's `env:exec --environment preview` fails on eas-cli 26.0.0 ("Nonexistent flag:
+  --environment"): the environment is a positional argument. Fixed in DEPLOYMENT.md.
+- "Not clocked in" and "Getting location…" wrap to two lines on a 360dp phone at default text; both
+  fit on one line at 411dp. This existed before #118, which changed only the clocked-in row.
+- The "Return from Settings and tap Clock In again…" toast fires as Settings opens, so the EA
+  never sees it. This existed before #118; the sheet staying open now shows the way back.
+- Slow indoor GPS reaches the 10 s deadline, then the service falls back to a last-known fix up to
+  15 minutes old and records it as `fix`. A `timeout` status on a phone therefore needs no fix in
+  the last 15 minutes; the simulator and `oneTapClockIn.integration.test.js` cover it.
+- `sign_in_time` is stamped after location resolves, so a slow fix records the start about 10 s
+  after the tap. This already happened before #118.
+- Clock-out also waits for GPS ("Getting location…"). Tapping Record during that wait opens Record
+  directly because the shift is still open; the clock-out then completes. This already happened
+  before #118, and it only appeared because the test script tapped too fast.
+- uiautomator dumps on Home now work while clocked in. The old "could not get idle state"
+  came from the ticking elapsed timer, which #118 replaced with a fixed "Since HH:MM".
+- The Supabase session pooler ignored `PGOPTIONS=-c default_transaction_read_only=on` (the session
+  reported `off`). Running `set session characteristics as transaction read only` as the first
+  command works.
+- Correction to the 2026-10-25 entry: writing the binding probe to a temp directory would change how
+  its relative imports resolve. #119 specifies an in-memory probe instead.
+
+#### Verification Register
+
+| Gate | Command / evidence | Result |
+|---|---|---|
+| `main` CI after merge | GitHub Actions `tests`, run 40868799805, `9128905` | PASS |
+| OTA publish | `npx eas-cli@26.0.0 update --channel preview --environment preview --non-interactive` from clean `9128905` | Published, runtime 1.4.0 |
+| Sentry source maps | `npx eas-cli@26.0.0 env:exec preview 'npm run sentry:sourcemaps' --non-interactive` | Both bundles uploaded, exit 0 |
+| A03s identity | Profile: Version 1.4.0 (Build 54), sqlite-staging, `Update 01a1878d-…` | Confirmed |
+| A03s K1, 360dp, font 1.0, TestB | Record from Home and from Children: "You are not clocked in.", red Clock in now, plain outlined escape hatch, ink Cancel, no note | PASS |
+| A03s incomplete clock-in | Never-asked permission → Don't allow → Try again → Don't allow → Open Settings → App info opened; no shift on the server; back in Masi the sheet was still open with Clock in now enabled | PASS |
+| A03s B4 retry (fast fix) | Allowed in Settings → Clock in now → "Clocking in…" with the escape hatch disabled at 0.3 s → "Who are you teaching?" + "Clocked in at 2:11 PM" at 1.5 s; server: one open shift `0587ee8f`, `fix` | PASS |
+| A03s S2 | "On the clock ›" + "Since 14:11" + Clock out; row 127 px at density 320 (≈64dp); gauge seen only at 1 of 3 | PASS (clock row) |
+| A03s K1, Android back mid-clock-in | Sheet closed, Home showed "Getting location…", then "On the clock · Since 14:12"; Record did not open | PASS |
+| A03s K1, Cancel mid-clock-in | Burst frames: "Clocked in at 2:14 PM" toast above the tab bar for about 2 s; no navigation, sheet not reopened | PASS |
+| A03s B4 slow GPS | "Clocking in…" held about 6 s, then "Who are you teaching?" + "Clocked in at 2:16 PM"; server: four shifts today, one open | PASS |
+| A03s at native 411dp | Home in both states and the sheet | PASS; "Not clocked in" on one line |
+| Device restored | TestB clocked out (server: 0 open shifts); Masi location permission back to never-asked with the original flags; density 280, font 1.0; ZZ back in front; temporary screenshots deleted | Done |
+| iPhone (TestFlight 25 + this OTA) | — | OPEN |
+
+#### Open hand-offs
+
+- iPhone pass for B4/K1/S2: the update arrives after two cold starts of TestFlight build 25.
+- Jim asked about moving to Expo SDK 58. Recommended: upgrade as its own branch (native change,
+  version bump, full device-gate pass). Separately, add a development-build variant with its own
+  app id so any branch can run on a phone beside the pilot app. Expo Go only ever runs the newest
+  SDK, so this mismatch comes back with every Expo release.
+- Polish candidates above (360dp wraps, Settings toast timing) and the 12h/24h mismatch remain
+  unfiled.
+
 ### 2026-10-29 — Field diagnostics: incident receipts, diagnostic bundles, Report a problem, MA-BUG registry (`feat/bug-machinery`)
 
 Jim asked to rebuild Zazi iZandi's bug machinery here: phones report problems automatically, an
