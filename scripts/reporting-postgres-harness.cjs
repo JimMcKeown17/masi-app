@@ -387,9 +387,7 @@ function main() {
   let summary;
   const capUrl = buildDatabaseUrl(adminUrl, capName).href;
   try {
-    runPsql({ databaseUrl, sql: `${bootstrapSql}
-ALTER TABLE auth.users ADD COLUMN raw_app_meta_data jsonb NOT NULL DEFAULT '{}',
-ADD COLUMN last_sign_in_at timestamptz, ADD COLUMN email_confirmed_at timestamptz;`, label: 'bootstrap' });
+    runPsql({ databaseUrl, sql: bootstrapSql, label: 'bootstrap' });
     // Model Supabase's API-role default ACLs with the existing harness helper.
     installDefaultPrivileges(databaseUrl);
     for (const filename of fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()) {

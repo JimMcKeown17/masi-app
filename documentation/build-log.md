@@ -7758,3 +7758,26 @@ Codex code review took two rounds:
 - Round 2: **approve**, no material findings.
 
 Local only; the hosted apply and the real reader login remain Jim's rollout steps.
+
+**2026-10-31, PR #131 CI fix.** The first CI run failed in the history-authorization harness:
+`column a.last_sign_in_at does not exist`. The reporting harness had added `raw_app_meta_data`,
+`last_sign_in_at` and `email_confirmed_at` to its own copy of the `auth.users` stand-in, not to the
+shared `bootstrapSql`. Every other harness replays every migration, so all of them would have hit
+the same error. CI didn't catch it earlier because `verify:reporting:postgres` had no CI step.
+- Fix: the three real Supabase columns now live in the shared stand-in, and CI runs the reporting
+  harness.
+- Local, on a fresh PG17 set up like CI: all 11 `verify:*:postgres` harnesses exit 0, and
+  reporting is 131/131.
+
+**Pre-apply Codex live-apply review.** One high finding: Supabase CLI 2.109.1's statement splitter
+ends a `BEGIN ATOMIC` body at the first `END` that isn't inside brackets. In this file that is a
+`CASE … END`, so `db push` would send broken function bodies.
+- It fails safely: `ExecBatch` runs the whole file as one implicit transaction, so nothing is
+  half-applied.
+- `db push --dry-run` does not catch it.
+- The fix is upstream ("respect atomic END boundaries", first released in v2.118.0). The splitter
+  was ported to check: v2.109.1 gives 53 statements (9 stray `END`s), v2.122.0 gives the correct 44.
+- The SQL is unchanged.
+
+The review found nothing else: no superuser-only steps, API roles lose EXECUTE in the same
+transaction, no long locks.
