@@ -61,7 +61,7 @@ informs teaching: per item on the two counters Questions, and once per Core arit
 
 **Draft and frozen identities are separate.** Pilot builds submit themselves to the stores, so
 content cannot be frozen just by shipping it. The draft form `masi-egma-en-2026-1-draft` and the
-Battery `masi_maths@2026.1-draft` are used until the partner approves the content. The freeze is a
+Battery `masi_maths@2026.1-draft` are used until the release gates pass. The freeze is a
 deliberate commit that adds `masi_maths@2026.1`, supersedes the draft, and moves the numeracy
 default in a second migration. No draft score gates a frozen Question.
 

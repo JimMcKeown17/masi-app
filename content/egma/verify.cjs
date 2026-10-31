@@ -9,7 +9,7 @@ const { egmaCatalog, listEgmaAssessments, getEgmaAssessment } = require('./index
 const questions = () => getEgmaAssessment('masi-egma-en-2026-1-draft').questions;
 const question = code => questions().find(q => q.questionCode === code);
 const allItems = () => questions().flatMap(q => q.items);
-const PINNED_SHA256 = '4bcd2abce95d1ac193ab840c9d8c3e845af6d1a77b340b55d80fd45642a32b35';
+const PINNED_SHA256 = '6f69090dbc90acf86c21fc7b794e353adc26fcf37ed6afdae24737f94c6f8731';
 
 function numbers(item) {
   switch (item.kind) {

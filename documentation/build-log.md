@@ -5823,6 +5823,7 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-10-31 | **Maths materials simplified to `number_card` (with page) and `counters`;** counters have no footer line. | The Number Card is generated from the pack, so a page number is enough; counters are loose objects. | A second printed maths card. |
 | 2026-10-31 | **Only a known maths subject is shared across screens** (one handle-scoped record in `programmeSubject.js`); every screen confirms reading itself; a failed read prefers known maths and, with nothing known, falls back to literacy. | Three review rounds showed cached or failed reads acting as permission to enter literacy routes. Hiding literacy is the safe direction, so only it may be cached; literacy EAs are never locked out by a read error. | Field reports of a numeracy EA reaching a literacy screen, or of literacy controls appearing late. |
 | 2026-10-31 | **Number Card pages follow the order the app asks for them:** Read numbers 1, Read big numbers 2, Which is more? 3, Bigger number 4, Missing number 5, Addition 1 6, Addition 2 7, Subtraction 1 8, Subtraction 2 9. `content/egma/verify.cjs` pins pack order = page order. | The A03 run showed spec §9 numbered the pages against §4.2's Question order, so an EA flipped 1 → 3 → 2 and 6 → 8 → 7. The form is still a draft and nothing is printed, so it changed in place (hash re-pinned). | Any reordering of Questions, or a second printed card. |
+| 2026-10-31 | **Partner approval is not a release gate for the maths assessment** (Jim). Spec §10 gate 1, the ROADMAP item, CONTEXT, ADR 0012, the pack README and two pack notes now say so; the pack hash moved to `6f69090d…` (notes only, no item or copy change; the Number Card is unchanged). | Jim, merging PR #133: "We do not need that now." The English copy check, curriculum mapping, the timed pass with the printed Number Card and the freeze remain. | The partner offers an SA-adapted EGMA or asks to review items (a new form id if items change). |
 
 ---
 
@@ -7937,3 +7938,7 @@ checks out; partner approval skipped for now.
   `npm run test:types` exit 0; `npm run test:content` **21 / 21**; `npm run test:integration`
   **95 suites / 1,350 tests**. Codex's own default-worker run hit the known `LessonWrapUp.save`
   timing flake once (17/17 alone; whole suite green serially); this run was clean.
+- **Partner approval dropped as a gate (Jim, at merge):** docs and pack notes updated, hash
+  re-pinned to `6f69090dbc90acf86c21fc7b794e353adc26fcf37ed6afdae24737f94c6f8731`;
+  `npm run test:content` 21 / 21; EGMA, Number Card and Battery Jest suites 6 / 256 passed;
+  `node scripts/number-card.cjs masi-egma-en-2026-1-draft` left the card unchanged.

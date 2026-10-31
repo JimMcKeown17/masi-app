@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "contentVersion": "2026-10-31.1-draft",
   "title": "Maths assessment",
-  "description": "Early number tasks and EGMA. English draft for partner approval.",
+  "description": "Early number tasks and EGMA. English draft.",
   "sources": [
     {
       "id": "rti-2014-printed",
@@ -1906,7 +1906,7 @@
         }
       ],
       "sourceNotes": [
-        "All instruction scripts, early number items, authored Addition and Subtraction 1 items and word problems are drafts for partner approval and an English copy check before the deliberate freeze.",
+        "All instruction scripts, early number items, authored Addition and Subtraction 1 items and word problems are drafts for an English copy check before the deliberate freeze.",
         "RTI printed boxes supply Number Identification (L719–725), Number Discrimination (L761–769), Missing Number (L801–843), Addition and Subtraction 1 items 1–5 (L862–875), and Addition and Subtraction 2 (L879–891). All other scored items are Masi-authored (masi-2026).",
         "Masi authored Addition 1 and Subtraction 1 items 6–20 to the toolkit specification. Subtraction 1 is the sum minus either addend in printed items and minus the second addend in authored items.",
         "Word Problems discrepancy: the toolkit says six at L936 but five at L1311. This form uses six, one per problem type (L956–978). English wording is adapted to local context.",

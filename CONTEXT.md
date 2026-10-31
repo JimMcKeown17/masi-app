@@ -263,7 +263,7 @@ The numeracy programme's one assessment, `masi_maths`, titled "Maths assessment"
 English, nine **early number Questions** first, then the eight **Core EGMA Questions** they gate.
 It is built from the EGMA content pack (`content/egma/`, one form per language) by
 `src/assessment-questions/egma/adapter.ts`. The draft identity `masi_maths@2026.1-draft` (form
-`masi-egma-en-2026-1-draft`) is used until the partner approves the content; the freeze then adds
+`masi-egma-en-2026-1-draft`) is used until the freeze; the freeze then adds
 `masi_maths@2026.1` and supersedes the draft. It is English only for now and uses `fixedLanguage`,
 so children in any class can take it. Spec:
 `docs/superpowers/specs/2026-10-31-egma-maths-assessment-design.md`; ADR 0012.

@@ -250,7 +250,7 @@ Add it to `package.json:43`:
 that id, so every result saved during development and the device check is marked as draft data and
 never shares an id with frozen content. **The freeze is a deliberate commit, not a side effect of a
 build.** It renames the id to `masi-egma-en-2026-1` and pins the hash, and its build-log entry records
-the partner approval and the English copy check. After the freeze, any change means a new form id.
+the English copy check. After the freeze, any change means a new form id.
 **The Battery is versioned the same way.** Before the freeze it is `masi_maths@2026.1-draft`, and
 its Questions use the draft form. The freeze commit does three things:
 
@@ -295,7 +295,8 @@ proofreader. `verify.cjs` requires complete `text` for every language the Batter
   local names), as the toolkit expects (L1132–1135).
 
 Appendix A has every item. Its early number items, authored Addition and Subtraction L1 items and
-word problems are **drafts for the partner to approve** before the freeze (§10).
+word problems are **drafts** until the English copy check and the freeze (§10). Partner approval
+is not a gate (Jim, 2026-10-31).
 
 ### 5.5 Distribution
 
@@ -587,11 +588,10 @@ The order of work:
 
 The gates:
 
-1. **The partner approves** the early number items, the authored Addition and Subtraction L1 items,
-   the word problems, the gate thresholds, and the instruction scripts. (Jim owns this
-   conversation.) If the partner holds an SA-adapted EGMA or the RTI templates (L1837–1838), Jim
-   decides whether that becomes the Core form instead. That would mean new item content under a new
-   form id, with the same engine.
+1. **Partner approval: not a gate** (Jim, 2026-10-31). The items, gate thresholds and instruction
+   scripts go ahead without it. If the partner later offers an SA-adapted EGMA or the RTI templates
+   (L1837–1838), Jim decides whether that becomes the Core form. That would mean new item content
+   under a new form id, with the same engine.
 2. **English copy check.** Instructions, labels and word problems read naturally for EAs whose
    first language is isiXhosa (plain, short sentences). isiXhosa text is a later version (§5.3).
 3. **The curriculum workstream confirms** it can map §8.1's skill keys to its cells. This needs no
@@ -613,7 +613,8 @@ Jim skipped the questions, so these were Claude's calls:
 
 1. **All three purposes, one Battery**, with early number Questions gating Core EGMA, rather than
    Core EGMA alone or a re-levelled EGMA.
-2. **Masi authors the missing items** to the toolkit's spec. The partner approves them.
+2. **Masi authors the missing items** to the toolkit's spec. (Partner approval was dropped as a
+   gate, Jim 2026-10-31.)
 3. **Six word problems**, one per type.
 4. **Stop at 4 in a row on the timed tasks**, which departs from the toolkit.
 5. **Gate thresholds** (§4.3).
@@ -694,7 +695,7 @@ Jim skipped the questions, so these were Claude's calls:
 ## Appendix A: Items (drafts are marked)
 
 Bands are shown as "to N". All early number content, authored L1 items and word problems are
-**drafts for partner approval**.
+**drafts** until the freeze.
 
 ### A.1 Early number Questions (draft)
 

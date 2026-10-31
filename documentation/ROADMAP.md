@@ -959,8 +959,8 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
   [plan](../docs/superpowers/plans/2026-10-31-egma-maths-assessment.md), ADR 0012): nine early
   number Questions gate the eight Core EGMA Questions, English only, numeracy EAs see only
   numeracy screens. Before the numeracy pilot (spec §10):
-  - the partner approves the early number items, the authored Addition and Subtraction 1 items
-    6–20, the word problems and the instruction copy; an English copy check follows;
+  - an English copy check of the instructions, labels and word problems (partner approval is
+    not a gate, Jim 2026-10-31);
   - done 2026-10-31: the default migration is on staging, and the A03 device gate at 360 dp passed
     (build log); still open: a timed pass with real counters and the printed, laminated Number
     Card (pages now follow the Question order);

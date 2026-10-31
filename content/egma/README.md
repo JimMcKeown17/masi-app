@@ -6,7 +6,7 @@ This portable UTF-8 JSON catalog contains Masi's nine early number Questions and
 
 The only form is `masi-egma-en-2026-1-draft`; catalog `contentVersion` is `2026-10-31.1-draft`. The associated implementation targets `masi_maths@2026.1-draft`. Draft results must not be used as frozen assessment evidence.
 
-The draft may change in place while awaiting the partner approval, English copy check, curriculum mapping confirmation and device check in spec §10. Freezing is a deliberate later commit, never a side effect of reaching a test track. That commit adds the frozen form `masi-egma-en-2026-1` and Battery `masi_maths@2026.1`, preserves the draft identity for unfinished assessments, and registers supersession. The programme default changes separately. This task creates only the draft content pack.
+The draft may change in place while awaiting the English copy check, curriculum mapping confirmation and device check in spec §10. Freezing is a deliberate later commit, never a side effect of reaching a test track. That commit adds the frozen form `masi-egma-en-2026-1` and Battery `masi_maths@2026.1`, preserves the draft identity for unfinished assessments, and registers supersession. The programme default changes separately. This task creates only the draft content pack.
 
 **Never edit a frozen form in place.** Once frozen, changed items require a new form id; changed gates require a new Battery version. Preserve historical content so saved results remain interpretable.
 
@@ -64,4 +64,4 @@ With Node 20, run from the repository root:
 PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content
 ```
 
-The JSON SHA-256 is `4bcd2abce95d1ac193ab840c9d8c3e845af6d1a77b340b55d80fd45642a32b35`. Pin it only after finalizing and reviewing the transcription. The verifier checks the hash, counts, ids, bands, answers, either-addend inverse rule, exact Appendix A content, Question contracts, immutable reads and no-fallback lookup. Deliberately wrong band and inverse examples prove those checks reject invalid content. The same command retains the EGRA hash check. These are content and API checks; device administration, printed card layout, scoring integration and curriculum approval remain later gates.
+The JSON SHA-256 is `6f69090dbc90acf86c21fc7b794e353adc26fcf37ed6afdae24737f94c6f8731`. Pin it only after finalizing and reviewing the transcription. The verifier checks the hash, counts, ids, bands, answers, either-addend inverse rule, exact Appendix A content, Question contracts, immutable reads and no-fallback lookup. Deliberately wrong band and inverse examples prove those checks reject invalid content. The same command retains the EGRA hash check. These are content and API checks; device administration, printed card layout, scoring integration and curriculum approval remain later gates.
