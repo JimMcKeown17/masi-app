@@ -9,7 +9,7 @@ import SpinnerArc from '../common/SpinnerArc';
 import GroupChip from './GroupChip';
 
 export default function ClassChildRow({
-  child, groupName, groupColor, onPressResults, onPressGroup, onPressLetterTracker, onPressEdit,
+  child, groupName, groupColor, onPressResults, onPressGroup, onPressLetterTracker, onPressNumberTracker, onPressEdit,
 }) {
   const { fontScale } = useWindowDimensions();
   const name = [child.first_name, child.last_name].map((part) => String(part ?? '').trim()).filter(Boolean).join(' ');
@@ -41,6 +41,9 @@ export default function ClassChildRow({
         ) : null}
       </View>
       <View style={styles.actions}>
+        {onPressNumberTracker ? <Pressable accessibilityRole="button" accessibilityLabel={`Number tracker for ${name}`} onPress={onPressNumberTracker} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
+          <MaterialCommunityIcons name="numeric" size={22} color={colors.text} />
+        </Pressable> : null}
         {onPressLetterTracker ? <Pressable accessibilityRole="button" accessibilityLabel={`Letter tracker for ${name}`} onPress={onPressLetterTracker} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
           <MaterialCommunityIcons name="format-letter-case" size={22} color={colors.text} />
         </Pressable> : null}

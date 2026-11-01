@@ -48,6 +48,7 @@ import StandaloneTestScreen from '../screens/assessments/StandaloneTestScreen';
 import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScreen';
 import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
+import NumberTrackerScreen from '../screens/numeracy/NumberTrackerScreen';
 import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
 import ChildResultsScreen from '../screens/assessments/ChildResultsScreen';
 import BatteryOverviewScreen from '../screens/assessments/battery/BatteryOverviewScreen';
@@ -307,6 +308,11 @@ export function MainNavigator() {
         options={{
           title: 'Assessment history',
         }}
+      />
+      <Stack.Screen
+        name="NumberTracker"
+        component={NumberTrackerScreen}
+        options={{ title: 'Number tracker' }}
       />
       <Stack.Screen
         name="LetterTracker"

@@ -5,6 +5,7 @@ module.exports = {
   setupFiles: ['./jest.integration.setup.js'],
   setupFilesAfterEnv: ['./test-support/defaultTestHandle.js'],
   testMatch: [
+    '<rootDir>/__tests__/NumberTrackerPanel.test.js',
     '<rootDir>/__tests__/supportIncidentDrain.test.js',
     '<rootDir>/__tests__/diagnosticBundle.test.js',
     '<rootDir>/__tests__/supportIncidentObserver.test.js',
