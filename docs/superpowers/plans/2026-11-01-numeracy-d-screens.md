@@ -1317,11 +1317,12 @@ that lands while a literacy lesson is open never reaches its supersession rule),
 
 ---
 
-## Open questions for Jim
+## Open questions for Jim (decided 2026-11-01)
 
-Each one is a place where the spec, as written, conflicts with the code or content as it is today.
-The plan builds the "Claude's call" answer so work isn't blocked, and each is a one-place change if
-Jim picks differently.
+**Jim accepted every "Claude's call" below on 2026-11-01 ("The above all sounds good to me").**
+That covers questions 1–5, the two new programme-change messages, and the literacy picker's
+leftover-numeracy-draft note (P12, both directions). Each was a place where the spec, as written,
+conflicted with the code or content; each stays a one-place change if it is revisited.
 
 1. **Assessment colour.**
    - The spec says amber = Assessment, "in the existing tracker colours (`letterStateColors`)". But
