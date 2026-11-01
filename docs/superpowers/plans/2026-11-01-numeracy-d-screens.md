@@ -71,7 +71,7 @@ These are Claude's calls. They are listed again in the PR body.
 | P9 | **Claude's call:** "who ticked it" reads "Ticked by you · 3 Nov" or "Ticked by another EA · 3 Nov". | A row carries only the `changed_by` id, and the phone has no staff name table. |
 | P10 | **Claude's call:** implied steps count toward "15 / 37 steps". | They are known (§3 Known step). |
 | P11 | **Claude's call:** the numeracy Record branch keys on `isMaths === true` alone, not on the job title. While the subject is loading, the spinner stays. | ADR 0012. The subject comes from the programme. |
-| P12 | **Claude's call:** if a literacy draft is still open when a numeracy EA opens Record (left from before a programme change), the picker shows a note and a **Discard it** button. That draft can't be saved now (`PROGRAMME_NOT_ACTIVE`). | Otherwise the one slot blocks numeracy for good. |
+| P12 | **Claude's call:** if a literacy draft is still open when a numeracy EA opens Record (left from before a programme change), the picker shows a note and a **Discard it** button. That draft can't be saved now (`PROGRAMME_NOT_ACTIVE`). Discard opens the draft in the controller first, so it works after a cold start and on a corrupt draft. | Otherwise the one slot blocks numeracy for good. |
 | P13 | **Claude's call:** Wrap up has no "save without…" confirmation, and the save button says **Save lesson** (§6.5). | The taught cards are recorded automatically, and ticks are optional. |
 | P14 | **Claude's call:** a tick for a step key the bundled curriculum no longer has is skipped at save and counted as kept back. It never throws. | A draft can span an OTA content update. A retired key means a changed meaning (§4.4). |
 | P15 | **Claude's call:** Session complete gains a **Taught** receipt row (step titles). The literacy receipt is unchanged. | The spec says nothing about the numeracy completion view. |
@@ -137,6 +137,14 @@ These are Claude's calls. They are listed again in the PR body.
 **Gating**
 - Numeracy entry points show only when `useActiveProgrammeSubject().isMaths === true`. A `null` or
   loading subject shows neither tracker icon (ADR 0012).
+- **Showing is not capturing.** `isMaths` can come from the per-EA cache after a failed programme
+  read (`useActiveProgrammeSubject.js:11-14,31-36`), so it decides only what is shown. Every numeracy
+  write needs a programme confirmed as maths by a fresh read:
+  - `confirmNumeracyProgramme` (Task 2) runs before the picker lists groups (Task 9), before a new
+    draft opens (Task 8), and when the Number tracker panel loads (Task 7);
+  - the draft and every tick carry that confirmed `programmeId`, never one resolved later;
+  - the save checks inside its transaction that the draft's programme is a maths programme
+    (`PROGRAMME_NOT_NUMERACY`, Task 5).
 - Reuse `NoActiveProgrammeNotice` and `useSessionLaunchGuard` unchanged; #80 owns the first-sign-in fix.
 
 **UI**
@@ -182,6 +190,16 @@ These are Claude's calls. They are listed again in the PR body.
    sheet does not re-read, and the immediate panel does.
    Tests: Task 11 `'the wrap-up tracker sheet ignores sync refreshes'`, Task 7 `'a skill_mastery sync
    result refreshes the panel'`.
+6. **Cached maths after a move to literacy.** The screens may still show numeracy for a moment, but
+   nothing is written under the literacy programme: the picker lists no groups, the lesson opens no
+   draft, the panel is read-only, and the save refuses `PROGRAMME_NOT_NUMERACY`.
+   Tests: Task 2 `'confirmNumeracyProgramme ignores cached maths after a move to literacy'`, Task 5
+   `'a numeracy draft on a literacy programme refuses the save'`, Task 7 `'cached maths after a move
+   to literacy gives a read-only grid'`, Task 9 `'cached maths after a move to literacy lists no
+   groups'`.
+7. **Maths data lands while a lesson is open.** An unfrozen plan updates; a frozen one keeps its cards.
+   Tests: Task 8 `'a history page landing while mounted refreshes an unfrozen plan'` and `'… on a
+   frozen plan keeps cards and refreshes readiness'`.
 
 ---
 
@@ -308,8 +326,8 @@ Expected: PASS.
 ### Task 2: Numeracy inputs: evidence reader, completeness, history, planner input
 
 **Files:**
-- Modify: `src/utils/assessmentRegistry.js`; `src/db/repositories/assessmentsRepository.js` (after `getLetterEvidenceResults`); `src/services/pullCoverage.js:91-116`; `src/session/handleServices.js` (the `assessmentHistory` block); `test-support/legacyHandleMocks.js:8`
-- Create: `src/numeracyLesson/inputs/numeracyInputs.js`
+- Modify: `src/utils/assessmentRegistry.js`; `src/db/repositories/assessmentsRepository.js` (after `getLetterEvidenceResults`); `src/db/repositories/domainRepositoryUtils.js` (add `getProgrammeById`); `src/services/pullCoverage.js:91-116`; `src/session/handleServices.js` (the `assessmentHistory` block); `test-support/legacyHandleMocks.js:8`
+- Create: `src/numeracyLesson/inputs/numeracyInputs.js`, `src/services/numeracyProgramme.js`
 - Test: `__tests__/numeracyInputs.test.js` (real SQLite; integration list), `__tests__/pullCoverage.test.js` (add cases)
 
 **Interfaces:**
@@ -330,6 +348,13 @@ Expected: PASS.
     `assessmentHistoryScope` cursor with `windowStart = year.starts_on`, plus `readAssessmentScope`.
     `masteryCompletenessByChild` is refactored to call it, with its behaviour and tests unchanged.
   - The handle service `services.assessmentHistory.assessmentCompletenessByChild({ childIds, programmeId, academicYear })`.
+  - `getProgrammeById(db, programmeId) → Promise<{ id, code } | null>` in `domainRepositoryUtils.js`
+    (`select id, code from programmes where id = ?`). It takes a reader or a transaction.
+  - `confirmNumeracyProgramme({ handle, userId }) → Promise<string | null>` in
+    `src/services/numeracyProgramme.js`. It calls `getActiveProgrammeGate` afresh (never the cache)
+    and returns `gate.programme.id` only when `isMathsProgramme(gate.programme)`; otherwise `null`.
+    A read error rejects, so the caller shows its existing retry. It never calls
+    `rememberProgrammeSubject`, so it cannot change what other screens show.
   - In `src/numeracyLesson/inputs/numeracyInputs.js`:
     - `loadKnownSteps({ repositories, userId, childIds, curriculum, programmeId?, academicYear? }) → Promise<Map<childId, Map<stepKey, KnownState>>>`.
       Every requested id gets an entry. Ticks are grouped by `child_id`. Evidence comes from
@@ -351,6 +376,8 @@ Expected: PASS.
 ```js
 test('MATHS_EVIDENCE_CODES is every EGMA question code once')                  // equals the 17 codes of masi-egma-en-2026-1-draft, no duplicates
 test('maths evidence results stay inside the academic year and programme')     // result dated before year.starts_on and one in another programme are absent
+test('confirmNumeracyProgramme returns the id only for an active maths programme') // numeracy assignment → id; literacy assignment → null; none → null
+test('confirmNumeracyProgramme ignores cached maths after a move to literacy')  // rememberProgrammeSubject(handle, numeracy); end it, assign literacy → null
 test('a draft EGMA result loads but gives no known step')                        // question_version '…-draft' → loadKnownSteps(...).get(c1) is an empty Map
 test('a final-version result and a tick combine with implied steps')            // non-draft read_numbers band 10 all right + tick add.10 → read_numbers.5 implied, read_numbers.10 assessment, add.5 implied, add.10 ticked
 test('a child with no rows still gets an empty map')                             // childIds [c1,c3]; c3 nothing → has('c3') && size 0
@@ -377,7 +404,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
-`git add src/utils/assessmentRegistry.js src/db/repositories/assessmentsRepository.js src/services/pullCoverage.js src/session/handleServices.js src/numeracyLesson/inputs/numeracyInputs.js test-support/legacyHandleMocks.js __tests__/numeracyInputs.test.js __tests__/pullCoverage.test.js jest.integration.config.js && git commit -m "feat(numeracy): load known steps, completeness and group history for lessons"`
+`git add src/utils/assessmentRegistry.js src/db/repositories/assessmentsRepository.js src/db/repositories/domainRepositoryUtils.js src/services/numeracyProgramme.js src/services/pullCoverage.js src/session/handleServices.js src/numeracyLesson/inputs/numeracyInputs.js test-support/legacyHandleMocks.js __tests__/numeracyInputs.test.js __tests__/pullCoverage.test.js jest.integration.config.js && git commit -m "feat(numeracy): load known steps, completeness and group history for lessons"`
 
 ---
 
@@ -487,7 +514,10 @@ Expected: PASS, with no Track C test changed.
   - `keepSumsTogether(text) → string`. Inside a number sentence (`/\d+(?: [+−\-=] \d+)+/`), spaces
     become ` `. Every builder above passes its content text through it.
   - `numeracySaveErrorMessage(error, names) → string`. Literacy's codes; `CHANGES_NOT_WRITABLE` →
-    "You can't update {names}'s steps any more."
+    "You can't update {names}'s steps any more."; `PROGRAMME_NOT_NUMERACY` → "This is a numeracy
+    lesson, but your programme has changed. Discard it to start again." (Jim's wording pass).
+  - `PROGRAMME_CHANGED_NOTE = "Your programme has changed. Go back and open it again."`, shown by the
+    picker, lesson and tracker panel when `confirmNumeracyProgramme` returns `null`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -536,7 +566,7 @@ Expected: PASS; `test:content` exits 0.
   - `storeNumeracyPlan` and `savedNumeracyPlan` (Task 3).
   - `LessonSaveError` (`src/services/lessonSave.js`, reused so codes and messages match).
   - Track B: `setSkillMastery` and `getSkillCorrectionTimes`.
-  - `compareServerTimestamps`, `hasActiveProgrammeAssignment`, `presentChildIds`.
+  - `compareServerTimestamps`, `hasActiveProgrammeAssignment`, `getProgrammeById` (Task 2), `isMathsProgramme`, `presentChildIds`.
   - `getCurriculum`, `CURRENT_EDITION`.
 - Produces, from `numeracyDraftState.js` (pure; shared attendance, date and notes transitions are
   re-exported from `lessonDraftState.js`):
@@ -571,7 +601,9 @@ Expected: PASS; `test:content` exits 0.
   - Inside one `handle.withTransaction`, in this order (spec §8.3):
     1. Checks before the transaction: `NO_CHILDREN` and `NO_PLAN`, then `assertStepChanges` (shape:
        boolean `mastered`, ISO `madeAt`).
-    2. `PROGRAMME_NOT_ACTIVE`.
+    2. `PROGRAMME_NOT_ACTIVE`, then `PROGRAMME_NOT_NUMERACY` when
+       `!isMathsProgramme(await getProgrammeById(transaction, draft.programme_id))`. Both run on the
+       transaction, so a programme change cannot slip in between the check and the writes.
     3. `getWriteAuthority`: `CHILD_NOT_WRITABLE` (attend), `CHANGES_NOT_WRITABLE` (deliver with
        changes).
     4. `saveSession`, with its group error mapped to `GROUP_MISSING`.
@@ -601,6 +633,7 @@ test('a back-dated lesson saves plan null with past_date and keeps taught')     
 test('a tick for a retired step key is kept back')                               // tracker change 'add.30' → keptBack 1, no throw
 test('a child the EA no longer delivers to blocks a save with their ticks')      // end child_ea_assignment → LessonSaveError CHANGES_NOT_WRITABLE, childIds [c2] (try/catch, not rejects.toThrow)
 test('an inactive programme refuses the save')                                   // end staff assignment → PROGRAMME_NOT_ACTIVE
+test('a numeracy draft on a literacy programme refuses the save')               // active literacy assignment; draft.programme_id = that literacy id → PROGRAMME_NOT_NUMERACY; no session, no skill_mastery, draft kept
 test('a second save of the same draft reports ALREADY_SAVED')                    // two saves → second code ALREADY_SAVED; one session row
 test('the saved ticks sync through set_skill_mastery')                           // run the sync engine with the test server; tableResults.skill_mastery present; rows synced
 ```
@@ -715,6 +748,7 @@ Expected: PASS.
     `repositories.assessments.getMathsEvidenceResults({ userId, childIds: [childId] })` directly, then
     `computeStepEvidence`.
   - `buildTrackerModel`, `NumberTrackerGrid`, `StepSheet` (Task 6).
+  - `confirmNumeracyProgramme` (Task 2) and `PROGRAMME_CHANGED_NOTE` (Task 4).
 - Produces:
   - `useMasterySyncRefresh(tableName: 'letter_mastery'|'skill_mastery', onRefresh)`. It refreshes on
     `lastSyncResult.tableResults[tableName]` and on every assessment-history `pageVersion` change
@@ -723,7 +757,10 @@ Expected: PASS.
     skeleton exactly: a `loadGeneration` ref, a `writeInFlight` ref, `useFocusEffect` load, and a
     background reload in `finally`. A tap calls
     `setSkillMastery({ childId, stepKey, confirmed: !ticked })`, then `refreshSyncStatus()` and
-    `triggerBackgroundSync?.()`. Taps behave as follows:
+    `triggerBackgroundSync?.()`. Its load also calls `confirmNumeracyProgramme`, and every tap passes
+    that `programmeId` (Track B otherwise stamps whatever programme is active at write time,
+    `skillMasteryRepository.js:146`). With `null`, the grid is read-only and shows
+    `PROGRAMME_CHANGED_NOTE`. Taps behave as follows:
     - a `null` or kept-back result shows no error and reloads (review note 3);
     - an assessment tile tap shows the inline note "EGMA shows this step, so it stays ticked.";
     - an implied tile tap shows "Known because '{higher step label}' is ticked.";
@@ -749,6 +786,8 @@ test('a read started before a tap never overwrites the tap')                    
 test('a skill_mastery sync result refreshes the panel')                          // mockOffline.lastSyncResult = { tableResults: { skill_mastery: {...} } } → reload
 test('a letter_mastery-only sync result does not refresh the number panel')      // no reload
 test('a non-delivery child is read-only')                                        // isDelivery false → tiles disabled, no Tick button
+test('a tap stamps the confirmed numeracy programme')                            // skill_mastery.programme_id = the numeracy programme id
+test('cached maths after a move to literacy gives a read-only grid')            // rememberProgrammeSubject(numeracy), reassign literacy → note shown, press writes nothing
 test('the class row shows the Number tracker only for a confirmed numeracy EA')  // ClassDetailScreen: isMaths true → 'Number tracker for Lwazi'; loading → neither icon; reading → letter icon only
 test('the letter tracker still refreshes on letter_mastery')                     // useMasterySyncRefresh.test.js: wrapper unchanged behaviour
 ```
@@ -787,7 +826,7 @@ Expected: PASS.
   - `getCurriculum`, `CURRENT_EDITION`.
 - The hook never names `assessmentHistory`. Completeness comes through Task 2's loader
   (`historyPullTriggerBudget`).
-- Produces: `useNumeracyLessonDraft({ draftId?, start?: { groupId, upNextGroupId } }) → { status, draft, plan, cards, knownByChild, curriculum, base, inputError, error, apply, swap, ensureDraft, beginSave, endSave, discard, retry }`.
+- Produces: `useNumeracyLessonDraft({ draftId?, start?: { groupId, upNextGroupId, programmeId } }) → { status, draft, plan, cards, knownByChild, curriculum, base, inputError, error, apply, swap, ensureDraft, beginSave, endSave, discard, retry }`.
   - `plan`: `StoredNumeracyPlan | null`.
   - `cards`: `Array<TaughtCard & { minutes, readiness: cardReadiness(...), help: cardHelpLists(...), stillOn: Array<{ childId, stepKey }> }>`.
     These come from `taughtCards(draft-or-plan)`, recomputed live from current attendance even when
@@ -797,6 +836,18 @@ Expected: PASS.
   - `ensureDraft()`. Applies `freezeForWrapUp`, then calls `controller.ensureDraft()`.
   - Opening alone creates no draft. Like literacy, the plan is folded into the first change, and a
     first change after midnight re-dates the draft (`datedOnFirstChange`).
+  - **Programme binding (Global Constraints, "Showing is not capturing").** A `start` carries the
+    `programmeId` the picker confirmed. Before `controller.open({ start })` the hook calls
+    `confirmNumeracyProgramme` again; `null` or a different id opens nothing and gives
+    `status: 'wrong_programme'` (the screen shows `PROGRAMME_CHANGED_NOTE`). `loadLessonBase` gets
+    that `programmeId` explicitly, and `newNumeracyDraftInput` stamps it.
+  - **Maths history refresh.** The input loader reruns when maths data lands while the screen is
+    mounted. The hook calls `useMasterySyncRefresh('skill_mastery', bumpInputs)` (Task 7, the one
+    allowed page observer, so this file still never names `assessmentHistory`). `bumpInputs`
+    increments a counter that is part of the loader's key, beside group, participants and retry.
+    The recompute rule then decides: an unfrozen plan picks up more complete inputs, and a frozen
+    plan keeps its cards while readiness lines use the new `knownByChild`. The Wrap up tracker sheet
+    keeps its own once-per-open snapshot (Task 11), so a reload never re-reads under pending marks.
   - Recompute rule: the plan is recomputed only if
     `!draft.plan || (isPlanRecomputable({ lessonDate, today, frozen: !!plan_fixed_at }) && (present ids changed || isNumeracyPlanSuperseded(stored, complete)))`.
   - The planner runs once per input change. It is memoised on the JSON keys of present ids, inputs
@@ -810,7 +861,10 @@ test('the first swap creates the draft, freezes the plan and changes that card')
 test('wrap up freezes the plan and fixes taught')                                // ensureDraft → ticks.taught length 3
 test('a frozen plan never recomputes')                                           // freeze, then add a tick for a present child in SQLite and bump inputs → plan unchanged
 test('an unfrozen plan recomputes when a child is marked absent')                // toggleAbsent → present_child_ids updated, plan recomputed once (spy planNumeracyLesson calls === 2)
-test('an unfrozen plan recomputes when inputs become more complete, never less') // complete.ticks false → true recomputes; true → false keeps
+test('an unfrozen plan recomputes when inputs become more complete, never less') // through the real store notification above, not a hand-set flag; true → false keeps
+test('a history page landing while mounted refreshes an unfrozen plan')         // complete.ticks false; seed skill_mastery coverage + bump the real assessment-history store pageVersion → planNumeracyLesson reruns, plan superseded
+test('a history page landing on a frozen plan keeps cards and refreshes readiness') // freeze; seed a tick for c2 on card 0 + bump pageVersion → step_key same, readiness.readyCount +1
+test('a start whose programme is no longer maths opens nothing')                // start.programmeId numeracy; reassign literacy → status 'wrong_programme', lesson_drafts 0
 test('readiness lines follow today\'s attendance on a frozen plan')              // freeze, mark c2 absent → cards[0].readiness.presentCount drops, step_key same
 test('the plan is computed once per input change')                               // spy planNumeracyLesson: unrelated rerenders add no calls
 ```
@@ -847,7 +901,9 @@ Expected: PASS.
   - `src/lessonPlan/inputs/lessonInputs.js:106-109` (`loadPickerRanking` returns `{ draftId, draftKind }`)
   - `src/utils/lessonDates.js:31-33` (`lessonRowDetail(seen, letters, { needsAppUpdate, nextSteps })`)
   - `src/components/lessons/UpNextCard.js:18`, `GroupLessonRow.js:10` (pass `row.nextSteps`)
-- Test: `__tests__/LessonPickerScreen.numeracy.test.js` (real SQLite; integration list), `__tests__/SessionFormScreen.test.js` (add cases), `__tests__/lessonDates.test.js` (add case)
+  - `__tests__/SessionFormProgrammeSwitch.test.js:21-65`. Its three real-hook tests assert the
+    coming-soon text this task deletes, so they are rewritten, not dropped (see Step 1).
+- Test: `__tests__/LessonPickerScreen.numeracy.test.js` (real SQLite; integration list), `__tests__/SessionFormScreen.test.js` (add cases), `__tests__/SessionFormProgrammeSwitch.test.js` (rewritten), `__tests__/lessonDates.test.js` (add case)
 
 **Interfaces:**
 - Consumes:
@@ -865,12 +921,19 @@ Expected: PASS.
   - `LessonPickerScreen({ navigation, kind = 'literacy' })` behaves as follows:
     - it routes an existing draft with `navigation.replace(lessonRouteForDraft(draft), { draftId })`,
       and a corrupt draft by `error.kind`;
-    - `kind === 'numeracy'` runs `loadNumeracyPickerNext` in place of `loadPickerLetters`, and starts
-      with `navigate('NumeracyLesson', { groupId, upNextGroupId })`;
+    - `kind === 'numeracy'` first calls `confirmNumeracyProgramme`. With `null` it shows
+      `PROGRAMME_CHANGED_NOTE` and no group rows. Otherwise it runs `loadNumeracyPickerNext` (with
+      that `programmeId` in `loadLessonBase`) in place of `loadPickerLetters`, and starts with
+      `navigate('NumeracyLesson', { groupId, upNextGroupId, programmeId })`;
     - **P12:** in the numeracy picker, a draft of kind `'literacy'` shows the `InlineNote` "An older
       reading lesson is still open. It can't be saved now." with **Discard it**. That opens a
       `ConfirmSheet` (title "Discard the reading lesson?", confirm "Discard"). On confirm it calls
-      `services.lessonDraft.discard`, then loads the picker.
+      `await services.lessonDraft.open({ draftId })`, then `services.lessonDraft.discard()`, then
+      reloads the picker. The `open` is required: after a cold start the picker has only read
+      `lessonDrafts.getActive()`, and `discard()` takes its target from the controller's open
+      draft (`lessonDraftController.js:180-190`), so a bare `discard()` deletes nothing. `open` also
+      attaches a corrupt draft (`status: 'corrupt'`, `existingDraftId`), which `discard()` then
+      removes. The controller stays the only writer.
   - `SessionFormScreen`:
     - `isMaths === true` gives `<LessonPickerScreen kind="numeracy" />`;
     - a literacy coach who isn't maths keeps the literacy picker;
@@ -883,27 +946,35 @@ Expected: PASS.
 test('a numeracy EA sees Who are you teaching with Up next and a Next line')    // 'Next: Count objects up to 5 · Read numbers up to 5' on a first lesson
 test('starting a group opens the numeracy lesson')                               // routeNames() ends with 'NumeracyLesson'
 test('an open numeracy draft reopens the numeracy lesson')                       // replace → 'NumeracyLesson' with draftId
-test('a leftover literacy draft offers Discard it, then the numeracy picker')   // note visible; Discard → ConfirmSheet → draft gone, Up next visible
+test('a leftover literacy draft offers Discard it, then the numeracy picker')   // draft seeded straight into SQLite, fresh controller (cold start); Discard → ConfirmSheet → lesson_drafts 0, Up next visible
+test('a leftover corrupt draft can be discarded the same way')                  // bad JSON row, fresh controller → Discard → lesson_drafts 0
+test('cached maths after a move to literacy lists no groups')                   // real hook: rememberProgrammeSubject(numeracy), reassign literacy, fail the gate read in SessionFormScreen → numeracy picker shows the note; no 'NumeracyLesson' route
 test('a literacy coach still gets the literacy picker and Lesson route')        // SessionFormScreen: literacy unchanged; existing literacy draft → 'Lesson'
 test('the numeracy coming-soon text is gone')                                    // queryByText(/coming soon/) null for isMaths
 test('picker rows are ready within budget')                                      // 6 groups × 6 children: loadNumeracyPickerNext resolves < 500 ms under jest real timers (logged, soft)
 ```
 
+`SessionFormProgrammeSwitch.test.js` keeps its real hook, its reassignment and its failed-read
+scenarios. The picker stub renders its `kind` as the text `picker:{kind}`. Each
+`'Session forms for Numeracy are coming soon.'` assertion becomes `picker:numeracy`, and each
+"picker never mounts" assertion becomes "the literacy picker (`picker:literacy`) never mounts" for a
+maths EA, and the reverse for a reading EA.
+
 - [ ] **Step 2: Run them and see them fail**
 
-Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/LessonPickerScreen.numeracy.test.js __tests__/SessionFormScreen.test.js __tests__/lessonDates.test.js`
+Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/LessonPickerScreen.numeracy.test.js __tests__/SessionFormScreen.test.js __tests__/SessionFormProgrammeSwitch.test.js __tests__/lessonDates.test.js`
 Expected: FAIL.
 
 - [ ] **Step 3: Implement the loader, the picker `kind`, the routing and the Record branch**
 
-- [ ] **Step 4: Run them, plus literacy picker suites, unmodified**
+- [ ] **Step 4: Run them, plus literacy picker suites (unmodified apart from `SessionFormProgrammeSwitch`)**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/LessonPickerScreen.numeracy.test.js __tests__/SessionFormScreen.test.js __tests__/SessionFormProgrammeSwitch.test.js __tests__/LessonPickerScreen.test.js __tests__/LessonFlowNavigation.test.js __tests__/lessonInputs.test.js __tests__/lessonDates.test.js __tests__/numeracyCopyPlainWords.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
-`git add src/numeracyLesson/inputs/numeracyPicker.js src/screens/sessions/SessionFormScreen.js src/screens/lessons/LessonPickerScreen.js src/lessonPlan/inputs/lessonInputs.js src/utils/lessonDates.js src/components/lessons/UpNextCard.js src/components/lessons/GroupLessonRow.js __tests__/LessonPickerScreen.numeracy.test.js __tests__/SessionFormScreen.test.js __tests__/lessonDates.test.js jest.integration.config.js && git commit -m "feat(numeracy): Record opens the numeracy group picker"`
+`git add src/numeracyLesson/inputs/numeracyPicker.js src/screens/sessions/SessionFormScreen.js src/screens/lessons/LessonPickerScreen.js src/lessonPlan/inputs/lessonInputs.js src/utils/lessonDates.js src/components/lessons/UpNextCard.js src/components/lessons/GroupLessonRow.js __tests__/LessonPickerScreen.numeracy.test.js __tests__/SessionFormScreen.test.js __tests__/SessionFormProgrammeSwitch.test.js __tests__/lessonDates.test.js jest.integration.config.js && git commit -m "feat(numeracy): Record opens the numeracy group picker"`
 
 ---
 
@@ -935,7 +1006,7 @@ Expected: PASS.
   - `SwapSheet({ visible, onDismiss, options, currentStepKey, curriculum, readinessFor, onPick })`.
     It is a `BottomSheet` of `SelectableRow variant="radio"`. Each row shows `stepTitle` with
     `readyLine` as its subtitle. Review options read "Practise again".
-  - `NumeracyLessonScreen` (route `NumeracyLesson`, params `{ draftId } | { groupId, upNextGroupId }`):
+  - `NumeracyLessonScreen` (route `NumeracyLesson`, params `{ draftId } | { groupId, upNextGroupId, programmeId }`):
     - the title is the children's names, as in literacy;
     - "Who's here" `AttendanceChips` plus "+ Add a child";
     - `lessonHeader`;
@@ -1195,6 +1266,10 @@ them as known risks in the build log.
 
 - [ ] **Step 5: Build log, then the PR (merge waits for Jim)**
 
+File the literacy follow-up from "Self-review notes" as a GitHub issue (letter-mastery completeness
+that lands while a literacy lesson is open never reaches its supersession rule), labelled
+`needs-triage`, and link it from the PR body.
+
 - Append Verification Register rows: each task's suites, the full gates, review rounds, device W rows
   and the deferred W9.
 - Commit:
@@ -1261,3 +1336,10 @@ Jim picks differently.
   - 5 → Task 2 `loadNumeracyCompleteness`.
 - **Not in this plan:** Insights and dashboards (spec non-goal), a lesson-shape setting (non-goal),
   the EGMA freeze (a separate Jim-gated change).
+- **Literacy follow-up found in review (not fixed here; literacy must not change):** `useLessonDraft`
+  reloads its participant inputs only on lesson identity, participants or retry
+  (`useLessonDraft.js:112-132`), so letter-mastery completeness that lands while a literacy lesson
+  is open does not reach its supersession rule. Task 13 files a GitHub issue for it; numeracy
+  avoids the gap through Task 8's history refresh.
+- **Literacy picker under cached maths:** literacy capture never relies on the shared cache (reading
+  is confirmed per screen), so the programme-binding work is numeracy-only.
