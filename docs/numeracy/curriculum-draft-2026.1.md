@@ -4,7 +4,7 @@
 
 **How this works in the app.** Each maths skill has steps by number size (Add: up to 5 → 10 → 15 → 20). For every step there are two parts:
 
-- **How to teach it**: the goal and 2–3 activities. The EA sees these on the lesson plan. Each activity fills one slot in a lesson (5–8 minutes), and the app rotates through a step's activities across lessons so they vary.
+- **How to teach it**: the goal and 2–3 activities. The EA sees these on the lesson plan. Each activity fills one slot in a lesson (4–8 minutes), and the app rotates through a step's activities across lessons so they vary.
 - **Tick when**: three things to ask one child on their own. If they get all 3 right, the EA ticks the step on the child's tracker.
 
 **Order.** A step is only suggested once the group has done what comes before it:

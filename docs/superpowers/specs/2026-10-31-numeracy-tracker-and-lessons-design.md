@@ -139,7 +139,7 @@ exists and that there are no cycles.
 For each step, the content file holds:
 
 - `goal`: one plain sentence ("Children add two small numbers, up to 5.").
-- `activities`: 2–3 activities, each with a name, minutes (5–8), numbered plain instructions, what's
+- `activities`: 2–3 activities, each with a name, minutes (4–8), numbered plain instructions, what's
   needed, and a source (`partner` with a week and session reference, `adapted`, or `new`). **Each
   activity fills one card's time.** A mixed-lesson card shows one of the step's activities, a focused
   card shows two, and a warm-up card shows one 5-minute activity. The app takes them in turn across
@@ -543,8 +543,7 @@ What can run in parallel once this document is approved:
 All 37 steps are drafted:
 
 - `docs/numeracy/curriculum-draft-2026.1.md`: the readable version, for the partner to review.
-- `docs/numeracy/curriculum-draft-2026.1.json`: the same content, structured. It becomes the
-  `2026.1-draft` content file (§4.4).
+- `content/numeracy-curriculum/curriculum-2026.1-draft.json`: the same content, structured: the `2026.1-draft` content file (§4.4). It moved here from `docs/numeracy/` when Track A was built.
 
 How they were made: one writer per skill, working from the partner's weeks 1–4; then a reviewer per
 skill checking the maths, plain words, faithfulness to the partner and practicality; then one
