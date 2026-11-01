@@ -8256,3 +8256,48 @@ after a Metro reload. Unverified on a release build.
 `.kbtest` keeps its failed outbox row ("1 item needs attention").
 
 **Open:** iPhone smoke for #124–#127; the commit in a bundle from the next EAS build (005).
+
+### 2026-11-01 — Numeracy planner and evidence, Track C (`feat/numeracy-planner`)
+
+Plan: `docs/superpowers/plans/2026-10-31-numeracy-c-planner-evidence.md` (spec
+`docs/superpowers/specs/2026-10-31-numeracy-tracker-and-lessons-design.md` §5, §7, §9, §13). Codex
+(gpt-6.1-sol, high) built each task with TDD; Claude reviewed every diff, re-ran every check and
+committed. Branch off `origin/main` `41c5726e`.
+
+What shipped: four pure modules under `src/numeracy/` (`evidence.js`, `knownSteps.js`,
+`groupSteps.js`, `planLesson.js`), the shared group threshold `src/utils/groupMastery.js`
+(`isGroupMastered`, moved unchanged out of the literacy engine's `isLetterGroupMastered`), and a
+37-step test fixture `test-support/numeracyCurriculumFixture.js` in Track A's curriculum shape. The
+curriculum and tick rows are inputs, so nothing here imports Track A, Track B or `content/`.
+
+#### Verification
+
+| Check | Result |
+|---|---|
+| Task 1 RED: `npx jest __tests__/groupMastery.test.js` | Fails: `Cannot find module '../src/utils/groupMastery'` |
+| Task 1 GREEN, threshold extraction with literacy behaviour unchanged: `npx jest __tests__/groupMastery.test.js __tests__/lessonPlanEnginePurity.test.js __tests__/lessonPlanEngine.vectors.test.js __tests__/lessonPlanEngine.realPacks.test.js __tests__/lessonPlanGroupLastSeen.test.js __tests__/lessonPlanSuperseded.test.js` | **6 suites / 209 tests** passed. No vector file changed; the moved function body is byte-identical; `git grep isLetterGroupMastered` finds no code reference |
+| Numeracy suites, each RED first on the missing module, then GREEN | `groupMastery` 13, `numeracyEvidence` 15, `numeracyKnownSteps` 12, `numeracyGroupSteps` 12, `numeracyPlanLesson` 16 |
+| Purity guard covers `src/utils/groupMastery.js` and `src/numeracy/` (`lessonPlanEnginePurity`, 4 tests: the existing three plus `numeracy files are pure`) | Passed. Mutation probe: a temporary `src/numeracy/zzProbe.js` with a `src/utils/letterMastery` import, a module-level `let` and `Date.now()` failed the guard with exactly those three violations; probe removed |
+| Track suites together: `npx jest numeracy groupMastery lessonPlan` | **12 suites / 324 tests** passed |
+| Full unit suite: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand` | **488 suites / 7,839 tests**, 16 snapshots, exit 0 |
+| Task 6 gate: `git fetch origin && git ls-tree --name-only origin/main content/numeracy-curriculum/index.js content/egma/index.js` | One line, `content/egma/index.js` (origin/main `41c5726e`): **gate not met**, Track A's content file is not on main |
+
+#### Deferred: real-content checks
+
+Task 6 Steps 1–4 (`__tests__/numeracyRealContent.test.js`: every `EVIDENCE_MAP` step exists in the
+bundled edition, every mapped `{skill, band}` tag appears in the EGMA pack, the fixture matches the
+bundled edition's steps, slots and `comes_after`, and a first lesson on the bundled edition) were
+**not run**. They become the first task of Track D's plan, or run once Track A merges, whichever
+comes first.
+
+#### Review findings and notes
+
+- Review fix (Task 2): `only steps in the given curriculum appear` had no control, so it would have
+  passed even if band-100 items were never read. Added the full-curriculum control assertion.
+- EGMA's current form is `-draft` (`question_version` `masi-egma-en-2026-1-draft`), so it produces
+  **no evidence by design** until EGMA freezes a form (spec §7.1, §10.3). Until then known steps come
+  from EA ticks only.
+- The plan's Produces JSDoc nests `/* … */` comments inside a JSDoc block, which would end the block
+  early; `planLesson.js` carries the same shape with those notes as line comments.
+- `planNumeracyLesson` assumes every step has at least one activity (the content verify script
+  requires 2–3); a step with none would throw when picked.
