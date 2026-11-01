@@ -65,7 +65,7 @@ const TITLES = {
   Profile: 'Profile', TimeTracking: 'Time tracking', TimeEntriesList: 'Work history',
   ClassOnboarding: 'Set up your class', CreateClass: 'Create class', ChildOnboarding: 'Add your children',
   EditClass: 'Edit class', AddChild: 'Add child', EditChild: 'Edit child',
-  SessionForm: 'Who are you teaching?', Lesson: '', LessonWrapUp: 'Wrap up', SessionHistory: 'Session history',
+  SessionForm: 'Who are you teaching?', Lesson: '', NumeracyLesson: '', HowToTeach: 'How to teach it', LessonWrapUp: 'Wrap up', SessionHistory: 'Session history',
   AssessmentChildSelect: 'Select child', AssessmentHistory: 'Assessment history', LetterTracker: 'Letter tracker', NumberTracker: 'Number tracker',
   AssessmentDetail: 'Assessment detail', LetterMasteryRanking: 'Letter mastery', AssessmentRanking: 'Assessment scores',
   BatteryOverview: '',

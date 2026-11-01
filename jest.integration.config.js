@@ -5,6 +5,7 @@ module.exports = {
   setupFiles: ['./jest.integration.setup.js'],
   setupFilesAfterEnv: ['./test-support/defaultTestHandle.js'],
   testMatch: [
+    '<rootDir>/__tests__/NumeracyLessonScreen.test.js',
     '<rootDir>/__tests__/LessonPickerScreen.numeracy.test.js',
     '<rootDir>/__tests__/useNumeracyLessonDraft.test.js',
     '<rootDir>/__tests__/NumberTrackerPanel.test.js',
