@@ -562,6 +562,7 @@ describe('SQLite debug dump', () => {
         failedOutboxRows: [],
         supportIncidents: [],
         letterMastery: [],
+        skillMastery: [],
         generatedAt: expect.any(String),
       });
     } finally {
@@ -616,6 +617,7 @@ describe('SQLite debug dump', () => {
         failedOutboxRows: [],
         supportIncidents: [],
         letterMastery: [],
+        skillMastery: [],
         generatedAt: expect.any(String),
       });
       expect(new Date(dump.generatedAt).toString()).not.toBe('Invalid Date');

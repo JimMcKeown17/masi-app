@@ -3,7 +3,9 @@ import { buildSyncPayload } from './syncPayload';
 import { normalizeErrorCode } from '../utils/normalizeErrorCode';
 import { SERVER_COLUMNS } from './syncServerColumns';
 import { parseSetLetterMasteryResult } from './letterMasteryCorrection';
+import { parseSetSkillMasteryResult } from './skillMasteryCorrection';
 import { applyCorrectionAcknowledgement } from '../db/repositories/masteryRepository';
+import { applyCorrectionAcknowledgement as applySkillCorrectionAcknowledgement } from '../db/repositories/skillMasteryRepository';
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
@@ -61,6 +63,7 @@ export const PUSH_ORDER = [
   'battery_runs',
   'assessments',
   'letter_mastery',
+  'skill_mastery',
 ];
 
 const TABLE_DEPENDENCIES = {
@@ -79,6 +82,7 @@ const TABLE_DEPENDENCIES = {
   battery_runs: ['children'],
   assessments: ['children', 'battery_runs'],
   letter_mastery: ['children'],
+  skill_mastery: ['children'],
 };
 
 const ARCHIVE_TABLE_DEPENDENCIES = {
@@ -129,6 +133,7 @@ const PARENT_FK_COLUMNS = {
   battery_runs: { children: 'child_id' },
   assessments: { children: 'child_id', battery_runs: 'battery_run_id' },
   letter_mastery: { children: 'child_id' },
+  skill_mastery: { children: 'child_id' },
 };
 
 // The grant(s) each write needs, matching private.current_user_can_write_for_child/class/group
@@ -181,6 +186,7 @@ const GRANT_SUBJECTS = {
     { membershipMediatedChild: 'child_id' },
   ],
   letter_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
+  skill_mastery: [{ grantTable: 'child_ea_assignments', subjectColumn: 'child_id' }],
   grouping_versions: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
   class_grouping_state: [{ grantTable: 'class_ea_assignments', subjectColumn: 'class_id' }],
 };
@@ -482,7 +488,7 @@ const classifyError = (
   }
 
   if (code === '23505') {
-    const requiresRpcAcknowledgement = ['assessments', 'battery_runs', 'letter_mastery'].includes(normalizeTableName(tableName));
+    const requiresRpcAcknowledgement = ['assessments', 'battery_runs', 'letter_mastery', 'skill_mastery'].includes(normalizeTableName(tableName));
     return { terminal: true, markAsSynced: duplicateIsSuccess && !requiresRpcAcknowledgement };
   }
 
@@ -652,7 +658,7 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
   try {
     payload = buildSyncPayload(config.tableName, payloadSource, outboxRecord.operation);
   } catch (error) {
-    if (!['assessments', 'letter_mastery'].includes(config.tableName) || !(error instanceof TypeError)) throw error;
+    if (!['assessments', 'letter_mastery', 'skill_mastery'].includes(config.tableName) || !(error instanceof TypeError)) throw error;
     return { success: false, error: { code: '22023', message: error.message } };
   }
 
@@ -692,6 +698,22 @@ const runServerOperation = async (supabaseClient, config, outboxRecord) => {
         error: {
           code: 'UNEXPECTED_RPC_RESULT',
           message: `set_letter_mastery returned an unexpected result: ${String(data)}`,
+        },
+      };
+    }
+    return { success: true, acknowledgement, sentCorrectionId: payload.p_correction_id };
+  }
+
+  if (config.tableName === 'skill_mastery') {
+    const { data, error } = await supabaseClient.rpc('set_skill_mastery', payload);
+    if (error) return { success: false, error };
+    const acknowledgement = parseSetSkillMasteryResult(data);
+    if (!acknowledgement) {
+      return {
+        success: false,
+        error: {
+          code: 'UNEXPECTED_RPC_RESULT',
+          message: `set_skill_mastery returned an unexpected result: ${String(data)}`,
         },
       };
     }
@@ -845,6 +867,11 @@ const finalizeSuccess = async ({
     sentCorrectionId: serverResult.sentCorrectionId,
     result: serverResult.acknowledgement,
   } : null;
+  const skillCorrection = tableName === 'skill_mastery' ? {
+    recordId: outboxRecord.record_id,
+    sentCorrectionId: serverResult.sentCorrectionId,
+    result: serverResult.acknowledgement,
+  } : null;
   const deleteResult = await txn.runAsync(`
     delete from sync_outbox
     where id = ?
@@ -854,6 +881,7 @@ const finalizeSuccess = async ({
 
   if ((deleteResult?.changes || 0) === 0) {
     if (correction) await applyCorrectionAcknowledgement(txn, { ...correction, outboxDeleted: false });
+    if (skillCorrection) await applySkillCorrectionAcknowledgement(txn, { ...skillCorrection, outboxDeleted: false });
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
   }
 
@@ -871,6 +899,8 @@ const finalizeSuccess = async ({
     });
     if (correction) {
       await applyCorrectionAcknowledgement(txn, { ...correction, outboxDeleted: true });
+    } else if (skillCorrection) {
+      await applySkillCorrectionAcknowledgement(txn, { ...skillCorrection, outboxDeleted: true });
     } else if (!hasRemainingOutbox && applyAcknowledgedPayload) {
       await applyAcknowledgedPayload(txn, tableName, outboxRecord.record_id, outboxRecord.operation, outboxRecord.payload);
     }

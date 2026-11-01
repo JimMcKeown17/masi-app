@@ -675,3 +675,19 @@ describe('childrenRepository', () => {
     }
   });
 });
+
+test('a child with a skill tick is not deleted as history-free', async () => {
+  const db = await createMigratedDatabase(runMigrations);
+  try {
+    await seedCoreData(db);
+    const repository = createChildrenRepository({ database: db });
+    await repository.saveChildRecord(makeChild({ synced: true }));
+    await db.runAsync(`insert into skill_mastery
+      (id, child_id, step_key, confirmed, changed_at, correction_id, changed_by)
+      values ('tick-1', 'child-1', 'add.5', 1, '2026-10-20T08:00:00.000Z', 'correction-1', 'user-1')`);
+    expect(await repository.deleteIfNoHistory('child-1')).toBe(false);
+    expect(await db.getFirstAsync("select id from children where id = 'child-1'" )).toEqual({ id: 'child-1' });
+    expect(await db.getAllAsync('select id from skill_mastery')).toEqual([{ id: 'tick-1' }]);
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+  } finally { await db.closeAsync(); }
+});

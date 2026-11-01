@@ -550,8 +550,8 @@ test.each(['.jpeg', '.PNG', '.HEIF'])('fetch preserves original screenshot bytes
 test('resolve mappings select only actual synced-table columns and never fall back to the local id', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/services/syncServerColumns.js'), 'utf8');
   const tables = [...source.matchAll(/^  (\w+): \[([\s\S]*?)\n  \],/gm)].map(match => ({ table: match[1], columns: [...match[2].matchAll(/'([^']+)'/g)].map(column => column[1]) }));
-  expect(tables).toHaveLength(18);
-  for (const { table, columns } of tables.filter(item => item.table !== 'letter_mastery')) {
+  expect(tables).toHaveLength(19);
+  for (const { table, columns } of tables.filter(item => !['letter_mastery', 'skill_mastery'].includes(item.table))) {
     const rows = [receipt({ payload: { table, serverRecordId: '43000000-0000-0000-0000-000000000001', recordId: 'local-id', wirePayload: null, wirePayloadError: 'serialization failed' } })];
     const handle = (await run(rows)).data.conditions[0].handle;
     const runner = jest.fn().mockReturnValueOnce({ status: 0, stdout: psqlOut({ snapshotAt: SNAPSHOT, receipts: rows }) }).mockReturnValueOnce({ status: 0, stdout: psqlOut('[]') });

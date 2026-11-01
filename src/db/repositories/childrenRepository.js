@@ -983,6 +983,7 @@ export const createChildrenRepository = ({ database } = {}) => {
       "select 1 from assessments where child_id = ? limit 1",
       "select 1 from battery_runs where child_id = ? limit 1",
       "select 1 from letter_mastery where child_id = ? limit 1",
+      "select 1 from skill_mastery where child_id = ? limit 1",
       "select 1 from child_group_memberships where child_id = ? limit 1",
       "select 1 from child_ea_assignments where child_id = ? and unassigned_at is not null limit 1",
       "select 1 from child_programme_enrollments where child_id = ? and ended_at is not null limit 1",

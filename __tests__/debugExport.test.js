@@ -350,3 +350,27 @@ test('bounded variable-size error, cursor and incident fields carry honest sibli
  expect(bounded.syncState[0]).toMatchObject({cursorTruncated:true,cursorOriginalBytes:60000});
  expect(bounded.supportIncidents[0]).toMatchObject({payloadTruncated:true,payloadOriginalBytes:60010,reportSnapshotOmitted:1});
 });
+
+test('the export lists skill ticks and a terminal tick has no server record id', async () => {
+  const { createFamilySyncFixture } = require('../test-support/assessmentFamilySyncTestUtils');
+  const { createSkillMasteryRepository } = require('../src/db/repositories/skillMasteryRepository');
+  const { terminalPayload } = require('../src/services/incidentPayloads');
+  const f = await createFamilySyncFixture({ withDelivery: true });
+  try {
+    const written = await createSkillMasteryRepository({ database: f.db }).setSkillMastery({
+      childId: f.childId, stepKey: 'add.5', confirmed: true,
+    });
+    await f.db.runAsync("update sync_outbox set status = 'terminal', error_code = 'MA001'");
+    const handle = { isOpen: () => true, isCurrent: () => true, getReader: async () => f.db };
+    const dump = await debugDump({ handle }, { masteryLimit: 1 });
+    expect(dump.skillMastery).toEqual([{ childId: f.childId, stepKey: 'add.5', confirmed: true,
+      changedAt: written.changed_at, correctionId: written.correction_id, changedBy: f.userId,
+      programmeId: f.programmeId, syncStatus: 'pending', serverChangedAt: null, serverCorrectionId: null }]);
+    expect(dump.failedOutboxRows[0]).toMatchObject({ serverRecordId: null, wirePayload: { p_step_key: 'add.5' } });
+    const row = await f.db.getFirstAsync('select * from sync_outbox');
+    expect(terminalPayload(row)).toMatchObject({ serverRecordId: null, wirePayload: { p_step_key: 'add.5' } });
+    await createSkillMasteryRepository({ database: f.db }).setSkillMastery({ childId: f.childId, stepKey: 'add.10', confirmed: true });
+    expect((await debugDump({ handle }, { masteryLimit: 1 })).skillMastery).toHaveLength(1);
+    expect((await debugDump({ handle })).skillMastery).toHaveLength(2);
+  } finally { await f.db.closeAsync(); }
+});

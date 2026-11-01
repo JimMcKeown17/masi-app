@@ -96,4 +96,8 @@ export const SERVER_COLUMNS = {
     'id', 'child_id', 'letter', 'language', 'confirmed', 'changed_at', 'correction_id',
     'changed_by', 'programme_id', 'created_at', 'updated_at',
   ],
+  skill_mastery: [
+    'id', 'child_id', 'step_key', 'confirmed', 'changed_at', 'correction_id',
+    'changed_by', 'programme_id', 'created_at', 'updated_at',
+  ],
 };

@@ -92,7 +92,7 @@ const parseJson = (value) => {
 const wireEvidence = (row) => {
   try {
     const wirePayload = buildSyncPayload(row.table_name, parseJson(row.payload), row.operation);
-    const serverRecordId = row.table_name === 'letter_mastery' ? null
+    const serverRecordId = ['letter_mastery', 'skill_mastery'].includes(row.table_name) ? null
       : wirePayload?.id ?? wirePayload?.p_assessment?.id ?? row.record_id;
     return { wirePayload, serverRecordId };
   } catch (error) {
@@ -205,6 +205,33 @@ const getLetterMastery = async (db, tableNames, options) => {
   }
 };
 
+const getSkillMastery = async (db, tableNames, options) => {
+  if (!tableNames.includes('skill_mastery')) return [];
+
+  try {
+    const rows = await db.getAllAsync(`
+      select child_id, step_key, confirmed, changed_at, correction_id, changed_by,
+             programme_id, sync_status, server_changed_at, server_correction_id
+      from skill_mastery
+      order by ${options ? `changed_at desc limit ${positiveLimit(options.masteryLimit)}` : 'child_id, step_key'}
+    `);
+    return rows.map(row => ({
+      childId: row.child_id,
+      stepKey: row.step_key,
+      confirmed: Boolean(row.confirmed),
+      changedAt: row.changed_at,
+      correctionId: row.correction_id,
+      changedBy: row.changed_by,
+      programmeId: row.programme_id,
+      syncStatus: row.sync_status,
+      serverChangedAt: row.server_changed_at,
+      serverCorrectionId: row.server_correction_id,
+    }));
+  } catch (error) {
+    return diagnosticError(error);
+  }
+};
+
 export async function debugDump({ handle }, limits) {
   const options = limits ? {outboxLimit:200,payloadMaxBytes:20480,masteryLimit:500,sectionLimit:200,...limits} : null;
   assertExportHandle(handle);
@@ -221,6 +248,7 @@ export async function debugDump({ handle }, limits) {
     failedOutboxRows: await getFailedOutboxRows(db, tableNames, options),
     supportIncidents: await getSupportIncidents(db, tableNames, options),
     letterMastery: await getLetterMastery(db, tableNames, options),
+    skillMastery: await getSkillMastery(db, tableNames, options),
     generatedAt: new Date().toISOString(),
   };
   assertExportHandle(handle);
