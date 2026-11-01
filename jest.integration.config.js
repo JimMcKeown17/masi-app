@@ -29,6 +29,8 @@ module.exports = {
     '<rootDir>/__tests__/letterMasteryHistoryPage.test.js',
     '<rootDir>/__tests__/masteryRepository.test.js',
     '<rootDir>/__tests__/letterMasteryCurrentStateMigration.test.js',
+    '<rootDir>/__tests__/skillMasteryMigration.test.js',
+    '<rootDir>/__tests__/skillMasteryIdParity.test.js',
     '<rootDir>/__tests__/outboxIntegrityScan.test.js',
     '<rootDir>/__tests__/outboxOwnerStamping.test.js',
     '<rootDir>/__tests__/outboxOwnerMigration.test.js',

@@ -102,9 +102,17 @@ it('PUSH_ORDER contains every locally-written synced table (no pushable table om
     'staff_programme_assignments',
   ];
 
+  // Numeracy Track B builds skill_mastery in steps: Task 2 adds the SQLite table,
+  // Task 4 adds it to PUSH_ORDER with its set_skill_mastery branch. This exception
+  // expires by itself: the assertion below fails once PUSH_ORDER names a pending
+  // table, so Task 4 must delete the entry here.
+  const PUSH_PENDING_TABLES = ['skill_mastery'];
+  expect(PUSH_ORDER.filter((t) => PUSH_PENDING_TABLES.includes(t))).toEqual([]);
+
   // The real family round trip below guards the family-member exception.
   const expectedPush = syncedTables.filter((t) => (
     !PULL_ONLY_SYNCED_TABLES.includes(t) && !FAMILY_MEMBER_TABLES.includes(t)
+    && !PUSH_PENDING_TABLES.includes(t)
   )).sort();
   expect([...PUSH_ORDER].sort()).toEqual(expectedPush);
 });

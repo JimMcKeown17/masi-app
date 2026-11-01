@@ -1,7 +1,7 @@
 jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 
 import { readUnsentSummary } from '../src/db/repositories/syncOutboxRepository';
-import { MIGRATIONS, runMigrations } from '../src/db/migrations';
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS, runMigrations } from '../src/db/migrations';
 import { getDefaultTestHandle, TEST_ACTOR_ID } from '../test-support/defaultTestHandle';
 import { openDefaultTestHandle, getTestWriter } from '../test-support/testDatabase';
 import { resetHandleRegistryForTests } from '../src/session/signedInHandle';
@@ -40,7 +40,7 @@ test('public open upgrades populated v19 without changing incidents or replaying
   await old.closeAsync();
   await openDefaultTestHandle();
   const db = await getDefaultTestHandle().getReader();
-  expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 20 });
+  expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: CURRENT_SCHEMA_VERSION });
   expect(await db.getAllAsync('select * from support_incident_queue order by id')).toEqual(
     incidents.map(row => expect.objectContaining({ ...row, schema_version: 1, observed: null,
       first_observed: null, first_seen_at: null, last_seen_at: null, last_sent_at: null, last_sent_release: null, bundle_state: 'none', bundle_attempts: 0 })));
