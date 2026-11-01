@@ -155,3 +155,19 @@ testHook('the plan is computed once per input change', async () => {
   rerender({}); rerender({}); await change(result, transitions.setNotes, 'Unrelated'); rerender({});
   expect(spy).toHaveBeenCalledTimes(1);
 });
+// Codex review round 1: an abandoned start must not replace the shared controller's lesson.
+testHook('a start abandoned during its group read never opens the controller', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const realGetGroups = handle.repositories.groups.getGroups;
+  const getGroups = jest.spyOn(handle.repositories.groups, 'getGroups').mockImplementation(async (...args) => {
+    await gate; return realGetGroups(...args);
+  });
+  const open = jest.spyOn(handle.services.lessonDraft, 'open');
+  const view = mount();
+  await waitFor(() => expect(getGroups).toHaveBeenCalled());
+  view.unmount();
+  await act(async () => { release(); await gate; await new Promise(resolve => setImmediate(resolve)); });
+  await act(async () => { await new Promise(resolve => setImmediate(resolve)); });
+  expect(open).not.toHaveBeenCalled();
+});

@@ -92,6 +92,12 @@ export default function NumeracyLessonScreen({ navigation, route }) {
     const row = await ensureDraft();
     navigation.navigate('NumeracyWrapUp', { draftId: row.id });
   });
+  // Teaching starts here: save and freeze the cards first, so new maths data cannot change
+  // what Wrap up records as taught while the EA is reading the instructions.
+  const openHowToTeach = card => attempt(async () => {
+    await ensureDraft();
+    navigation.navigate('HowToTeach', { stepKey: card.step_key, activity: card.activity });
+  });
   const discardAndExit = restart => attempt(async () => {
     await discard();
     setDiscardVisible(false);
@@ -130,7 +136,7 @@ export default function NumeracyLessonScreen({ navigation, route }) {
             minutes: cards.reduce((sum, card) => sum + card.minutes, 0) })}</Text> : null}
           {plan.reason === 'incomplete_inputs' ? <InlineNote tone="warning">Still downloading what children know. Suggestions may repeat.</InlineNote> : null}
           {cards.map((card, index) => <LessonCard key={index} card={card} curriculum={curriculum} names={childNames}
-            onOpen={() => navigation.navigate('HowToTeach', { stepKey: card.step_key, activity: card.activity })}
+            onOpen={() => openHowToTeach(card)}
             onSwap={() => setSwapIndex(index)} />)}
           {!cards.some(card => card.slot === 'activity') ? <>
             <Text style={styles.body}>This group knows every step that's ready. Use Swap to choose a step.</Text>

@@ -104,6 +104,8 @@ export const useNumeracyLessonDraft = ({ draftId, start } = {}) => {
       const { classId } = resolveLessonClass({
         groupClassId: group.class_id, memberClassIds: members.map(child => child.class_id),
       });
+      // A screen left during the reads above must not replace the shared controller's lesson.
+      if (!active) return null;
       await controller.open({ start: transitions.newNumeracyDraftInput({
         group, members, programmeId: confirmed, classId, lessonDate: today,
       }) });

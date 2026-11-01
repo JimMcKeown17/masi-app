@@ -321,7 +321,8 @@ Wrap up → Save lesson → Session complete** (numeracy design
   child twice). **Swap** offers every step the group could do now; with no ready activity step,
   **Choose a step** adds a "Practise again" card. **How to teach it** shows the step's goal and
   the card's activity: numbered steps and what's needed.
-- The plan freezes on the first Swap or on Wrap up →. Before that it follows attendance and new
+- The plan freezes (and the draft is saved) on the first Swap, on opening How to teach it, or on
+  Wrap up →. Before that it follows attendance and new
   maths data (history pages and `skill_mastery` sync results) while the lesson is open.
 - Wrap up asks "Who can do these without help?" with a Tick when strip per taught step and one chip
   per taught step per child; chips only add ticks, and the "N / 37 ›" sheet can untick. Every

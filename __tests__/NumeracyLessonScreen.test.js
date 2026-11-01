@@ -87,6 +87,17 @@ screenTest('tapping a card opens How to teach it for that step and activity', as
   await waitFor(() => expect(view.routeNames().at(-1)).toBe('HowToTeach'));
   expect(view.navigationRef.getCurrentRoute().params).toEqual({ stepKey: 'finger_flash.5', activity: getStep(curriculum, 'finger_flash.5').activities[0].name });
 });
+// Codex review round 1: teaching starts when the EA opens How to teach it, so the cards they
+// teach from must stop following new maths data, and survive a force-quit.
+screenTest('opening How to teach it saves and freezes the plan the EA teaches from', async () => {
+  const view = mount(); await ready(view);
+  expect(await row()).toBeNull();
+  fireEvent.press(view.getByRole('button', { name: 'Finger flash · up to 5' }));
+  await waitFor(() => expect(view.routeNames().at(-1)).toBe('HowToTeach'));
+  const draft = await row();
+  expect(draft.plan_fixed_at).toBeTruthy();
+  expect(draft.ticks.taught[0]).toEqual({ slot: 'warm_up', step_key: 'finger_flash.5', activity: getStep(curriculum, 'finger_flash.5').activities[0].name });
+});
 screenTest('Wrap up freezes the plan and opens Wrap up', async () => {
   const view = mount(); await ready(view); fireEvent.press(view.getByRole('button', { name: 'Wrap up →' }));
   await waitFor(() => expect(view.routeNames().at(-1)).toBe('NumeracyWrapUp')); expect((await row()).plan_fixed_at).toBeTruthy();
