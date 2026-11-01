@@ -2464,3 +2464,43 @@ stays concise. The auth-restore healer prefers stored error codes so diagnostic 
 cannot turn an unrelated terminal failure into a retry. Its text fallback remains for
 legacy rows without a meaningful code. Local SQLite tests prove retention and policy;
 a device receipt is still a separate acceptance gate.
+
+## 2026-11-01 — A draft says what it is; a child who needs help is not a helper (numeracy Track D)
+
+**Why `lesson_drafts.kind` beat inferring the shape.** Numeracy lessons reuse the one-slot
+`lesson_drafts` table, so a reader has to know which JSON shape a row holds before it can validate
+it: literacy ticks are `{ letters, blends, books }`, numeracy ticks are `{ taught }`. The spec
+offered two ways to tell them apart without a new column, and both fail in a way worth naming.
+
+- *Infer it from `programme_id`.* That turns a local validator into a join on `programmes`. On a
+  first sign-in that row may not have downloaded yet (MA-BUG-20261031-002), so a perfectly good
+  draft would read as corrupt, and after a programme move the answer changes under a draft that
+  has not.
+- *Infer it from the JSON.* A brand-new draft of either kind has empty tracker changes, so the
+  contents are ambiguous exactly when the decision matters most (the first resume).
+
+A third option, a separate `numeracy_lesson_drafts` table, would have allowed two lessons in
+progress at once and doubled the Home, picker and controller branching. The chosen fix is one
+additive, local-only column (`kind not null default 'literacy'`, SQLite v22) that is fixed after
+create. The general rule: **when a reader must branch on a fact, store the fact; do not make the
+reader re-derive it from data that can be missing or ambiguous.** The default keeps every existing
+literacy row valid with no data migration, and the corrupt-draft error carries the kind too, so
+Home and Record can route even a broken draft to the right screens (or offer to discard it).
+
+**"Need help" versus "can help" overlap.** Each lesson card says who is ready for its step, who
+needs extra help and who can help a partner. The two lists come from different questions: "needs
+help" means the child is missing some step *below* the card's step (in any skill the step depends
+on), while "can help" means the child already knows the card's step. Those overlap. A child can
+know Add up to 10 and still be missing Count objects up to 10, which Add up to 10 builds on. Shown
+naively, the card would name that child twice, once as needing help and once as a helper. Plan
+call P5 resolves it in the display, not in the planner: `cardHelpLists` shows such a child only
+under need help (display "can help" = can help − need help). The planner's own readiness counts are
+unchanged, so the decision stays a one-line presentation rule rather than a change to the
+suggestion logic.
+
+The need-help line also names the step the child is "still on" (P4): the first unknown step in the
+card's own skill when they are missing one there, otherwise the first unknown step in the skill of
+the first missing earlier step, with that skill's name. A child whose only missing steps are keys
+this curriculum no longer has gets no step (`stillOnStep` returns `null`) and is listed as "not
+ready yet", rather than the app throwing on content it no longer knows. Both rules are tested
+through the pure helpers in `src/numeracy/cards.js` and through the rendered card.

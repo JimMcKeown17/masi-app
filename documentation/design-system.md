@@ -483,6 +483,47 @@ teaching order, the Wrap-up tracker retains its existing order while the lesson 
 both plans must merge before a field build. Static guards remain the automated token/purity gate,
 not proof of iOS swipe behaviour or A03s timing.
 
+### Numeracy components (Track D, 2026-11-01)
+
+Numeracy EAs get their own tracker and lesson pieces under `src/components/numeracy/`, composed from
+the same Bold Red primitives (`BottomSheet`, `BrandButton`, `SelectableRow`, `InlineNote`). Every
+string comes from `src/numeracyLesson/copy.js`, which builds EA copy from the curriculum content;
+`numeracyCopyPlainWords.test.js` scans every string literal and JSX text under
+`src/numeracyLesson`, `src/components/numeracy` and `src/screens/numeracy` against the shared banned
+list (`content/numeracy-curriculum/bannedWords.cjs`). Number sentences keep a no-break space
+around their operators through `keepSumsTogether`, so "2 + 2" never wraps. Routes: `NumberTracker`
+(title "Number tracker"), `NumeracyLesson` (empty title), `HowToTeach` ("How to teach it") and
+`NumeracyWrapUp` ("Wrap up", back icon). Native acceptance is
+[device section W](./device-gates-sqlite-backend-2026-07.md#w-numeracy-screens-track-d-2026-11),
+not yet run.
+
+| Piece (`src/components/numeracy/`) | Contract |
+|---|---|
+| `StepTile` | `tile, label, onPress, size=44, disabled=false`. Memoised; modelled on `LetterToggleTile`. Shows the step size ("5", "2s"); a lock for **Assessment**, "↑" for an implied (**Known**) step, a dashed `colors.primary` edge for the child's next step when they are ready for it. Spoken "{step phrase}, {Ticked\|Assessment\|Known\|Not yet}". A pending tile looks like a stored one. |
+| `SkillRow` | `row, onPressTile, onPressSkill, readOnly, curriculum`. Skill button "{skill}, steps" with ⓘ, grey hint, and a six-column strip (`TRACKER_COLUMNS` 5/10/15/20/50/100) with spacer cells so sizes line up across rows. Exports `TILE_SIZE` 44 and `TILE_GAP` 6: the strip is 294 dp, inside a 360 dp phone's 296 dp content width. |
+| `NumberTrackerGrid` | `model, onPressTile, onPressSkill, readOnly, curriculum`. Legend Ticked / Assessment / Not yet, then the main section and "Counting". Pure presentation over `buildTrackerModel`. |
+| `StepSheet` | `visible, onDismiss, curriculum, row, childFirstName, onTick, readOnly`. Shared `BottomSheet` ("Close steps"): each step with its state word and "Ticked by you · 3 Nov" / "Ticked by another EA · 3 Nov", then a **Tick when** box ("Ask {name} on their own:", setup, ask → expected, rule) and a footer **Tick** for the next step. A finished skill shows no box; `readOnly` hides Tick. |
+| `NumberTrackerPanel` | `child, isDelivery=true`. **Immediate mode** (class row → Number tracker screen). Copies `LetterMasteryPanel`'s load generation and write-in-flight skeleton; loads on focus and on `useMasterySyncRefresh('skill_mastery')`. Read-only until `confirmNumeracyProgramme` confirms; a move away shows the programme-changed note. Each tap calls `tickStepNow`, which re-checks the programme inside its write. Assessment and implied taps explain themselves inline ("Known because '{step}' is ticked."). |
+| `NumberTrackerSheet` | `visible, onDismiss, child, curriculum, userId, pendingChanges, onChangesUpdate, programmeId, academicYear`. **Deferred mode** (Wrap up "N / 37 ›"). Loads once per open, keeps local edits, never subscribes to sync; **Done** hands the edits to the draft, dismissing discards them. The skill button opens nothing (no sheet over a sheet). |
+| `LessonCard` | `card, curriculum, names, onOpen, onSwap`. Slot label and "{n} min" on separate lines, step title, "{r} of {p} are ready", the need-help line ("{names} {is\|are} still on …") and the can-help line ("… can help a partner"), with a child never in both. Tapping opens How to teach it; **Swap** opens `SwapSheet`. |
+| `SwapSheet` | `visible, onDismiss, options, currentStepKey, curriculum, readinessFor, onPick`. `BottomSheet` "Choose a step" with radio `SelectableRow`s; a ready step's subtitle is its ready line, a review step's is "Practise again". |
+| `TickWhenStrip` | `curriculum, stepKey, initiallyOpen=false`. A 44 dp toggle reading "{skill} {step}: {ask 1} · {ask 2} · {ask 3}"; open, it shows the setup, each ask → expected answer and the rule. Renders nothing for an unknown step. |
+| `WrapUpStepRow` | `child, steps, model, pending, isDelivery, onToggle, onOpenTracker`. One 44 dp wrapping chip per taught step (`CHIP_WORDS`, "Add to 5"): Assessment is locked, a stored or implied step with no pending change is fixed, a pending add can be removed, a pending removal shows not yet. "{known} / {total} ›" opens the sheet. A non-delivery child shows "Steps can't be updated for this child". |
+
+**One mastery palette, two trackers.** [`masteryStateColors`](../src/constants/masteryStateColors.js)
+re-exports the same `letterStateColors` object (named and default), so the Number tracker and the
+letter tracker share one swatch set: Assessment keeps the light green `successBg`/`successBorder`
+tint (plan open question 1; amber would change both trackers), Ticked is `successText`, Not yet is
+the default surface.
+
+The numeracy screens live in `src/screens/numeracy/`: `NumberTrackerScreen`,
+`NumeracyLessonScreen` (attendance chips, header "Group N · M min lesson", the cards, **Choose a
+step** when there is no activity card, **Wrap up →**), `HowToTeachScreen` (goal, "{activity} · {n}
+min", numbered steps and "You need: …"; never `note_for_partner`, `source` or `source_ref`) and
+`NumeracyWrapUpScreen` (heading "Who can do these without help?", "Teaching it today doesn't
+count.", the date button, strips, rows, Notes and a sibling **Save lesson** footer). Both lesson
+screens share leave, discard and stack cleanup through `useLessonExitGuard`.
+
 ### Sheets
 
 **`BottomSheet`** — `visible, onDismiss, dismissible=true, title, subtitle, dismissLabel, headerExtras, footer, footerStyle,

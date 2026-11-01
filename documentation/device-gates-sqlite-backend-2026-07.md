@@ -278,3 +278,32 @@ Jest navigation and real-SQLite durability coverage do not establish native iOS 
 behaviour, A03s timing or phone-to-server convergence. Record results here and in the lesson-flow
 Verification Register subsection of the build log. Task 12's ADR and PR/review closure are separate
 from these physical-device gates.
+
+## W. Numeracy screens (Track D, 2026-11)
+
+Device acceptance for the numeracy screens built on `feat/numeracy-screens`: the Number tracker,
+Record's "Who are you teaching?" for numeracy, the lesson plan with Swap, How to teach it, Wrap up
+and Save lesson, and Home's lesson card by kind
+([plan](../docs/superpowers/plans/2026-11-01-numeracy-d-screens.md) Task 13 Step 4). It needs Jim's
+yes for EAS **preview** builds from the branch head (Android and iOS) and for staging test data on
+`masi-app-sqlite` (confirm `project_ref=segygjzpujphwvrubusm`): a numeracy test EA with an active
+`numeracy` assignment, one class, six children and one group. Run on the Galaxy A03s at 360 dp
+(`wm density 320`) and one iPhone, at default text size, with no screen-reader checks. Fresh
+install, and wait for the first sync to finish before checking. A failure gets an MA-BUG record
+before any fix. Record build ids, source revision, platform and evidence with each result.
+
+**Status: Not run yet: waits for Jim's go for EAS builds and staging test data.** Jest and
+real-SQLite suites cover the logic (build log, "2026-11-01 — Numeracy Track D: screens"); they do
+not establish 360 dp layout, A03s timing, native navigation or phone-to-server convergence.
+
+| Gate | Check | Builds needed | Result |
+|---|---|---|---|
+| W1 | Record: "Who are you teaching?" shows Up next with a "Next: …" line; no literacy text anywhere (no letters, no reading level, no letter tracker icon) | `preview`, Android + iOS | pending |
+| W2 | Lesson plan: "Group N · M min lesson", a Warm-up and two Activity cards, "N of M are ready"; after ticking two children back on the tracker, "still on …" names them and they are not in "can help"; nothing clipped at 360 dp | `preview`, Android + iOS | pending |
+| W3 | How to teach it: opens from a card; goal, numbered steps and needs readable while scrolling; sums don't break across lines; Back returns to the same plan | `preview`, Android + iOS | pending |
+| W4 | Swap and resume: Swap a card; leave with Keep, reopen from Home's "Lesson in progress": same cards; force-quit and reopen: same | `preview`, Android + iOS | pending |
+| W5 | Wrap up: strips collapse and open; chips tick and untick a new tick; "N / 37 ›" opens the sheet, untick a stored tick, Done; **Save lesson** in airplane mode gives Session complete with a Taught row; back online, sync clears; a staging read-only query shows the session's `activities.numeracy` keys (`curriculum_edition`, `plan`, `taught`) and the `skill_mastery` rows. iPhone: keyboard behaviour on the Notes field | `preview`, Android + iOS | pending |
+| W6 | Number tracker: opened from the class row; tiles fit with no sideways scroll; a tap ticks and unticks at once (< 300 ms by eye on the A03s); an implied tile explains itself; the ⓘ step sheet shows Tick when and the Tick button; an offline tick syncs later | `preview`, Android + iOS | pending |
+| W7 | Literacy EA unchanged: letter tracker icon, the literacy lesson flow and Home's lesson card behave as before | `preview`, Android + iOS | pending |
+| W8 | Timing: picker rows < 500 ms after focus on the A03s (Share logs timing line) | `preview`, Android | pending |
+| W9 | After the EGMA freeze: Assessment tiles lock (EGMA results stay `-draft` until the freeze before December, so amber/Assessment tiles are covered by Jest fixtures only until then) | `preview` after the freeze, Android + iOS | pending |

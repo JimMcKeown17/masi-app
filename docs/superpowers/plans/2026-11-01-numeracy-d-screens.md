@@ -1220,7 +1220,7 @@ Expected: PASS.
 **Files:**
 - Modify: `CONTEXT.md`, `PRD.md`, `documentation/rls-sync-contract-map.md`, `documentation/design-system.md`, `documentation/device-gates-sqlite-backend-2026-07.md`, `documentation/build-log.md`, `documentation/LEARNING.md`, `documentation/ROADMAP.md` (only if a follow-up is left open)
 
-- [ ] **Step 1: Standing docs (spec §11, net of Track B)**
+- [x] **Step 1: Standing docs (spec §11, net of Track B)**
 
 - `CONTEXT.md`:
   - add **Number tracker** (one child's skills and steps; immediate ticks; locked EGMA steps;
@@ -1241,7 +1241,7 @@ Expected: PASS.
 - `documentation/LEARNING.md`: a section on why `lesson_drafts.kind` beat inferring the shape, and on
   "need help" versus "can help" overlap.
 
-- [ ] **Step 2: Full gates**
+- [x] **Step 2: Full gates**
 
 Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand && npm run test:integration && npm run test:content && npm run test:types`
 Expected: exit 0, with suite and test counts noted against the Task 0 baseline. No literacy test file
