@@ -1,0 +1,14 @@
+export type Curriculum = { readonly edition: string; readonly skills: readonly Skill[] };
+export type Skill = { readonly key: string; readonly label: string; readonly hint: string;
+  readonly group: 'main' | 'counting'; readonly slot: 'warm_up' | 'activity'; readonly steps: readonly Step[] };
+export type Step = { readonly key: string; readonly skill: string; readonly label: string; readonly size: number | null;
+  readonly goal: string; readonly activities: readonly Activity[]; readonly tick_when: TickWhen;
+  readonly comes_after: readonly string[]; readonly note_for_partner: string };
+export type Activity = { readonly name: string; readonly minutes: number; readonly how: readonly string[];
+  readonly needs: string; readonly source: 'partner' | 'adapted' | 'new'; readonly source_ref: string };
+export type TickWhen = { readonly setup: string; readonly ask: readonly [string, string, string];
+  readonly expected: readonly [string, string, string]; readonly rule: string };
+export const CURRENT_EDITION: '2026.1-draft';
+export function getCurriculum(): Curriculum;
+export function getStep(curriculum: Curriculum, stepKey: string): Step | null;
+export function listStepKeys(curriculum: Curriculum): readonly string[];

@@ -1,14 +1,18 @@
 {
   "edition": "2026.1-draft",
-  "status": "Draft for partner review. Generated 2026-10-31 from the partner Grade 1 weeks 1-4 activities; reviewed for maths and plain language.",
   "skills": [
     {
-      "skill": "finger_flash",
-      "skill_label": "Finger flash",
+      "key": "finger_flash",
+      "label": "Finger flash",
+      "hint": "up to…",
+      "group": "main",
+      "slot": "warm_up",
       "steps": [
         {
-          "id": "finger_flash.5",
+          "key": "finger_flash.5",
+          "skill": "finger_flash",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child sees 1 to 5 fingers for a moment and says how many straight away, without counting them one by one.",
           "activities": [
             {
@@ -72,8 +76,10 @@
           "note_for_partner": "In your lessons finger flash is the 5-minute warm-up. For this step it becomes the main 15-minute lesson, using three of your finger games. Is that OK, or would you swap one for another game (for example 'Fingers up, fingers down', W4 S1 activity 1)? We use the EA saying the number aloud with the card, as you do, because reading numbers is a separate step. In the check, 5 (a full hand) may be easy to spot. With only 3, 4 and 5 at the top of this range, we kept all three. Is that OK?"
         },
         {
-          "id": "finger_flash.10",
+          "key": "finger_flash.10",
+          "skill": "finger_flash",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child sees 6 to 10 fingers on two hands and says how many straight away, because they know one full hand is 5.",
           "activities": [
             {
@@ -140,12 +146,17 @@
       ]
     },
     {
-      "skill": "count",
-      "skill_label": "Count objects",
+      "key": "count",
+      "label": "Count objects",
+      "hint": "up to…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "count.5",
+          "key": "count.5",
+          "skill": "count",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child counts out up to 5 counters, touching each counter once, and says how many.",
           "activities": [
             {
@@ -198,8 +209,10 @@
           "note_for_partner": "Your Count and Count and show activities only ask children to count OUT a number. We added a 'messy pile, how many?' turn to Count and show, and the same task to the tick check, so it covers both ways of counting. Please confirm that fits your Grade 1 approach."
         },
         {
-          "id": "count.10",
+          "key": "count.10",
+          "skill": "count",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child counts out up to 10 counters, touching each counter once, and says how many.",
           "activities": [
             {
@@ -266,8 +279,10 @@
           "note_for_partner": "The first activity needs about 72 counters for 6 children, and the pairs game needs 3 sets of number cards 1 to 10. Please confirm EAs have this, or say if they should do the first activity in pairs too."
         },
         {
-          "id": "count.20",
+          "key": "count.20",
+          "skill": "count",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child counts out up to 20 counters, keeping their place after 10, and says how many.",
           "activities": [
             {
@@ -336,12 +351,17 @@
       ]
     },
     {
-      "skill": "read_numbers",
-      "skill_label": "Read numbers",
+      "key": "read_numbers",
+      "label": "Read numbers",
+      "hint": "up to…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "read_numbers.5",
+          "key": "read_numbers.5",
+          "skill": "read_numbers",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child looks at a number card from 1 to 5 and says the number.",
           "activities": [
             {
@@ -403,8 +423,10 @@
           "note_for_partner": "Starting step. All three activities change the partner's version slightly so the child, not the EA, says the number. A sixth child is given a checker job because the 1 to 5 set has only five cards."
         },
         {
-          "id": "read_numbers.10",
+          "key": "read_numbers.10",
+          "skill": "read_numbers",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child looks at a number card from 1 to 10 and says the number.",
           "activities": [
             {
@@ -467,8 +489,10 @@
           "note_for_partner": "6 and 9 are often mixed up, so both are in the tick list on purpose. Hold cards the right way up. For 10 the child must say 'ten', not 'one, zero'."
         },
         {
-          "id": "read_numbers.20",
+          "key": "read_numbers.20",
+          "skill": "read_numbers",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child looks at a number card from 1 to 20 and says the number.",
           "activities": [
             {
@@ -532,8 +556,10 @@
           "note_for_partner": "Numbers 11 to 20 are hard: children mix up 13 and 31, or say 'thirty' for 13. 11 and 12 have their own odd names; swap 12 in for 13 in the tick list if you think it is the better check. Activity 1 handles 20 on its own because 'ten and some more' does not fit it. Activity 2 asks children to count out up to 20 counters, which the order rules do not require before this step; the pile of 10 is there to help."
         },
         {
-          "id": "read_numbers.50",
+          "key": "read_numbers.50",
+          "skill": "read_numbers",
           "label": "up to 50",
+          "size": 50,
           "goal": "The child looks at a number card from 1 to 50 and says the number.",
           "activities": [
             {
@@ -598,8 +624,10 @@
           "note_for_partner": "The common mistake is reading the two parts the wrong way round (43 read as 'thirty-four'). Activity 3 puts these look-alike pairs side by side on purpose. In activity 1 the EA says 'ten, twenty, thirty'; children do not need to have learned to skip count in 10s yet. Activity 1 can need up to 5 children showing tens (for 49 or 50), which fits a group of 6."
         },
         {
-          "id": "read_numbers.100",
+          "key": "read_numbers.100",
+          "skill": "read_numbers",
           "label": "up to 100",
+          "size": 100,
           "goal": "The child looks at a number card from 1 to 100 and says the number.",
           "activities": [
             {
@@ -665,12 +693,17 @@
       ]
     },
     {
-      "skill": "compare",
-      "skill_label": "Compare",
+      "key": "compare",
+      "label": "Compare",
+      "hint": "up to…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "compare.5",
+          "key": "compare.5",
+          "skill": "compare",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child looks at two small groups (up to 5) and says which has more, which has less, or if they are the same.",
           "activities": [
             {
@@ -736,8 +769,10 @@
           "note_for_partner": "The tick questions use counters and fingers, not number cards, because reading numbers is not needed before this step. We say 'less' everywhere instead of switching between 'less' and 'fewer', to keep words simple for EAs. Please check you are happy with that."
         },
         {
-          "id": "compare.10",
+          "key": "compare.10",
+          "skill": "compare",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child compares two groups up to 10 and says which has more, which has less, or if they are the same.",
           "activities": [
             {
@@ -804,8 +839,10 @@
           "note_for_partner": "Finger flash up to 10 does not have to come before this step, so some children will count their fingers in the two-hand games. We think that is fine here. Please check."
         },
         {
-          "id": "compare.20",
+          "key": "compare.20",
+          "skill": "compare",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child compares numbers up to 20 and says which is more, which is less, or if they are the same.",
           "activities": [
             {
@@ -872,8 +909,10 @@
           "note_for_partner": "By our order rules this step needs Count objects up to 20, not Read numbers up to 20. So the EA says each number out loud in the tick questions and helps children read cards in the games. The child may use counters to check any tick question. The card game uses one set of cards 1 to 20 shared between 3 pairs, or numbers written on paper, because EAs may not have several sets. Lining up counters only shows which has more if the counters are placed counter next to counter, so we tell EAs to line them up that way."
         },
         {
-          "id": "compare.50",
+          "key": "compare.50",
+          "skill": "compare",
           "label": "up to 50",
+          "size": 50,
           "goal": "The child compares two numbers up to 50 and says which is more or less by looking at the left side of each number first.",
           "activities": [
             {
@@ -940,8 +979,10 @@
           "note_for_partner": "'Look at the left side first' is a new activity. It is our plain way of saying 'compare the tens first'. It only works when both numbers have two digits (cover the right side of 7 and nothing is left), so all games at this step use cards 10 to 50. Please check it fits how you teach comparing two-digit numbers, or give us your wording, and say if children also need practice comparing a one-digit and a two-digit number. The third tick question (34 and 43) is there on purpose to catch children who mix up the two sides of a number. With one set of cards there are no matching pairs, so the same-same dance is left out of the card game."
         },
         {
-          "id": "compare.100",
+          "key": "compare.100",
+          "skill": "compare",
           "label": "up to 100",
+          "size": 100,
           "goal": "The child compares two numbers up to 100 and says which is more or less, including 100 itself.",
           "activities": [
             {
@@ -1010,12 +1051,17 @@
       ]
     },
     {
-      "skill": "before_after",
-      "skill_label": "Before & after",
+      "key": "before_after",
+      "label": "Before & after",
+      "hint": "up to…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "before_after.5",
+          "key": "before_after.5",
+          "skill": "before_after",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child says the number just before and just after any number up to 5, and puts the cards 1 to 5 in order.",
           "activities": [
             {
@@ -1068,8 +1114,10 @@
           "note_for_partner": "Your W2 S1 activity 3 gives a card to each learner, but cards 1 to 5 only cover 5 of the 6 children, so we added a 'checker' role (otherwise the activity is yours as written). For W3 S1 activity 2 we read 'put a counter on a particular number' as a counter on a line of cards 1 to 5. Please confirm that is what you meant. The tick asks before/after with no cards out: is that the right test at this range, or should the child see the 1 to 5 line?"
         },
         {
-          "id": "before_after.10",
+          "key": "before_after.10",
+          "skill": "before_after",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child says the number before, after and between numbers up to 10, and puts the cards 1 to 10 in order.",
           "activities": [
             {
@@ -1136,8 +1184,10 @@
           "note_for_partner": "Your W3 S2 activity 2 uses two copies of cards 2, 3 and 4. EAs have one set of cards 0 to 100, so we give out cards 4 to 9 instead (one each). Is that OK?"
         },
         {
-          "id": "before_after.20",
+          "key": "before_after.20",
+          "skill": "before_after",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child says the number before, after and between numbers up to 20, and puts mixed cards up to 20 in order.",
           "activities": [
             {
@@ -1204,8 +1254,10 @@
           "note_for_partner": "We put 11 to 20 in a second line under 1 to 10 so children see 14 sits under 4. Does this fit how you teach the numbers 11 to 20? We replaced a 'hidden number' game with your pairs ordering game (W2 S2 activity 3) so children practise ordering cards that are not next to each other, which the tick asks for."
         },
         {
-          "id": "before_after.50",
+          "key": "before_after.50",
+          "skill": "before_after",
           "label": "up to 50",
+          "size": 50,
           "goal": "The child says the number before and after any number up to 50, including the jump from 39 to 40, and puts mixed cards in order.",
           "activities": [
             {
@@ -1272,8 +1324,10 @@
           "note_for_partner": "CAPS Grade 1 does before and after up to 20 (Grade 2 goes up to 99). Please confirm you want 'up to 50' for Grade 1 groups, or only for children who race ahead. Please also check the 'how each number starts' hint for ordering is how you want EAs to explain tens. It matches the 'look at the left side first' game in Compare up to 50."
         },
         {
-          "id": "before_after.100",
+          "key": "before_after.100",
+          "skill": "before_after",
           "label": "up to 100",
+          "size": 100,
           "goal": "The child says the number before and after any number up to 100, including jumps like 89 to 90 and 99 to 100, and puts mixed cards in order.",
           "activities": [
             {
@@ -1342,12 +1396,17 @@
       ]
     },
     {
-      "skill": "add",
-      "skill_label": "Add",
+      "key": "add",
+      "label": "Add",
+      "hint": "totals to…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "add.5",
+          "key": "add.5",
+          "skill": "add",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child puts two small groups together and says how many there are altogether, up to 5.",
           "activities": [
             {
@@ -1398,8 +1457,10 @@
           "note_for_partner": "Your W4 S1 activity 3 (the hidden-fist game) is written here in everyday words, with no maths terms, so EAs can follow it. Please check: should the tick need the fist way, or is counting everything from 1 fine at this step?"
         },
         {
-          "id": "add.10",
+          "key": "add.10",
+          "skill": "add",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child adds two numbers with an answer up to 10, starting from the bigger number instead of counting everything from 1.",
           "activities": [
             {
@@ -1465,8 +1526,10 @@
           "note_for_partner": "Activities 2 and 3 tell the child to start from the bigger number (for 2 + 7, hide the 7). Is that right for this level? The tick still accepts counting everything from 1. Please confirm."
         },
         {
-          "id": "add.15",
+          "key": "add.15",
+          "skill": "add",
           "label": "up to 15",
+          "size": 15,
           "goal": "The child adds two numbers with an answer up to 15, starting from the bigger number.",
           "activities": [
             {
@@ -1531,8 +1594,10 @@
           "note_for_partner": "Answers go past 10 at this step. Is 'start from the bigger number and keep counting' enough here, or do you want a 'fill up to 10 first' activity at this step? Activity 1 needs about 90 counters for 6 children; children could share in pairs if counters are short."
         },
         {
-          "id": "add.20",
+          "key": "add.20",
+          "skill": "add",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child adds two numbers with an answer up to 20.",
           "activities": [
             {
@@ -1599,12 +1664,17 @@
       ]
     },
     {
-      "skill": "subtract",
-      "skill_label": "Take away",
+      "key": "subtract",
+      "label": "Take away",
+      "hint": "within…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "subtract.5",
+          "key": "subtract.5",
+          "skill": "subtract",
           "label": "up to 5",
+          "size": 5,
           "goal": "The child takes some away from a group of up to 5 and says how many are left.",
           "activities": [
             {
@@ -1670,8 +1740,10 @@
           "note_for_partner": "Your weeks 1-4 have no take-away activities, so all three are your adding games turned around. Please check you are happy with these and with the words 'take away' and 'leaves'."
         },
         {
-          "id": "subtract.10",
+          "key": "subtract.10",
+          "skill": "subtract",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child takes some away from a group of up to 10 and says how many are left.",
           "activities": [
             {
@@ -1740,8 +1812,10 @@
           "note_for_partner": "Activity 2 teaches taking away one counter at a time while saying the numbers going down. It is your hidden-fist game done backwards. Please check EAs will follow it."
         },
         {
-          "id": "subtract.15",
+          "key": "subtract.15",
+          "skill": "subtract",
           "label": "up to 15",
+          "size": 15,
           "goal": "The child takes some away from a number up to 15 and says how many are left.",
           "activities": [
             {
@@ -1808,8 +1882,10 @@
           "note_for_partner": "Two practice sums (12 − 3 and 12 − 4) and the third tick item (13 take away 5) go below 10, just as Add up to 15 goes past 10. Please say if going below 10 belongs in this step or should wait for 'up to 20'."
         },
         {
-          "id": "subtract.20",
+          "key": "subtract.20",
+          "skill": "subtract",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child takes some away from a number up to 20 and says how many are left.",
           "activities": [
             {
@@ -1878,12 +1954,17 @@
       ]
     },
     {
-      "skill": "number_pairs",
-      "skill_label": "Number pairs",
+      "key": "number_pairs",
+      "label": "Number pairs",
+      "hint": "that make…",
+      "group": "main",
+      "slot": "activity",
       "steps": [
         {
-          "id": "number_pairs.5",
+          "key": "number_pairs.5",
+          "skill": "number_pairs",
           "label": "pairs that make 5",
+          "size": 5,
           "goal": "The child knows which two numbers make 5, like 3 and 2. When some of the 5 are hidden, the child can say how many are hidden.",
           "activities": [
             {
@@ -1953,8 +2034,10 @@
           "note_for_partner": "There are only three different pairs that make 5 (1 and 4, 2 and 3, 0 and 5). So the third tick question uses an empty fist (answer 0). Please check 0 is fair for Grade R/1 at this point. If not, swap it for 'You see 4' (answer 1), even though that repeats the 1 and 4 pair. 'How many are hiding?' turns your hidden-fist game (W4 S1 activity 3) into a guessing game. Please check it works for your EAs."
         },
         {
-          "id": "number_pairs.10",
+          "key": "number_pairs.10",
+          "skill": "number_pairs",
           "label": "pairs that make 10",
+          "size": 10,
           "goal": "The child knows which two numbers make 10, like 7 and 3. When some of the 10 are hidden, the child can say how many are hidden.",
           "activities": [
             {
@@ -2026,12 +2109,17 @@
       ]
     },
     {
-      "skill": "count_aloud",
-      "skill_label": "Count aloud",
+      "key": "count_aloud",
+      "label": "Count aloud",
+      "hint": "to…",
+      "group": "counting",
+      "slot": "warm_up",
       "steps": [
         {
-          "id": "count_aloud.10",
+          "key": "count_aloud.10",
+          "skill": "count_aloud",
           "label": "up to 10",
+          "size": 10,
           "goal": "The child says the numbers from 1 to 10 in the right order, and can start from any number and keep going to 10.",
           "activities": [
             {
@@ -2094,8 +2182,10 @@
           "note_for_partner": "Weeks 1-4 have no counting-out-loud activity, so all three are built from your 'go around the group', 'show the number' and 'before and after' games. Please check: should counting back from 10 to 1 also be part of this step?"
         },
         {
-          "id": "count_aloud.20",
+          "key": "count_aloud.20",
+          "skill": "count_aloud",
           "label": "up to 20",
+          "size": 20,
           "goal": "The child says the numbers from 1 to 20 in the right order, with no mistakes after 10, and can start from any number and keep going to 20.",
           "activities": [
             {
@@ -2159,8 +2249,10 @@
           "note_for_partner": "Please check: should the EA count in English, in isiXhosa, or both? The numbers after 10 sound very different in each language, and this step is where children often go wrong."
         },
         {
-          "id": "count_aloud.50",
+          "key": "count_aloud.50",
+          "skill": "count_aloud",
           "label": "up to 50",
+          "size": 50,
           "goal": "The child says the numbers up to 50 in the right order, and knows what comes after 29, 39 and 49.",
           "activities": [
             {
@@ -2223,8 +2315,10 @@
           "note_for_partner": "The 50 cards are laid out before the lesson because there is no time inside 20 minutes. Is that practical in your schools, or would a ready-made 1 to 50 paper chart work better? Also check that starting the circle game at 20 is right."
         },
         {
-          "id": "count_aloud.100",
+          "key": "count_aloud.100",
+          "skill": "count_aloud",
           "label": "up to 100",
+          "size": 100,
           "goal": "The child says the numbers up to 100 in the right order, and knows what comes after 59, 79 and 99.",
           "activities": [
             {
@@ -2289,12 +2383,17 @@
       ]
     },
     {
-      "skill": "skip_count",
-      "skill_label": "Skip count",
+      "key": "skip_count",
+      "label": "Skip count",
+      "hint": "in…",
+      "group": "counting",
+      "slot": "warm_up",
       "steps": [
         {
-          "id": "skip_count.2s",
+          "key": "skip_count.2s",
+          "skill": "skip_count",
           "label": "2s to 20",
+          "size": 20,
           "goal": "The child says 2, 4, 6 … up to 20, and counts piles of 2 in 2s.",
           "activities": [
             {
@@ -2358,8 +2457,10 @@
           "note_for_partner": "We kept the order 2s, then 5s, then 10s. Many programmes teach 10s first because it is the easiest. Tell us if you would rather start with 10s. The whisper-loud game is new, not from your weeks 1-4. Please check it suits Grade R/1."
         },
         {
-          "id": "skip_count.5s",
+          "key": "skip_count.5s",
+          "skill": "skip_count",
           "label": "5s to 50",
+          "size": 50,
           "goal": "The child says 5, 10, 15 … up to 50, and counts piles of 5 in 5s.",
           "activities": [
             {
@@ -2423,8 +2524,10 @@
           "note_for_partner": "Activity 2 needs 50 counters in piles of 5 (the tick check needs 45). Please check the EA kit has at least 50 counters. The hands game is our own scaling of your finger games, not a copy of one."
         },
         {
-          "id": "skip_count.10s",
+          "key": "skip_count.10s",
+          "skill": "skip_count",
           "label": "10s to 100",
+          "size": 100,
           "goal": "The child says 10, 20, 30 … up to 100, and counts piles of 10 in 10s.",
           "activities": [
             {
