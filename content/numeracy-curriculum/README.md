@@ -73,8 +73,10 @@ produces messages instead of crashing.
   Its rule is exactly `All 3 right? Tick it.`.
 - String fields are non-empty and have no leading or trailing whitespace,
   including partner notes and source references.
-- `comes_after` is an array of strings. Order rules and tick arithmetic are
-  added in Task 3.
+- `comes_after` names existing steps, follows the order rules and declared
+  overrides below, has no loops, and leaves exactly the four starting steps.
+  Tick numbers stay within the step's size, and addition, take away and number
+  pairs have correct expected answers.
 - Editions match `YYYY.number`, optionally ending in `-draft`. Each JSON
   file's name matches its edition. Frozen editions have SHA-256 pins, pinned
   bytes cannot change, and every pin has a corresponding file.
@@ -103,3 +105,45 @@ To freeze an edition after sign-off:
    `FROZEN_EDITIONS` in `verify.cjs` in the same commit.
 5. Run the content checks before committing. Future wording changes get a
    new edition; changed step meanings also get new step keys.
+
+## Order
+
+Each step's `comes_after` lists the steps a child needs first. Four rules
+work out that list:
+
+1. Within a skill, finish the previous step first.
+2. For Add, Take away, Compare and Number pairs at size N, use the smallest
+   Count step at or above N, if one exists. For example, Add up to 15 needs
+   Count up to 20. Above 20, also require Read numbers at N. Before & after
+   always needs Read numbers at the same size.
+3. Take away and Number pairs need Add at the same size. Number pairs that
+   make 5 also needs Finger flash up to 5.
+4. Skip count needs Count aloud to its total: 20 for 2s, 50 for 5s and 100
+   for 10s. It also follows the previous Skip count step, under rule 1.
+
+Exactly four steps have nothing before them: `finger_flash.5`, `count.5`,
+`read_numbers.5` and `count_aloud.10`. The verifier checks every arrow and
+reports unknown steps, missing or unexpected arrows, and loops.
+
+An accepted partner change to one arrow needs both a JSON edit and an entry
+in `ORDER_OVERRIDES` in `verify.cjs`, in the same commit. For example, to
+remove Count up to 10 from Add up to 10, set that step's `comes_after` to
+`["add.5"]` and declare:
+
+```js
+const ORDER_OVERRIDES = Object.freeze({
+  'add.10': { remove: ['count.10'] },
+});
+```
+
+An entry can also use `add: ['step.key']` to add an arrow. Overrides change
+the expected arrows for that step only; they still must name existing steps,
+leave no loops, and preserve the four starting steps.
+
+Tick questions use `a + b` for Add, `a take away b` for Take away, and
+`I have N. You see M.` for Number pairs (for example, `I have 5. You see 2.`).
+The verifier reads the first integer in the expected answer and checks the
+sum or difference. Number pairs must make the step's size. Every integer in
+each question and expected answer must be no bigger than the step's size,
+including tick questions for the other skills. Keep these wording patterns
+when copying accepted partner edits back into the JSON.

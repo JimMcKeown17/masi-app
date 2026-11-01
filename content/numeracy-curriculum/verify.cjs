@@ -22,6 +22,7 @@ const SKILLS = [
   { key: 'skip_count', group: 'counting', slot: 'warm_up' },
 ];
 const FROZEN_EDITIONS = Object.freeze({});
+const ORDER_OVERRIDES = Object.freeze({});
 const BANNED_WORDS = [/\bcount(?:ing)? on\b/i, /\bcount(?:ing)? all\b/i, /\bsubiti[sz]\w*/i, /\bnumber bonds?\b/i,
   /\brungs?\b/i, /\bladders?\b/i, /\bbands?\b/i, /\bstrateg\w*/i];
 
@@ -31,8 +32,140 @@ const itemsOf = value => Array.isArray(value) ? value : [];
 const ownerOf = (value, fallback) => typeof value === 'string' && value.trim() ? value : fallback;
 const location = (owner, path) => path ? `${owner} ${path}` : owner;
 
-function checkCurriculum(curriculum, options = {}) {
-  return [...checkStructure(curriculum), ...checkPlainWords(curriculum)];
+function checkCurriculum(curriculum, { orderOverrides = ORDER_OVERRIDES } = {}) {
+  return [...checkStructure(curriculum), ...checkPlainWords(curriculum),
+    ...checkOrder(curriculum, orderOverrides), ...checkTicks(curriculum)];
+}
+
+function expectedComesAfter(curriculum, rawStep) {
+  const step = fieldsOf(rawStep);
+  const skills = itemsOf(fieldsOf(curriculum).skills).map(fieldsOf);
+  const skill = skills.find(s => s.key === step.skill);
+  if (!skill || !Number.isInteger(step.size) || step.size <= 0) return [];
+  const steps = itemsOf(skill.steps).map(fieldsOf);
+  const index = steps.findIndex(s => s.key === step.key);
+  const prev = index > 0 ? steps[index - 1] : null;
+  const expected = prev && typeof prev.key === 'string' ? [prev.key] : [];
+  const N = step.size;
+  if (['add', 'subtract', 'compare', 'number_pairs'].includes(step.skill)) {
+    const count = skills.find(s => s.key === 'count');
+    const c = itemsOf(count?.steps).map(fieldsOf)
+      .filter(s => Number.isInteger(s.size) && s.size >= N && typeof s.key === 'string')
+      .sort((a, b) => a.size - b.size)[0];
+    if (c) expected.push(c.key);
+    if (N > 20) expected.push(`read_numbers.${N}`);
+  }
+  if (step.skill === 'before_after') expected.push(`read_numbers.${N}`);
+  if (step.skill === 'subtract' || step.skill === 'number_pairs') expected.push(`add.${N}`);
+  if (step.key === 'number_pairs.5') expected.push('finger_flash.5');
+  if (step.skill === 'skip_count') expected.push(`count_aloud.${N}`);
+  return expected;
+}
+
+function applyOrderOverride(expected, override) {
+  const { add, remove } = fieldsOf(override);
+  return [...new Set([...itemsOf(expected), ...itemsOf(add)])]
+    .filter(key => typeof key === 'string' && !itemsOf(remove).includes(key));
+}
+
+function checkOrder(curriculum, overrides) {
+  const errors = [];
+  const steps = itemsOf(fieldsOf(curriculum).skills)
+    .flatMap(skill => itemsOf(fieldsOf(skill).steps)).map(fieldsOf)
+    .filter(step => typeof step.key === 'string');
+  const byKey = new Map(steps.map(step => [step.key, step]));
+  const arrows = step => itemsOf(step.comes_after).filter(key => typeof key === 'string');
+  for (const step of steps) {
+    if (!Array.isArray(step.comes_after)) continue;
+    const actual = new Set(arrows(step));
+    const expected = new Set(applyOrderOverride(expectedComesAfter(curriculum, step),
+      fieldsOf(overrides)[step.key]));
+    for (const key of actual) {
+      if (!byKey.has(key)) errors.push(`${step.key} comes_after: "${key}" is not a step`);
+      if (!expected.has(key)) errors.push(`${step.key} comes_after: unexpected "${key}"`);
+    }
+    for (const key of expected) {
+      if (!actual.has(key)) errors.push(`${step.key} comes_after: missing "${key}"`);
+    }
+  }
+  const visited = new Set();
+  const active = new Set();
+  const path = [];
+  function visit(key) {
+    if (active.has(key)) {
+      errors.push(`curriculum comes_after: loop: ${[...path.slice(path.indexOf(key)), key].join(' → ')}`);
+      return;
+    }
+    if (visited.has(key) || !byKey.has(key)) return;
+    active.add(key);
+    path.push(key);
+    for (const next of arrows(byKey.get(key))) visit(next);
+    path.pop();
+    active.delete(key);
+    visited.add(key);
+  }
+  for (const key of byKey.keys()) visit(key);
+  const starts = ['finger_flash.5', 'count.5', 'read_numbers.5', 'count_aloud.10'];
+  const actualStarts = new Set(steps.filter(s => Array.isArray(s.comes_after) && s.comes_after.length === 0)
+    .map(s => s.key));
+  if (actualStarts.size !== starts.length || starts.some(key => !actualStarts.has(key))) {
+    errors.push(`curriculum comes_after: starting steps must be exactly ${starts.join(', ')}`);
+  }
+  return errors;
+}
+
+function checkTicks(curriculum) {
+  const errors = [];
+  for (const rawSkill of itemsOf(fieldsOf(curriculum).skills)) {
+    for (const rawStep of itemsOf(fieldsOf(rawSkill).steps)) {
+      const step = fieldsOf(rawStep);
+      if (typeof step.key !== 'string' || !Number.isInteger(step.size) || step.size <= 0) continue;
+      const tick = fieldsOf(step.tick_when);
+      const asks = itemsOf(tick.ask);
+      const answers = itemsOf(tick.expected);
+      for (let i = 0; i < Math.max(asks.length, answers.length); i++) {
+        const ask = asks[i];
+        const answer = answers[i];
+        const report = message => errors.push(`${step.key} tick item ${i + 1}: ${message}`);
+        for (const text of [ask, answer]) {
+          if (typeof text !== 'string') continue;
+          for (const n of text.match(/\d+/g) || []) {
+            if (Number(n) > step.size) report(`${n} is bigger than ${step.size}`);
+          }
+        }
+        if (typeof ask !== 'string' || typeof answer !== 'string') continue;
+        const x = answer.match(/\d+/)?.[0];
+        if (step.skill === 'add') {
+          const match = ask.match(/(\d+)\s*\+\s*(\d+)/);
+          if (!match) report('can\'t find a sum like "2 + 3"');
+          else {
+            const [, a, b] = match.map(Number);
+            if (x === undefined || Number(x) !== a + b) report(`${a} + ${b} is ${a + b}, not ${x}`);
+          }
+        }
+        if (step.skill === 'subtract') {
+          const match = ask.match(/(\d+)\s+take away\s+(\d+)/);
+          if (!match) report('can\'t find a sum like "5 take away 2"');
+          else {
+            const [, a, b] = match.map(Number);
+            if (x === undefined || Number(x) !== a - b) report(`${a} take away ${b} is ${a - b}, not ${x}`);
+          }
+        }
+        if (step.skill === 'number_pairs') {
+          const match = ask.match(/I have (\d+)\b[\s\S]*?\bsee (\d+)/i);
+          if (!match) report('can\'t find "I have 5. You see 2."');
+          else {
+            const [, total, seen] = match.map(Number);
+            if (total !== step.size) report(`must make ${step.size}`);
+            if (x === undefined || Number(x) !== total - seen) {
+              report(`${total} with ${seen} seen leaves ${total - seen}, not ${x}`);
+            }
+          }
+        }
+      }
+    }
+  }
+  return errors;
 }
 
 function checkStructure(curriculum) {
@@ -354,4 +487,74 @@ test('plain words: ordinary words that contain a banned word, and partner notes,
     t.activities[0].source_ref = 'band W1';
   });
   assert.equal(errors.filter(e => /banned/.test(e)).length, 0, errors.join('\n'));
+});
+
+const sorted = a => [...a].sort();
+const step = key => getStep(getCurriculum(), key);
+
+test('order: the expected arrows follow the four rules', () => {
+  const c = getCurriculum();
+  const cases = {
+    'finger_flash.5': [], 'read_numbers.20': ['read_numbers.10'], 'add.10': ['add.5', 'count.10'],
+    'add.15': ['add.10', 'count.20'], 'compare.50': ['compare.20', 'read_numbers.50'],
+    'before_after.5': ['read_numbers.5'], 'subtract.15': ['add.15', 'count.20', 'subtract.10'],
+    'number_pairs.5': ['add.5', 'count.5', 'finger_flash.5'], 'skip_count.2s': ['count_aloud.20'],
+    'skip_count.10s': ['count_aloud.100', 'skip_count.5s'],
+  };
+  for (const [key, want] of Object.entries(cases)) assert.deepEqual(sorted(expectedComesAfter(c, step(key))), sorted(want), key);
+  // the bundled content is checked WITH its declared overrides applied, so an accepted partner change passes
+  for (const key of listStepKeys(c)) assert.deepEqual(sorted(step(key).comes_after), sorted(applyOrderOverride(expectedComesAfter(c, step(key)), ORDER_OVERRIDES[key])), key);
+});
+
+test('order: a missing or extra arrow is caught unless an override records it', () => {
+  const drop = c => { c.skills[5].steps[1].comes_after = ['add.5']; };
+  assert.match(broken(drop).join('\n'), /add\.10.*missing "count\.10"/);
+  assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('compare.5'); }).join('\n'), /add\.10.*unexpected "compare\.5"/);
+  const c = structuredClone(getCurriculum()); drop(c);
+  assert.deepEqual(checkCurriculum(c, { orderOverrides: { 'add.10': { remove: ['count.10'] } } }), []);
+});
+
+test('order: the documented partner edit (JSON change plus override entry) passes every content check', () => {
+  const clone = structuredClone(getCurriculum());
+  getStep(clone, 'add.10').comes_after = ['add.5'];
+  const overrides = { 'add.10': { remove: ['count.10'] } };
+  assert.deepEqual(checkCurriculum(clone, { orderOverrides: overrides }), []);
+  for (const key of listStepKeys(clone)) {
+    const step = getStep(clone, key);
+    assert.deepEqual(sorted(step.comes_after),
+      sorted(applyOrderOverride(expectedComesAfter(clone, step), overrides[key])), key);
+  }
+  const other = getStep(clone, 'subtract.10');
+  other.comes_after = other.comes_after.filter(key => key !== 'count.10');
+  assert.match(checkCurriculum(clone, { orderOverrides: overrides }).join('\n'),
+    /subtract\.10.*missing "count\.10"/);
+});
+
+test('order: an unknown key or a loop is caught', () => {
+  assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('add.7'); }).join('\n'), /add\.10.*"add\.7" is not a step/);
+  const c = structuredClone(getCurriculum());
+  c.skills[5].steps[0].comes_after.push('add.10');
+  assert.match(checkCurriculum(c, { orderOverrides: { 'add.5': { add: ['add.10'] } } }).join('\n'), /loop: .*add\.5.*add\.10/);
+});
+
+test('order: exactly the four starting steps', () => {
+  const c = getCurriculum();
+  assert.deepEqual(listStepKeys(c).filter(k => step(k).comes_after.length === 0),
+    ['finger_flash.5', 'count.5', 'read_numbers.5', 'count_aloud.10']);
+  const fifth = structuredClone(c); fifth.skills[3].steps[0].comes_after = [];
+  assert.match(checkCurriculum(fifth, { orderOverrides: { 'compare.5': { remove: ['count.5'] } } }).join('\n'),
+    /starting steps must be exactly finger_flash\.5, count\.5, read_numbers\.5, count_aloud\.10/);
+});
+
+test('ticks: the sums are checked for add, take away and number pairs', () => {
+  assert.match(broken(c => { c.skills[5].steps[1].tick_when.expected[1] = '11'; }).join('\n'), /add\.10 tick item 2: 6 \+ 4 is 10, not 11/);
+  assert.match(broken(c => { c.skills[6].steps[0].tick_when.expected[0] = '4'; }).join('\n'), /subtract\.5 tick item 1: 5 take away 2 is 3, not 4/);
+  assert.match(broken(c => { c.skills[7].steps[1].tick_when.expected[2] = '7'; }).join('\n'), /number_pairs\.10 tick item 3: 10 with 2 seen leaves 8, not 7/);
+  assert.match(broken(c => { c.skills[7].steps[1].tick_when.ask[0] = 'I have 5. You see 3. How many are under the paper?'; }).join('\n'), /number_pairs\.10 tick item 1: must make 10/);
+  assert.match(broken(c => { c.skills[5].steps[0].tick_when.ask[0] = 'two plus three'; }).join('\n'), /add\.5 tick item 1: can't find a sum like "2 \+ 3"/);
+});
+
+test('ticks: every number in a tick item is within the step size', () => {
+  assert.match(broken(c => { const t = c.skills[5].steps[0].tick_when; t.ask[2] = '4 + 3'; t.expected[2] = '7'; }).join('\n'), /add\.5 tick item 3: 7 is bigger than 5/);
+  assert.match(broken(c => { c.skills[2].steps[2].tick_when.ask[0] = 'Card 21'; }).join('\n'), /read_numbers\.20 tick item 1: 21 is bigger than 20/);
 });
