@@ -99,7 +99,7 @@ import { saveLesson } from '../src/services/lessonSave';
 import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
 import HomeScreen from '../src/screens/main/HomeScreen';
 
-const lessonDraft = { id: 'draft-1', attendance: {
+const lessonDraft = { id: 'draft-1', kind: 'literacy', attendance: {
   childIds: ['c1', 'c2'], absentChildIds: [], addedChildIds: [],
 } };
 const lessonChildren = [{ id: 'c1', first_name: 'Amahle' }, { id: 'c2', first_name: 'Lulu' }];
@@ -201,6 +201,88 @@ describe('HomeScreen', () => {
     await cleanupAsync();
     jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  const seedHomeDraft = async (kind) => {
+    const handle = getDefaultTestHandle();
+    handle.repositories.lessonDrafts.getActive.mockRestore();
+    await handle.withTransaction(async db => {
+      await seedCoreData(db);
+      await db.runAsync("insert into groups (id, name, programme_id, class_id, created_by) values ('group-1', 'Group 1', 'programme-a', 'class-1', ?)", handle.userId);
+    });
+    const draft = await handle.repositories.lessonDrafts.create(draftStart({
+      kind, plan: null,
+      ...(kind === 'numeracy' ? { language_code: null, pack_id: null, ticks: { taught: null } } : {}),
+    }));
+    mockUseChildren.mockReturnValue({ children: lessonChildren });
+    return draft;
+  };
+
+  test('a numeracy EA with a numeracy draft sees Lesson in progress and resumes the numeracy lesson', async () => {
+    const draft = await seedHomeDraft('numeracy');
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: 'numeracy' } });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    fireEvent.press(await screen.findByRole('button', { name: 'Lesson in progress with Amahle and Lulu. Resume' }));
+    expect(navigation.navigate).toHaveBeenCalledWith('NumeracyLesson', { draftId: draft.id });
+  });
+
+  test('a numeracy EA never sees a leftover literacy draft on Home', async () => {
+    const draft = await seedHomeDraft('literacy');
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: 'numeracy' } });
+    const screen = renderHome();
+    await screen.findByText('2 of 3 sessions today');
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+    expect((await getDefaultTestHandle().repositories.lessonDrafts.getActive()).id).toBe(draft.id);
+  });
+
+  test('a literacy EA with a literacy draft sees the same card as before', async () => {
+    const draft = await seedHomeDraft('literacy');
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    const resume = await screen.findByRole('button', { name: 'Lesson in progress with Amahle and Lulu. Resume' });
+    expect(screen.getByText('Lesson in progress')).toBeTruthy();
+    expect(screen.getByText('Amahle & Lulu · Resume')).toBeTruthy();
+    expect(screen.queryByLabelText('Dismiss: Lesson in progress')).toBeNull();
+    fireEvent.press(resume);
+    expect(navigation.navigate).toHaveBeenCalledWith('Lesson', { draftId: draft.id });
+  });
+
+  test('no card shows before the subject is known', async () => {
+    await seedHomeDraft('numeracy');
+    const gate = deferred();
+    mockGetActiveProgrammeGate.mockReturnValue(gate.promise);
+    const screen = renderHome();
+    await act(async () => {});
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+    await act(async () => gate.resolve({ hasActiveProgramme: true, programme: { code: 'numeracy' } }));
+    expect(await screen.findByText('Lesson in progress')).toBeTruthy();
+  });
+
+  test('a literacy EA never sees a leftover numeracy draft on Home', async () => {
+    await seedHomeDraft('numeracy');
+    const screen = renderHome();
+    await screen.findByText('2 of 3 sessions today');
+    expect(screen.queryByText('Lesson in progress')).toBeNull();
+  });
+
+  test.each([
+    ['numeracy', 'numeracy', 'NumeracyLesson'],
+    ['literacy', 'literacy', 'Lesson'],
+    ['numeracy', 'literacy', null],
+    ['literacy', 'numeracy', null],
+  ])('a corrupt %s draft on %s Home resumes only its matching subject', async (kind, subject, route) => {
+    mockGetActiveDraft.mockRejectedValue(new LessonDraftCorruptError('corrupt-kind', ['attendance'], kind));
+    mockGetActiveProgrammeGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: subject } });
+    const navigation = { navigate: jest.fn() };
+    const screen = renderHome(navigation);
+    await screen.findByText('2 of 3 sessions today');
+    if (route) {
+      fireEvent.press(await screen.findByRole('button', { name: 'Lesson in progress. Resume' }));
+      expect(navigation.navigate).toHaveBeenCalledWith(route, { draftId: 'corrupt-kind' });
+    } else {
+      expect(screen.queryByText('Lesson in progress')).toBeNull();
+    }
   });
 
   test('a numeracy EA is never told children need assessing', async () => {
@@ -305,7 +387,7 @@ describe('HomeScreen', () => {
   });
   test('a corrupt draft still shows Resume', async () => {
     const report = jest.spyOn(console, 'error').mockImplementation(() => {});
-    mockGetActiveDraft.mockRejectedValue(new LessonDraftCorruptError('corrupt-1', ['attendance']));
+    mockGetActiveDraft.mockRejectedValue(new LessonDraftCorruptError('corrupt-1', ['attendance'], 'literacy'));
     const navigation = { navigate: jest.fn() };
     const screen = renderHome(navigation);
     fireEvent.press(await screen.findByRole('button', { name: 'Lesson in progress. Resume' }));

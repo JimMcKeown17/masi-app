@@ -27,6 +27,7 @@ import { isStaleActorError } from '../../session/staleActor';
 import { LessonDraftCorruptError } from '../../db/repositories/lessonDraftsRepository';
 import { getCoverageFromCounts, getWeekSessionCounts } from '../../utils/dashboardStats';
 import { deriveHomeAttentionItems, lessonInProgressFromDraft } from '../../utils/homeAttention';
+import { lessonRouteForDraft } from '../../utils/lessonDraftRoutes';
 import { getGoalCopy } from '../../utils/sessionGoalPresentation';
 import { toLocalDateString } from '../../utils/localDate';
 import { colors, shadows } from '../../constants/colors';
@@ -159,8 +160,9 @@ export default function HomeScreen({ navigation }) {
     }, [loadStats])
   );
   const attentionItems = useMemo(() => deriveHomeAttentionItems({
-    lessonInProgress: !subjectReady || isMaths ? null : lessonDraft instanceof LessonDraftCorruptError
-      ? { draftId: lessonDraft.draftId, childNames: [] }
+    lessonInProgress: !subjectReady || lessonDraft?.kind !== (isMaths ? 'numeracy' : 'literacy')
+      ? null : lessonDraft instanceof LessonDraftCorruptError
+      ? { draftId: lessonDraft.draftId, childNames: [], route: lessonRouteForDraft({ kind: lessonDraft.kind }) }
       : lessonInProgressFromDraft(lessonDraft, childrenList),
     needsAttentionCount,
     autoClockOut: autoClockOutNotice,

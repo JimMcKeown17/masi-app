@@ -4,6 +4,7 @@ import { AUTO_CLOCK_OUT_NOTICE_TTL_MS } from '../services/homeAttentionStore';
 import { formatDisplayDate, toLocalDateString } from './localDate';
 import { presentChildIds } from '../db/repositories/lessonDraftsRepository';
 import { formatNameList } from './childNames';
+import { lessonRouteForDraft } from './lessonDraftRoutes';
 
 // Home's attention area: blank by default, at most two cards, highest priority
 // first. Every rule lives here so Home only renders what this returns.
@@ -16,11 +17,12 @@ export const lessonInProgressFromDraft = (draft, children) => {
   const namesById = new Map(children.map((child) => [child.id, child.first_name]));
   return {
     draftId: draft.id,
+    route: lessonRouteForDraft(draft),
     childNames: presentChildIds(draft.attendance).map((id) => namesById.get(id)).filter(Boolean),
   };
 };
 
-const lessonInProgressItem = ({ draftId, childNames }) => {
+const lessonInProgressItem = ({ draftId, childNames, route = 'Lesson' }) => {
   const names = formatNameList(childNames);
   return {
     key: `lesson_in_progress:${draftId}`,
@@ -31,7 +33,7 @@ const lessonInProgressItem = ({ draftId, childNames }) => {
     accessibilityLabel: names
       ? `Lesson in progress with ${formatNameList(childNames, { spoken: true })}. Resume`
       : 'Lesson in progress. Resume',
-    route: 'Lesson',
+    route,
     params: { draftId },
     dismissible: false,
   };
