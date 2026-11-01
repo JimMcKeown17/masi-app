@@ -8445,3 +8445,26 @@ release or device gate was run in this documentation session.
   **1 suite / 5 tests passed, exit 0**.
 - `git diff --check`: passed. Only the five authorized documentation files changed.
   No hosted commands and no code changes.
+
+**Post-build Codex adversarial review, round 2 (gpt-6-astra, whole branch against `origin/main` 297dbad3)**
+
+- Verdict needs-attention, one high finding: **real, fixed**. `setSkillMastery` guarded the
+  single slot with the displayed row's `changed_at`. After a terminal 42501, a history page
+  repairs the row to an older accepted tick while the outbox keeps the refused newer payload;
+  Retry plus a transport failure re-owes that payload as `failed`. A delayed older save
+  (lesson saves pass `changedAt: change.madeAt`) then passed the guard and replaced the slot,
+  so the newer un-confirm and its correction id never reached the server. Reproduced on real
+  SQLite with the production repository, `retryFailedItem`, `syncAll` and `saveHistoryPage`.
+  Fix: the existing keyed read also selects the owed slot payload's `changed_at`, and the guard
+  uses the later of the two (same clamp to now). Regression:
+  `skillMasteryCorrectionSync.test.js` "a delayed older save never replaces a newer owed
+  correction that history repair hid from the row" (RED before, GREEN after).
+- The letter repository on main has the identical guard; a throwaway probe of the same
+  sequence against `masteryRepository` lost Tuesday's correction too. Recorded as
+  MA-BUG-20261101-008 (letter fix proposed, not applied here: it is outside Track B and needs
+  Jim's go-ahead). The skill copy now differs from the letter mirror by this guard only.
+- Verification after the fix (Node 20.19.4): unit `npm test -- --runInBand` **490 suites /
+  7,845 tests passed**; integration `npx jest -c jest.integration.config.js` **101 suites /
+  1,415 tests passed**; PostgreSQL 17 harnesses (masi-numeracy-pg, databases prefixed
+  `masi_history_rls_b2r2_`) all exit 0: skill-mastery 31/31, letter-mastery 20/20,
+  assessment-history 144/144, reporting 132/132, history-authorization, ea-access, session-group 36/36.

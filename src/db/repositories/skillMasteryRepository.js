@@ -48,7 +48,7 @@ export const deleteUndeliveredSkillMastery = async (txn, { userId, childIds }) =
 
 const mapMastery = (row) => {
   if (!row) return null;
-  const { outbox_status, ...record } = row;
+  const { outbox_status, outbox_changed_at, ...record } = row;
   return mapDomainRow(record, { booleanColumns: ['confirmed'] });
 };
 
@@ -118,7 +118,7 @@ export const createSkillMasteryRepository = ({ database } = {}) => {
       // Anchor the existing keyed read on delivery authority. The left join still
       // returns a row for an authorised child's first confirmation.
       const existing = await txn.getFirstAsync(`
-        select lm.*, o.status as outbox_status
+        select lm.*, o.status as outbox_status, json_extract(o.payload, '$.changed_at') as outbox_changed_at
         from (select 1 from child_ea_assignments
           where child_id = ? and user_id = ? and unassigned_at is null limit 1) delivery
         left join (select * from skill_mastery lm where lm.id = ?) lm on 1 = 1
@@ -131,8 +131,11 @@ export const createSkillMasteryRepository = ({ database } = {}) => {
         error.code = 'NOT_DELIVERY_CHILD';
         throw error;
       }
-      if (existing?.outbox_status != null
-        && Math.min(Date.parse(existing.changed_at), nowMs) > Date.parse(changed_at)) {
+      // History repair can restore an older accepted row while a newer refused and
+      // retried correction is still owed; the owed payload's time also guards the slot.
+      const owedTimes = [existing.changed_at, existing.outbox_changed_at].map(Date.parse).filter(Number.isFinite);
+      if (existing.outbox_status != null && owedTimes.length > 0
+        && Math.min(Math.max(...owedTimes), nowMs) > Date.parse(changed_at)) {
         return mapMastery(existing);
       }
 

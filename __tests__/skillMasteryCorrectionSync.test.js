@@ -183,6 +183,32 @@ describe('skill mastery correction sync', () => {
     expect(await f.db.getAllAsync('select * from sync_outbox')).toHaveLength(1);
   });
 
+  test('a delayed older save never replaces a newer owed correction that history repair hid from the row', async () => {
+    const MON_AM = '2026-10-19T07:00:00.000Z';
+    const MON_PM = '2026-10-19T14:00:00.000Z';
+    const tuesday = await write({ confirmed: false, changedAt: TUE });
+    client.rpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'RLS denied' } });
+    const engine = f.engine(client);
+    expect(await engine.syncAll({ tableName: 'skill_mastery' })).toMatchObject({ totalTerminal: 1 });
+    // History repair restores Monday morning's accepted confirmation over the refused row.
+    const { id } = await read();
+    expect(await mastery.saveHistoryPage([{
+      id, child_id: f.childId, step_key: 'add.5', confirmed: true, changed_at: MON_AM,
+      correction_id: uuid(), changed_by: OTHER_EA, programme_id: null, created_at: MON_AM, updated_at: MON_AM,
+    }], { scope: `skill_mastery_pull:${f.userId}`, pullState: { lastPulledAt: MON_AM, cursor: null } }))
+      .toMatchObject({ applied: 1 });
+    await engine.retryFailedItem('skill_mastery', id);
+    client.rpc.mockResolvedValueOnce({ data: null, error: { message: 'Network request failed' } });
+    expect(await engine.syncAll({ tableName: 'skill_mastery' })).toMatchObject({ totalRetriable: 1 });
+    const [owed] = await f.db.getAllAsync('select * from sync_outbox');
+    expect(owed.status).toBe('failed');
+    expect(await read()).toMatchObject({ changed_at: MON_AM });
+
+    await write({ confirmed: true, changedAt: MON_PM });
+    const [slot] = await f.db.getAllAsync('select * from sync_outbox');
+    expect(JSON.parse(slot.payload)).toMatchObject({ correction_id: tuesday.correction_id, confirmed: false, changed_at: TUE });
+  });
+
   test('letter and skill corrections in one pass each reach their own RPC and acknowledgement', async () => {
     const skill = await write();
     const { createMasteryRepository } = require('../src/db/repositories/masteryRepository');
