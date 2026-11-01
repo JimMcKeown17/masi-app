@@ -8262,13 +8262,28 @@ after a Metro reload. Unverified on a release build.
 Plan: `docs/superpowers/plans/2026-10-31-numeracy-c-planner-evidence.md` (spec
 `docs/superpowers/specs/2026-10-31-numeracy-tracker-and-lessons-design.md` §5, §7, §9, §13). Codex
 (gpt-6.1-sol, high) built each task with TDD; Claude reviewed every diff, re-ran every check and
-committed. Branch off `origin/main` `41c5726e`.
+committed. Branch off `origin/main` `41c5726e`, rebased onto `297dbad3` (Track A, #138) on
+2026-11-01.
 
 What shipped: four pure modules under `src/numeracy/` (`evidence.js`, `knownSteps.js`,
 `groupSteps.js`, `planLesson.js`), the shared group threshold `src/utils/groupMastery.js`
 (`isGroupMastered`, moved unchanged out of the literacy engine's `isLetterGroupMastered`), and a
 37-step test fixture `test-support/numeracyCurriculumFixture.js` in Track A's curriculum shape. The
-curriculum and tick rows are inputs, so nothing here imports Track A, Track B or `content/`.
+curriculum and tick rows are inputs, so nothing here imports Track A, Track B or `content/`. Only
+the test `__tests__/numeracyRealContent.test.js` reads `content/`, to check the planner against the
+bundled curriculum and EGMA pack.
+
+**Ready-children rule (Jim, 2026-11-01).** A Codex review found that a group step was "ready" when
+each `comes_after` key was separately group-known. In a group of 3 where each child misses a
+different earlier step, every earlier step is group-known (2 of 3 is all but one), so the step was
+ready while "0 of 3 are ready". Now a present child is ready for a step when they know every
+`comes_after` step (any known state; a step key this edition lacks is never known), and the step is
+ready when the ready-child count passes `isGroupMastered`. Starting steps (no `comes_after`) are ready
+for everyone. Group-known steps and each skill's group step are unchanged. "Need extra help" on a card
+is now the present children who are not ready (missing any earlier step), so
+`readyCount + needHelp.length === presentCount` on every card. One shared helper,
+`childReadyFor(knownByChild, childId, step, stepKeys)` in `groupSteps.js`, drives both the ready steps
+and the card counts. Spec §9.2 and §9.3 updated in the same commit.
 
 #### Verification
 
@@ -8280,18 +8295,27 @@ curriculum and tick rows are inputs, so nothing here imports Track A, Track B or
 | Purity guard covers `src/utils/groupMastery.js` and `src/numeracy/` (`lessonPlanEnginePurity`, 4 tests: the existing three plus `numeracy files are pure`) | Passed. Mutation probe: a temporary `src/numeracy/zzProbe.js` with a `src/utils/letterMastery` import, a module-level `let` and `Date.now()` failed the guard with exactly those three violations; probe removed |
 | Track suites together: `npx jest numeracy groupMastery lessonPlan` | **12 suites / 324 tests** passed |
 | Full unit suite: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand` | **488 suites / 7,839 tests**, 16 snapshots, exit 0 |
-| Task 6 gate: `git fetch origin && git ls-tree --name-only origin/main content/numeracy-curriculum/index.js content/egma/index.js` | One line, `content/egma/index.js` (origin/main `41c5726e`): **gate not met**, Track A's content file is not on main |
+| Task 6 gate, first run: `git fetch origin && git ls-tree --name-only origin/main content/numeracy-curriculum/index.js content/egma/index.js` | One line, `content/egma/index.js` (origin/main `41c5726e`): gate not met, Track A's content file was not on main yet |
+| Ready-children rule RED (2026-11-01): `npx jest __tests__/numeracyGroupSteps.test.js __tests__/numeracyPlanLesson.test.js` before the change | **2 failed / 29 passed**: `a step is not ready when no single child knows every earlier step` (`readySteps` included `number_pairs.5`) and `need extra help lists exactly the children who are not ready` (`readyCount + needHelp.length` was 9 of 10) |
+| Ready-children rule GREEN: `numeracyGroupSteps` + `numeracyPlanLesson` + `numeracyKnownSteps` + `numeracyEvidence` + `groupMastery` + `lessonPlanEnginePurity` | **6 suites / 75 tests** passed. New tests: `a step is not ready when no single child knows every earlier step`, `a step is ready when enough children know every earlier step`, `need extra help lists exactly the children who are not ready`; `expectOnlyReady` now checks `readyCount + needHelp.length === presentCount` on every card of every planner test. No existing expectation changed (`extra help lists children still on the step below…` still covers a child missing only the same-skill previous step) |
+| Task 6 gate, second run (2026-11-01) | Two lines, `content/egma/index.js` and `content/numeracy-curriculum/index.js` (origin/main `297dbad3`): **gate met**; branch rebased onto it (one `build-log.md` conflict, both sides kept) |
+| Track suites after the rebase: `npx jest numeracy groupMastery lessonPlan` | **12 suites / 327 tests** passed |
+| Task 6 real-content checks: `npx jest __tests__/numeracyRealContent.test.js` | **1 suite / 4 tests** passed on the first run: every `EVIDENCE_MAP` step (30) is in the bundled edition `2026.1-draft` (37 steps) and the 7 unmapped steps are exactly `before_after.50`, `before_after.100`, `add.15`, `subtract.15`, `skip_count.2s`, `skip_count.5s`, `skip_count.10s`; every mapped `{skill, band}` tag appears among the EGMA pack's 161 tagged items; the fixture matches the bundled edition's steps, order, slots and `comes_after` with **no differences** (no fixture change); a first lesson on the bundled edition gives the four starting steps and a warm-up activity of 5 minutes or less |
+| Track suites with the real-content suite: `npx jest numeracy groupMastery lessonPlan` | **13 suites / 331 tests** passed (`numeracyGroupSteps` 14, `numeracyPlanLesson` 17, `numeracyRealContent` 4) |
+| Full unit suite after the rebase: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand` | Not recorded: the run started but the driver had to hand back before it finished (15 suites passed, none failed, at handoff). Rerun before merge |
 
-#### Deferred: real-content checks
+#### Real-content checks
 
-Task 6 Steps 1–4 (`__tests__/numeracyRealContent.test.js`: every `EVIDENCE_MAP` step exists in the
-bundled edition, every mapped `{skill, band}` tag appears in the EGMA pack, the fixture matches the
-bundled edition's steps, slots and `comes_after`, and a first lesson on the bundled edition) were
-**not run**. They become the first task of Track D's plan, or run once Track A merges, whichever
-comes first.
+The first pass deferred Task 6 Steps 1–4 because Track A was not on main. Track A merged as #138, so
+`__tests__/numeracyRealContent.test.js` now runs on this branch (rows above) and is no longer a
+Track D task.
 
 #### Review findings and notes
 
+- Review fix (ready-children rule): Codex's first diff changed `a prerequisite missing from the
+  curriculum is not known` to expect `count.5` ready, because children "knew" the retired key. That
+  contradicted Task 4's pinned rule (a `comes_after` key missing from the curriculum counts as not
+  known). Restored the original expectation; `childReadyFor` takes the curriculum's step keys.
 - Review fix (Task 2): `only steps in the given curriculum appear` had no control, so it would have
   passed even if band-100 items were never read. Added the full-curriculum control assertion.
 - EGMA's current form is `-draft` (`question_version` `masi-egma-en-2026-1-draft`), so it produces
