@@ -1,5 +1,5 @@
-export type MaterialItem = 'reading_card' | 'picture_cards' | 'writing_sheet';
-export interface Materials { item: MaterialItem; side?: 'A' | 'B' | 'C' | 'D' }
+export type MaterialItem = 'reading_card' | 'picture_cards' | 'writing_sheet' | 'number_card' | 'counters';
+export interface Materials { item: MaterialItem; side?: 'A' | 'B' | 'C' | 'D'; page?: number }
 export interface BatteryQuestion {
   title: string;
   question_code: string;
@@ -9,7 +9,7 @@ export interface BatteryQuestion {
   materials: Materials | null;
   paper_marked?: boolean;
 }
-export interface PrerequisiteRule { depends_on: string; minScore: number; on_unmet_reason: 'skipped_prerequisite_unmet' }
+export interface PrerequisiteRule { depends_on: string; minScore: number; on_unmet_reason: 'skipped_prerequisite_unmet'; unmet_label?: string }
 export interface FirstRowTrigger { question_code: string; first_row_length: number }
 export interface SkipRule { triggers: FirstRowTrigger[]; skips: string[] }
 export interface BatteryConfig {
@@ -20,6 +20,7 @@ export interface BatteryConfig {
   languages: string[];
   fixedLanguage?: string;
   readingCard?: string;
+  numberCard?: string;
   questions: BatteryQuestion[];
   prerequisites: Record<string, PrerequisiteRule>;
   skipRule?: SkipRule;

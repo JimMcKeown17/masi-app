@@ -8,7 +8,7 @@ export default function MaterialsBlock({ firstName, materials }) {
   return <View style={styles.block}>
     <Text style={styles.eyebrow}>Hand {firstName}</Text>
     <Text style={styles.item}>{[materials.item, materials.side].filter(Boolean).join(' · ')}</Text>
-    <Text style={styles.footer}>Footer: {materials.footer}</Text>
+    {materials.footer != null && <Text style={styles.footer}>Footer: {materials.footer}</Text>}
   </View>;
 }
 

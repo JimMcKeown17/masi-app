@@ -21,3 +21,11 @@ it('every battery and standalone question code maps to a component; unknown code
   expect(testFixtures.FIXTURE_STORY_WRITING_EN.picture).toBeDefined();
   expect(WELA_PLUS_STORY_WRITING_EN.question_code).toBe('wela_plus_story_writing');
 });
+
+import { MASI_MATHS_2026_1_DRAFT, MathsGridQuestion, MathsCardsQuestion } from '../..';
+test('every maths question code maps to its grid or cards component', () => {
+  const grids=['maths_read_numbers','egma_number_id','egma_addition_l1','egma_subtraction_l1'];
+  for (const q of MASI_MATHS_2026_1_DRAFT.questions) expect(questionComponentFor(q.question_code)).toEqual({
+    Component:grids.includes(q.question_code)?MathsGridQuestion:MathsCardsQuestion,extraProps:{},
+  });
+});

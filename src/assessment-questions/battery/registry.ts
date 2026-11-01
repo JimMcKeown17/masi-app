@@ -1,10 +1,11 @@
 import type { BatteryConfig } from '../types/BatteryConfig';
 import { WELA_PLUS_FULL_2024_1 } from './wela_plus_full';
 import { WELA_PLUS_FULL_2026_1 } from './wela_plus_full_2026_1';
+import { MASI_MATHS_BATTERIES } from '../egma';
 import { EGRA_BATTERIES } from '../egra';
 import { FULL_EGRA_2026_1 } from '../egra/fullEgra';
 
-const BATTERIES = [WELA_PLUS_FULL_2024_1, WELA_PLUS_FULL_2026_1, FULL_EGRA_2026_1, ...EGRA_BATTERIES];
+const BATTERIES = [WELA_PLUS_FULL_2024_1, WELA_PLUS_FULL_2026_1, FULL_EGRA_2026_1, ...EGRA_BATTERIES, ...MASI_MATHS_BATTERIES];
 const identities = new Set<string>();
 for (const battery of BATTERIES) {
   const key = `${battery.battery_code}@${battery.battery_version}`;

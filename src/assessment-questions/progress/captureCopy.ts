@@ -2,7 +2,7 @@ import type { CaptureCopy, LinePart } from './captureTypes';
 
 const capitalise = (text: string) => text[0].toUpperCase() + text.slice(1);
 
-export function flatCopy(noun: 'letter' | 'word' | 'question', total: number): CaptureCopy {
+export function flatCopy(noun: 'letter' | 'word' | 'question' | 'number' | 'pair' | 'problem' | 'item', total: number): CaptureCopy {
   const name = capitalise(noun);
   return {
     noun,

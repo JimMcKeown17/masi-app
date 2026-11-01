@@ -1,0 +1,2493 @@
+{
+  "edition": "2026.1-draft",
+  "status": "Draft for partner review. Generated 2026-10-31 from the partner Grade 1 weeks 1-4 activities; reviewed for maths and plain language.",
+  "skills": [
+    {
+      "skill": "finger_flash",
+      "skill_label": "Finger flash",
+      "steps": [
+        {
+          "id": "finger_flash.5",
+          "label": "up to 5",
+          "goal": "The child sees 1 to 5 fingers for a moment and says how many straight away, without counting them one by one.",
+          "activities": [
+            {
+              "name": "Finger flash",
+              "minutes": 5,
+              "how": [
+                "Hide one hand behind your back.",
+                "Bring it out with some fingers up, for example 3. Show it for one second, then hide it again.",
+                "Ask: 'How many?' The children say it together: 'Three!'",
+                "Sometimes point to one child to answer alone, so you can see who knows.",
+                "Use all the numbers 1 to 5 in a mixed-up order, for example 3, 1, 4, 5, 2.",
+                "If a child counts slowly on their own fingers, flash again and say: 'Look fast. Just say it.'"
+              ],
+              "needs": "Hands only",
+              "source": "partner",
+              "source_ref": "W1 S1 activity 1"
+            },
+            {
+              "name": "Show the number",
+              "minutes": 5,
+              "how": [
+                "Hold up a number card, for example 4, and say 'four'.",
+                "The children show 4 fingers as fast as they can.",
+                "Look at every hand. Check it is 4 fingers.",
+                "Use all the numbers 1 to 5 in a mixed-up order, for example 3, 1, 4, 5, 2.",
+                "Watch for children who copy a friend, or who lift one finger at a time."
+              ],
+              "needs": "Number cards 1 to 5",
+              "source": "partner",
+              "source_ref": "W2 S1 activity 1 (watch-for tip from W2 S2 activity 1)"
+            },
+            {
+              "name": "Flash in pairs",
+              "minutes": 5,
+              "how": [
+                "Put the 6 children in 3 pairs.",
+                "One child flashes some fingers (1 to 5) for one second. The other child says how many.",
+                "After 5 turns, they swap.",
+                "While they play, sit with the children who still count one by one. Flash for them and help them say it fast."
+              ],
+              "needs": "Hands only",
+              "source": "partner",
+              "source_ref": "W1 S2 activity 1"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Flash your fingers for one second, then hide them. Ask: 'How many?' The child must say it fast, without counting one by one.",
+            "ask": [
+              "Flash 4 fingers",
+              "Flash 3 fingers",
+              "Flash 5 fingers"
+            ],
+            "expected": [
+              "4, said straight away",
+              "3, said straight away",
+              "5, said straight away"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [],
+          "note_for_partner": "In your lessons finger flash is the 5-minute warm-up. For this step it becomes the main 15-minute lesson, using three of your finger games. Is that OK, or would you swap one for another game (for example 'Fingers up, fingers down', W4 S1 activity 1)? We use the EA saying the number aloud with the card, as you do, because reading numbers is a separate step. In the check, 5 (a full hand) may be easy to spot. With only 3, 4 and 5 at the top of this range, we kept all three. Is that OK?"
+        },
+        {
+          "id": "finger_flash.10",
+          "label": "up to 10",
+          "goal": "The child sees 6 to 10 fingers on two hands and says how many straight away, because they know one full hand is 5.",
+          "activities": [
+            {
+              "name": "Finger flash with two hands",
+              "minutes": 5,
+              "how": [
+                "Show one full hand and say: 'This is 5. A full hand is always 5.'",
+                "Now flash one full hand and 2 fingers on the other hand for one second, then hide them.",
+                "Ask: 'How many?' The children say it together: 'Seven!'",
+                "Show it again slowly and say: '5 and 2 more is 7.'",
+                "Use the numbers 6 to 10 in a mixed-up order, for example 8, 6, 10, 7, 9. Sometimes point to one child to answer alone."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 1, with numbers 6 to 10 on two hands"
+            },
+            {
+              "name": "Show the number with two hands",
+              "minutes": 5,
+              "how": [
+                "Hold up a number card, for example 8, and say 'eight'.",
+                "The children show 8 fingers as fast as they can, using both hands.",
+                "Check every hand. A child should put up one full hand first, then 3 more.",
+                "Use the numbers 6 to 10 in a mixed-up order.",
+                "If a child lifts one finger at a time, say: 'Full hand first. That is 5. Now how many more?'"
+              ],
+              "needs": "Number cards 6 to 10",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 1, with numbers 6 to 10"
+            },
+            {
+              "name": "Flash in pairs",
+              "minutes": 5,
+              "how": [
+                "Put the 6 children in 3 pairs.",
+                "One child flashes a full hand and some more fingers (6 to 10) for one second. The other child says how many.",
+                "After 5 turns, they swap.",
+                "While they play, sit with the children who still count one by one. Flash for them and say: '5 and 3 more is 8.'"
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W1 S2 activity 1, with numbers 6 to 10"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Flash a full hand and some more fingers for one second, then hide them. Ask: 'How many?' The child must say it fast, without counting one by one.",
+            "ask": [
+              "Flash 8 fingers",
+              "Flash 9 fingers",
+              "Flash 7 fingers"
+            ],
+            "expected": [
+              "8, said straight away",
+              "9, said straight away",
+              "7, said straight away"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "finger_flash.5"
+          ],
+          "note_for_partner": "We show 6 to 10 as one full hand plus some fingers on the other hand (8 = 5 and 3). Is that the hand shape you teach? We left 10 out of the check because all fingers up is too easy to spot. Can Grade R children flash 6 to 10 fast enough with two hands to play this in pairs, or should the EA do all the flashing at this step?"
+        }
+      ]
+    },
+    {
+      "skill": "count",
+      "skill_label": "Count objects",
+      "steps": [
+        {
+          "id": "count.5",
+          "label": "up to 5",
+          "goal": "The child counts out up to 5 counters, touching each counter once, and says how many.",
+          "activities": [
+            {
+              "name": "Count",
+              "minutes": 7,
+              "how": [
+                "Give each child a pile of 8 counters.",
+                "Hold up a number card and say the number: 'Four.'",
+                "Each child counts out that many counters. They push each counter to one side as they say its number: 'one, two, three, four.'",
+                "Check each child's counters. Say: 'Yes, you have 4.'",
+                "Use all the numbers 1 to 5 in a mixed-up order, for example 4, 1, 5, 3, 2."
+              ],
+              "needs": "Counters (8 for each child); number cards 1 to 5",
+              "source": "partner",
+              "source_ref": "W1 S1 activity 2"
+            },
+            {
+              "name": "Count and show",
+              "minutes": 8,
+              "how": [
+                "Give each child a different number card from 1 to 5.",
+                "Each child counts out that many counters.",
+                "Go around the group. Each child says how many counters they have: 'I have 3.'",
+                "Ask: 'Who has more? Who has less?'",
+                "If a child is wrong, count with them, touching each counter once.",
+                "Sometimes put 1 to 5 counters in a messy pile in front of a child and ask: 'How many?'",
+                "Swap the cards and play again.",
+                "In the second lesson, children play in pairs. Child A picks a card and child B counts out that many. Then they swap and say who has more. You help the children who find it hard."
+              ],
+              "needs": "Counters (8 for each child); number cards 1 to 5",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 (pairs version W2 S2 activity 2), plus a 'how many in a messy pile?' turn"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put a pile of 8 counters in front of them. Say each question out loud.",
+            "ask": [
+              "Give me 5 counters.",
+              "(Put 4 counters in a messy pile) How many counters?",
+              "Give me 3 counters."
+            ],
+            "expected": [
+              "Pushes out exactly 5 counters (count them yourself to check)",
+              "Says '4'",
+              "Pushes out exactly 3 counters"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [],
+          "note_for_partner": "Your Count and Count and show activities only ask children to count OUT a number. We added a 'messy pile, how many?' turn to Count and show, and the same task to the tick check, so it covers both ways of counting. Please confirm that fits your Grade 1 approach."
+        },
+        {
+          "id": "count.10",
+          "label": "up to 10",
+          "goal": "The child counts out up to 10 counters, touching each counter once, and says how many.",
+          "activities": [
+            {
+              "name": "Count",
+              "minutes": 5,
+              "how": [
+                "Give each child a pile of 12 counters.",
+                "Hold up a number card and say the number: 'Seven.'",
+                "Each child counts out that many. They push each counter to one side as they say its number.",
+                "Check each child's counters.",
+                "Use the numbers 1 to 10 in a mixed-up order. Use more of the big ones: 7, 3, 10, 6, 9, 8."
+              ],
+              "needs": "Counters (12 for each child); number cards 1 to 10",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 2, numbers 1 to 10"
+            },
+            {
+              "name": "How many in my pile?",
+              "minutes": 5,
+              "how": [
+                "Count out 6 to 10 counters yourself. Drop them on the table in a messy pile.",
+                "Ask one child: 'How many?' The child moves each counter into a line as they say its number.",
+                "Ask: 'So how many?' The child says the last number, for example 'eight'.",
+                "The group checks by counting the line together out loud.",
+                "Make a new pile with a different number for the next child.",
+                "If a child counts a counter twice, show them: 'Move it away when you say its number.'"
+              ],
+              "needs": "Counters (10)",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 (each child says how many counters they have)"
+            },
+            {
+              "name": "Count and show in pairs",
+              "minutes": 5,
+              "how": [
+                "Each pair gets the number cards 1 to 10, shuffled, and 12 counters.",
+                "Child A picks a card and child B counts out that many.",
+                "Child A counts the counters again to check.",
+                "Then they swap.",
+                "Walk around and help the pairs who find it hard."
+              ],
+              "needs": "Counters (12 for each pair); number cards 1 to 10 (one set for each pair)",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 2, numbers 1 to 10"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put a pile of 15 counters in front of them. Say each question out loud.",
+            "ask": [
+              "Give me 8 counters.",
+              "(Put 9 counters in a messy pile) How many counters?",
+              "Give me 10 counters."
+            ],
+            "expected": [
+              "Pushes out exactly 8 counters (count them yourself to check)",
+              "Says '9'",
+              "Pushes out exactly 10 counters"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count.5"
+          ],
+          "note_for_partner": "The first activity needs about 72 counters for 6 children, and the pairs game needs 3 sets of number cards 1 to 10. Please confirm EAs have this, or say if they should do the first activity in pairs too."
+        },
+        {
+          "id": "count.20",
+          "label": "up to 20",
+          "goal": "The child counts out up to 20 counters, keeping their place after 10, and says how many.",
+          "activities": [
+            {
+              "name": "Make 10, then keep going",
+              "minutes": 6,
+              "how": [
+                "Put the children in pairs. Give each pair 20 counters.",
+                "Each pair counts out 10 counters and puts them in a line. The partner checks: 'Yes, 10.'",
+                "Hold up a card, for example 13, and say: 'Thirteen.'",
+                "The pair puts more counters at the end of the line, one at a time. They say: 'eleven, twelve, thirteen.'",
+                "Everyone counts the whole line from 1 to check: 13.",
+                "Take away the extra counters so 10 are left. Try 15, 12, 18, 16, 20."
+              ],
+              "needs": "Counters (20 for each pair); number cards 11 to 20",
+              "source": "new",
+              "source_ref": "Not in partner weeks 1-4"
+            },
+            {
+              "name": "How many in my pile?",
+              "minutes": 5,
+              "how": [
+                "Count out 11 to 20 counters yourself. Drop them on the table in a messy pile.",
+                "Ask one child: 'How many?' The child moves each counter into a line as they say its number.",
+                "Tell them: 'Make a line of 10 first, then start a new line.'",
+                "Ask: 'So how many?' The child says the last number, for example 'sixteen'.",
+                "The group checks by counting the lines together out loud.",
+                "Make a new pile with a different number for the next child."
+              ],
+              "needs": "Counters (20)",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 (each child says how many counters they have), numbers 11 to 20"
+            },
+            {
+              "name": "Count and show in pairs",
+              "minutes": 4,
+              "how": [
+                "Each pair gets the number cards 11 to 20, shuffled, and 20 counters.",
+                "Child A picks a card and child B counts out that many.",
+                "Child A counts again to check. Then they swap.",
+                "Help the pairs who lose their place after 10."
+              ],
+              "needs": "Counters (20 for each pair); number cards 11 to 20 (one set for each pair)",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 2, numbers 11 to 20"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put a pile of 25 counters in front of them. Say each question out loud.",
+            "ask": [
+              "Give me 13 counters.",
+              "(Put 17 counters in a messy pile) How many counters?",
+              "Give me 20 counters."
+            ],
+            "expected": [
+              "Pushes out exactly 13 counters (count them yourself to check)",
+              "Says '17'",
+              "Pushes out exactly 20 counters"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count.10"
+          ],
+          "note_for_partner": "'Make 10, then keep going' is new. It helps children keep their place after 10 by making a line of 10 first. Please check it fits your method. This step needs about 60 counters (20 for each pair) plus 25 for the tick check, and 3 sets of number cards 11 to 20. Please confirm EAs have enough."
+        }
+      ]
+    },
+    {
+      "skill": "read_numbers",
+      "skill_label": "Read numbers",
+      "steps": [
+        {
+          "id": "read_numbers.5",
+          "label": "up to 5",
+          "goal": "The child looks at a number card from 1 to 5 and says the number.",
+          "activities": [
+            {
+              "name": "Show the number",
+              "minutes": 4,
+              "how": [
+                "Hold up a number card, for example 3. Say 'three'.",
+                "Children say 'three' and show 3 fingers.",
+                "Do all the cards 1 to 5 in a mixed-up order, for example 3, 1, 4, 5, 2.",
+                "Now hold up a card and say nothing. Children say the number and show the fingers."
+              ],
+              "needs": "Number cards 1 to 5",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 1 (children now say the number themselves)"
+            },
+            {
+              "name": "Count and show",
+              "minutes": 5,
+              "how": [
+                "Give five children one card each from 1 to 5. The sixth child is the checker.",
+                "Each child says the number on their card out loud.",
+                "Then each child counts out that many counters.",
+                "Go around the group. Each child says how many counters they have. The checker says 'yes' or 'check again'.",
+                "Swap cards so a new child is the checker. Play again."
+              ],
+              "needs": "Number cards 1 to 5; about 20 counters",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 (child reads the card out loud first, as in W3 S2 activity 2)"
+            },
+            {
+              "name": "Put numbers in order",
+              "minutes": 6,
+              "how": [
+                "Shuffle the cards 1 to 5. Give one card to each of five children. The sixth child is the checker.",
+                "Children line up the cards in order, from smallest to biggest: 1, 2, 3, 4, 5.",
+                "Point to a card. Ask: 'What number is this?' The child holding it says it.",
+                "Ask: 'Point to and say the numbers that are bigger than 2.' Then: 'Point to and say the numbers that are smaller than 3.'"
+              ],
+              "needs": "Number cards 1 to 5",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (adds 'What number is this?' and a checker for the sixth child)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Show one card at a time. Do not say the number.",
+            "ask": [
+              "Card 5",
+              "Card 3",
+              "Card 4"
+            ],
+            "expected": [
+              "Says 'five'",
+              "Says 'three'",
+              "Says 'four'"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [],
+          "note_for_partner": "Starting step. All three activities change the partner's version slightly so the child, not the EA, says the number. A sixth child is given a checker job because the 1 to 5 set has only five cards."
+        },
+        {
+          "id": "read_numbers.10",
+          "label": "up to 10",
+          "goal": "The child looks at a number card from 1 to 10 and says the number.",
+          "activities": [
+            {
+              "name": "Show the number with two hands",
+              "minutes": 5,
+              "how": [
+                "Hold up a number card from 6 to 10, for example 7. Do not say it.",
+                "Children say 'seven' and show 7 fingers: one full hand and 2 more.",
+                "Use all the numbers in a mixed-up order, for example 8, 6, 10, 7, 9. Mix in some small ones too, like 3 and 5.",
+                "If a child says the wrong number, say it with them and show the fingers together."
+              ],
+              "needs": "Number cards 1 to 10",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 1, numbers 6 to 10"
+            },
+            {
+              "name": "Find the card",
+              "minutes": 5,
+              "how": [
+                "Lay cards 1 to 10 face up on the floor, mixed up.",
+                "Say a number: 'Find 8.' One child finds the card, holds it up and says 'eight'.",
+                "Give each child a turn.",
+                "Then let a child say a number and you find it. Sometimes pick the wrong card on purpose so they can fix you."
+              ],
+              "needs": "Number cards 1 to 10",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 ('point to and say the number'), made into a find-the-card game"
+            },
+            {
+              "name": "Count and show",
+              "minutes": 5,
+              "how": [
+                "Give each child one card from 5 to 10.",
+                "Each child reads their card out loud, then counts out that many counters.",
+                "Go around the group. Each child says how many counters they have.",
+                "Swap cards and play again."
+              ],
+              "needs": "Number cards 5 to 10; about 50 counters",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2, numbers 5 to 10"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Show one card at a time. Do not say the number.",
+            "ask": [
+              "Card 9",
+              "Card 6",
+              "Card 10"
+            ],
+            "expected": [
+              "Says 'nine'",
+              "Says 'six'",
+              "Says 'ten'"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "read_numbers.5"
+          ],
+          "note_for_partner": "6 and 9 are often mixed up, so both are in the tick list on purpose. Hold cards the right way up. For 10 the child must say 'ten', not 'one, zero'."
+        },
+        {
+          "id": "read_numbers.20",
+          "label": "up to 20",
+          "goal": "The child looks at a number card from 1 to 20 and says the number.",
+          "activities": [
+            {
+              "name": "Ten and some more",
+              "minutes": 5,
+              "how": [
+                "Hold up a card from 11 to 19, for example 14. Do not say it yet.",
+                "Point to the 1: 'This 1 means ten.' One child shows 10 fingers.",
+                "Point to the 4: 'And 4 more.' A second child shows 4 fingers.",
+                "Everyone says: 'Ten and 4 make fourteen.' Do more cards in a mixed-up order. Change who shows the ten.",
+                "Last, hold up 20: 'This 2 means two tens.' Two children each show 10 fingers. Everyone says 'twenty'."
+              ],
+              "needs": "Number cards 11 to 20",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 1 (two children show one number with fingers)"
+            },
+            {
+              "name": "Count and show in pairs",
+              "minutes": 5,
+              "how": [
+                "Children work in pairs. Give each pair a card from 11 to 20.",
+                "The pair reads their card out loud.",
+                "They count out 10 counters in one pile, then the rest in a second pile. For 16: a pile of 10 and a pile of 6.",
+                "Each pair says: 'Ten and 6 make sixteen.' Swap cards and play again."
+              ],
+              "needs": "Number cards 11 to 20; about 60 counters",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2, numbers 11 to 20, in pairs as in W2 S2 activity 2"
+            },
+            {
+              "name": "Put numbers in order",
+              "minutes": 5,
+              "how": [
+                "Shuffle cards 11 to 20. Give each child one or two cards.",
+                "Together, lay the cards in a line in order, from smallest to biggest: 11, 12, 13 ... up to 20.",
+                "Point to a card. Ask: 'What number is this?' The child who put it there says it.",
+                "Then everyone reads the whole line together from 11 to 20."
+              ],
+              "needs": "Number cards 11 to 20",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3, numbers 11 to 20"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Show one card at a time. Do not say the number.",
+            "ask": [
+              "Card 17",
+              "Card 13",
+              "Card 20"
+            ],
+            "expected": [
+              "Says 'seventeen'",
+              "Says 'thirteen' (not 'thirty' or 'thirty-one')",
+              "Says 'twenty'"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "read_numbers.10"
+          ],
+          "note_for_partner": "Numbers 11 to 20 are hard: children mix up 13 and 31, or say 'thirty' for 13. 11 and 12 have their own odd names; swap 12 in for 13 in the tick list if you think it is the better check. Activity 1 handles 20 on its own because 'ten and some more' does not fit it. Activity 2 asks children to count out up to 20 counters, which the order rules do not require before this step; the pile of 10 is there to help."
+        },
+        {
+          "id": "read_numbers.50",
+          "label": "up to 50",
+          "goal": "The child looks at a number card from 1 to 50 and says the number.",
+          "activities": [
+            {
+              "name": "Tens with friends",
+              "minutes": 5,
+              "how": [
+                "Hold up a card, for example 34.",
+                "Point to the 3: 'This 3 means three tens.' Three children each show 10 fingers.",
+                "Point to the 4: 'And 4 more.' One more child shows 4 fingers.",
+                "Touch each child with ten fingers and say 'ten, twenty, thirty'. Then point to the last child: 'thirty-four'. Everyone says it.",
+                "For 30, 40 or 50 there are no extra fingers: 'Three tens. Thirty.'",
+                "Do more cards from 21 to 50. Change who shows the tens."
+              ],
+              "needs": "Number cards 21 to 50",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 1 (many children show one number with fingers)"
+            },
+            {
+              "name": "Read the row",
+              "minutes": 5,
+              "how": [
+                "Lay cards 30 to 39 in a line in order.",
+                "Read the line together: thirty, thirty-one, thirty-two ... up to thirty-nine.",
+                "Say: 'They all start with 3. They all start with thirty.'",
+                "Point to cards out of order. Children say each one. Do it again with 40 to 49, then 20 to 29."
+              ],
+              "needs": "Number cards 20 to 49",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (put numbers in order)"
+            },
+            {
+              "name": "Find the card",
+              "minutes": 5,
+              "how": [
+                "Lay out about 10 cards from 21 to 50, mixed up. Put in pairs that look alike, like 34 and 43, or 24 and 42.",
+                "Say a number: 'Find 43.' One child finds it, holds it up and says it.",
+                "If they pick 34, hold both cards up and read them slowly: 'This one is thirty-four. This one is forty-three.'",
+                "Give each child two turns."
+              ],
+              "needs": "Number cards 21 to 50",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 ('point to and say the number'), numbers 21 to 50"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Show one card at a time. Do not say the number.",
+            "ask": [
+              "Card 43",
+              "Card 36",
+              "Card 50"
+            ],
+            "expected": [
+              "Says 'forty-three' (not 'thirty-four')",
+              "Says 'thirty-six'",
+              "Says 'fifty'"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "read_numbers.20"
+          ],
+          "note_for_partner": "The common mistake is reading the two parts the wrong way round (43 read as 'thirty-four'). Activity 3 puts these look-alike pairs side by side on purpose. In activity 1 the EA says 'ten, twenty, thirty'; children do not need to have learned to skip count in 10s yet. Activity 1 can need up to 5 children showing tens (for 49 or 50), which fits a group of 6."
+        },
+        {
+          "id": "read_numbers.100",
+          "label": "up to 100",
+          "goal": "The child looks at a number card from 1 to 100 and says the number.",
+          "activities": [
+            {
+              "name": "Read the tens",
+              "minutes": 5,
+              "how": [
+                "Shuffle the cards 10, 20, 30, 40, 50, 60, 70, 80, 90, 100.",
+                "Children lay them in a line in order. Read the line together: ten, twenty, thirty ... up to one hundred.",
+                "Point to tens cards out of order. Children say each one.",
+                "Hold up 70 and 76 side by side: 'Seventy. Seventy-six.' Then 90 and 92, then 60 and 65."
+              ],
+              "needs": "Number cards 10, 20, 30 ... up to 100, plus 65, 76 and 92",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (put numbers in order), tens cards"
+            },
+            {
+              "name": "Find the card",
+              "minutes": 5,
+              "how": [
+                "Lay out about 10 cards from 51 to 100, mixed up. Put in pairs that look alike, like 68 and 86, or 59 and 95.",
+                "Say: 'Find 86.' One child finds it, holds it up and says it.",
+                "If they pick the wrong one, hold both up and read them slowly: 'This one is sixty-eight. This one is eighty-six.'",
+                "Give each child two turns. Then a child says a number and you find it."
+              ],
+              "needs": "Number cards 51 to 100",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 ('point to and say the number'), numbers 51 to 100"
+            },
+            {
+              "name": "Card flash in pairs",
+              "minutes": 5,
+              "how": [
+                "Children work in pairs. Give each pair about 8 cards from 51 to 100.",
+                "Child A holds up a card. Child B says the number. If A agrees, B keeps the card.",
+                "If A is not sure, or thinks B is wrong, put the card to one side for you to check.",
+                "Swap: B holds up a card and A says it.",
+                "Walk around and listen. Sit with any pair that is stuck and read the cards with them."
+              ],
+              "needs": "Number cards 51 to 100",
+              "source": "adapted",
+              "source_ref": "W1 S2 activity 1 (play in pairs, take turns to flash), using cards instead of fingers"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Show one card at a time. Do not say the number.",
+            "ask": [
+              "Card 86",
+              "Card 71",
+              "Card 100"
+            ],
+            "expected": [
+              "Says 'eighty-six' (not 'sixty-eight')",
+              "Says 'seventy-one'",
+              "Says 'one hundred'"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "read_numbers.50"
+          ],
+          "note_for_partner": "For 100 the child must say 'one hundred', not 'ten, zero' or 'one, zero, zero'. Watch for sixty/seventy mix-ups. This step is reading only; children do not need to count out 100 counters. In activity 3, cards put to one side are the ones to check with the EA."
+        }
+      ]
+    },
+    {
+      "skill": "compare",
+      "skill_label": "Compare",
+      "steps": [
+        {
+          "id": "compare.5",
+          "label": "up to 5",
+          "goal": "The child looks at two small groups (up to 5) and says which has more, which has less, or if they are the same.",
+          "activities": [
+            {
+              "name": "More, less, same",
+              "minutes": 6,
+              "how": [
+                "Put some counters in front of you, for example 3. Say 'I have 3.'",
+                "Say 'Take more than me.' Each child takes some counters and says how many.",
+                "Check together. Put each child's counters in a line next to yours. Say 'Yes, 4 is more than 3.'",
+                "Do it again with a new number. Sometimes say 'Take less than me' or 'Take the same as me.'",
+                "Use only numbers 1 to 5. Don't ask for more than 5 or less than 1."
+              ],
+              "needs": "Counters (5 for each child and 5 for you)",
+              "source": "partner",
+              "source_ref": "W1 S1 activity 3"
+            },
+            {
+              "name": "Show me more, show me less",
+              "minutes": 4,
+              "how": [
+                "Hold up a number card, for example 3. Say 'I have 3. Show me more.'",
+                "Children show you with the fingers of one hand.",
+                "Right? High five and say 'Yes, 5 is more than 3.'",
+                "Wrong? Hold your 3 fingers next to the child's fingers. Say 'No, 1 is less than 3. Try again.'",
+                "Mix it up. Sometimes say 'Show me more', sometimes 'Show me less'. Don't say 'Show me more' with 5 or 'Show me less' with 1."
+              ],
+              "needs": "Number cards 1 to 5",
+              "source": "partner",
+              "source_ref": "W3 S1 activity 1"
+            },
+            {
+              "name": "1, 2, 3, show: compare!",
+              "minutes": 5,
+              "how": [
+                "Children sit in pairs with their hands behind their backs.",
+                "Together they say '1, 2, 3, show!' and each brings out one hand with some fingers up.",
+                "Each child says who has more: 'My 4 is more than your 2.'",
+                "Same number? Both children do the same-same dance.",
+                "Walk around. If a pair is stuck, help them touch finger to finger. The hand with fingers left over has more."
+              ],
+              "needs": "Hands only",
+              "source": "partner",
+              "source_ref": "W3 S1 activity 3 (help tip from W3 S2 activity 3)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Have 10 counters ready. Make messy piles, not lines, so the child has to count.",
+            "ask": [
+              "Make a pile of 5 counters and a pile of 4. Ask: 'Which pile has more, or are they the same?'",
+              "Say: 'I have 4. Show me less than 4 with your fingers.'",
+              "Make two piles of 5 counters. Ask: 'Which pile has more, or are they the same?'"
+            ],
+            "expected": [
+              "The pile of 5",
+              "1, 2 or 3 fingers",
+              "'They are the same' (both have 5)"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count.5"
+          ],
+          "note_for_partner": "The tick questions use counters and fingers, not number cards, because reading numbers is not needed before this step. We say 'less' everywhere instead of switching between 'less' and 'fewer', to keep words simple for EAs. Please check you are happy with that."
+        },
+        {
+          "id": "compare.10",
+          "label": "up to 10",
+          "goal": "The child compares two groups up to 10 and says which has more, which has less, or if they are the same.",
+          "activities": [
+            {
+              "name": "More, less, same",
+              "minutes": 6,
+              "how": [
+                "Make a line of counters in front of you, for example 7. Say 'I have 7.'",
+                "Say 'Take more than me.' Each child makes their own line and says how many.",
+                "Check together. Put each child's line right next to yours, counter next to counter. The line with counters left over has more. Say 'Yes, 9 is more than 7.'",
+                "Do it again with a new number. Sometimes say 'Take less than me' or 'Take the same as me.'",
+                "Use numbers 6 to 10 most of the time. Don't ask for more than 10."
+              ],
+              "needs": "Counters (10 for each child and 10 for you)",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 3 (numbers up to 10)"
+            },
+            {
+              "name": "Show me more, show me less with two hands",
+              "minutes": 4,
+              "how": [
+                "Hold up a number card and say the number, for example 'I have 7. Show me more.'",
+                "Children use both hands to show you with fingers.",
+                "Right? High five and say 'Yes, 9 is more than 7.'",
+                "Wrong? Show your 7 fingers next to theirs and count both together. Then try again.",
+                "Mix it up. Sometimes say 'Show me more', sometimes 'Show me less'. Don't say 'Show me more' with 10."
+              ],
+              "needs": "Number cards 1 to 10",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 1 (numbers up to 10)"
+            },
+            {
+              "name": "1, 2, 3, show: compare! with two hands",
+              "minutes": 5,
+              "how": [
+                "Children sit in pairs with both hands behind their backs.",
+                "Together they say '1, 2, 3, show!' and bring out both hands with some fingers up.",
+                "Each child says how many they have, then who has more: 'My 8 is more than your 6.'",
+                "Same number? Both do the same-same dance.",
+                "Walk around. If a pair is stuck, help them touch finger to finger. The child with fingers left over has more."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 3 (both hands, numbers up to 10)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Have 20 counters ready. Make messy piles, not lines, so the child has to count.",
+            "ask": [
+              "Make a pile of 10 counters and a pile of 9. Ask: 'Which pile has more, or are they the same?'",
+              "Make a pile of 8 counters and a pile of 6. Ask: 'Which pile has less?'",
+              "Say: 'I have 7. Show me more than 7 with your fingers.'"
+            ],
+            "expected": [
+              "The pile of 10",
+              "The pile of 6",
+              "8, 9 or 10 fingers"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "compare.5",
+            "count.10"
+          ],
+          "note_for_partner": "Finger flash up to 10 does not have to come before this step, so some children will count their fingers in the two-hand games. We think that is fine here. Please check."
+        },
+        {
+          "id": "compare.20",
+          "label": "up to 20",
+          "goal": "The child compares numbers up to 20 and says which is more, which is less, or if they are the same.",
+          "activities": [
+            {
+              "name": "More, less, same in pairs",
+              "minutes": 6,
+              "how": [
+                "Children work in pairs. Make a line of counters in front of you, for example 14. Say 'I have 14.'",
+                "Say 'Make a line with more than me.' Each pair makes one line.",
+                "Check together. Put each line right next to yours, counter next to counter. The line with counters left over has more. Count both lines to be sure.",
+                "Say 'Yes, 17 is more than 14.'",
+                "Do it again with a new number. Sometimes say 'less than me' or 'the same as me'. Don't ask for more than 20."
+              ],
+              "needs": "Counters (20 for each pair and 20 for you)",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 3 (pairs, numbers up to 20)"
+            },
+            {
+              "name": "Stand up if more",
+              "minutes": 4,
+              "how": [
+                "Give each child one number card from 1 to 20. Help each child say their number.",
+                "Hold up your card and say it, for example 'I have 12.'",
+                "Say 'Stand up if your number is more than 12. Stay sitting if it is less.'",
+                "Each child who stands says 'My 17 is more than 12.'",
+                "Swap cards and play again. Sometimes say 'Stand up if your number is less.'"
+              ],
+              "needs": "Number cards 1 to 20",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 1 (children answer with their own card, numbers up to 20)"
+            },
+            {
+              "name": "1, 2, 3, show: compare! with cards",
+              "minutes": 5,
+              "how": [
+                "Children sit in pairs. Give each pair 6 cards from 1 to 20, mixed big and small. They mix them up and share them out, face down.",
+                "Together they say '1, 2, 3, show!' and each turns over their top card.",
+                "Both say their numbers out loud. If they can't read a card, help them. Then they say which is more: '16 is more than 13.'",
+                "Not sure? They count out both numbers with counters and put the lines next to each other, counter next to counter.",
+                "When their cards run out, they swap cards with another pair and play again."
+              ],
+              "needs": "Number cards 1 to 20 (or numbers written on small pieces of paper); counters",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 3 (cards instead of fingers, numbers up to 20)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Have number cards 10 to 20 and a pile of 20 counters. Say each number out loud as you put a card down.",
+            "ask": [
+              "Put down 17 and 19 and say both numbers. Ask: 'Which number is more?'",
+              "Put down 20 and 16 and say both numbers. Ask: 'Which number is less?'",
+              "Say: 'I have 15. Take more than 15 counters. Tell me how many you took.'"
+            ],
+            "expected": [
+              "19",
+              "16",
+              "16, 17, 18, 19 or 20 counters, and the child says the right number"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "compare.10",
+            "count.20"
+          ],
+          "note_for_partner": "By our order rules this step needs Count objects up to 20, not Read numbers up to 20. So the EA says each number out loud in the tick questions and helps children read cards in the games. The child may use counters to check any tick question. The card game uses one set of cards 1 to 20 shared between 3 pairs, or numbers written on paper, because EAs may not have several sets. Lining up counters only shows which has more if the counters are placed counter next to counter, so we tell EAs to line them up that way."
+        },
+        {
+          "id": "compare.50",
+          "label": "up to 50",
+          "goal": "The child compares two numbers up to 50 and says which is more or less by looking at the left side of each number first.",
+          "activities": [
+            {
+              "name": "Look at the left side first",
+              "minutes": 5,
+              "how": [
+                "Hold up 41 and 38. Cover the right side of each card with your thumb.",
+                "Say 'Look only at the left side: 4 and 3. 4 is more than 3. So 41 is more than 38.'",
+                "Now hold up 34 and 37. Say 'The left sides are the same: 3 and 3.' Move your thumbs away. Say 'So look at the right side: 7 is more than 4. So 37 is more.'",
+                "Give each child two cards from 10 to 50. They cover the right side, look, and say which number is more.",
+                "Do it a few times with new cards. Only use cards from 10 to 50 in this game."
+              ],
+              "needs": "Number cards 10 to 50",
+              "source": "new",
+              "source_ref": "Not in partner weeks 1-4"
+            },
+            {
+              "name": "Stand up if more",
+              "minutes": 5,
+              "how": [
+                "Give each child one number card from 10 to 50. Each child reads their number out loud.",
+                "Hold up your card and say it, for example 'I have 32.'",
+                "Say 'Stand up if your number is more than 32. Stay sitting if it is less.'",
+                "Each child who stands says 'My 45 is more than 32.'",
+                "Swap cards and play again. Sometimes say 'Stand up if your number is less.'"
+              ],
+              "needs": "Number cards 10 to 50",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 1 (children answer with their own card, numbers up to 50)"
+            },
+            {
+              "name": "1, 2, 3, show: compare! with cards",
+              "minutes": 5,
+              "how": [
+                "Children sit in pairs. Mix up your cards 10 to 50. Give each pair a pile of about 12 cards. They share them out, face down.",
+                "Together they say '1, 2, 3, show!' and each turns over their top card.",
+                "Both read their numbers out loud. Then they say which is more: '42 is more than 24.'",
+                "Walk around. If a pair is stuck, remind them: cover the right side and look at the left side first.",
+                "When their cards run out, they swap piles with another pair and play again."
+              ],
+              "needs": "Number cards 10 to 50",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 3 (cards instead of fingers, numbers up to 50)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Hold up two number cards at a time and let the child read them.",
+            "ask": [
+              "Show 39 and 50. Ask: 'Which number is more?'",
+              "Show 45 and 48. Ask: 'Which number is less?'",
+              "Show 34 and 43. Ask: 'Which number is more?'"
+            ],
+            "expected": [
+              "50",
+              "45",
+              "43"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "compare.20",
+            "read_numbers.50"
+          ],
+          "note_for_partner": "'Look at the left side first' is a new activity. It is our plain way of saying 'compare the tens first'. It only works when both numbers have two digits (cover the right side of 7 and nothing is left), so all games at this step use cards 10 to 50. Please check it fits how you teach comparing two-digit numbers, or give us your wording, and say if children also need practice comparing a one-digit and a two-digit number. The third tick question (34 and 43) is there on purpose to catch children who mix up the two sides of a number. With one set of cards there are no matching pairs, so the same-same dance is left out of the card game."
+        },
+        {
+          "id": "compare.100",
+          "label": "up to 100",
+          "goal": "The child compares two numbers up to 100 and says which is more or less, including 100 itself.",
+          "activities": [
+            {
+              "name": "Look at the left side first",
+              "minutes": 5,
+              "how": [
+                "Hold up 68 and 86. Cover the right side of each card with your thumb.",
+                "Say 'Look only at the left side: 6 and 8. 8 is more than 6. So 86 is more than 68.'",
+                "Hold up 99 and 100. Say '100 is the biggest number on our cards. 100 is more than 99.'",
+                "Give each child two cards from 10 to 99. They cover the right side, look, and say which number is more.",
+                "Do it a few times with new cards. Use numbers 60 to 100 most of the time."
+              ],
+              "needs": "Number cards 10 to 100",
+              "source": "new",
+              "source_ref": "Not in partner weeks 1-4"
+            },
+            {
+              "name": "Stand up if more",
+              "minutes": 5,
+              "how": [
+                "Give each child one number card from 10 to 100. Each child reads their number out loud.",
+                "Hold up your card and say it, for example 'I have 67.'",
+                "Say 'Stand up if your number is more than 67. Stay sitting if it is less.'",
+                "Each child who stands says 'My 82 is more than 67.'",
+                "Swap cards and play again. Sometimes say 'Stand up if your number is less.'"
+              ],
+              "needs": "Number cards 10 to 100",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 1 (children answer with their own card, numbers up to 100)"
+            },
+            {
+              "name": "1, 2, 3, show: compare! with cards",
+              "minutes": 5,
+              "how": [
+                "Children sit in pairs. Mix up your cards 10 to 100. Give each pair a pile of about 30 cards. They share them out, face down.",
+                "Together they say '1, 2, 3, show!' and each turns over their top card.",
+                "Both read their numbers out loud. Then they say which is more: '84 is more than 81.'",
+                "Walk around. If a pair is stuck, remind them: cover the right side and look at the left side first.",
+                "When their cards run out, they swap piles with another pair and play again."
+              ],
+              "needs": "Number cards 10 to 100",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 3 (cards instead of fingers, numbers up to 100)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Hold up two number cards at a time and let the child read them.",
+            "ask": [
+              "Show 89 and 98. Ask: 'Which number is more?'",
+              "Show 76 and 73. Ask: 'Which number is less?'",
+              "Show 99 and 100. Ask: 'Which number is more?'"
+            ],
+            "expected": [
+              "98",
+              "73",
+              "100"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "compare.50",
+            "read_numbers.100"
+          ],
+          "note_for_partner": "Same new 'look at the left side first' game as the up-to-50 step, with 100 added as a special case (the left-side rule does not explain 100, so the EA simply says 100 is the biggest card). Some children think 99 is more than 100 because 9 is a big number, so the third tick question checks for that. Activity examples were picked so they never match the tick questions."
+        }
+      ]
+    },
+    {
+      "skill": "before_after",
+      "skill_label": "Before & after",
+      "steps": [
+        {
+          "id": "before_after.5",
+          "label": "up to 5",
+          "goal": "The child says the number just before and just after any number up to 5, and puts the cards 1 to 5 in order.",
+          "activities": [
+            {
+              "name": "Number before and number after",
+              "minutes": 7,
+              "how": [
+                "Put number cards 1 to 5 in a line on the table: 1, 2, 3, 4, 5.",
+                "Tell one child: 'Put a counter on 3.'",
+                "Ask: 'What number comes after 3?' The child moves the counter to 4 and says 'four'.",
+                "Mix the questions: 'What comes before your number?', 'Show me 1 more', 'Show me 1 less'.",
+                "Give every child a turn. Start on a different number each time."
+              ],
+              "needs": "Number cards 1 to 5; 1 counter",
+              "source": "partner",
+              "source_ref": "W3 S1 activity 2"
+            },
+            {
+              "name": "Put numbers in order",
+              "minutes": 8,
+              "how": [
+                "Shuffle number cards 1 to 5. Give one card to each of five children. The sixth child is the checker.",
+                "Say: 'Put your cards in a line, from smallest to biggest.'",
+                "The checker reads the line out loud: '1, 2, 3, 4, 5.'",
+                "Ask: 'What comes before 4? What comes after 2?'",
+                "Ask: 'Point to and say the numbers that are bigger than 2.' Then: 'Point to and say the numbers that are smaller than 3.'",
+                "Shuffle and play again. A new child is the checker."
+              ],
+              "needs": "Number cards 1 to 5",
+              "source": "partner",
+              "source_ref": "W2 S1 activity 3"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Ask the first two with no cards out. For the last one, give them the 5 cards shuffled.",
+            "ask": [
+              "What comes after 4?",
+              "What comes before 4?",
+              "Put these cards in order, smallest first: 3, 5, 1, 4, 2"
+            ],
+            "expected": [
+              "5",
+              "3",
+              "1, 2, 3, 4, 5"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "read_numbers.5"
+          ],
+          "note_for_partner": "Your W2 S1 activity 3 gives a card to each learner, but cards 1 to 5 only cover 5 of the 6 children, so we added a 'checker' role (otherwise the activity is yours as written). For W3 S1 activity 2 we read 'put a counter on a particular number' as a counter on a line of cards 1 to 5. Please confirm that is what you meant. The tick asks before/after with no cards out: is that the right test at this range, or should the child see the 1 to 5 line?"
+        },
+        {
+          "id": "before_after.10",
+          "label": "up to 10",
+          "goal": "The child says the number before, after and between numbers up to 10, and puts the cards 1 to 10 in order.",
+          "activities": [
+            {
+              "name": "Put numbers in order",
+              "minutes": 6,
+              "how": [
+                "Shuffle number cards 1 to 10. Give each child 1 or 2 cards.",
+                "Say: 'Put all the cards in a line, from smallest to biggest.'",
+                "Read the line together: '1, 2, 3 ... 10.'",
+                "Ask: 'Who has the number after 6?' That child holds up 7.",
+                "Ask: 'Who has the number before 10?' That child holds up 9.",
+                "Shuffle and play again."
+              ],
+              "needs": "Number cards 1 to 10",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (scaled from 1 to 5 up to 1 to 10)"
+            },
+            {
+              "name": "Number before and number after",
+              "minutes": 5,
+              "how": [
+                "Leave the 1 to 10 line on the table.",
+                "A child puts a counter on a number, for example 7.",
+                "Ask: 'What comes after 7?' or 'What comes before 7?' The child moves the counter and says the number.",
+                "Add a new question: 'What number is between 7 and 9?' The child puts the counter on 8.",
+                "Give every child a turn. Use the big numbers (6 to 10) most."
+              ],
+              "needs": "Number cards 1 to 10; 1 counter",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 (scaled to 1 to 10, adds 'between')"
+            },
+            {
+              "name": "Before and after my card",
+              "minutes": 4,
+              "how": [
+                "Pick up the line. Give each child one card from 4 to 9.",
+                "The child reads their card out loud.",
+                "Ask: 'What number comes just before your number?' or 'What is 1 more than your number?'",
+                "Swap cards and ask again."
+              ],
+              "needs": "Number cards 4 to 9",
+              "source": "adapted",
+              "source_ref": "W3 S2 activity 2 (uses cards 4 to 9 instead of two copies of 2, 3, 4)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Ask the first two with no cards out. For the last one, give them the 5 cards shuffled.",
+            "ask": [
+              "What comes before 8?",
+              "What number is between 8 and 10?",
+              "Put these cards in order, smallest first: 10, 6, 9, 7, 8"
+            ],
+            "expected": [
+              "7",
+              "9",
+              "6, 7, 8, 9, 10"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "before_after.5",
+            "read_numbers.10"
+          ],
+          "note_for_partner": "Your W3 S2 activity 2 uses two copies of cards 2, 3 and 4. EAs have one set of cards 0 to 100, so we give out cards 4 to 9 instead (one each). Is that OK?"
+        },
+        {
+          "id": "before_after.20",
+          "label": "up to 20",
+          "goal": "The child says the number before, after and between numbers up to 20, and puts mixed cards up to 20 in order.",
+          "activities": [
+            {
+              "name": "Put numbers in order",
+              "minutes": 6,
+              "how": [
+                "Put cards 1 to 10 in a line on the table.",
+                "Shuffle cards 11 to 20. Give each child 1 or 2 cards.",
+                "Say: 'Put your card under its partner in the top line.' 11 goes under 1, 12 under 2, all the way to 20 under 10.",
+                "Read both lines together: '1 ... 10, 11 ... 20.'",
+                "Point and say: 'Look, 14 is under 4. 17 is under 7.'"
+              ],
+              "needs": "Number cards 1 to 20",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (scaled to 1 to 20 in two lines)"
+            },
+            {
+              "name": "Number before and number after",
+              "minutes": 5,
+              "how": [
+                "Use the two lines on the table.",
+                "A child puts a counter on a number, for example 15.",
+                "Ask: 'What comes after 15?', 'What comes before 15?' or 'What number is between 15 and 17?' The child moves the counter and says the number.",
+                "Ask about the end of each line: 'What comes after 10?' 'What comes after 19?'",
+                "Give every child a turn."
+              ],
+              "needs": "Number cards 1 to 20; 1 counter",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 (scaled to 1 to 20)"
+            },
+            {
+              "name": "Smallest to biggest",
+              "minutes": 4,
+              "how": [
+                "Pick up the lines. Children work in pairs.",
+                "Give each pair 4 mixed cards from 1 to 20, for example 14, 8, 19, 11.",
+                "The pair puts the cards in a line, from smallest to biggest: 8, 11, 14, 19.",
+                "Check each pair. Make sure one pair gets 9 and 19 together.",
+                "Swap cards between pairs and play again."
+              ],
+              "needs": "Number cards 1 to 20",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 3 (pairs order shuffled cards; cards are not next to each other)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Ask the first two with no cards out. For the last one, give them the 4 cards shuffled.",
+            "ask": [
+              "What comes after 19?",
+              "What number is between 17 and 19?",
+              "Put these cards in order, smallest first: 17, 11, 20, 14"
+            ],
+            "expected": [
+              "20",
+              "18",
+              "11, 14, 17, 20"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "before_after.10",
+            "read_numbers.20"
+          ],
+          "note_for_partner": "We put 11 to 20 in a second line under 1 to 10 so children see 14 sits under 4. Does this fit how you teach the numbers 11 to 20? We replaced a 'hidden number' game with your pairs ordering game (W2 S2 activity 3) so children practise ordering cards that are not next to each other, which the tick asks for."
+        },
+        {
+          "id": "before_after.50",
+          "label": "up to 50",
+          "goal": "The child says the number before and after any number up to 50, including the jump from 39 to 40, and puts mixed cards in order.",
+          "activities": [
+            {
+              "name": "Put numbers in order",
+              "minutes": 6,
+              "how": [
+                "Take cards 35 to 44 and shuffle them.",
+                "Give each child 1 or 2 cards. Each child reads their card out loud.",
+                "Say: 'Put all the cards in a line, from smallest to biggest.'",
+                "Read the line together: '35, 36, 37, 38, 39, 40, 41 ... 44.'",
+                "Point to 39 and 40: 'After 39 comes 40. Thirty-nine, forty.'",
+                "Play again with cards 25 to 34 or 41 to 50."
+              ],
+              "needs": "Number cards 25 to 50",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (a run of 10 cards that goes past a 10)"
+            },
+            {
+              "name": "Number before and number after",
+              "minutes": 5,
+              "how": [
+                "Use the line on the table. A child puts a counter on a number, for example 38.",
+                "Ask: 'What comes after 38?', 'What comes before 38?' or 'What number is between 38 and 40?' The child moves the counter and says the number.",
+                "Then pick up the line and ask with no cards: 'What comes after 29?' 'What comes after 49?' 'What comes before 30?'",
+                "Give every child a turn."
+              ],
+              "needs": "Number cards 25 to 50; 1 counter",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 (scaled to 50)"
+            },
+            {
+              "name": "Smallest to biggest",
+              "minutes": 4,
+              "how": [
+                "Children work in pairs. Give each pair 4 mixed cards, for example 12, 45, 31, 27.",
+                "The pair puts the cards in a line, from smallest to biggest: 12, 27, 31, 45.",
+                "If they are stuck, say: 'Look at how each number starts. 45 starts with 4, so it is forty-something. 31 starts with 3, so it is thirty-something. Forty-something is bigger.'",
+                "Check each pair. Make sure some pairs get 34 and 43 together.",
+                "Swap cards between pairs and play again."
+              ],
+              "needs": "Number cards 10 to 50",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 3 (pairs order shuffled cards; cards are not next to each other)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Ask the first two with no cards out. For the last one, give them the 4 cards shuffled.",
+            "ask": [
+              "What comes after 39?",
+              "What comes before 50?",
+              "Put these cards in order, smallest first: 43, 34, 48, 29"
+            ],
+            "expected": [
+              "40",
+              "49",
+              "29, 34, 43, 48"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "before_after.20",
+            "read_numbers.50"
+          ],
+          "note_for_partner": "CAPS Grade 1 does before and after up to 20 (Grade 2 goes up to 99). Please confirm you want 'up to 50' for Grade 1 groups, or only for children who race ahead. Please also check the 'how each number starts' hint for ordering is how you want EAs to explain tens. It matches the 'look at the left side first' game in Compare up to 50."
+        },
+        {
+          "id": "before_after.100",
+          "label": "up to 100",
+          "goal": "The child says the number before and after any number up to 100, including jumps like 89 to 90 and 99 to 100, and puts mixed cards in order.",
+          "activities": [
+            {
+              "name": "Put numbers in order",
+              "minutes": 6,
+              "how": [
+                "Take cards 85 to 94 and shuffle them.",
+                "Give each child 1 or 2 cards. Each child reads their card out loud.",
+                "Say: 'Put all the cards in a line, from smallest to biggest.'",
+                "Read the line together: '85, 86, 87, 88, 89, 90, 91 ... 94.'",
+                "Point to 89 and 90: 'After 89 comes 90. Eighty-nine, ninety.'",
+                "Play again with cards 65 to 74 or 91 to 100."
+              ],
+              "needs": "Number cards 60 to 100",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (a run of 10 cards that goes past a 10)"
+            },
+            {
+              "name": "Number before and number after",
+              "minutes": 5,
+              "how": [
+                "Use the line on the table. A child puts a counter on a number, for example 88.",
+                "Ask: 'What comes after 88?', 'What comes before 88?' or 'What number is between 88 and 90?' The child moves the counter and says the number.",
+                "Then pick up the line and ask with no cards: 'What comes after 69?' 'What comes after 99?' 'What comes before 80?'",
+                "Give every child a turn."
+              ],
+              "needs": "Number cards 60 to 100; 1 counter",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 (scaled to 100)"
+            },
+            {
+              "name": "Smallest to biggest",
+              "minutes": 4,
+              "how": [
+                "Children work in pairs. Give each pair 4 mixed cards, for example 58, 85, 72, 91.",
+                "The pair puts the cards in a line, from smallest to biggest: 58, 72, 85, 91.",
+                "If they are stuck, say: 'Look at how each number starts. 85 starts with 8, so it is eighty-something. 58 starts with 5, so it is fifty-something. Eighty-something is bigger.'",
+                "Check each pair. Make sure some pairs get 67 and 76 together.",
+                "Swap cards between pairs and play again."
+              ],
+              "needs": "Number cards 50 to 100",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 3 (pairs order shuffled cards; cards are not next to each other)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Ask the first two with no cards out. For the last one, give them the 4 cards shuffled.",
+            "ask": [
+              "What comes after 89?",
+              "What comes before 100?",
+              "Put these cards in order, smallest first: 76, 67, 91, 58"
+            ],
+            "expected": [
+              "90",
+              "99",
+              "58, 67, 76, 91"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "before_after.50",
+            "read_numbers.100"
+          ],
+          "note_for_partner": "Same as 'up to 50': this goes past the CAPS Grade 1 range of 20 (CAPS Grade 2 goes to 99). Please confirm it is for children who race ahead."
+        }
+      ]
+    },
+    {
+      "skill": "add",
+      "skill_label": "Add",
+      "steps": [
+        {
+          "id": "add.5",
+          "label": "up to 5",
+          "goal": "The child puts two small groups together and says how many there are altogether, up to 5.",
+          "activities": [
+            {
+              "name": "Put two groups together",
+              "minutes": 7,
+              "how": [
+                "Each child takes some counters in one hand (say 3) and some in the other hand (say 1).",
+                "Ask: 'How many in this hand? How many in that hand? How many altogether?'",
+                "Write the sum on paper: 3 + 1 = . When the children say the answer, write 4.",
+                "Do it again with other numbers. Keep the answer 5 or less."
+              ],
+              "needs": "Counters (5 for each child); paper and a pen",
+              "source": "partner",
+              "source_ref": "W4 S1 activity 2"
+            },
+            {
+              "name": "Hide and add",
+              "minutes": 8,
+              "how": [
+                "Show the children: put 3 counters in your fist and say 'three'.",
+                "Put 2 more counters on the table. Point to each one and say 'four, five'.",
+                "Say: '3 and 2 make 5.'",
+                "Give each child a sum like 2 + 2, 4 + 1 or 2 + 3. They hide the first number in their fist and say it. Then they point to the other counters and keep counting.",
+                "If a child counts every counter from 1, say 'Yes, well done.' Then show the fist way one more time."
+              ],
+              "needs": "Counters (5 for each child)",
+              "source": "partner",
+              "source_ref": "W4 S1 activity 3 (last line from W4 S2 activity 2)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put 5 counters out. Say each sum and write it on paper. Counters or fingers are fine.",
+            "ask": [
+              "2 + 3",
+              "4 + 1",
+              "2 + 2"
+            ],
+            "expected": [
+              "5",
+              "5",
+              "4"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count.5"
+          ],
+          "note_for_partner": "Your W4 S1 activity 3 (the hidden-fist game) is written here in everyday words, with no maths terms, so EAs can follow it. Please check: should the tick need the fist way, or is counting everything from 1 fine at this step?"
+        },
+        {
+          "id": "add.10",
+          "label": "up to 10",
+          "goal": "The child adds two numbers with an answer up to 10, starting from the bigger number instead of counting everything from 1.",
+          "activities": [
+            {
+              "name": "Put two groups together with cards",
+              "minutes": 5,
+              "how": [
+                "Put number cards 1 to 5 face down on the table.",
+                "A child picks two cards, for example 5 and 3. Write 5 + 3 = on paper.",
+                "The child counts out 5 counters and then 3 counters, and says how many altogether.",
+                "Write the answer. Put the cards back and mix them. Give every child a turn."
+              ],
+              "needs": "Number cards 1 to 5; counters (10 for each child); paper and a pen",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 2 and W2 S2 activity 2, numbers up to 10"
+            },
+            {
+              "name": "Hide and add",
+              "minutes": 5,
+              "how": [
+                "Show the children: put 6 counters under your hand and say 'six'.",
+                "Put 3 counters next to your hand. Point to each one and say 'seven, eight, nine'.",
+                "Say: '6 and 3 make 9.'",
+                "Give each child a sum like 5 + 4, 7 + 2 or 8 + 2. They hide the first number under their hand and say it. Then they point to the other counters and keep counting.",
+                "Hide the bigger number. For 2 + 7, hide the 7, say 'seven', then 'eight, nine'."
+              ],
+              "needs": "Counters (10 for each child)",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 3, numbers up to 10, hidden under a hand"
+            },
+            {
+              "name": "Put it in your head",
+              "minutes": 5,
+              "how": [
+                "Say: '7 + 2.' Tap your head and say 'seven'.",
+                "Lift 2 fingers one at a time and say 'eight, nine'.",
+                "Say: '7 and 2 make 9.'",
+                "The children try it with 6 + 4, 7 + 3 and 5 + 3.",
+                "If a child gets stuck, give them counters again."
+              ],
+              "needs": "Hands; counters for children who need them",
+              "source": "adapted",
+              "source_ref": "W4 S2 activity 3, numbers up to 10"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put 10 counters out. Say each sum and write it on paper. Counters or fingers are fine.",
+            "ask": [
+              "5 + 3",
+              "6 + 4",
+              "7 + 2"
+            ],
+            "expected": [
+              "8",
+              "10",
+              "9"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "add.5",
+            "count.10"
+          ],
+          "note_for_partner": "Activities 2 and 3 tell the child to start from the bigger number (for 2 + 7, hide the 7). Is that right for this level? The tick still accepts counting everything from 1. Please confirm."
+        },
+        {
+          "id": "add.15",
+          "label": "up to 15",
+          "goal": "The child adds two numbers with an answer up to 15, starting from the bigger number.",
+          "activities": [
+            {
+              "name": "Hide and add",
+              "minutes": 5,
+              "how": [
+                "Show the children: put 9 counters under a piece of paper and say 'nine'.",
+                "Put 4 counters next to the paper. Point to each one and say 'ten, eleven, twelve, thirteen'.",
+                "Say: '9 and 4 make 13.'",
+                "Give each child a sum like 8 + 5, 10 + 4 or 11 + 3. They hide the bigger number under their paper and say it. Then they point to the other counters and keep counting."
+              ],
+              "needs": "Counters (15 for each child); paper",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 3, numbers up to 15, hidden under paper"
+            },
+            {
+              "name": "Put it in your head",
+              "minutes": 5,
+              "how": [
+                "Say: '10 + 3.' Tap your head and say 'ten'.",
+                "Lift 3 fingers one at a time and say 'eleven, twelve, thirteen'.",
+                "Say: '10 and 3 make 13.'",
+                "The children try it with 9 + 5, 11 + 4 and 8 + 6.",
+                "Always put the bigger number in your head."
+              ],
+              "needs": "Hands; counters for children who need them",
+              "source": "adapted",
+              "source_ref": "W4 S2 activity 3, numbers up to 15"
+            },
+            {
+              "name": "1, 2, 3, show: add!",
+              "minutes": 5,
+              "how": [
+                "Children play in pairs. Child A can use both hands. Child B uses only one hand.",
+                "They say '1, 2, 3, show!' and bring out their hands with some fingers up.",
+                "The child with more fingers says their number. Then they point to the other child's fingers and keep counting. For example, 8 and 3: 'eight', then 'nine, ten, eleven'.",
+                "The other child checks. Then they swap who uses one hand."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 3, adding instead of comparing"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put 15 counters out. Say each sum and write it on paper. Counters or fingers are fine.",
+            "ask": [
+              "8 + 5",
+              "7 + 7",
+              "9 + 6"
+            ],
+            "expected": [
+              "13",
+              "14",
+              "15"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "add.10",
+            "count.20"
+          ],
+          "note_for_partner": "Answers go past 10 at this step. Is 'start from the bigger number and keep counting' enough here, or do you want a 'fill up to 10 first' activity at this step? Activity 1 needs about 90 counters for 6 children; children could share in pairs if counters are short."
+        },
+        {
+          "id": "add.20",
+          "label": "up to 20",
+          "goal": "The child adds two numbers with an answer up to 20.",
+          "activities": [
+            {
+              "name": "Hide and add",
+              "minutes": 5,
+              "how": [
+                "Show the children: put 12 counters under a piece of paper and say 'twelve'.",
+                "Put 5 counters next to the paper. Point to each one and say 'thirteen, fourteen, fifteen, sixteen, seventeen'.",
+                "Say: '12 and 5 make 17.'",
+                "Give each child a sum like 14 + 4, 13 + 6 or 15 + 5. They hide the bigger number under their paper and say it. Then they point to the other counters and keep counting."
+              ],
+              "needs": "Counters (20 for each child); paper",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 3, numbers up to 20, hidden under paper"
+            },
+            {
+              "name": "Fill the row of 10",
+              "minutes": 5,
+              "how": [
+                "Before the lesson, draw a row of 10 boxes on paper for each child.",
+                "Say: '9 + 6.' The child puts 9 counters in the boxes, one in each box. They put 6 more counters next to the paper.",
+                "Ask: 'How many more to fill the row?' (1). The child moves 1 of the 6 counters into the last box.",
+                "Ask: 'How many are left next to the paper?' (5). Say: '10 and 5 make 15.'",
+                "Do it again with 8 + 7, 9 + 9 and 8 + 5."
+              ],
+              "needs": "Counters (20 for each child); paper with a row of 10 boxes; a pen",
+              "source": "new",
+              "source_ref": "Not in partner weeks 1-4"
+            },
+            {
+              "name": "1, 2, 3, show: add!",
+              "minutes": 5,
+              "how": [
+                "Children play in pairs. Both children can use both hands.",
+                "They say '1, 2, 3, show!' and bring out their hands with some fingers up.",
+                "The child with more fingers says their number. Then they point to the other child's fingers and keep counting. For example, 9 and 4: 'nine', then 'ten, eleven, twelve, thirteen'.",
+                "The other child checks. Play again."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 3, adding instead of comparing"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put 20 counters out. Say each sum and write it on paper. Counters or fingers are fine.",
+            "ask": [
+              "9 + 8",
+              "12 + 7",
+              "14 + 6"
+            ],
+            "expected": [
+              "17",
+              "19",
+              "20"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "add.15",
+            "count.20"
+          ],
+          "note_for_partner": "'Fill the row of 10' is new and not one of your activities. Please check it, or swap in one of yours. This step needs about 120 counters for 6 children; pairs could share if counters are short."
+        }
+      ]
+    },
+    {
+      "skill": "subtract",
+      "skill_label": "Take away",
+      "steps": [
+        {
+          "id": "subtract.5",
+          "label": "up to 5",
+          "goal": "The child takes some away from a group of up to 5 and says how many are left.",
+          "activities": [
+            {
+              "name": "Fingers up, fingers down: take away",
+              "minutes": 5,
+              "how": [
+                "Everyone holds up 5 fingers on one hand.",
+                "Say: 'Put 2 fingers down. How many are still up?' Children say 3.",
+                "Say: 'Yes, 5 take away 2 leaves 3.' Children say it with you.",
+                "Do it again. Sometimes start with 4 or 3 fingers up. Put down 1, 2 or 3 fingers."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 1 (Fingers up, fingers down), turned into take away"
+            },
+            {
+              "name": "Take away counters",
+              "minutes": 5,
+              "how": [
+                "Each child counts out 5 counters onto the table.",
+                "Say: 'Take away 2. Put them in your hand.'",
+                "Ask: 'How many are left on the table?' Children count them: 3.",
+                "Write 5 − 2 = 3 on paper. Point and read it: '5 take away 2 leaves 3.'",
+                "Do it again with 4 − 1, 3 − 2 and 5 − 4."
+              ],
+              "needs": "Counters (5 for each child); paper and a pen",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 2 (Combine two groups), done the other way round"
+            },
+            {
+              "name": "Take away in pairs",
+              "minutes": 5,
+              "how": [
+                "Children work in pairs. Give each pair one number card: 3, 4 or 5.",
+                "Child A reads the card and counts out that many counters.",
+                "Child B says 'Take away 1' or 'Take away 2' and takes them away.",
+                "Both count what is left. They say it: '4 take away 1 leaves 3.'",
+                "Swap jobs. Then each pair passes its card to the next pair. You sit with children who find it hard."
+              ],
+              "needs": "Counters (5 for each pair); number cards 3, 4 and 5",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 2 (Count and show in pairs)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Give them 5 counters. Say each one out loud.",
+            "ask": [
+              "5 take away 2",
+              "4 take away 3",
+              "5 take away 1"
+            ],
+            "expected": [
+              "3",
+              "1",
+              "4"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count.5",
+            "add.5"
+          ],
+          "note_for_partner": "Your weeks 1-4 have no take-away activities, so all three are your adding games turned around. Please check you are happy with these and with the words 'take away' and 'leaves'."
+        },
+        {
+          "id": "subtract.10",
+          "label": "up to 10",
+          "goal": "The child takes some away from a group of up to 10 and says how many are left.",
+          "activities": [
+            {
+              "name": "Fingers up, fingers down: take away with two hands",
+              "minutes": 4,
+              "how": [
+                "Everyone holds up all 10 fingers.",
+                "Say: 'Put 3 fingers down. How many are still up?' Children say 7.",
+                "Point to the full hand: 'One full hand is 5, and 2 more. That is 7.'",
+                "Say: 'Yes, 10 take away 3 leaves 7.'",
+                "Do it again. Start with 10, 9 or 8 fingers up. Put down 1 to 5 fingers."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 1 (Fingers up, fingers down), with two hands"
+            },
+            {
+              "name": "Take away one at a time",
+              "minutes": 6,
+              "how": [
+                "Put 9 counters in a row. Count them together: 9.",
+                "Say: 'We will take away 3. Watch me.'",
+                "Take 1 counter off the end and say 'eight'. Take another and say 'seven'. Take another and say 'six'.",
+                "Say: 'The last number I said is how many are left. 6.' Count the row to check.",
+                "Children do it with their own counters: 10 − 2, 8 − 3, 7 − 4.",
+                "Write each one on paper and read it together: '10 take away 2 leaves 8.'"
+              ],
+              "needs": "Counters (10 for each child); paper and a pen",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 3 (hold some in your fist and say the next numbers), going down instead of up"
+            },
+            {
+              "name": "Take away in pairs",
+              "minutes": 5,
+              "how": [
+                "Children work in pairs. Shuffle number cards 5 to 10. Give each pair 2 cards, face down.",
+                "Child A turns over a card and counts out that many counters.",
+                "Child B picks a number from 1 to 5. Child B takes the counters away one at a time, saying the numbers going down: 'eight, seven, six'.",
+                "Both count what is left. They say it: '9 take away 4 leaves 5.'",
+                "Swap jobs. When both cards are used, swap cards with another pair. You sit with children who find it hard."
+              ],
+              "needs": "Counters (10 for each pair); number cards 5 to 10",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 2 (Count and show in pairs)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Give them 10 counters. Say each one out loud.",
+            "ask": [
+              "10 take away 3",
+              "9 take away 4",
+              "8 take away 6"
+            ],
+            "expected": [
+              "7",
+              "5",
+              "2"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "subtract.5",
+            "count.10",
+            "add.10"
+          ],
+          "note_for_partner": "Activity 2 teaches taking away one counter at a time while saying the numbers going down. It is your hidden-fist game done backwards. Please check EAs will follow it."
+        },
+        {
+          "id": "subtract.15",
+          "label": "up to 15",
+          "goal": "The child takes some away from a number up to 15 and says how many are left.",
+          "activities": [
+            {
+              "name": "Take away from ten and some more",
+              "minutes": 5,
+              "how": [
+                "Each child counts out 10 counters in a row. Then they put 4 more below the row.",
+                "Say: '10 and 4 make 14.'",
+                "Say: 'Take away 3 from the 4 at the bottom. How many are left?' Children count: 11.",
+                "Say: 'The row of 10 did not change. 10 and 1 make 11.'",
+                "Do it again with 13 − 2, 15 − 4 and 12 − 2."
+              ],
+              "needs": "Counters (15 for each child)",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 2 (Combine two groups), making 11 to 15 as 10 and some more"
+            },
+            {
+              "name": "Say the big number, then go down",
+              "minutes": 6,
+              "how": [
+                "Hold up number card 15. Everyone says 'fifteen'.",
+                "Say: 'Take away 3.' Lift 1 finger at a time and say 'fourteen, thirteen, twelve'.",
+                "Say: 'We stopped at 12. So 15 take away 3 leaves 12.'",
+                "Check with counters: count out 15, take away 3, count what is left.",
+                "Children try with their fingers: 13 − 2, 14 − 4, 12 − 3. Check each one with counters."
+              ],
+              "needs": "Number cards 10 to 15; counters",
+              "source": "adapted",
+              "source_ref": "W4 S2 activity 3 (pop the number in your head and use fingers), going down instead of up"
+            },
+            {
+              "name": "Write it, do it, check it",
+              "minutes": 4,
+              "how": [
+                "Write 3 take-away sums on paper: 14 − 3, 12 − 4, 15 − 2.",
+                "Pairs read each one out loud and work it out with counters or fingers.",
+                "They tell you the answer. Write it in.",
+                "Read each one together: '14 take away 3 leaves 11.'"
+              ],
+              "needs": "Counters; paper and a pen",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 2 (write the sum on paper, then write in the answer)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Give them 15 counters and let them use fingers. Say each one out loud.",
+            "ask": [
+              "15 take away 3",
+              "14 take away 4",
+              "13 take away 5"
+            ],
+            "expected": [
+              "12",
+              "10",
+              "8"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "subtract.10",
+            "count.20",
+            "add.15"
+          ],
+          "note_for_partner": "Two practice sums (12 − 3 and 12 − 4) and the third tick item (13 take away 5) go below 10, just as Add up to 15 goes past 10. Please say if going below 10 belongs in this step or should wait for 'up to 20'."
+        },
+        {
+          "id": "subtract.20",
+          "label": "up to 20",
+          "goal": "The child takes some away from a number up to 20 and says how many are left.",
+          "activities": [
+            {
+              "name": "Fingers up, fingers down: take away with 20 fingers",
+              "minutes": 4,
+              "how": [
+                "Children stand in pairs. Both hold up all 10 fingers. Say: 'Together that is 20.'",
+                "Say: 'Child B, put 4 fingers down. How many are still up?' Pairs say: 'Child A has 10 and Child B has 6. 10 and 6 make 16.'",
+                "Say: 'Yes, 20 take away 4 leaves 16.'",
+                "Do it again. Child B puts down 2, 5, 6 or 8 fingers. Then swap so Child A puts fingers down."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 1 (Fingers up, fingers down), with two children together"
+            },
+            {
+              "name": "Say the big number, then go down",
+              "minutes": 6,
+              "how": [
+                "Hold up number card 18. Everyone says 'eighteen'.",
+                "Say: 'Take away 5.' Lift 1 finger at a time and say 'seventeen, sixteen, fifteen, fourteen, thirteen'.",
+                "Say: 'We stopped at 13. So 18 take away 5 leaves 13.'",
+                "Check with counters: count out a row of 10 and 8 more. Take away 5. Count what is left.",
+                "Children try: 20 − 3, 16 − 4, 14 − 6. Check each one with counters."
+              ],
+              "needs": "Number cards 11 to 20; counters",
+              "source": "adapted",
+              "source_ref": "W4 S2 activity 3 (pop the number in your head and use fingers), going down instead of up"
+            },
+            {
+              "name": "Take away in pairs",
+              "minutes": 5,
+              "how": [
+                "Children work in pairs. Shuffle number cards 11 to 20. Give each pair 3 cards, face down.",
+                "Child A turns over a card and counts out that many counters.",
+                "Child B holds up some fingers, from 1 to 9. Child A takes away that many counters.",
+                "Both count what is left. They say it: '16 take away 7 leaves 9.' Write it on paper.",
+                "Swap jobs. When the cards are used, swap cards with another pair. You sit with children who find it hard."
+              ],
+              "needs": "Counters (20 for each pair); number cards 11 to 20; paper and a pen",
+              "source": "adapted",
+              "source_ref": "W2 S2 activity 2 (Count and show in pairs)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Give them 20 counters and let them use fingers. Say each one out loud.",
+            "ask": [
+              "20 take away 4",
+              "18 take away 5",
+              "17 take away 8"
+            ],
+            "expected": [
+              "16",
+              "13",
+              "9"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "subtract.15",
+            "count.20",
+            "add.20"
+          ],
+          "note_for_partner": "Activity 1 needs two children together to make 20 fingers (3 pairs in a group of 6). Activity 3 uses fingers for the small number so the EA needs only one set of cards 11 to 20. Please check both work for your groups."
+        }
+      ]
+    },
+    {
+      "skill": "number_pairs",
+      "skill_label": "Number pairs",
+      "steps": [
+        {
+          "id": "number_pairs.5",
+          "label": "pairs that make 5",
+          "goal": "The child knows which two numbers make 5, like 3 and 2. When some of the 5 are hidden, the child can say how many are hidden.",
+          "activities": [
+            {
+              "name": "Fingers up, fingers down",
+              "minutes": 5,
+              "how": [
+                "Hold up one hand. Put 3 fingers up and fold 2 down.",
+                "Ask: 'How many are up?' (3). Then ask: 'How many are down?' (2).",
+                "Say together: 'Yes, 3 and 2 make 5.'",
+                "Do it again with 4 up, then 1 up, then 2 up.",
+                "Let each child have a turn. They show fingers and ask the group: 'How many are up? How many are down?'"
+              ],
+              "needs": "Hands only",
+              "source": "partner",
+              "source_ref": "W4 S1 activity 1 (children take turns as in W4 S2 activity 1)"
+            },
+            {
+              "name": "How many are hiding?",
+              "minutes": 6,
+              "how": [
+                "Put 5 counters on the table. Count them together: '1, 2, 3, 4, 5.'",
+                "Pick up the counters and put your hands behind your back. Put some counters in your fist.",
+                "Bring your hands out. Put the other counters on the table and keep your fist closed.",
+                "Say: 'I have 5. You see 2. How many are in my fist?'",
+                "Children answer. Open your fist and count together to check: '1, 2, 3.'",
+                "Say together: '2 and 3 make 5.'",
+                "Do it again with a different number in your fist. Give each child a turn to hide the counters."
+              ],
+              "needs": "Counters (5)",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 3 (counters held in a closed fist)"
+            },
+            {
+              "name": "Counters in two hands",
+              "minutes": 4,
+              "how": [
+                "Put the children in pairs. Give each pair 5 counters.",
+                "Child A puts some counters in one hand and the rest in the other hand, behind their back.",
+                "Child A opens one hand. Child B says how many are in the closed hand.",
+                "Child A opens the other hand. They count to check and say: '4 and 1 make 5.'",
+                "Swap turns. Write some of their pairs on paper, like 4 + 1 = 5 and 2 + 3 = 5."
+              ],
+              "needs": "Counters (5 for each pair); paper and a pen",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 2 (combine two groups, some counters in each hand)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Count 5 counters together. Behind your back, put some in your fist. Put the rest on the table and keep your fist closed.",
+            "ask": [
+              "I have 5. You see 1. How many are in my fist?",
+              "I have 5. You see 3. How many are in my fist?",
+              "I have 5. You see 5. How many are in my fist?"
+            ],
+            "expected": [
+              "4",
+              "2",
+              "0 (none, the fist is empty)"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "finger_flash.5",
+            "count.5",
+            "add.5"
+          ],
+          "note_for_partner": "There are only three different pairs that make 5 (1 and 4, 2 and 3, 0 and 5). So the third tick question uses an empty fist (answer 0). Please check 0 is fair for Grade R/1 at this point. If not, swap it for 'You see 4' (answer 1), even though that repeats the 1 and 4 pair. 'How many are hiding?' turns your hidden-fist game (W4 S1 activity 3) into a guessing game. Please check it works for your EAs."
+        },
+        {
+          "id": "number_pairs.10",
+          "label": "pairs that make 10",
+          "goal": "The child knows which two numbers make 10, like 7 and 3. When some of the 10 are hidden, the child can say how many are hidden.",
+          "activities": [
+            {
+              "name": "Fingers up, fingers down with two hands",
+              "minutes": 5,
+              "how": [
+                "Hold up both hands with all 10 fingers up. Count them together.",
+                "Fold some fingers down so 6 are up.",
+                "Ask: 'How many are up?' (6). Then ask: 'How many are down?' (4).",
+                "Say together: 'Yes, 6 and 4 make 10.'",
+                "Do it again with 8 up, then 3 up, then 5 up, then 7 up.",
+                "Let each child have a turn to show fingers and ask the group."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 1 (fingers up, fingers down, with two hands instead of one)"
+            },
+            {
+              "name": "How many are hiding?",
+              "minutes": 6,
+              "how": [
+                "Put 10 counters on the table in 2 rows of 5. Count them together.",
+                "Tell the children to close their eyes. Slide some counters under a piece of paper.",
+                "Children open their eyes. Say: 'I have 10. You see 7. How many are under the paper?'",
+                "Children answer. Lift the paper and count the hidden ones together to check: '1, 2, 3.'",
+                "Say together: '7 and 3 make 10.'",
+                "Do it again, hiding a different number each time. Give each child a turn to hide the counters."
+              ],
+              "needs": "Counters (10); a piece of paper",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 3 (counters hidden in a closed fist), with 10 counters under paper"
+            },
+            {
+              "name": "Counters in two hands",
+              "minutes": 4,
+              "how": [
+                "Put the children in pairs. Give each pair 10 counters.",
+                "Child A puts some counters in one hand and the rest in the other hand, behind their back.",
+                "Child A opens one hand. Child B says how many are in the closed hand.",
+                "Child A opens the other hand. They count to check and say: '6 and 4 make 10.'",
+                "Swap turns. Write some of their pairs on paper, like 6 + 4 = 10 and 8 + 2 = 10."
+              ],
+              "needs": "Counters (10 for each pair); paper and a pen",
+              "source": "adapted",
+              "source_ref": "W4 S1 activity 2 (combine two groups, some counters in each hand), with 10 counters"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Put 10 counters in 2 rows of 5 and count them together. The child closes their eyes while you slide some under a piece of paper.",
+            "ask": [
+              "I have 10. You see 3. How many are under the paper?",
+              "I have 10. You see 6. How many are under the paper?",
+              "I have 10. You see 2. How many are under the paper?"
+            ],
+            "expected": [
+              "7",
+              "4",
+              "8"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "number_pairs.5",
+            "count.10",
+            "add.10"
+          ],
+          "note_for_partner": "We took out a new card-matching game and used your 'combine two groups' game with 10 counters instead, so EAs play games they already know. Please check that small hands can hold up to 10 counters, or let children use two cups instead. In the 2 rows of 5, children can see the gap where counters are missing. We think that helps them, but please say if you would rather have the counters in a loose pile."
+        }
+      ]
+    },
+    {
+      "skill": "count_aloud",
+      "skill_label": "Count aloud",
+      "steps": [
+        {
+          "id": "count_aloud.10",
+          "label": "up to 10",
+          "goal": "The child says the numbers from 1 to 10 in the right order, and can start from any number and keep going to 10.",
+          "activities": [
+            {
+              "name": "Count around the circle",
+              "minutes": 5,
+              "how": [
+                "Sit in a circle with the children.",
+                "You say '1'. The child next to you says '2'. The next child says '3'. Keep going around.",
+                "The child who says '10' stands up. Everyone claps.",
+                "Start again at 1 with the next child, so a different child gets to say 10.",
+                "Then start at other numbers, like 4 or 6, and go round to 10."
+              ],
+              "needs": "Nothing",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 ('Go around the group. Each child says...'), used for saying numbers instead of counting counters"
+            },
+            {
+              "name": "Fingers up as we count",
+              "minutes": 5,
+              "how": [
+                "Everyone makes two fists.",
+                "Count together from 1 to 10. Lift one finger for each number you say.",
+                "At 10, all fingers are up. Everyone shouts '10!' and waves their hands.",
+                "Do it again: slow, then fast, then in a whisper, then loud.",
+                "Watch who says the numbers in the wrong order or skips one. Count with that child again."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 1 (Show the number with fingers)"
+            },
+            {
+              "name": "Stop and go",
+              "minutes": 5,
+              "how": [
+                "Say numbers out loud from 1: '1, 2, 3, 4...'",
+                "Stop suddenly and point to one child.",
+                "That child says the next numbers until 10. For example, you stop at 4, the child says '5, 6, 7, 8, 9, 10'.",
+                "Give every child a turn. Stop at a different number each time, like 3, 6 or 8."
+              ],
+              "needs": "Nothing",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 ('What number comes after your number?' Give each learner a turn. Vary the start numbers.)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. No counters, no cards. You say the start; the child says the numbers out loud.",
+            "ask": [
+              "Count from 1 to 10.",
+              "Start at 4. Count to 10.",
+              "Start at 7. Count to 10."
+            ],
+            "expected": [
+              "1, 2, 3, 4, 5, 6, 7, 8, 9, 10",
+              "4, 5, 6, 7, 8, 9, 10",
+              "7, 8, 9, 10"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [],
+          "note_for_partner": "Weeks 1-4 have no counting-out-loud activity, so all three are built from your 'go around the group', 'show the number' and 'before and after' games. Please check: should counting back from 10 to 1 also be part of this step?"
+        },
+        {
+          "id": "count_aloud.20",
+          "label": "up to 20",
+          "goal": "The child says the numbers from 1 to 20 in the right order, with no mistakes after 10, and can start from any number and keep going to 20.",
+          "activities": [
+            {
+              "name": "Count around the circle to 20",
+              "minutes": 5,
+              "how": [
+                "Sit in a circle. You say '1'. The next child says '2'. Keep going around.",
+                "The child who says '20' stands up. Everyone claps.",
+                "Start again with the next child. Then start at 8, 10 or 13 and go round to 20.",
+                "Listen after 10. If a child says 'ten-one' or skips 15, stop. Say it together: '10, 11, 12, 13, 14, 15'."
+              ],
+              "needs": "Nothing",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 ('Go around the group. Each child says...'), scaled up to 20"
+            },
+            {
+              "name": "Rows of 10",
+              "minutes": 5,
+              "how": [
+                "Before you start, put number cards 1 to 10 in a row. Put 11 to 20 in a second row under it.",
+                "Point to each card. Everyone says the number together, from 1 to 20.",
+                "Turn 3 cards face down, for example 12, 15 and 18.",
+                "Point and say the numbers again. The children must say the hidden numbers too.",
+                "Turn more cards face down each time, until the children can say 1 to 20 with no cards showing."
+              ],
+              "needs": "Number cards 1 to 20",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (Put numbers in order), with cards 1 to 20 and cards turned face down"
+            },
+            {
+              "name": "Stop and go to 20",
+              "minutes": 5,
+              "how": [
+                "Say numbers out loud: '1, 2, 3...'",
+                "Stop suddenly and point to one child. That child says the next numbers until 20.",
+                "Stop at a different number each time, like 9, 12 or 16.",
+                "Give every child a turn. Give the harder stops, like 9 or 13, to children who are doing well."
+              ],
+              "needs": "Nothing",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 ('What number comes after your number?' Vary the start numbers.)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. No counters, no cards. You say the start; the child says the numbers out loud.",
+            "ask": [
+              "Count from 1 to 20.",
+              "Start at 9. Count to 16.",
+              "Start at 14. Count to 20."
+            ],
+            "expected": [
+              "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20",
+              "9, 10, 11, 12, 13, 14, 15, 16",
+              "14, 15, 16, 17, 18, 19, 20"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count_aloud.10"
+          ],
+          "note_for_partner": "Please check: should the EA count in English, in isiXhosa, or both? The numbers after 10 sound very different in each language, and this step is where children often go wrong."
+        },
+        {
+          "id": "count_aloud.50",
+          "label": "up to 50",
+          "goal": "The child says the numbers up to 50 in the right order, and knows what comes after 29, 39 and 49.",
+          "activities": [
+            {
+              "name": "Rows of 10",
+              "minutes": 6,
+              "how": [
+                "Before the lesson, put number cards 1 to 50 in 5 rows on a table or the floor: 1 to 10 in the first row, 11 to 20 under it, and so on to 50.",
+                "Point to each card. Everyone says the number together, from 1 to 50.",
+                "Stop at 29 and ask: 'What comes next?' Point to the next card: '30!' Do the same at 39 and 49.",
+                "Turn some cards face down, like 30, 40 and 41. Count again. The children say the hidden numbers too."
+              ],
+              "needs": "Number cards 1 to 50",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (Put numbers in order), with cards 1 to 50 laid in rows of 10"
+            },
+            {
+              "name": "Count around the circle to 50",
+              "minutes": 5,
+              "how": [
+                "Sit in a circle. Start at 20. You say '20'. The next child says '21'. Keep going around.",
+                "The child who says '50' stands up. Everyone claps.",
+                "Start again at other numbers, like 25 or 34.",
+                "If a child gets stuck after 29 or 39, point to the card rows and say it together."
+              ],
+              "needs": "Nothing. Keep the card rows from the first game out.",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 ('Go around the group'), scaled up to 50"
+            },
+            {
+              "name": "Stop and go to 50",
+              "minutes": 4,
+              "how": [
+                "Say numbers out loud, starting at 20 or higher.",
+                "Stop just before a number that ends in 0, like at 28, 38 or 47. Point to one child.",
+                "That child keeps saying the numbers until you say 'Stop!' at least 3 numbers later.",
+                "Give every child a turn."
+              ],
+              "needs": "Nothing",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 ('What number comes after your number?' Vary the start numbers.)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. No counters, no cards. You say the start; the child says the numbers out loud.",
+            "ask": [
+              "Start at 27. Count to 33.",
+              "Start at 37. Count to 43.",
+              "Start at 46. Count to 50."
+            ],
+            "expected": [
+              "27, 28, 29, 30, 31, 32, 33",
+              "37, 38, 39, 40, 41, 42, 43",
+              "46, 47, 48, 49, 50"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count_aloud.20"
+          ],
+          "note_for_partner": "The 50 cards are laid out before the lesson because there is no time inside 20 minutes. Is that practical in your schools, or would a ready-made 1 to 50 paper chart work better? Also check that starting the circle game at 20 is right."
+        },
+        {
+          "id": "count_aloud.100",
+          "label": "up to 100",
+          "goal": "The child says the numbers up to 100 in the right order, and knows what comes after 59, 79 and 99.",
+          "activities": [
+            {
+              "name": "Cards that help",
+              "minutes": 6,
+              "how": [
+                "Put number cards 50, 60, 70, 80, 90 and 100 in a row on the floor.",
+                "Count together from 50 to 100. Each time you say a number that has a card, point to the card and everyone claps.",
+                "Stop at 59 and ask: 'What comes next?' Point to the 60 card: '60!' Do the same at 69, 79, 89 and 99.",
+                "Turn the cards face down and count from 50 to 100 again."
+              ],
+              "needs": "Number cards 50, 60, 70, 80, 90, 100",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (Put numbers in order), using only the cards that end in 0"
+            },
+            {
+              "name": "Count around the circle to 100",
+              "minutes": 5,
+              "how": [
+                "Sit in a circle. Start at 50. You say '50'. The next child says '51'. Keep going around.",
+                "The child who says '100' stands up. Everyone claps.",
+                "Start again at other numbers, like 64 or 77.",
+                "If a child gets stuck after a number that ends in 9, point to the card on the floor and say it together."
+              ],
+              "needs": "Nothing. Keep the cards from the first game on the floor.",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 2 ('Go around the group'), scaled up to 100"
+            },
+            {
+              "name": "Stop and go to 100",
+              "minutes": 4,
+              "how": [
+                "Say numbers out loud, starting at 50 or higher.",
+                "Stop just before a number that ends in 0, like at 58, 78 or 97. Point to one child.",
+                "That child keeps saying the numbers until you say 'Stop!' at least 3 numbers later.",
+                "Give every child a turn."
+              ],
+              "needs": "Nothing",
+              "source": "adapted",
+              "source_ref": "W3 S1 activity 2 ('What number comes after your number?' Vary the start numbers.)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. No counters, no cards. You say the start; the child says the numbers out loud.",
+            "ask": [
+              "Start at 57. Count to 63.",
+              "Start at 77. Count to 83.",
+              "Start at 95. Count to 100."
+            ],
+            "expected": [
+              "57, 58, 59, 60, 61, 62, 63",
+              "77, 78, 79, 80, 81, 82, 83",
+              "95, 96, 97, 98, 99, 100"
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count_aloud.50"
+          ],
+          "note_for_partner": "The first game uses the cards that end in 0 (50 to 100) only to help children see where they are. It is not the 'skip count in 10s' step. Please check it does not overlap too much with that step. Also check: should this step include counting from 1 all the way to 100 in one go?"
+        }
+      ]
+    },
+    {
+      "skill": "skip_count",
+      "skill_label": "Skip count",
+      "steps": [
+        {
+          "id": "skip_count.2s",
+          "label": "2s to 20",
+          "goal": "The child says 2, 4, 6 … up to 20, and counts piles of 2 in 2s.",
+          "activities": [
+            {
+              "name": "Whisper, then say it loud",
+              "minutes": 5,
+              "how": [
+                "Sit in a circle. Count together from 1 to 20. Whisper one number, then say the next one loud: 'one' (whisper), 'TWO!' (loud), 'three' (whisper), 'FOUR!'",
+                "Do it again. Clap on every loud number.",
+                "Now say only the loud numbers: '2, 4, 6, 8 … 20.' Say the whisper numbers in your head, with no sound.",
+                "Go around the circle. Each child says the next loud number. When you reach 20, start again at 2."
+              ],
+              "needs": "Nothing",
+              "source": "new",
+              "source_ref": "Not in partner weeks 1-4"
+            },
+            {
+              "name": "Piles of 2",
+              "minutes": 5,
+              "how": [
+                "Children work in pairs. Give each pair 20 counters.",
+                "Show them how to put the counters in piles of 2: 2, then 2, then 2.",
+                "Touch each pile and say '2, 4, 6, 8, 10 …'. Children touch their own piles and count with you.",
+                "Show a number card, for example 14. One child in each pair touches the piles, counting in 2s, '2, 4, 6 …', until they reach 14. Then the partner has a turn.",
+                "Use different cards in a mixed-up order, for example 10, 16, 6, 20, 12."
+              ],
+              "needs": "Counters (20 for each pair); number cards 2, 4, 6 … 20",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 2 (Count) and W2 S2 activity 2 (Count and show, in pairs)"
+            },
+            {
+              "name": "Put the 2s cards in order",
+              "minutes": 5,
+              "how": [
+                "Mix up the cards 2, 4, 6, 8, 10, 12, 14, 16, 18, 20. Give them out. Some children get 2 cards.",
+                "Children put the cards in a line in order, from smallest to biggest. Read them together: '2, 4, 6 … 20.'",
+                "Children close their eyes. Take one card away. Children open their eyes: 'Which number is missing?'",
+                "Ask: 'When we count in 2s, what comes after 8?' (10) 'What comes before 12?' (10)"
+              ],
+              "needs": "Number cards 2, 4, 6 … 20",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (Put numbers in order)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Have number cards 12, 14, 18, 20 and 9 piles of 2 counters ready.",
+            "ask": [
+              "Count in 2s, from 2 up to 20.",
+              "Put out cards 12, 14, then a gap, then 18, 20. Ask: 'Which number is missing?'",
+              "Point to the 9 piles of 2. Ask: 'Count these in 2s. How many?'"
+            ],
+            "expected": [
+              "2, 4, 6, 8, 10, 12, 14, 16, 18, 20. No number missed, and no 1, 3, 5 said in between.",
+              "16",
+              "'2, 4, 6 … 18.' Eighteen."
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "count_aloud.20"
+          ],
+          "note_for_partner": "We kept the order 2s, then 5s, then 10s. Many programmes teach 10s first because it is the easiest. Tell us if you would rather start with 10s. The whisper-loud game is new, not from your weeks 1-4. Please check it suits Grade R/1."
+        },
+        {
+          "id": "skip_count.5s",
+          "label": "5s to 50",
+          "goal": "The child says 5, 10, 15 … up to 50, and counts piles of 5 in 5s.",
+          "activities": [
+            {
+              "name": "Hands in 5s",
+              "minutes": 5,
+              "how": [
+                "Hold up one hand. Say: 'One hand has 5 fingers.'",
+                "Go around the circle. Each child holds up one hand and keeps it up. The group says the next number: '5, 10, 15, 20, 25, 30.'",
+                "Keep going around. Now each child holds up their other hand too: '35, 40, 45, 50.' Stop at 50.",
+                "Do it again, faster. Then put all hands down and say '5, 10, 15 … 50' with no hands."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 1 (Finger flash): same use of a hand of 5 fingers"
+            },
+            {
+              "name": "Piles of 5",
+              "minutes": 5,
+              "how": [
+                "Before the lesson, make 10 piles of 5 counters. In the lesson, let the children check 2 piles by counting 1, 2, 3, 4, 5.",
+                "Touch each pile and count together: '5, 10, 15 … 50.'",
+                "Show a number card, for example 35. One child touches the piles, counting in 5s, until they reach 35. Give each child a turn.",
+                "Use different cards in a mixed-up order, for example 20, 45, 15, 50, 30."
+              ],
+              "needs": "Counters (50); number cards 5, 10, 15 … 50",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 2 (Count)"
+            },
+            {
+              "name": "Put the 5s cards in order",
+              "minutes": 5,
+              "how": [
+                "Mix up the cards 5, 10, 15 … 50. Give them out. Some children get 2 cards.",
+                "Children put the cards in a line in order, from smallest to biggest. Read them together: '5, 10, 15 … 50.'",
+                "Children close their eyes. Take one card away. Children open their eyes: 'Which number is missing?'",
+                "Ask: 'When we count in 5s, what comes after 25?' (30) 'What comes before 20?' (15)"
+              ],
+              "needs": "Number cards 5, 10, 15 … 50",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (Put numbers in order)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Have number cards 30, 35, 45, 50 and 9 piles of 5 counters ready.",
+            "ask": [
+              "Count in 5s, from 5 up to 50.",
+              "Put out cards 30, 35, then a gap, then 45, 50. Ask: 'Which number is missing?'",
+              "Point to the 9 piles of 5. Ask: 'Count these in 5s. How many?'"
+            ],
+            "expected": [
+              "5, 10, 15, 20, 25, 30, 35, 40, 45, 50. No number missed.",
+              "40",
+              "'5, 10, 15 … 45.' Forty-five."
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "skip_count.2s",
+            "count_aloud.50"
+          ],
+          "note_for_partner": "Activity 2 needs 50 counters in piles of 5 (the tick check needs 45). Please check the EA kit has at least 50 counters. The hands game is our own scaling of your finger games, not a copy of one."
+        },
+        {
+          "id": "skip_count.10s",
+          "label": "10s to 100",
+          "goal": "The child says 10, 20, 30 … up to 100, and counts piles of 10 in 10s.",
+          "activities": [
+            {
+              "name": "Hands in 10s",
+              "minutes": 5,
+              "how": [
+                "Hold up both hands. Say: 'All my fingers make 10.'",
+                "Go around the circle. Each child holds up both hands and keeps them up. The group says the next number: '10, 20, 30, 40, 50, 60.'",
+                "Go around a second time. Each child holds up both hands again: '70, 80, 90, 100.' Stop at 100.",
+                "Do it again, faster. Then put all hands down and say '10, 20, 30 … 100' with no hands."
+              ],
+              "needs": "Hands only",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 1 (Finger flash): same use of fingers"
+            },
+            {
+              "name": "Piles of 10",
+              "minutes": 5,
+              "how": [
+                "Before the lesson, make 10 piles of 10 counters. In the lesson, let the children check one pile by counting 1 to 10.",
+                "Touch each pile and count together: '10, 20, 30 … 100.'",
+                "Show a number card, for example 70. One child touches the piles, counting in 10s, until they reach 70. Give each child a turn.",
+                "Use different cards in a mixed-up order, for example 40, 90, 20, 60, 100."
+              ],
+              "needs": "Counters (100); number cards 10, 20, 30 … 100",
+              "source": "adapted",
+              "source_ref": "W1 S1 activity 2 (Count)"
+            },
+            {
+              "name": "Put the 10s cards in order",
+              "minutes": 5,
+              "how": [
+                "Mix up the cards 10, 20, 30 … 100. Give them out. Some children get 2 cards.",
+                "Children put the cards in a line in order, from smallest to biggest. Read them together: '10, 20, 30 … 100.'",
+                "Children close their eyes. Take one card away. Children open their eyes: 'Which number is missing?'",
+                "Ask: 'When we count in 10s, what comes after 50?' (60) 'What comes before 30?' (20)"
+              ],
+              "needs": "Number cards 10, 20, 30 … 100",
+              "source": "adapted",
+              "source_ref": "W2 S1 activity 3 (Put numbers in order)"
+            }
+          ],
+          "tick_when": {
+            "setup": "Sit with one child on their own. Have number cards 60, 70, 90, 100 and 9 piles of 10 counters ready.",
+            "ask": [
+              "Count in 10s, from 10 up to 100.",
+              "Put out cards 60, 70, then a gap, then 90, 100. Ask: 'Which number is missing?'",
+              "Point to the 9 piles of 10. Ask: 'Count these in 10s. How many?'"
+            ],
+            "expected": [
+              "10, 20, 30, 40, 50, 60, 70, 80, 90, 100. No number missed.",
+              "80",
+              "'10, 20, 30 … 90.' Ninety."
+            ],
+            "rule": "All 3 right? Tick it."
+          },
+          "comes_after": [
+            "skip_count.5s",
+            "count_aloud.100"
+          ],
+          "note_for_partner": "Activity 2 needs 100 counters in piles of 10 (the tick check needs 90). If kits are smaller, bundles of 10 sticks held with a rubber band would work too. Please confirm what the kit holds."
+        }
+      ]
+    }
+  ]
+}

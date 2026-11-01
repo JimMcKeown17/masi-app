@@ -7,14 +7,18 @@ export function evaluateBatteryState(battery: BatteryConfig, decidedResults: Dec
   const decided = order.filter((c) => byCode.has(c));
   const results = [...byCode.values()];
   const autoSkips: BatteryState['autoSkips'] = [];
+  const skipped = new Set<string>();
   for (const code of order) {
     if (byCode.has(code)) continue;
     const cause = skipCauseFor(battery, results, code);
-    if (!cause) continue;
+    // An auto-skip is already enough evidence to gate its dependants in this pass.
+    const prerequisite = battery.prerequisites[code];
+    const dependencySkipped = prerequisite && skipped.has(prerequisite.depends_on);
+    if (!cause && !dependencySkipped) continue;
     autoSkips.push({ question_code: code, reason: 'skipped_prerequisite_unmet',
-      trigger: cause.kind === 'first_row' ? cause.trigger : null });
+      trigger: cause?.kind === 'first_row' ? cause.trigger : null });
+    skipped.add(code);
   }
-  const skipped = new Set(autoSkips.map((a) => a.question_code));
   const undecided = order.filter((c) => !byCode.has(c) && !skipped.has(c));
   const nextCode = undecided[0] ?? null;
   return {

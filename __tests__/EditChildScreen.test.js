@@ -1,3 +1,6 @@
+jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({ useActiveProgrammeSubject: jest.fn() }));
+import { useActiveProgrammeSubject } from '../src/hooks/useActiveProgrammeSubject';
+beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }), { virtual: true });
 import React from 'react';
 import { Alert, StyleSheet } from 'react-native';
@@ -301,4 +304,23 @@ test('the current group shows the shared dot and an ink name with the default fi
   expect(StyleSheet.flatten(within(field).getByTestId('group-dot').props.style)).toMatchObject({ backgroundColor: '#1565C0', width: 10, height: 10 });
   expect(StyleSheet.flatten(within(field).getByText('Lions').props.style).color).toBe(colors.text);
   expect(StyleSheet.flatten(field.props.style)).toMatchObject({ borderColor: tints.control, borderWidth: 1.5 });
+});
+
+test('numeracy hides reading level', () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
+  const screen = renderScreen();
+  expect(screen.queryByText('Current reading level', { includeHiddenElements: true })).toBeNull();
+  expect(screen.queryByText('This level pre-fills the next literacy session and changes when the child progresses.')).toBeNull();
+  expect(screen.queryByLabelText(/Choose current reading level/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy();
+});
+test.each([READING_LEVELS[4], null, ''])('saving keeps the stored reading level (%p)', async reading_level => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
+  mockChildren = [{ ...makeChild(), reading_level }];
+  const screen = renderScreen();
+  fireEvent.changeText(screen.getByDisplayValue('Amahle'), 'Amended');
+  fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith('child-1', expect.objectContaining({
+    first_name: 'Amended', reading_level,
+  })));
 });

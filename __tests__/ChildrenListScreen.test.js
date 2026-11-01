@@ -1,3 +1,6 @@
+jest.mock('../src/hooks/useActiveProgrammeSubject', () => ({ useActiveProgrammeSubject: jest.fn() }));
+import { useActiveProgrammeSubject } from '../src/hooks/useActiveProgrammeSubject';
+beforeEach(() => useActiveProgrammeSubject.mockReturnValue({ subject: 'reading', isMaths: false, loading: false }));
 jest.mock('../src/hooks/useAssessableChildren', () => ({ useAssessableChildren: jest.fn() }));
 import { useAssessableChildren } from '../src/hooks/useAssessableChildren';
 beforeEach(() => useAssessableChildren.mockImplementation(() => {
@@ -264,4 +267,13 @@ test('Unassessed uses class scope without widening child counts or class rows', 
   expect(screen.getByLabelText('19 children')).toBeTruthy();
   expect(screen.getByLabelText('2 classes')).toBeTruthy();
   expect(screen.queryByText('Cora Control')).toBeNull();
+});
+
+test('a numeracy EA sees no Unassessed stat', async () => {
+  useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
+  const screen = await renderScreen();
+  expect(screen.queryByText('Unassessed')).toBeNull();
+  expect(screen.getByLabelText('19 children')).toBeTruthy();
+  expect(screen.getByLabelText('2 classes')).toBeTruthy();
+  expect(mockGetLetterResults).not.toHaveBeenCalled();
 });

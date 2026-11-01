@@ -18,6 +18,7 @@
     "sqlite:staging:ios": "node scripts/sqlite-staging.cjs ios",
     "sqlite:staging:android": "node scripts/sqlite-staging.cjs android",
     "rls:probe": "node scripts/rls-visibility-probe.cjs",
+    "verify:reporting:postgres": "node scripts/reporting-postgres-harness.cjs",
     "verify:history-authorization:postgres": "node scripts/history-authorization-postgres-harness.cjs",
     "verify:upload-contract:postgres": "node scripts/upload-contract-postgres-harness.cjs",
     "verify:organisation-label:postgres": "node scripts/organisation-label-postgres-harness.cjs",
@@ -40,7 +41,7 @@
     "test:integration": "jest --runInBand --config jest.integration.config.js",
     "test:types": "tsc --noEmit -p tsconfig.assessment-questions.json",
     "test:release": "npm test && npm run test:integration && npm run test:types && npm run test:content && npm run sqlite:staging:check",
-    "test:content": "node --test content/egra/verify.cjs"
+    "test:content": "node --test content/egra/verify.cjs content/egma/verify.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/andika": "0.4.1",

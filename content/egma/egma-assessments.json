@@ -1,0 +1,1920 @@
+{
+  "formatVersion": 1,
+  "contentVersion": "2026-10-31.1-draft",
+  "title": "Maths assessment",
+  "description": "Early number tasks and EGMA. English draft.",
+  "sources": [
+    {
+      "id": "rti-2014-printed",
+      "title": "Early Grade Mathematics Assessment (EGMA) Toolkit, RTI, March 2014",
+      "fileName": "EGMA Toolkit_March2014.pdf",
+      "sha256": "ef97fb1bb55946d02d740fe22e91b0b01d7b74843c71744cc8e6314634979efd"
+    }
+  ],
+  "assessments": [
+    {
+      "id": "masi-egma-en-2026-1-draft",
+      "title": "Maths assessment",
+      "languageCode": "en",
+      "languageName": "English",
+      "questions": [
+        {
+          "questionCode": "maths_count_aloud",
+          "title": "Count aloud",
+          "instructions": "Say: \"Count for me. Start at one.\" Mark each step the child reaches without a mistake. Stop at the first mistake. If the child stops for about 5 seconds, mark the next step wrong. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "checkpoint",
+              "upTo": 5,
+              "answer": 5,
+              "skill": "count_aloud",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "checkpoint",
+              "upTo": 10,
+              "answer": 10,
+              "skill": "count_aloud",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "checkpoint",
+              "upTo": 20,
+              "answer": 20,
+              "skill": "count_aloud",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "checkpoint",
+              "upTo": 50,
+              "answer": 50,
+              "skill": "count_aloud",
+              "band": 50,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "checkpoint",
+              "upTo": 100,
+              "answer": 100,
+              "skill": "count_aloud",
+              "band": 100,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "maths_quick_see",
+          "title": "Finger flash",
+          "instructions": "Say: \"How many fingers?\" Hold your fingers up for about 2 seconds, then hide them. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "fingers",
+              "mode": "flash",
+              "shown": 3,
+              "answer": 3,
+              "skill": "quick_see",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "fingers",
+              "mode": "flash",
+              "shown": 5,
+              "answer": 5,
+              "skill": "quick_see",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "fingers",
+              "mode": "flash",
+              "shown": 2,
+              "answer": 2,
+              "skill": "quick_see",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "fingers",
+              "mode": "flash",
+              "shown": 7,
+              "answer": 7,
+              "skill": "quick_see",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "fingers",
+              "mode": "flash",
+              "shown": 6,
+              "answer": 6,
+              "skill": "quick_see",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "fingers",
+              "mode": "flash",
+              "shown": 9,
+              "answer": 9,
+              "skill": "quick_see",
+              "band": 10,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "maths_count_out",
+          "title": "Count out counters",
+          "instructions": "Say: \"Give me N counters.\" Use the number on each item for N. Mark correct only if the child stops at N. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "count_out",
+              "target": 4,
+              "answer": 4,
+              "skill": "count_out",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "count_out",
+              "target": 2,
+              "answer": 2,
+              "skill": "count_out",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "count_out",
+              "target": 5,
+              "answer": 5,
+              "skill": "count_out",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "count_out",
+              "target": 7,
+              "answer": 7,
+              "skill": "count_out",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "count_out",
+              "target": 9,
+              "answer": 9,
+              "skill": "count_out",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "count_out",
+              "target": 6,
+              "answer": 6,
+              "skill": "count_out",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "7",
+              "kind": "count_out",
+              "target": 12,
+              "answer": 12,
+              "skill": "count_out",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "8",
+              "kind": "count_out",
+              "target": 15,
+              "answer": 15,
+              "skill": "count_out",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "9",
+              "kind": "count_out",
+              "target": 18,
+              "answer": 18,
+              "skill": "count_out",
+              "band": 20,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "maths_read_numbers",
+          "title": "Read numbers to 20",
+          "instructions": "Ask the child to read each number on Number Card page 1. The child must say the whole number: \"thirteen\", not \"one three\". The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "number",
+              "value": 3,
+              "answer": 3,
+              "skill": "read_numbers",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "number",
+              "value": 5,
+              "answer": 5,
+              "skill": "read_numbers",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "number",
+              "value": 0,
+              "answer": 0,
+              "skill": "read_numbers",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "number",
+              "value": 7,
+              "answer": 7,
+              "skill": "read_numbers",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "number",
+              "value": 9,
+              "answer": 9,
+              "skill": "read_numbers",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "number",
+              "value": 6,
+              "answer": 6,
+              "skill": "read_numbers",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "7",
+              "kind": "number",
+              "value": 13,
+              "answer": 13,
+              "skill": "read_numbers",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "8",
+              "kind": "number",
+              "value": 17,
+              "answer": 17,
+              "skill": "read_numbers",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "9",
+              "kind": "number",
+              "value": 20,
+              "answer": 20,
+              "skill": "read_numbers",
+              "band": 20,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": 1
+        },
+        {
+          "questionCode": "egma_number_id",
+          "title": "Read big numbers",
+          "instructions": "Ask the child to read each number on Number Card page 2. The child must say the number with its place value. \"Nine-nine\" for 99 is wrong. For three-digit numbers they must say \"hundred\". Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "number",
+              "value": 2,
+              "answer": 2,
+              "skill": "read_numbers",
+              "band": 5,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "number",
+              "value": 9,
+              "answer": 9,
+              "skill": "read_numbers",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "number",
+              "value": 0,
+              "answer": 0,
+              "skill": "read_numbers",
+              "band": 5,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "number",
+              "value": 12,
+              "answer": 12,
+              "skill": "read_numbers",
+              "band": 20,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "number",
+              "value": 30,
+              "answer": 30,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "6",
+              "kind": "number",
+              "value": 22,
+              "answer": 22,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "7",
+              "kind": "number",
+              "value": 45,
+              "answer": 45,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "8",
+              "kind": "number",
+              "value": 39,
+              "answer": 39,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "9",
+              "kind": "number",
+              "value": 23,
+              "answer": 23,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "10",
+              "kind": "number",
+              "value": 48,
+              "answer": 48,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "11",
+              "kind": "number",
+              "value": 91,
+              "answer": 91,
+              "skill": "read_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "12",
+              "kind": "number",
+              "value": 33,
+              "answer": 33,
+              "skill": "read_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "13",
+              "kind": "number",
+              "value": 74,
+              "answer": 74,
+              "skill": "read_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "14",
+              "kind": "number",
+              "value": 87,
+              "answer": 87,
+              "skill": "read_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "15",
+              "kind": "number",
+              "value": 65,
+              "answer": 65,
+              "skill": "read_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "16",
+              "kind": "number",
+              "value": 108,
+              "answer": 108,
+              "skill": "read_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "17",
+              "kind": "number",
+              "value": 245,
+              "answer": 245,
+              "skill": "read_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "18",
+              "kind": "number",
+              "value": 587,
+              "answer": 587,
+              "skill": "read_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "19",
+              "kind": "number",
+              "value": 731,
+              "answer": 731,
+              "skill": "read_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "20",
+              "kind": "number",
+              "value": 989,
+              "answer": 989,
+              "skill": "read_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": 60,
+          "numberCardPage": 2
+        },
+        {
+          "questionCode": "maths_which_more",
+          "title": "Which is more?",
+          "instructions": "Ask: \"Which is more?\" Use Number Card page 3. The child must say the bigger number, not point. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "pair",
+              "left": 2,
+              "right": 4,
+              "answer": 4,
+              "skill": "compare_numbers",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "pair",
+              "left": 5,
+              "right": 3,
+              "answer": 5,
+              "skill": "compare_numbers",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "pair",
+              "left": 3,
+              "right": 4,
+              "answer": 4,
+              "skill": "compare_numbers",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "pair",
+              "left": 6,
+              "right": 9,
+              "answer": 9,
+              "skill": "compare_numbers",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "pair",
+              "left": 8,
+              "right": 7,
+              "answer": 8,
+              "skill": "compare_numbers",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "pair",
+              "left": 10,
+              "right": 6,
+              "answer": 10,
+              "skill": "compare_numbers",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "7",
+              "kind": "pair",
+              "left": 12,
+              "right": 15,
+              "answer": 15,
+              "skill": "compare_numbers",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "8",
+              "kind": "pair",
+              "left": 19,
+              "right": 13,
+              "answer": 19,
+              "skill": "compare_numbers",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "9",
+              "kind": "pair",
+              "left": 11,
+              "right": 17,
+              "answer": 17,
+              "skill": "compare_numbers",
+              "band": 20,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": 3
+        },
+        {
+          "questionCode": "egma_number_discrimination",
+          "title": "Bigger number",
+          "instructions": "Ask the child to say the bigger number in each pair on Number Card page 4. The child must say the bigger number, not point. \"One five three\" is accepted here. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "pair",
+              "left": 7,
+              "right": 5,
+              "answer": 7,
+              "skill": "compare_numbers",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "pair",
+              "left": 11,
+              "right": 24,
+              "answer": 24,
+              "skill": "compare_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "pair",
+              "left": 39,
+              "right": 23,
+              "answer": 39,
+              "skill": "compare_numbers",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "pair",
+              "left": 58,
+              "right": 49,
+              "answer": 58,
+              "skill": "compare_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "pair",
+              "left": 65,
+              "right": 67,
+              "answer": 67,
+              "skill": "compare_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "6",
+              "kind": "pair",
+              "left": 94,
+              "right": 78,
+              "answer": 94,
+              "skill": "compare_numbers",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "7",
+              "kind": "pair",
+              "left": 146,
+              "right": 153,
+              "answer": 153,
+              "skill": "compare_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "8",
+              "kind": "pair",
+              "left": 287,
+              "right": 534,
+              "answer": 534,
+              "skill": "compare_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "9",
+              "kind": "pair",
+              "left": 623,
+              "right": 632,
+              "answer": 632,
+              "skill": "compare_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "10",
+              "kind": "pair",
+              "left": 867,
+              "right": 965,
+              "answer": 965,
+              "skill": "compare_numbers",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            }
+          ],
+          "practiceItems": [
+            "3 | 8"
+          ],
+          "timeLimitSeconds": null,
+          "numberCardPage": 4
+        },
+        {
+          "questionCode": "maths_neighbours",
+          "title": "Before and after",
+          "instructions": "Say: \"What number comes after 3?\" or \"What number comes just before 5?\" Use the word and number on each item. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "neighbour",
+              "relation": "after",
+              "n": 3,
+              "answer": 4,
+              "skill": "number_neighbours",
+              "band": 5,
+              "source": "masi-2026",
+              "label": "after 3"
+            },
+            {
+              "id": "2",
+              "kind": "neighbour",
+              "relation": "before",
+              "n": 5,
+              "answer": 4,
+              "skill": "number_neighbours",
+              "band": 5,
+              "source": "masi-2026",
+              "label": "before 5"
+            },
+            {
+              "id": "3",
+              "kind": "neighbour",
+              "relation": "after",
+              "n": 1,
+              "answer": 2,
+              "skill": "number_neighbours",
+              "band": 5,
+              "source": "masi-2026",
+              "label": "after 1"
+            },
+            {
+              "id": "4",
+              "kind": "neighbour",
+              "relation": "after",
+              "n": 6,
+              "answer": 7,
+              "skill": "number_neighbours",
+              "band": 10,
+              "source": "masi-2026",
+              "label": "after 6"
+            },
+            {
+              "id": "5",
+              "kind": "neighbour",
+              "relation": "before",
+              "n": 10,
+              "answer": 9,
+              "skill": "number_neighbours",
+              "band": 10,
+              "source": "masi-2026",
+              "label": "before 10"
+            },
+            {
+              "id": "6",
+              "kind": "neighbour",
+              "relation": "after",
+              "n": 9,
+              "answer": 10,
+              "skill": "number_neighbours",
+              "band": 10,
+              "source": "masi-2026",
+              "label": "after 9"
+            },
+            {
+              "id": "7",
+              "kind": "neighbour",
+              "relation": "after",
+              "n": 12,
+              "answer": 13,
+              "skill": "number_neighbours",
+              "band": 20,
+              "source": "masi-2026",
+              "label": "after 12"
+            },
+            {
+              "id": "8",
+              "kind": "neighbour",
+              "relation": "before",
+              "n": 16,
+              "answer": 15,
+              "skill": "number_neighbours",
+              "band": 20,
+              "source": "masi-2026",
+              "label": "before 16"
+            },
+            {
+              "id": "9",
+              "kind": "neighbour",
+              "relation": "after",
+              "n": 19,
+              "answer": 20,
+              "skill": "number_neighbours",
+              "band": 20,
+              "source": "masi-2026",
+              "label": "after 19"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "egma_missing_number",
+          "title": "Missing number",
+          "instructions": "Ask the child for the missing number on Number Card page 5. Saying only the missing number is enough. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "sequence",
+              "slots": [
+                5,
+                6,
+                7,
+                null
+              ],
+              "answer": 8,
+              "skill": "number_patterns",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "sequence",
+              "slots": [
+                14,
+                15,
+                null,
+                17
+              ],
+              "answer": 16,
+              "skill": "number_patterns",
+              "band": 20,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "sequence",
+              "slots": [
+                20,
+                null,
+                40,
+                50
+              ],
+              "answer": 30,
+              "skill": "number_patterns",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "sequence",
+              "slots": [
+                null,
+                300,
+                400,
+                500
+              ],
+              "answer": 200,
+              "skill": "number_patterns",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "sequence",
+              "slots": [
+                2,
+                4,
+                6,
+                null
+              ],
+              "answer": 8,
+              "skill": "number_patterns",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "6",
+              "kind": "sequence",
+              "slots": [
+                348,
+                349,
+                null,
+                351
+              ],
+              "answer": 350,
+              "skill": "number_patterns",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "7",
+              "kind": "sequence",
+              "slots": [
+                28,
+                null,
+                24,
+                22
+              ],
+              "answer": 26,
+              "skill": "number_patterns",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "8",
+              "kind": "sequence",
+              "slots": [
+                30,
+                35,
+                null,
+                45
+              ],
+              "answer": 40,
+              "skill": "number_patterns",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "9",
+              "kind": "sequence",
+              "slots": [
+                550,
+                540,
+                530,
+                null
+              ],
+              "answer": 520,
+              "skill": "number_patterns",
+              "band": 1000,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "10",
+              "kind": "sequence",
+              "slots": [
+                3,
+                8,
+                null,
+                18
+              ],
+              "answer": 13,
+              "skill": "number_patterns",
+              "band": 20,
+              "source": "rti-2014-printed"
+            }
+          ],
+          "practiceItems": [
+            "1 2 _ 4"
+          ],
+          "timeLimitSeconds": null,
+          "numberCardPage": 5
+        },
+        {
+          "questionCode": "maths_add_counters",
+          "title": "Add with counters",
+          "instructions": "Each item shows two numbers, like 2 + 1. Put out the first number of counters and cover them with your hand. Say: \"There are 2 under my hand.\" Put out the second number of counters next to your hand. Say: \"How many altogether?\" Mark how the child got each correct answer. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "counters",
+              "a": 2,
+              "op": "+",
+              "b": 1,
+              "answer": 3,
+              "skill": "add_objects",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "counters",
+              "a": 3,
+              "op": "+",
+              "b": 2,
+              "answer": 5,
+              "skill": "add_objects",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "counters",
+              "a": 1,
+              "op": "+",
+              "b": 3,
+              "answer": 4,
+              "skill": "add_objects",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "counters",
+              "a": 4,
+              "op": "+",
+              "b": 3,
+              "answer": 7,
+              "skill": "add_objects",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "counters",
+              "a": 6,
+              "op": "+",
+              "b": 2,
+              "answer": 8,
+              "skill": "add_objects",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "counters",
+              "a": 5,
+              "op": "+",
+              "b": 4,
+              "answer": 9,
+              "skill": "add_objects",
+              "band": 10,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "maths_take_away_counters",
+          "title": "Take away with counters",
+          "instructions": "Each item shows two numbers, like 3 − 1. Put out the first number of counters. Say: \"Watch.\" Take the second number away and cover them with your hand. Say: \"How many are left?\" Mark how the child got each correct answer. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "counters",
+              "a": 3,
+              "op": "-",
+              "b": 1,
+              "answer": 2,
+              "skill": "subtract_objects",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "counters",
+              "a": 5,
+              "op": "-",
+              "b": 2,
+              "answer": 3,
+              "skill": "subtract_objects",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "counters",
+              "a": 4,
+              "op": "-",
+              "b": 3,
+              "answer": 1,
+              "skill": "subtract_objects",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "counters",
+              "a": 7,
+              "op": "-",
+              "b": 2,
+              "answer": 5,
+              "skill": "subtract_objects",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "counters",
+              "a": 9,
+              "op": "-",
+              "b": 3,
+              "answer": 6,
+              "skill": "subtract_objects",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "counters",
+              "a": 8,
+              "op": "-",
+              "b": 5,
+              "answer": 3,
+              "skill": "subtract_objects",
+              "band": 10,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "maths_make_five_ten",
+          "title": "Make 5 and make 10",
+          "instructions": "Use one hand for 5 and two hands for 10. Show the number of fingers up on each item. Say: \"How many fingers are down?\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and go to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "fingers",
+              "mode": "make",
+              "shown": 3,
+              "total": 5,
+              "answer": 2,
+              "skill": "number_bonds",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "fingers",
+              "mode": "make",
+              "shown": 1,
+              "total": 5,
+              "answer": 4,
+              "skill": "number_bonds",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "fingers",
+              "mode": "make",
+              "shown": 4,
+              "total": 5,
+              "answer": 1,
+              "skill": "number_bonds",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "fingers",
+              "mode": "make",
+              "shown": 7,
+              "total": 10,
+              "answer": 3,
+              "skill": "number_bonds",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "fingers",
+              "mode": "make",
+              "shown": 4,
+              "total": 10,
+              "answer": 6,
+              "skill": "number_bonds",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "fingers",
+              "mode": "make",
+              "shown": 8,
+              "total": 10,
+              "answer": 2,
+              "skill": "number_bonds",
+              "band": 10,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        },
+        {
+          "questionCode": "egma_addition_l1",
+          "title": "Addition 1",
+          "instructions": "Use Number Card page 6. Say: \"You don't have to read the sum out loud.\" Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "equation",
+              "a": 1,
+              "op": "+",
+              "b": 3,
+              "answer": 4,
+              "skill": "add",
+              "band": 5,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "equation",
+              "a": 3,
+              "op": "+",
+              "b": 2,
+              "answer": 5,
+              "skill": "add",
+              "band": 5,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "equation",
+              "a": 6,
+              "op": "+",
+              "b": 2,
+              "answer": 8,
+              "skill": "add",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "equation",
+              "a": 4,
+              "op": "+",
+              "b": 5,
+              "answer": 9,
+              "skill": "add",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "equation",
+              "a": 3,
+              "op": "+",
+              "b": 3,
+              "answer": 6,
+              "skill": "add",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "6",
+              "kind": "equation",
+              "a": 2,
+              "op": "+",
+              "b": 5,
+              "answer": 7,
+              "skill": "add",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "7",
+              "kind": "equation",
+              "a": 7,
+              "op": "+",
+              "b": 1,
+              "answer": 8,
+              "skill": "add",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "8",
+              "kind": "equation",
+              "a": 4,
+              "op": "+",
+              "b": 4,
+              "answer": 8,
+              "skill": "add",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "9",
+              "kind": "equation",
+              "a": 8,
+              "op": "+",
+              "b": 2,
+              "answer": 10,
+              "skill": "add",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "10",
+              "kind": "equation",
+              "a": 6,
+              "op": "+",
+              "b": 4,
+              "answer": 10,
+              "skill": "add",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "11",
+              "kind": "equation",
+              "a": 9,
+              "op": "+",
+              "b": 2,
+              "answer": 11,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "12",
+              "kind": "equation",
+              "a": 5,
+              "op": "+",
+              "b": 6,
+              "answer": 11,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "13",
+              "kind": "equation",
+              "a": 8,
+              "op": "+",
+              "b": 4,
+              "answer": 12,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "14",
+              "kind": "equation",
+              "a": 7,
+              "op": "+",
+              "b": 5,
+              "answer": 12,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "15",
+              "kind": "equation",
+              "a": 6,
+              "op": "+",
+              "b": 7,
+              "answer": 13,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "16",
+              "kind": "equation",
+              "a": 9,
+              "op": "+",
+              "b": 5,
+              "answer": 14,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "17",
+              "kind": "equation",
+              "a": 8,
+              "op": "+",
+              "b": 7,
+              "answer": 15,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "18",
+              "kind": "equation",
+              "a": 7,
+              "op": "+",
+              "b": 9,
+              "answer": 16,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "19",
+              "kind": "equation",
+              "a": 9,
+              "op": "+",
+              "b": 8,
+              "answer": 17,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "20",
+              "kind": "equation",
+              "a": 10,
+              "op": "+",
+              "b": 9,
+              "answer": 19,
+              "skill": "add",
+              "band": 20,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": 60,
+          "numberCardPage": 6
+        },
+        {
+          "questionCode": "egma_addition_l2",
+          "title": "Addition 2",
+          "instructions": "Use Number Card page 7. Give the child pencil and paper. Say: \"You don't have to read the sum out loud.\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "equation",
+              "a": 13,
+              "op": "+",
+              "b": 6,
+              "answer": 19,
+              "skill": "add",
+              "band": 20,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "equation",
+              "a": 18,
+              "op": "+",
+              "b": 7,
+              "answer": 25,
+              "skill": "add",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "equation",
+              "a": 12,
+              "op": "+",
+              "b": 14,
+              "answer": 26,
+              "skill": "add",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "equation",
+              "a": 22,
+              "op": "+",
+              "b": 37,
+              "answer": 59,
+              "skill": "add",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "equation",
+              "a": 38,
+              "op": "+",
+              "b": 26,
+              "answer": 64,
+              "skill": "add",
+              "band": 100,
+              "source": "rti-2014-printed"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": 7
+        },
+        {
+          "questionCode": "egma_subtraction_l1",
+          "title": "Subtraction 1",
+          "instructions": "Use Number Card page 8. Say: \"You don't have to read it out loud.\" Tap Start to begin the 60-second clock. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "equation",
+              "a": 4,
+              "op": "-",
+              "b": 1,
+              "answer": 3,
+              "skill": "subtract",
+              "band": 5,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "equation",
+              "a": 5,
+              "op": "-",
+              "b": 2,
+              "answer": 3,
+              "skill": "subtract",
+              "band": 5,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "equation",
+              "a": 8,
+              "op": "-",
+              "b": 2,
+              "answer": 6,
+              "skill": "subtract",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "equation",
+              "a": 9,
+              "op": "-",
+              "b": 5,
+              "answer": 4,
+              "skill": "subtract",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "equation",
+              "a": 6,
+              "op": "-",
+              "b": 3,
+              "answer": 3,
+              "skill": "subtract",
+              "band": 10,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "6",
+              "kind": "equation",
+              "a": 7,
+              "op": "-",
+              "b": 5,
+              "answer": 2,
+              "skill": "subtract",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "7",
+              "kind": "equation",
+              "a": 8,
+              "op": "-",
+              "b": 1,
+              "answer": 7,
+              "skill": "subtract",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "8",
+              "kind": "equation",
+              "a": 8,
+              "op": "-",
+              "b": 4,
+              "answer": 4,
+              "skill": "subtract",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "9",
+              "kind": "equation",
+              "a": 10,
+              "op": "-",
+              "b": 2,
+              "answer": 8,
+              "skill": "subtract",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "10",
+              "kind": "equation",
+              "a": 10,
+              "op": "-",
+              "b": 4,
+              "answer": 6,
+              "skill": "subtract",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "11",
+              "kind": "equation",
+              "a": 11,
+              "op": "-",
+              "b": 2,
+              "answer": 9,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "12",
+              "kind": "equation",
+              "a": 11,
+              "op": "-",
+              "b": 6,
+              "answer": 5,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "13",
+              "kind": "equation",
+              "a": 12,
+              "op": "-",
+              "b": 4,
+              "answer": 8,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "14",
+              "kind": "equation",
+              "a": 12,
+              "op": "-",
+              "b": 5,
+              "answer": 7,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "15",
+              "kind": "equation",
+              "a": 13,
+              "op": "-",
+              "b": 7,
+              "answer": 6,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "16",
+              "kind": "equation",
+              "a": 14,
+              "op": "-",
+              "b": 5,
+              "answer": 9,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "17",
+              "kind": "equation",
+              "a": 15,
+              "op": "-",
+              "b": 7,
+              "answer": 8,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "18",
+              "kind": "equation",
+              "a": 16,
+              "op": "-",
+              "b": 9,
+              "answer": 7,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "19",
+              "kind": "equation",
+              "a": 17,
+              "op": "-",
+              "b": 8,
+              "answer": 9,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "20",
+              "kind": "equation",
+              "a": 19,
+              "op": "-",
+              "b": 9,
+              "answer": 10,
+              "skill": "subtract",
+              "band": 20,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": 60,
+          "numberCardPage": 8
+        },
+        {
+          "questionCode": "egma_subtraction_l2",
+          "title": "Subtraction 2",
+          "instructions": "Use Number Card page 9. Give the child pencil and paper. Say: \"You don't have to read it out loud.\" The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child. After about 5 seconds with no answer, say \"Go on\", mark the item wrong and point to the next one.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "equation",
+              "a": 19,
+              "op": "-",
+              "b": 6,
+              "answer": 13,
+              "skill": "subtract",
+              "band": 20,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "2",
+              "kind": "equation",
+              "a": 25,
+              "op": "-",
+              "b": 7,
+              "answer": 18,
+              "skill": "subtract",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "3",
+              "kind": "equation",
+              "a": 26,
+              "op": "-",
+              "b": 14,
+              "answer": 12,
+              "skill": "subtract",
+              "band": 50,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "4",
+              "kind": "equation",
+              "a": 59,
+              "op": "-",
+              "b": 37,
+              "answer": 22,
+              "skill": "subtract",
+              "band": 100,
+              "source": "rti-2014-printed"
+            },
+            {
+              "id": "5",
+              "kind": "equation",
+              "a": 64,
+              "op": "-",
+              "b": 26,
+              "answer": 38,
+              "skill": "subtract",
+              "band": 100,
+              "source": "rti-2014-printed"
+            }
+          ],
+          "practiceItems": [],
+          "timeLimitSeconds": null,
+          "numberCardPage": 9
+        },
+        {
+          "questionCode": "egma_word_problems",
+          "title": "Word problems",
+          "instructions": "Give the child counters, pencil and paper. Read each phrase aloud, with \"(pause)\" between phrases. You may repeat the problem once. A child working with fingers, counters or paper may take up to a minute. The child may answer in any language you understand. Never say \"correct\" or \"wrong\" to the child.",
+          "items": [
+            {
+              "id": "1",
+              "kind": "word_problem",
+              "problemType": "change_result_unknown",
+              "phrases": [
+                "Two children are in a taxi.",
+                "Three more children get in.",
+                "How many children are in the taxi now?"
+              ],
+              "answer": 5,
+              "skill": "word_problems",
+              "band": 5,
+              "source": "masi-2026"
+            },
+            {
+              "id": "2",
+              "kind": "word_problem",
+              "problemType": "combine",
+              "phrases": [
+                "There are six children in the taxi.",
+                "Two are boys.",
+                "The rest are girls.",
+                "How many girls are in the taxi?"
+              ],
+              "answer": 4,
+              "skill": "word_problems",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "3",
+              "kind": "word_problem",
+              "problemType": "compare",
+              "phrases": [
+                "Lwazi has two sweets.",
+                "Ayanda has seven sweets.",
+                "How many more sweets does Lwazi need to have the same as Ayanda?"
+              ],
+              "answer": 5,
+              "skill": "word_problems",
+              "band": 10,
+              "source": "masi-2026"
+            },
+            {
+              "id": "4",
+              "kind": "word_problem",
+              "problemType": "change_start_unknown",
+              "phrases": [
+                "Some children are in a taxi.",
+                "Five more children get in.",
+                "Now there are twelve children in the taxi.",
+                "How many children were in the taxi at the start?"
+              ],
+              "answer": 7,
+              "skill": "word_problems",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "5",
+              "kind": "word_problem",
+              "problemType": "sharing",
+              "phrases": [
+                "Four children share twelve sweets.",
+                "They each get the same number.",
+                "How many sweets does each child get?"
+              ],
+              "answer": 3,
+              "skill": "word_problems",
+              "band": 20,
+              "source": "masi-2026"
+            },
+            {
+              "id": "6",
+              "kind": "word_problem",
+              "problemType": "multiplying",
+              "phrases": [
+                "There are five seats in the taxi.",
+                "Two children sit on each seat.",
+                "How many children are in the taxi?"
+              ],
+              "answer": 10,
+              "skill": "word_problems",
+              "band": 10,
+              "source": "masi-2026"
+            }
+          ],
+          "practiceItems": [
+            "You have one sweet. (pause) I give you one more. (pause) How many sweets do you have now? (2)"
+          ],
+          "timeLimitSeconds": null,
+          "numberCardPage": null
+        }
+      ],
+      "sourceNotes": [
+        "All instruction scripts, early number items, authored Addition and Subtraction 1 items and word problems are drafts for an English copy check before the deliberate freeze.",
+        "RTI printed boxes supply Number Identification (L719–725), Number Discrimination (L761–769), Missing Number (L801–843), Addition and Subtraction 1 items 1–5 (L862–875), and Addition and Subtraction 2 (L879–891). All other scored items are Masi-authored (masi-2026).",
+        "Masi authored Addition 1 and Subtraction 1 items 6–20 to the toolkit specification. Subtraction 1 is the sum minus either addend in printed items and minus the second addend in authored items.",
+        "Word Problems discrepancy: the toolkit says six at L936 but five at L1311. This form uses six, one per problem type (L956–978). English wording is adapted to local context.",
+        "Practice is unscored instruction text: Missing Number 1 2 _ 4 comes from toolkit prose (L2128–2129); Bigger number and Word problems practice are authored drafts.",
+        "The clock starts on Start, rather than when the child first speaks as in the toolkit.",
+        "Timed stop-rule deviation: Number Identification and Addition and Subtraction 1 stop at 4 consecutive wrong answers; the toolkit has no timed stop rule. Jim accepted this for now on 2026-10-31.",
+        "All early number and Core EGMA Questions use engine stop rules and Core gates supplied by the adapter, not by this content pack. Published-data comparisons must footnote gating and timing deviations."
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { useActiveProgrammeSubject } from '../../hooks/useActiveProgrammeSubject';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import React from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
@@ -11,12 +12,14 @@ import { colors, spacing } from '../../constants/colors';
 const INSIGHTS = [
   {
     label: 'Letter mastery',
+    literacyOnly: true,
     description: 'See which letters children know and where support is needed.',
     icon: 'school-outline',
     route: 'LetterMasteryRanking',
   },
   {
     label: 'Assessment scores',
+    literacyOnly: true,
     description: 'Compare the latest literacy assessment results.',
     icon: 'clipboard-outline',
     route: 'AssessmentRanking',
@@ -36,6 +39,9 @@ const INSIGHTS = [
 ];
 
 export default function InsightsScreen({ navigation }) {
+  const { isMaths: maths, loading: subjectLoading } = useActiveProgrammeSubject();
+  // Literacy-only rows stay hidden until the first programme read settles.
+  const isMaths = maths || subjectLoading;
   const onScroll = useHeaderHairline();
   return (
     <ScrollView onScroll={onScroll} scrollEventThrottle={16}
@@ -47,7 +53,7 @@ export default function InsightsScreen({ navigation }) {
       <Text style={styles.hint}>Review learner progress and participation.</Text>
 
       <ListGroup>
-        {INSIGHTS.map((insight) => (
+        {INSIGHTS.filter(insight => !isMaths || !insight.literacyOnly).map((insight) => (
           <ListRow key={insight.route} title={insight.label} subtitle={insight.description}
             lead={<IconTile icon={insight.icon} />} trailing="chevron"
             onPress={() => navigation.navigate(insight.route)}

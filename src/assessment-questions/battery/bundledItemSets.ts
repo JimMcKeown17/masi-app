@@ -1,3 +1,4 @@
+import { egmaItemSetFor } from '../egma';
 import * as sets from '../itemsets';
 import type { ItemSet } from '../types/ItemSet';
 import { egraItemSetFor } from '../egra';
@@ -73,6 +74,7 @@ export function bundledItemSetFor(
       return languages[language] as ItemSet;
     }
   }
-  return sharedItemSetFor(questionCode, questionVersion, language)
-    ?? egraItemSetFor(questionCode, questionVersion, language) as ItemSet | null;
+  return (sharedItemSetFor(questionCode, questionVersion, language)
+    ?? egraItemSetFor(questionCode, questionVersion, language)
+    ?? egmaItemSetFor(questionCode, questionVersion, language)) as ItemSet | null;
 }

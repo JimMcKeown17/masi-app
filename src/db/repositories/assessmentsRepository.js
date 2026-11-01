@@ -10,6 +10,7 @@ import {
   upsertDomainRecord,
 } from './domainRepositoryUtils';
 import { chunkArray, sqlPlaceholders } from './sqliteRepositoryUtils';
+import { validateMathsResult } from '../../assessment-questions/egma/validateMathsResult';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
 import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
@@ -124,7 +125,12 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     assessmentId, result, childId, userId, batteryRunId = null, captureMode = null, transaction,
   }) => {
     const verdict = validateResult(result);
-    if (!verdict.valid) throw new TypeError(`Invalid Question result: ${verdict.errors.join('; ')}`);
+    const mathsVerdict = validateMathsResult(result);
+    if (!verdict.valid || !mathsVerdict.valid) {
+      const error = new TypeError(`Invalid Question result: ${[...verdict.errors, ...mathsVerdict.errors].join('; ')}`);
+      error.code = 'INVALID_QUESTION_RESULT';
+      throw error;
+    }
     return runWrite(transaction, async (txn) => {
       let run;
       if (batteryRunId) {

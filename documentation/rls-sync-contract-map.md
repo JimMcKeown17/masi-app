@@ -483,6 +483,29 @@ Each signed-in EA handle owns its own request queue (`handle.enqueueRequest`, co
 
 Each workflow still awaits the result it needs before constructing the next dependent query. The change is fairness, not parallelism. If another operation was queued while request A was in flight, it runs after A and before the pull submits request B. Data shaping and SQLite persistence occur outside the network lease. A pull begun under one handle cannot persist into another EA's file: its repositories are bound to its own handle, and a stale handle refuses every write. Failed or incomplete scopes retain the same fail-closed reconcile rules.
 
+### Maths Question metadata and derived keys (2026-10-31)
+
+Maths results (`question_code` starting `maths_` or `egma_`, Battery `masi_maths`) use the same
+`submit_assessment` family write as every other Question. **The server checks only that `metadata`
+and `derived` are objects. The phone enforces the values** with `validateMathsResult`
+(`src/assessment-questions/egma/validateMathsResult.ts`), which `saveQuestionResult` runs beside
+`validateResult`. A failure throws `INVALID_QUESTION_RESULT` before any SQLite write or outbox row,
+and the Battery screen treats it as fatal, not retryable.
+
+| Key | Where | Values |
+|---|---|---|
+| `metadata.skill` | every maths item | a skill key from spec §8.1 (`count_aloud`, `read_numbers`, `add`, …) |
+| `metadata.band` | every maths item | `5 \| 10 \| 20 \| 50 \| 100 \| 1000` |
+| `metadata.reached` | every item (shared rule) | `false` items are not evidence |
+| `metadata.strategy` | reached correct items of `maths_add_counters` and `maths_take_away_counters` only | `count_all \| count_on \| known` |
+| `derived.strategies` | non-skipped Core arithmetic results only (`egma_addition_l1/l2`, `egma_subtraction_l1/l2`, `egma_word_problems`) | `[]` when `total_correct = 0`; `['not_seen']`; or a non-empty, duplicate-free subset of `head \| fingers \| counters \| paper` |
+| `derived.correct_per_minute`, `derived.seconds_remaining` | timed maths results (`egma_number_id`, `egma_addition_l1`, `egma_subtraction_l1`) | rate rounded to 0.1, scaled only when completed early; integer seconds, 0 unless completed |
+
+`score` stays `derived.total_correct`. History pull re-stores these objects unchanged; the
+real-SQLite test `__tests__/mathsRun.integration.test.js` proves save → outbox → history re-store
+into a second database round-trips them exactly. Results whose `question_version` ends in `-draft`
+are development data; readers should ignore them.
+
 ## Letter mastery: one current record, the most recently made correction wins (Assessment Results Plan 2)
 
 **Server and phone schema, repository, sync, readers and both write surfaces implemented.
@@ -2190,6 +2213,42 @@ above; `scripts/support-incident-postgres-harness.cjs` covers populated v1 repla
 v2 identity/validation/quotas/grants and the local Storage policy model.
 Hosted apply/read-back, native build/old-binary OTA, default-text A03s/iPhone,
 first real sweeps, field convergence and no-recurrence remain independent gates.
+
+## Website reporting functions (`masi_reporting_*_v1`, 2026-10-31)
+
+The Masi website's Django backend reads app data **only** through nine functions created by
+`supabase/migrations/20261031180000_masi_reporting_v1.sql`. Spec: `masi-web-nextjs`
+`docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`. Plan A:
+`docs/superpowers/plans/2026-10-31-masi-reporting-functions-plan.md`.
+
+**Principal:** `masi_reporting_reader`.
+- `LOGIN`, `NOINHERIT`, created with **no password**; the password is set out of band at rollout.
+- `default_transaction_read_only = on`, `statement_timeout = 15s`.
+- Holds `USAGE` on `public` only, no table privileges, and `EXECUTE` on the nine functions only.
+  `anon`, `authenticated` and `service_role` cannot execute them.
+
+**Function rules:**
+- `LANGUAGE sql` with a `BEGIN ATOMIC` body, `STABLE SECURITY DEFINER`, owner `postgres`,
+  `SET search_path = ''`.
+- No reference to any user-defined function. The harness asserts this through `pg_depend`, with a
+  denylist and a negative control.
+- Refusals are documents: `error: too_much_data | invalid_argument`.
+- `_v1` is never edited after a hosted apply; a change ships as `_v2`.
+- Deploy order: functions → Django → website.
+
+| Function | Reads | Returns |
+| --- | --- | --- |
+| `accounts_v1()` | `users`, `auth.users`, `organizations`, `job_titles`, `staff_programme_assignments`, roster tables, activity tables, `letter_mastery_corrections`, `mobile_support_incidents` | Per-account identity, auth state, current assignment, delivery/class/group counts, activity and server-stamped "last data received", last reported release |
+| `roster_v1(user_ids)` | `child_ea_assignments` + the five `getMyChildren` predicates | EA × delivery-roster child |
+| `assessed_children_v1(author_ids, from, to)` | `assessments` (non-`skipped_*`) | Children with an eligible result in range |
+| `daily_v1(user_ids, from, to)` | `sessions`, `session_attendees`, `time_entries`, `assessments`, `battery_runs` | Per EA per SAST day facts |
+| `ea_detail_v1(user_id, from, to)` | as above, plus `groups`, `classes`, `children` | Latest-N lists with totals, current groups, 12 weekly buckets |
+| `sessions_v1`, `assessments_v1`, `time_entries_v1` | as named | Row-level exports (no GPS coordinates); `completed_battery_runs` |
+| `incidents_v1(user_ids, from, to, kinds)` | `mobile_support_incidents` | Receipts with release identity and a 2 KB summary; no payloads |
+
+**Harness:** `npm run verify:reporting:postgres` (disposable local PG17, `masi_history_rls_`
+prefix; `MASI_REPORTING_KEEP=1` retains the database for the Django and website end-to-end checks).
+121/121 cases on 2026-10-31. **A schema change to any table above must keep this harness green.**
 
 ## Table Contract Map
 

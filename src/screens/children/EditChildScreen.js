@@ -1,3 +1,4 @@
+import { useActiveProgrammeSubject } from '../../hooks/useActiveProgrammeSubject';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Platform, Alert, TouchableOpacity } from 'react-native';
@@ -26,6 +27,9 @@ const READING_LEVEL_OPTIONS = READING_LEVELS.map(level => ({ key: level, label: 
 const NO_CLASS_OPTION_KEY = '__no_class__';
 
 export default function EditChildScreen({ route, navigation }) {
+  const { isMaths: maths, loading: subjectLoading } = useActiveProgrammeSubject();
+  // The reading level stays hidden (and is saved unchanged) until the first programme read settles.
+  const isMaths = maths || subjectLoading;
   const { childId } = route.params;
   const { children, groups, childrenGroups, updateChild, deleteChild } = useChildren();
   const { classes, schools } = useClasses();
@@ -117,7 +121,7 @@ export default function EditChildScreen({ route, navigation }) {
         last_name: lastName.trim(),
         age: age ? parseInt(age) : null,
         gender: gender || null,
-        reading_level: readingLevel,
+        reading_level: isMaths ? child.reading_level : readingLevel,
       });
 
       if (result.success) {
@@ -248,18 +252,20 @@ export default function EditChildScreen({ route, navigation }) {
             testID="edit-child-gender"
           />
 
-          <View style={styles.readingLevelField}>
-            <SelectField
-              label="Current reading level"
-              value={readingLevel}
-              placeholder="Not set"
-              onPress={() => setReadingLevelPickerVisible(true)}
-              accessibilityLabel={`Choose current reading level for ${child.first_name} ${child.last_name}`}
-            />
-          </View>
-          <Text variant="bodySmall" style={styles.readingLevelHelper}>
-            This level pre-fills the next literacy session and changes when the child progresses.
-          </Text>
+          {!isMaths && <>
+            <View style={styles.readingLevelField}>
+              <SelectField
+                label="Current reading level"
+                value={readingLevel}
+                placeholder="Not set"
+                onPress={() => setReadingLevelPickerVisible(true)}
+                accessibilityLabel={`Choose current reading level for ${child.first_name} ${child.last_name}`}
+              />
+            </View>
+            <Text variant="bodySmall" style={styles.readingLevelHelper}>
+              This level pre-fills the next literacy session and changes when the child progresses.
+            </Text>
+          </>}
 
           {/* Group picker field */}
           <View style={styles.groupField}>
@@ -344,7 +350,7 @@ export default function EditChildScreen({ route, navigation }) {
         maxHeight="60%"
       />
 
-      <SelectSheet
+      {!isMaths && <SelectSheet
         visible={readingLevelPickerVisible}
         onDismiss={() => setReadingLevelPickerVisible(false)}
         title="Current reading level"
@@ -354,7 +360,7 @@ export default function EditChildScreen({ route, navigation }) {
         selectedKey={readingLevel}
         onSelect={setReadingLevel}
         maxHeight="70%"
-      />
+      />}
     </KeyboardAvoidingView>
   );
 }

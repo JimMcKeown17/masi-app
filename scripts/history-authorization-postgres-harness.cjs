@@ -143,6 +143,9 @@ CREATE TABLE auth.users (
   email CHARACTER VARYING(255),
   banned_until TIMESTAMPTZ,
   raw_user_meta_data JSONB NOT NULL DEFAULT '{}'::JSONB,
+  raw_app_meta_data JSONB NOT NULL DEFAULT '{}'::JSONB,
+  last_sign_in_at TIMESTAMPTZ,
+  email_confirmed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now()
 );
 CREATE FUNCTION auth.uid()
