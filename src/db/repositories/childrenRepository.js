@@ -23,6 +23,7 @@ import {
 } from './domainRepositoryUtils';
 import { chunkArray, sqlPlaceholders, syncStatusFromSynced } from './sqliteRepositoryUtils';
 import { normalizeGender } from '../../constants/options';
+import { deleteUndeliveredSkillMastery } from './skillMasteryRepository';
 import { deleteUndeliveredLetterMastery } from './masteryRepository';
 
 const CHILD_COLUMNS = [
@@ -167,6 +168,7 @@ export const createChildrenRepository = ({ database } = {}) => {
             and id not in (select value from json_each(?))
         `, pulledAt, pulledAt, userId, acknowledgedIdsJson);
         await deleteUndeliveredLetterMastery(txn, { userId, childIds: children.map((row) => row.child_id) });
+        await deleteUndeliveredSkillMastery(txn, { userId, childIds: children.map((row) => row.child_id) });
         return result.changes;
       },
     });

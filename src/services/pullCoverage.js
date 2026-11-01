@@ -3,7 +3,7 @@ import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/
 import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 import { sessionHistoryScope } from './sessionHistoryPull';
 import {
-  assessmentHistoryScope, letterMasteryHistoryScope, readAssessmentScope, readMasteryScope,
+  assessmentHistoryScope, letterMasteryHistoryScope, skillMasteryHistoryScope, readAssessmentScope, readMasteryScope,
 } from './assessmentHistoryPull';
 
 // Read-only coverage answers; the pull owns the cursor and its lifecycle.
@@ -113,4 +113,15 @@ export const masteryCompletenessByChild = async ({ database, userId, programmeId
   const deliveryChildren = new Set(masteryScope.childIds);
   return Object.fromEntries(childIds.map(id => [id, assessmentCoverage.has(id) && masteryCoverage.has(id)
     && assessmentChildren.has(id) && deliveryChildren.has(id)]));
+};
+
+export const skillMasteryCompletenessByChild = async ({ database, userId, childIds = [] }) => {
+  const incomplete = Object.fromEntries(childIds.map(id => [id, false]));
+  if (!userId) return incomplete;
+  const db = await resolveDatabase(database);
+  const state = await createSyncStateRepository({ database }).getPullState(skillMasteryHistoryScope(userId));
+  const scope = await readMasteryScope(db, { userId });
+  const delivery = new Set(scope.childIds);
+  return Object.fromEntries(childIds.map(id => [id, delivery.has(id)
+    && isCoverageWalkComplete(state?.cursor, { childIds: [id], windowStart: null })]));
 };

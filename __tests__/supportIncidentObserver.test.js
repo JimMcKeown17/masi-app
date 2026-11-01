@@ -199,3 +199,12 @@ test('an empty status refresh does not wait for the domain writer when there is 
   expect(result).toMatchObject({incidentReadyCount:0,unsyncedCount:0});
  } finally {clearTimeout(timer);release();await writer;}
 });
+
+test('a skill walk failing for a day raises pull_failing', async () => {
+  const h = getDefaultTestHandle();
+  const failure = { lastFailureAt: new Date(Date.now()-25*3600000).toISOString(), lastFailureKind: 'query', lastFailureMessage: 'missing RPC' };
+  await h.services.repositories.syncState.setPullState('skill_mastery_pull:ea', { cursor: JSON.stringify(failure) });
+  await h.services.syncEngine.getSyncStatus();
+  const rows = await h.services.repositories.supportIncidents.listPending();
+  expect(rows.find(row => row.kind === 'pull_failing')).toMatchObject({ payload: { scopeFamily: 'skill_mastery_pull', cursor: failure } });
+});

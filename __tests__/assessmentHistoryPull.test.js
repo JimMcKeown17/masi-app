@@ -329,6 +329,6 @@ describe('assessment, run and mastery history walks', () => {
     expect(assessmentHistoryScope(USER, PROGRAMME)).toBe('assessment_history_pull:' + USER + ':' + PROGRAMME);
     expect(batteryRunHistoryScope(USER, PROGRAMME)).toBe('battery_run_history_pull:' + USER + ':' + PROGRAMME);
     expect(letterMasteryHistoryScope(USER)).toBe('letter_mastery_pull:' + USER);
-    expect(new Set(Object.values(states)).size).toBe(3);
+    expect(new Set(Object.values(states)).size).toBe(4);
   });
 });

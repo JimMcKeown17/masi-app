@@ -3,7 +3,7 @@ jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import {
-  isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete,
+  skillMasteryCompletenessByChild, isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete,
   sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
 } from '../src/services/pullCoverage';
 import * as syncStateRepositories from '../src/db/repositories/syncStateRepository';
@@ -13,7 +13,7 @@ import { runSessionHistoryPull, createSessionHistoryState } from '../src/service
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 import {
   createAssessmentHistoryStates, runAssessmentHistoryPull, runLetterMasteryHistoryPull,
-  runBatteryRunHistoryPull,
+  runBatteryRunHistoryPull, runSkillMasteryHistoryPull,
 } from '../src/services/assessmentHistoryPull';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
@@ -500,5 +500,41 @@ describe('isMasteryInputsComplete through real walks', () => {
     expect(await db.getAllAsync('select * from sync_state order by scope')).toEqual(before);
     expect(server.calls).toEqual([]);
     expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+  });
+});
+
+describe('skill mastery completeness', () => {
+  let db, server, states;
+  const options = () => ({ database: db, userId: 'user-1', childIds: ['child-a', 'child-b'] });
+  const walk = () => runSkillMasteryHistoryPull({ userId: 'user-1', force: true, deps: {
+    database: db, state: states.skillMastery, client: server.client, enqueueRequest: task => task(),
+  } });
+  beforeEach(async () => {
+    db = await createMigratedDatabase(runMigrations);
+    await seedCoreData(db);
+    for (const id of ['child-a', 'child-b']) {
+      await db.runAsync("insert into children (id, first_name, last_name) values (?, 'Test', 'Child')", id);
+      await db.runAsync("insert into child_ea_assignments (id, user_id, child_id, sync_status) values (?, 'user-1', ?, 'synced')", 'a-'+id, id);
+    }
+    server = createHistoryServer(); states = createAssessmentHistoryStates();
+  });
+  afterEach(async () => { await db.closeAsync(); });
+  test('skill mastery completeness is true after a complete walk', async () => {
+    await walk();
+    expect(await skillMasteryCompletenessByChild(options())).toEqual({ 'child-a': true, 'child-b': true });
+  });
+  test('skill mastery completeness is false for a lost grant', async () => {
+    await walk();
+    await db.runAsync("update child_ea_assignments set unassigned_at = assigned_at where child_id = 'child-a'");
+    expect(await skillMasteryCompletenessByChild(options())).toEqual({ 'child-a': false, 'child-b': true });
+  });
+  test('skill mastery completeness is false for a failed cursor', async () => {
+    await walk();
+    server.lists.get_skill_mastery_page = () => { throw { code: 'PGRST202' }; };
+    await walk();
+    expect(await skillMasteryCompletenessByChild(options())).toEqual({ 'child-a': false, 'child-b': false });
+  });
+  test('skill mastery completeness is false for a missing cursor', async () => {
+    expect(await skillMasteryCompletenessByChild(options())).toEqual({ 'child-a': false, 'child-b': false });
   });
 });

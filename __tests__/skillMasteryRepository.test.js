@@ -69,7 +69,7 @@ test('setSkillMastery stores one pending record under the uuidv5 id and queues o
   expect(slot).toMatchObject({ id: `skill_mastery:${id}:update`, record_id: id, operation: 'update', owner_user_id: 'user-1' });
   expect(JSON.parse(slot.payload)).toEqual({ id, child_id: 'child-1', step_key: 'add.5', confirmed: true,
     changed_at: result.changed_at, correction_id: result.correction_id, changed_by: 'user-1', programme_id: 'programme-a' });
-  expect(Object.keys(repository).sort()).toEqual(['getSkillCorrectionTimes', 'getSkillMastery', 'setSkillMastery']);
+  expect(Object.keys(repository).sort()).toEqual(['getSkillCorrectionTimes', 'getSkillMastery', 'saveHistoryPage', 'setSkillMastery']);
 });
 
 test('each change gets a new correction id and replaces the single slot', async () => {
@@ -204,7 +204,7 @@ test('the signed-in handle exposes repositories.skillMastery bound to its EA', a
   });
   const bound = handle.services.repositories.skillMastery;
   expect(bound).toBe(handle.repositories.skillMastery);
-  expect(Object.keys(bound).sort()).toEqual(['getSkillCorrectionTimes', 'getSkillMastery', 'setSkillMastery']);
+  expect(Object.keys(bound).sort()).toEqual(['getSkillCorrectionTimes', 'getSkillMastery', 'saveHistoryPage', 'setSkillMastery']);
   const result = await bound.setSkillMastery({ ...key, confirmed: true });
   expect(result.changed_by).toBe(handle.userId);
   const reader = await handle.getReader();

@@ -2,6 +2,7 @@
 import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { createAssessmentsRepository } from '../db/repositories/assessmentsRepository';
 import { createBatteryRunsRepository } from '../db/repositories/batteryRunsRepository';
+import { createSkillMasteryRepository, skillMasteryHistoryScope } from '../db/repositories/skillMasteryRepository';
 import { createMasteryRepository, letterMasteryHistoryScope } from '../db/repositories/masteryRepository';
 import { createHistoryWalkState, runHistoryWalk } from './historyWalk';
 
@@ -9,13 +10,14 @@ export const ASSESSMENT_HISTORY_PAGE_SIZE = 50;
 export const ASSESSMENT_HISTORY_FIRST_PAGE_SIZE = 10;
 export const BATTERY_RUN_HISTORY_PAGE_SIZE = 200;
 export const LETTER_MASTERY_PAGE_SIZE = 200;
+export const SKILL_MASTERY_PAGE_SIZE = 200;
 
 export const assessmentHistoryScope = (userId, programmeId) => `assessment_history_pull:${userId}:${programmeId}`;
 export const batteryRunHistoryScope = (userId, programmeId) => `battery_run_history_pull:${userId}:${programmeId}`;
-export { letterMasteryHistoryScope };
+export { letterMasteryHistoryScope, skillMasteryHistoryScope };
 
 export const createAssessmentHistoryStates = () => ({
-  batteryRuns: createHistoryWalkState(), assessments: createHistoryWalkState(), mastery: createHistoryWalkState(),
+  batteryRuns: createHistoryWalkState(), assessments: createHistoryWalkState(), mastery: createHistoryWalkState(), skillMastery: createHistoryWalkState(),
 });
 
 // Synced rows model grants the server already knows. Memberships on this phone are
@@ -97,5 +99,18 @@ export const runLetterMasteryHistoryPull = ({ userId, force = false, deps = {} }
     }),
     readCoverage: ({ db, userId: actor }) => readMasteryScope(db, { userId: actor }),
     fetchPage: fetchPage('get_letter_mastery_page', false), savePage: pageSaver(repo),
+  } });
+};
+
+export const runSkillMasteryHistoryPull = ({ userId, force = false, deps = {} } = {}) => {
+  const repo = deps.repositories?.skillMastery || createSkillMasteryRepository({ database: deps.database });
+  return runHistoryWalk({ userId, force, deps, walk: {
+    tag: 'SkillMasteryHistory', coverageKeys: ['childIds'], pageSize: SKILL_MASTERY_PAGE_SIZE,
+    logTiming: true, dropLostCoverage: true,
+    resolveScope: async ({ userId: actor }) => ({
+      scope: skillMasteryHistoryScope(actor), windowStart: null,
+    }),
+    readCoverage: ({ db, userId: actor }) => readMasteryScope(db, { userId: actor }),
+    fetchPage: fetchPage('get_skill_mastery_page', false), savePage: pageSaver(repo),
   } });
 };
