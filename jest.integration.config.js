@@ -28,6 +28,7 @@ module.exports = {
     '<rootDir>/__tests__/letterMasteryCorrectionSync.test.js',
     '<rootDir>/__tests__/letterMasteryHistoryPage.test.js',
     '<rootDir>/__tests__/masteryRepository.test.js',
+    '<rootDir>/__tests__/skillMasteryRepository.test.js',
     '<rootDir>/__tests__/letterMasteryCurrentStateMigration.test.js',
     '<rootDir>/__tests__/skillMasteryMigration.test.js',
     '<rootDir>/__tests__/skillMasteryIdParity.test.js',
