@@ -6,7 +6,7 @@ jest.mock('../src/services/supabaseClient', () => ({
 import { v4 as uuid } from 'uuid';
 import { createFamilySyncFixture } from '../test-support/assessmentFamilySyncTestUtils';
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
-import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
+import { createMasteryRepository, deleteUndeliveredLetterMastery } from '../src/db/repositories/masteryRepository';
 import { AUTHENTICATED_DENIAL_MARKER } from '../src/services/offlineSync';
 import { loadMasteryState } from '../src/utils/masteryState';
 
@@ -259,5 +259,71 @@ describe('letter mastery correction sync', () => {
     expect(await f.db.getFirstAsync('select * from sync_outbox')).toMatchObject({
       id: slot.id, payload: slot.payload, status: 'failed', last_error: expect.stringContaining('ack write-back refused'),
     });
+  });
+
+  test('a delayed older save never replaces a newer owed correction that history repair hid from the row', async () => {
+    const MON_AM = '2026-10-19T07:00:00.000Z';
+    const MON_PM = '2026-10-19T14:00:00.000Z';
+    const tuesday = await write({ confirmed: false, changedAt: TUE });
+    client.rpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'RLS denied' } });
+    const engine = f.engine(client);
+    expect(await engine.syncAll({ tableName: 'letter_mastery' })).toMatchObject({ totalTerminal: 1 });
+    // History repair restores Monday morning's accepted confirmation over the refused row.
+    const { id } = await read();
+    expect(await mastery.saveHistoryPage([{
+      id, child_id: f.childId, letter: 'k', language: 'en', confirmed: true, changed_at: MON_AM,
+      correction_id: uuid(), changed_by: OTHER_EA, programme_id: null, created_at: MON_AM, updated_at: MON_AM,
+    }], { scope: `letter_mastery_pull:${f.userId}`, pullState: { lastPulledAt: MON_AM, cursor: null } }))
+      .toMatchObject({ applied: 1 });
+    await engine.retryFailedItem('letter_mastery', id);
+    client.rpc.mockResolvedValueOnce({ data: null, error: { message: 'Network request failed' } });
+    expect(await engine.syncAll({ tableName: 'letter_mastery' })).toMatchObject({ totalRetriable: 1 });
+    const [owed] = await f.db.getAllAsync('select * from sync_outbox');
+    expect(owed.status).toBe('failed');
+    expect(await read()).toMatchObject({ changed_at: MON_AM });
+
+    const kept = await write({ confirmed: true, changedAt: MON_PM });
+    const [slot] = await f.db.getAllAsync('select * from sync_outbox');
+    expect(JSON.parse(slot.payload)).toMatchObject({ correction_id: tuesday.correction_id, confirmed: false, changed_at: TUE });
+    expect(slot.record_id).toBe(id);
+    expect(kept).toMatchObject({ id, changed_at: MON_AM });
+    expect(kept).not.toHaveProperty('outbox_changed_at');
+    client.rpc.mockResolvedValueOnce(reply(winner({ confirmed: false, correction_id: tuesday.correction_id, changed_at: TUE, changed_by: f.userId })));
+    expect(await engine.syncAll({ tableName: 'letter_mastery', force: true })).toMatchObject({ totalSynced: 1 });
+    expect(client.rpc.mock.calls.at(-1)[1].p_correction_id).toBe(tuesday.correction_id);
+  });
+
+  test('the owed correction still guards the slot after handover deleted its repaired row', async () => {
+    const MON_AM = '2026-10-19T07:00:00.000Z';
+    const MON_PM = '2026-10-19T14:00:00.000Z';
+    const tuesday = await write({ confirmed: false, changedAt: TUE });
+    client.rpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'RLS denied' } });
+    const engine = f.engine(client);
+    expect(await engine.syncAll({ tableName: 'letter_mastery' })).toMatchObject({ totalTerminal: 1 });
+    const { id } = await read();
+    await mastery.saveHistoryPage([{
+      id, child_id: f.childId, letter: 'k', language: 'en', confirmed: true, changed_at: MON_AM,
+      correction_id: uuid(), changed_by: OTHER_EA, programme_id: null, created_at: MON_AM, updated_at: MON_AM,
+    }], { scope: `letter_mastery_pull:${f.userId}`, pullState: { lastPulledAt: MON_AM, cursor: null } });
+    // Handover deletes the repaired synced row; only terminal evidence remains.
+    const { id: assignmentId } = await f.db.getFirstAsync(
+      'select id from child_ea_assignments where child_id = ? and user_id = ? and unassigned_at is null', f.childId, f.userId);
+    await f.db.runAsync("update child_ea_assignments set unassigned_at = assigned_at where id = ?", assignmentId);
+    expect(await deleteUndeliveredLetterMastery(f.db, { userId: f.userId, childIds: [f.childId] })).toBe(1);
+    expect(await read()).toBeNull();
+    // The child returns; Retry re-owes Tuesday's correction without a row.
+    await f.db.runAsync('update child_ea_assignments set unassigned_at = null where id = ?', assignmentId);
+    await engine.retryFailedItem('letter_mastery', id);
+
+    const kept = await write({ confirmed: true, changedAt: MON_PM });
+    const [slot] = await f.db.getAllAsync('select * from sync_outbox');
+    expect(slot.status).toBe('pending');
+    expect(JSON.parse(slot.payload)).toMatchObject({ correction_id: tuesday.correction_id, confirmed: false, changed_at: TUE });
+    expect(slot.record_id).toBe(id);
+    expect(kept).toBeNull();
+    client.rpc.mockResolvedValueOnce(reply(winner({ confirmed: false, correction_id: tuesday.correction_id, changed_at: TUE, changed_by: f.userId })));
+    expect(await engine.syncAll({ tableName: 'letter_mastery', force: true })).toMatchObject({ totalSynced: 1 });
+    expect(client.rpc.mock.calls.at(-1)[1].p_correction_id).toBe(tuesday.correction_id);
+    expect(await read()).toBeNull();
   });
 });

@@ -184,6 +184,25 @@ describe('LetterMasteryPanel', () => {
     expect(screen.getByText('0 / 26 letters mastered')).toBeTruthy();
   });
 
+  test('a kept-back save returning null leaves taught state unchanged without an error', async () => {
+    storedRows = [stored('a')];
+    masteryRepository.setLetterMastery.mockResolvedValueOnce(null);
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const screen = render(panel());
+      fireEvent.press(await screen.findByLabelText('a, taught by coach'));
+      await waitFor(() => expect(masteryRepository.getLetterMastery).toHaveBeenCalledTimes(2));
+      expect(screen.getByLabelText('a, taught by coach')).toBeTruthy();
+      expect(screen.getByText('1 / 26 letters mastered')).toBeTruthy();
+      expect(screen.queryByText('Letter update was not saved. Please try again.')).toBeNull();
+      expect(errorLog).not.toHaveBeenCalled();
+      expect(refreshSyncStatus).not.toHaveBeenCalled();
+      expect(triggerBackgroundSync).not.toHaveBeenCalled();
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
   test('a pending write prevents another letter write', async () => {
     let release;
     masteryRepository.setLetterMastery.mockImplementationOnce(async args => {

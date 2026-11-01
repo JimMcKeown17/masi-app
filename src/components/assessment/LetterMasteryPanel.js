@@ -90,6 +90,7 @@ export default function LetterMasteryPanel({ child, isDelivery = true }) {
         language: languageCode,
         confirmed: !taughtLetters[letter],
       });
+      if (record === null) return;
       setTaughtLetters(prev => {
         const next = { ...prev };
         if (record.confirmed) next[letter] = true;

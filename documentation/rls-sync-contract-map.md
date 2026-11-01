@@ -586,8 +586,12 @@ Programme is nullable context. Server ordering metadata is preserved, never synt
 
 The slot is ordering-aware: an older save keeps the row and slot unchanged when a later
 correction is still owed (`pending`, `failed` or `in_flight`, the same set Plan 3's merge uses).
-A queued time ahead of a corrected phone clock counts as now. Thus Monday's mark saved on
-Wednesday cannot erase Tuesday's queued un-confirm before the server ever sees it.
+The slot is read by deterministic record id even when handover removed its repaired row.
+The guard compares the later of the row time and the owed payload time, clamped to phone now.
+A kept-back save returns the existing row, or `null` when no row exists; query-only outbox
+metadata is stripped from returned records. The tracker treats `null` as no local change and
+still refreshes from SQLite. Thus Monday's mark saved on Wednesday cannot erase Tuesday's
+queued un-confirm before the server ever sees it.
 **Accepted risk A2:** a fast-clock correction is queued; the clock is corrected backwards;
 its queued stamp is still ahead of now; a later explicitly timed sheet tap is saved after a
 delay. The queued stamp counts as save-time now, which is later than that tap's time, so the
