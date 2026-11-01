@@ -147,3 +147,22 @@ sum or difference. Number pairs must make the step's size. Every integer in
 each question and expected answer must be no bigger than the step's size,
 including tick questions for the other skills. Keep these wording patterns
 when copying accepted partner edits back into the JSON.
+
+## Partner round
+
+1. Run `npm run content:numeracy-doc` and paste the generated readable document
+   from `docs/numeracy/` into the Google Doc.
+2. The partner reviews it there using suggestions and comments.
+3. Masi copies accepted changes by hand into
+   `content/numeracy-curriculum/curriculum-2026.1-draft.json`. There is no
+   Doc-to-JSON converter (design §4.4). An order change also needs its
+   `ORDER_OVERRIDES` entry, as described above.
+4. Run `npm run test:content` until it is clean. The checks include comparing
+   the readable document with the JSON: after accepted edits, regenerate it
+   with `npm run content:numeracy-doc` before rerunning the checks.
+5. Re-render for the next partner round. The document is generated; make
+   curriculum edits in the JSON, rather than editing the Markdown by hand.
+6. Content-only changes ship as an OTA update on the preview channel.
+
+Use Node 20 for these commands:
+`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.

@@ -5608,6 +5608,17 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
   each build added in App Store Connect.
 
 
+### 2026-11-01 — Numeracy curriculum content (Track A)
+
+| Date | Command/Check | Result | Notes |
+| --- | --- | --- | --- |
+| 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH node --test content/numeracy-curriculum/verify.cjs` | RED: `Cannot find module './render.cjs'`; `# tests 1`, `# pass 0`, `# fail 1`. GREEN: `# tests 22`, `# pass 22`, `# fail 0`; exit 0. | Added the plan's two exact test names and bodies before implementing the renderer. RED stops at the module import. Task 3 has 7 tests rather than the plan's 6: its stated 19 becomes 20, and Task 4's stated 21 becomes 22. |
+| 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH node -e 'const a=JSON.parse(require("node:child_process").execFileSync("git", ["show", "HEAD~3:docs/numeracy/curriculum-draft-2026.1.json"], {encoding:"utf8"})), b=require("./content/numeracy-curriculum/curriculum-2026.1-draft.json"); const norm=c=>c.skills.map(s=>({k:s.skill??s.key,l:s.skill_label??s.label,steps:s.steps.map(({id,key,skill,size,...t})=>({key:id??key,...t}))})); require("assert").deepStrictEqual(norm(b),norm(a)); console.log("content unchanged", b.edition)'` | PASS: `content unchanged 2026.1-draft`; exit 0. | Task 1 seed-equivalence check rerun against the deleted seed in Git history; no seed restored or content edited. |
+| 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx tsc --noEmit --strict content/numeracy-curriculum/index.d.ts` | PASS: no diagnostics; exit 0. | Readonly loader declarations. |
+| 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content` | PASS: `# tests 43`, `# pass 43`, `# fail 0`; exit 0. | EGRA 5 + numeracy 22 + EGMA 16. The plan's 26 predates EGMA and undercounts Task 3 by one; corrected pre-EGMA total is 27, with 43 after EGMA. The script retains all three verify files. |
+| 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run content:numeracy-doc && git diff --exit-code docs/numeracy/curriculum-draft-2026.1.md` | PASS: printed the absolute path of `docs/numeracy/curriculum-draft-2026.1.md`; no diff; exit 0. | Renderer reproduces the committed readable document byte for byte, including its single final newline; no hand edits. |
+| 2026-11-01 | `git diff --stat origin/main -- content/egra` | PASS: no output; exit 0. | EGRA unchanged. Also ran `git diff --stat origin/main -- content/egma`: no output; exit 0. |
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -5824,6 +5835,7 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-10-31 | **Only a known maths subject is shared across screens** (one handle-scoped record in `programmeSubject.js`); every screen confirms reading itself; a failed read prefers known maths and, with nothing known, falls back to literacy. | Three review rounds showed cached or failed reads acting as permission to enter literacy routes. Hiding literacy is the safe direction, so only it may be cached; literacy EAs are never locked out by a read error. | Field reports of a numeracy EA reaching a literacy screen, or of literacy controls appearing late. |
 | 2026-10-31 | **Number Card pages follow the order the app asks for them:** Read numbers 1, Read big numbers 2, Which is more? 3, Bigger number 4, Missing number 5, Addition 1 6, Addition 2 7, Subtraction 1 8, Subtraction 2 9. `content/egma/verify.cjs` pins pack order = page order. | The A03 run showed spec §9 numbered the pages against §4.2's Question order, so an EA flipped 1 → 3 → 2 and 6 → 8 → 7. The form is still a draft and nothing is printed, so it changed in place (hash re-pinned). | Any reordering of Questions, or a second printed card. |
 | 2026-10-31 | **Partner approval is not a release gate for the maths assessment** (Jim). Spec §10 gate 1, the ROADMAP item, CONTEXT, ADR 0012, the pack README and two pack notes now say so; the pack hash moved to `6f69090d…` (notes only, no item or copy change; the Number Card is unchanged). | Jim, merging PR #133: "We do not need that now." The English copy check, curriculum mapping, the timed pass with the printed Number Card and the freeze remain. | The partner offers an SA-adapted EGMA or asks to review items (a new form id if items change). |
+| 2026-11-01 | Numeracy curriculum content (Track A): verify recomputes `comes_after` from the four rules, with `ORDER_OVERRIDES` the only way to deviate; six row hints absent from the mockup are Finger flash, Count objects, Compare and Before & after → `up to…`, Number pairs → `that make…`, Skip count → `in…`; the seed JSON was deleted in favour of the bundled content file; the readable document is generated and sync-tested. | Keep partner arrow changes explicit in review, supply consistent compact tracker hints, maintain one source of content truth and prevent the partner document drifting from the app bundle. | Partner review rounds become frequent enough to justify a Doc-to-JSON converter, or a second edition must run side by side. |
 
 ---
 

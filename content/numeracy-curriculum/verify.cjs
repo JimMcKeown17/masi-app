@@ -558,3 +558,18 @@ test('ticks: every number in a tick item is within the step size', () => {
   assert.match(broken(c => { const t = c.skills[5].steps[0].tick_when; t.ask[2] = '4 + 3'; t.expected[2] = '7'; }).join('\n'), /add\.5 tick item 3: 7 is bigger than 5/);
   assert.match(broken(c => { c.skills[2].steps[2].tick_when.ask[0] = 'Card 21'; }).join('\n'), /read_numbers\.20 tick item 1: 21 is bigger than 20/);
 });
+
+const { renderCurriculumMarkdown, readableDocPath } = require('./render.cjs');
+
+test('the readable doc for the partner matches the JSON', () => {
+  const onDisk = readFileSync(readableDocPath(CURRENT_EDITION), 'utf8');
+  assert.equal(onDisk, renderCurriculumMarkdown(getCurriculum()),
+    'docs/numeracy is out of date: run npm run content:numeracy-doc');
+});
+
+test('the readable doc path drops the -draft suffix and changes with the content', () => {
+  assert.ok(readableDocPath('2026.1-draft').endsWith(join('docs', 'numeracy', 'curriculum-draft-2026.1.md')));
+  assert.ok(readableDocPath('2026.2').endsWith(join('docs', 'numeracy', 'curriculum-draft-2026.2.md')));
+  const c = structuredClone(getCurriculum()); c.skills[5].steps[1].goal = 'Children add up to 10.';
+  assert.match(renderCurriculumMarkdown(c), /### Add · up to 10\n\n\*\*Goal:\*\* Children add up to 10\.\n/);
+});

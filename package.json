@@ -41,7 +41,8 @@
     "test:integration": "jest --runInBand --config jest.integration.config.js",
     "test:types": "tsc --noEmit -p tsconfig.assessment-questions.json",
     "test:release": "npm test && npm run test:integration && npm run test:types && npm run test:content && npm run sqlite:staging:check",
-    "test:content": "node --test content/egra/verify.cjs content/numeracy-curriculum/verify.cjs content/egma/verify.cjs"
+    "test:content": "node --test content/egra/verify.cjs content/numeracy-curriculum/verify.cjs content/egma/verify.cjs",
+    "content:numeracy-doc": "node content/numeracy-curriculum/render.cjs"
   },
   "dependencies": {
     "@expo-google-fonts/andika": "0.4.1",
