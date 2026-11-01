@@ -1,4 +1,4 @@
-import { groupStepState, childKnows } from './groupSteps';
+import { groupStepState, childKnows, childReadyFor, curriculumStepKeys } from './groupSteps';
 
 /** Curriculum = { edition, skills: Skill[] }
  *  Skill = { key, label, hint, group: 'main'|'counting', slot: 'warm_up'|'activity', steps: Step[] }
@@ -18,6 +18,7 @@ import { groupStepState, childKnows } from './groupSteps';
  *                          readyCount: number, presentCount: number, needHelp: string[], canHelp: string[] }>,
  *           reason: 'ok'|'no_children'|'no_ready_activity'|'incomplete_inputs',
  *           readySteps: string[] }   // groupStepState().readySteps, for Swap
+ *  needHelp lists present children missing any comes_after key, the complement of readyCount.
  */
 export const NUMERACY_ENGINE_VERSION = 1;
 
@@ -60,6 +61,7 @@ export function planNumeracyLesson(input) {
     const lastDone = (name) => newestMatching(history, (item) => item.step_key === step.key && item.activity === name);
     return [...candidates].sort((a, b) => compareRecency(lastDone(a.name), lastDone(b.name)))[0].name;
   };
+  const stepKeys = curriculumStepKeys(curriculum);
   const hasReadyStep = (skill) => readySteps.includes(groupStepBySkill.get(skill.key));
   const warmSkills = curriculum.skills.filter((skill) => skill.slot === 'warm_up');
   const readyWarm = rank(warmSkills.filter(hasReadyStep))[0];
@@ -74,14 +76,14 @@ export function planNumeracyLesson(input) {
     const ordered = [...skill.steps].sort((a, b) => a.size - b.size);
     const index = ordered.findIndex((step) => step.key === stepKey);
     const step = ordered[index];
-    const previous = ordered[index - 1];
+    const readyIds = presentIds.filter((id) => childReadyFor(knownByChild, id, step, stepKeys));
     return {
       slot: skill.slot,
       step_key: step.key,
       activity: pickActivity(step, skill.slot),
-      readyCount: presentIds.filter((id) => step.comes_after.every((key) => childKnows(knownByChild, id, key))).length,
+      readyCount: readyIds.length,
       presentCount: presentIds.length,
-      needHelp: previous ? presentIds.filter((id) => !childKnows(knownByChild, id, previous.key)) : [],
+      needHelp: presentIds.filter((id) => !readyIds.includes(id)),
       canHelp: presentIds.filter((id) => childKnows(knownByChild, id, step.key)),
     };
   };

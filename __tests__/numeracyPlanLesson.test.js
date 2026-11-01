@@ -34,6 +34,7 @@ const activity = (name, minutes = 5) => ({ name, minutes, how: 'Try together.', 
 const expectOnlyReady = (input, plan) => {
   const { groupKnown } = groupStepState(input);
   plan.cards.forEach((card) => {
+    expect(card.readyCount + card.needHelp.length).toBe(card.presentCount);
     expect(card.slot === 'warm_up' ? [...plan.readySteps, ...groupKnown] : plan.readySteps).toContain(card.step_key);
     expect(Object.keys(card).sort()).toEqual(['slot', 'step_key', 'activity', 'readyCount', 'presentCount', 'needHelp', 'canHelp'].sort());
   });
@@ -119,6 +120,21 @@ test('extra help lists children still on the step below; can-help lists children
   expect(plan.cards.find((c) => c.step_key === 'count.10')).toMatchObject({ readyCount: 5, presentCount: 6, needHelp: ['c6'], canHelp: ['c1', 'c2'] });
   const duplicate = planFor({ presentChildIds: [...presentChildIds, 'c1'], knownByChild });
   expect(duplicate).toEqual(plan);
+});
+
+test('need extra help lists exactly the children who are not ready', () => {
+  const presentChildIds = ['c10', 'c9', 'c8', 'c7', 'c6', 'c5', 'c4', 'c3', 'c2', 'c1'];
+  const prerequisites = ['add.5', 'count.5', 'finger_flash.5'];
+  const knownByChild = new Map(presentChildIds.map((id) => [id, known(
+    ...prerequisites.filter((key) => !(id === 'c9' && key === 'finger_flash.5')
+      && !(id === 'c8' && key === 'add.5')),
+  )]));
+  const plan = planFor({ presentChildIds, knownByChild, activityCardCount: 7 });
+  const card = plan.cards.find((c) => c.step_key === 'number_pairs.5');
+  expect(fixture.skills.flatMap((s) => s.steps).find((s) => s.key === card.step_key).comes_after)
+    .toEqual(prerequisites);
+  expect(card).toMatchObject({ readyCount: 8, presentCount: 10, needHelp: ['c9', 'c8'], canHelp: [] });
+  plan.cards.forEach((c) => expect(c.readyCount + c.needHelp.length).toBe(c.presentCount));
 });
 
 test('groups smaller than 3 need everyone', () => {

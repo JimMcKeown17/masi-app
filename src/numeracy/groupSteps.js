@@ -13,6 +13,16 @@ export function childKnows(knownByChild, childId, stepKey) {
   return steps instanceof Map && steps.has(stepKey);
 }
 
+/** Every step key in the curriculum, so a comes_after key this edition lacks is never known. */
+export function curriculumStepKeys(curriculum) {
+  return new Set(curriculum.skills.flatMap((skill) => skill.steps.map((step) => step.key)));
+}
+
+/** A child is ready when they know every earlier step; starting steps need no knowledge. */
+export function childReadyFor(knownByChild, childId, step, stepKeys) {
+  return step.comes_after.every((key) => stepKeys.has(key) && childKnows(knownByChild, childId, key));
+}
+
 /**
  * Derive group knowledge and ready group steps from distinct present children.
  * @returns {{ presentIds: string[], groupKnown: string[], groupStepBySkill: Map<string, string | null>, readySteps: string[] }}
@@ -30,7 +40,11 @@ export function groupStepState({ curriculum, presentChildIds, knownByChild }) {
     [...skill.steps].sort((a, b) => a.size - b.size).find((step) => !known.has(step.key))?.key ?? null,
   ]));
   const groupSteps = new Set(groupStepBySkill.values());
+  const stepKeys = curriculumStepKeys(curriculum);
   const readySteps = steps.filter((step) => groupSteps.has(step.key)
-    && step.comes_after.every((key) => known.has(key))).map((step) => step.key);
+    && (step.comes_after.length === 0 || isGroupMastered(
+      presentIds.filter((id) => childReadyFor(knownByChild, id, step, stepKeys)).length,
+      presentIds.length,
+    ))).map((step) => step.key);
   return { presentIds, groupKnown, groupStepBySkill, readySteps };
 }

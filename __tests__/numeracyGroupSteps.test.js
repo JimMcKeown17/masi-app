@@ -27,6 +27,27 @@ test('first lesson: only the four starting steps are ready', () => {
   expect(result.groupStepBySkill.get('add')).toBe('add.5');
 });
 
+test('a step is not ready when no single child knows every earlier step', () => {
+  const prerequisites = ['add.5', 'count.5', 'finger_flash.5'];
+  const result = state({ knownByChild: new Map(present.map((id, index) => [
+    id, known(...prerequisites.filter((_, missing) => missing !== index)),
+  ])) });
+  for (const key of prerequisites) expect(result.groupKnown).toContain(key);
+  expect(result.groupKnown).not.toContain('number_pairs.5');
+  expect(result.groupStepBySkill.get('number_pairs')).toBe('number_pairs.5');
+  expect(result.readySteps).not.toContain('number_pairs.5');
+});
+
+test('a step is ready when enough children know every earlier step', () => {
+  const presentChildIds = ['c1', 'c2', 'c3', 'c4', 'c5'];
+  const result = state({ presentChildIds, knownByChild: new Map(presentChildIds.map((id, index) => [
+    id, known('count.5', 'finger_flash.5', ...(index < 4 ? ['add.5'] : [])),
+  ])) });
+  expect(result.groupKnown).not.toContain('number_pairs.5');
+  expect(result.groupStepBySkill.get('number_pairs')).toBe('number_pairs.5');
+  expect(result.readySteps).toContain('number_pairs.5');
+});
+
 test('fewer than 3 present: everyone must know it', () => {
   const input = { presentChildIds: ['c1', 'c2'], knownByChild: new Map([['c1', known('count.5')]]) };
   expect(state(input).readySteps).toContain('count.5');
