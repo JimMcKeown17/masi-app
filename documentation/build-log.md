@@ -7997,6 +7997,34 @@ skills, written for the partner to review. Docs only: no code, migrations or rel
 `feat/egma-maths-assessment`. That branch is unpushed and has no PR. Numeracy screens build on
 main after it merges. Data, planner and content can start now.
 
+### 2026-10-31 — Reporting migration applied to staging; reader password set
+
+- **Applied** to `masi-app-sqlite` (`segygjzpujphwvrubusm`) with Supabase CLI 2.122.0 through the
+  isolated `sqlite:staging:push` helper. The dry run listed only `20261031180000_masi_reporting_v1.sql`.
+  Main does not yet contain `20261031120000_numeracy_maths_draft_default.sql`, which staging already
+  records, so that file was placed in the checkout for the push and removed afterwards. Without it
+  the CLI refuses with "Remote migration versions not found". `migration repair --status reverted`
+  was rejected: it would erase the EGMA branch's record and make its next push re-run its migration.
+  The EGMA branch has since merged (#133), so main and staging histories agree again.
+- **Verified read-only** afterwards: `schema_migrations` records `20261031180000 masi_reporting_v1`
+  (44 statements). `masi_reporting_reader` can log in, does not inherit, and has
+  `default_transaction_read_only=on, statement_timeout=15s`. All nine `masi_reporting_*_v1`
+  functions are SECURITY DEFINER and owned by `postgres`. The `anon`, `authenticated` and
+  `service_role` roles cannot execute them, the reader has no table privileges, and the reader can
+  execute no other public SECURITY DEFINER function.
+- **Reader password** set by Jim with psql `\password masi_reporting_reader` through the session
+  pooler, then login-tested as the reader. `\password` sends only a SCRAM hash, so the plain
+  password is not written to Supabase's DDL statement log (`log_statement='ddl'`). No password is
+  recorded in any repository. A first attempt failed with `password authentication failed` because
+  the wrong admin password was typed; the saved `SUPABASE_DB_PASSWORD_SQLITE` was valid.
+- **Downstream:** the Render `MASI_APP_DB_*` and `MASI_APP_TEST_EMAILS` variables were saved, which
+  triggered an unplanned redeploy of masi-website-main's unchanged `main` (`8130458`). It was
+  harmless: no code on `main` reads those variables, and the site answered 200 afterwards. The
+  Django API merged as masi-website-main #34 (`1053bb5`; full suite 1,550 tests OK). It is live on
+  Render: signed out, `/api/masi-app/*` answers 401 instead of 404. The website merged as
+  masi-web-nextjs #56 (`e39e242`), and production serves the 308 `/operations/field-app` redirect.
+  Remaining: remove `MASI_SUPABASE_*` from Vercel, and a signed-in check of the live dashboard.
+
 ### 2026-10-31 — First-sweep small bugs (`fix/first-sweep-small-bugs`)
 
 Implemented locally, uncommitted, using Node v20.19.4. No Supabase CLI, EAS, network,
