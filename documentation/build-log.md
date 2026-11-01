@@ -8303,6 +8303,9 @@ and the card counts. Spec §9.2 and §9.3 updated in the same commit.
 | Task 6 real-content checks: `npx jest __tests__/numeracyRealContent.test.js` | **1 suite / 4 tests** passed on the first run: every `EVIDENCE_MAP` step (30) is in the bundled edition `2026.1-draft` (37 steps) and the 7 unmapped steps are exactly `before_after.50`, `before_after.100`, `add.15`, `subtract.15`, `skip_count.2s`, `skip_count.5s`, `skip_count.10s`; every mapped `{skill, band}` tag appears among the EGMA pack's 161 tagged items; the fixture matches the bundled edition's steps, order, slots and `comes_after` with **no differences** (no fixture change); a first lesson on the bundled edition gives the four starting steps and a warm-up activity of 5 minutes or less |
 | Track suites with the real-content suite: `npx jest numeracy groupMastery lessonPlan` | **13 suites / 331 tests** passed (`numeracyGroupSteps` 14, `numeracyPlanLesson` 17, `numeracyRealContent` 4) |
 | Full unit suite after the rebase: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand` | Not recorded: the run started but the driver had to hand back before it finished (15 suites passed, none failed, at handoff). Rerun before merge |
+| Post-build Codex adversarial review, round 2 (2026-11-01, `gpt-6-astra`) | One finding, medium, real: the review warm-up could pick a group-known step that too few children were ready for (see Review findings). Confirmed: fixture-curriculum independent and real-content checks, readyCount/needHelp agreement, literacy unchanged |
+| Review-warm-up fix RED: `npx jest __tests__/numeracyPlanLesson.test.js` | **1 failed / 17 passed**: `a review warm-up is a step enough children are ready for` (warm-up `skip_count.10s`, 1 of 3 ready) |
+| Review-warm-up fix GREEN: `npx jest numeracy groupMastery lessonPlan` | **13 suites / 332 tests** passed; `expectOnlyReady` now also requires `isGroupMastered(readyCount, presentCount)` on every card, warm-ups included |
 
 #### Real-content checks
 
@@ -8316,6 +8319,12 @@ Track D task.
   curriculum is not known` to expect `count.5` ready, because children "knew" the retired key. That
   contradicted Task 4's pinned rule (a `comes_after` key missing from the curriculum counts as not
   known). Restored the original expectation; `childReadyFor` takes the curriculum's step keys.
+- Review fix (round 2, review warm-up): with every warm-up skill group-known, the fallback took the
+  highest group-known step without checking readiness. Implied knowledge stays inside a skill, so a
+  step can be group-known while too few children know its cross-skill earlier steps: c1/c2 know
+  Count aloud, c2/c3 know Skip count, so `skip_count.10s` was suggested with "1 of 3 are ready". The
+  fallback now takes the highest group-known step whose ready-child count passes `isGroupMastered`
+  (here `skip_count.2s`, 2 of 3), and skips a skill with none. Spec §9.3 updated.
 - Review fix (Task 2): `only steps in the given curriculum appear` had no control, so it would have
   passed even if band-100 items were never read. Added the full-curriculum control assertion.
 - EGMA's current form is `-draft` (`question_version` `masi-egma-en-2026-1-draft`), so it produces

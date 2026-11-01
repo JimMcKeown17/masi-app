@@ -1,5 +1,6 @@
 import { NUMERACY_ENGINE_VERSION, planNumeracyLesson } from '../src/numeracy/planLesson';
 import { groupStepState } from '../src/numeracy/groupSteps';
+import { isGroupMastered } from '../src/utils/groupMastery';
 import { buildNumeracyCurriculumFixture } from '../test-support/numeracyCurriculumFixture';
 
 const deepFreeze = (value) => {
@@ -35,6 +36,8 @@ const expectOnlyReady = (input, plan) => {
   const { groupKnown } = groupStepState(input);
   plan.cards.forEach((card) => {
     expect(card.readyCount + card.needHelp.length).toBe(card.presentCount);
+    // Every card, review warm-ups included, has enough ready children.
+    expect(isGroupMastered(card.readyCount, card.presentCount)).toBe(true);
     expect(card.slot === 'warm_up' ? [...plan.readySteps, ...groupKnown] : plan.readySteps).toContain(card.step_key);
     expect(Object.keys(card).sort()).toEqual(['slot', 'step_key', 'activity', 'readyCount', 'presentCount', 'needHelp', 'canHelp'].sort());
   });
@@ -96,6 +99,19 @@ test('with no ready warm-up skill, the warm-up reviews a known step', () => {
   expect(planFor({ knownByChild }).cards[0].step_key).toBe('finger_flash.10');
   const curriculum = { ...fixture, skills: fixture.skills.filter((s) => s.slot === 'activity') };
   expect(steps(planFor({ curriculum }))).toEqual([['activity', 'count.5'], ['activity', 'read_numbers.5']]);
+});
+
+test('a review warm-up is a step enough children are ready for', () => {
+  // Codex review, 2026-11-01: every warm-up skill is group-known, but only c2 knows both
+  // skip_count.5s and count_aloud.100, so skip_count.10s is not ready (1 of 3).
+  const knownByChild = new Map([
+    ['c1', known(...keysIn('finger_flash', 'count_aloud'))],
+    ['c2', known(...keysIn('finger_flash', 'count_aloud', 'skip_count'))],
+    ['c3', known(...keysIn('finger_flash', 'skip_count'))],
+  ]);
+  const history = [lesson('2026-11-03', [taught('finger_flash.10')]), lesson('2026-11-02', [taught('count_aloud.100')])];
+  const warm = planFor({ knownByChild, history }).cards[0];
+  expect(warm).toMatchObject({ slot: 'warm_up', step_key: 'skip_count.2s', readyCount: 2, presentCount: 3, needHelp: ['c3'] });
 });
 
 test('a group that knows every ready activity step gets no activity card', () => {

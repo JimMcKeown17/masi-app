@@ -1,3 +1,4 @@
+import { isGroupMastered } from '../utils/groupMastery';
 import { groupStepState, childKnows, childReadyFor, curriculumStepKeys } from './groupSteps';
 
 /** Curriculum = { edition, skills: Skill[] }
@@ -19,6 +20,7 @@ import { groupStepState, childKnows, childReadyFor, curriculumStepKeys } from '.
  *           reason: 'ok'|'no_children'|'no_ready_activity'|'incomplete_inputs',
  *           readySteps: string[] }   // groupStepState().readySteps, for Swap
  *  needHelp lists present children missing any comes_after key, the complement of readyCount.
+ *  A review warm-up (no ready warm-up skill) is the highest group-known step enough children are ready for.
  */
 export const NUMERACY_ENGINE_VERSION = 1;
 
@@ -65,18 +67,20 @@ export function planNumeracyLesson(input) {
   const hasReadyStep = (skill) => readySteps.includes(groupStepBySkill.get(skill.key));
   const warmSkills = curriculum.skills.filter((skill) => skill.slot === 'warm_up');
   const readyWarm = rank(warmSkills.filter(hasReadyStep))[0];
-  const reviewWarm = readyWarm ? null : rank(warmSkills.filter((skill) => (
-    skill.steps.some((step) => groupKnown.includes(step.key))
-  )))[0];
+  const readyIdsFor = (step) => presentIds.filter((id) => childReadyFor(knownByChild, id, step, stepKeys));
+  // A review step is group-known and, like every card, has enough ready children (Codex review, 2026-11-01).
+  const reviewSteps = (skill) => skill.steps.filter((step) => groupKnown.includes(step.key)
+    && isGroupMastered(readyIdsFor(step).length, presentIds.length));
+  const reviewWarm = readyWarm ? null : rank(warmSkills.filter((skill) => reviewSteps(skill).length > 0))[0];
   const warmSkill = readyWarm ?? reviewWarm;
   const warmStep = readyWarm ? groupStepBySkill.get(readyWarm.key) : reviewWarm
-    ? [...reviewWarm.steps].filter((step) => groupKnown.includes(step.key)).sort((a, b) => b.size - a.size)[0].key
+    ? reviewSteps(reviewWarm).sort((a, b) => b.size - a.size)[0].key
     : null;
   const makeCard = (skill, stepKey) => {
     const ordered = [...skill.steps].sort((a, b) => a.size - b.size);
     const index = ordered.findIndex((step) => step.key === stepKey);
     const step = ordered[index];
-    const readyIds = presentIds.filter((id) => childReadyFor(knownByChild, id, step, stepKeys));
+    const readyIds = readyIdsFor(step);
     return {
       slot: skill.slot,
       step_key: step.key,

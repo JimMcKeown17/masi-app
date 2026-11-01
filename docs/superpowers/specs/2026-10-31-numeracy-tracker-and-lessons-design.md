@@ -451,7 +451,8 @@ and evidence, as with letters.
 - Take the top warm-up skill, plus the top two activity skills (the activity-card count). For each
   card, pick the step's activity this group has done least recently (§4.3).
 - If a pool runs dry: with no ready warm-up skill, the warm-up becomes a review of a known step from the
-  same pool; with no ready activity skills, show "This group knows every step that's ready. Use Swap to
+  same pool that enough present children are ready for (the highest such step in the least recently
+  taught skill; no such step means no warm-up card); with no ready activity skills, show "This group knows every step that's ready. Use Swap to
   choose a step." Never suggest a step that isn't ready.
 - **For each card**, list the present children who are not ready yet (missing any earlier step)
   under "need extra help", shown with the step they are still on ("still on up to 5"), so the list
