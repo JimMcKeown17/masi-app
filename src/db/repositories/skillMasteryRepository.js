@@ -123,20 +123,21 @@ export const createSkillMasteryRepository = ({ database } = {}) => {
           where child_id = ? and user_id = ? and unassigned_at is null limit 1) delivery
         left join (select * from skill_mastery lm where lm.id = ?) lm on 1 = 1
         left join sync_outbox o
-          on o.table_name = 'skill_mastery' and o.record_id = lm.id
+          on o.table_name = 'skill_mastery' and o.record_id = ?
          and o.status in ('pending', 'failed', 'in_flight')
-      `, childId, changed_by, id);
+      `, childId, changed_by, id, id);
       if (!existing) {
         const error = new Error('Skill mastery requires an active delivery assignment');
         error.code = 'NOT_DELIVERY_CHILD';
         throw error;
       }
-      // History repair can restore an older accepted row while a newer refused and
-      // retried correction is still owed; the owed payload's time also guards the slot.
+      // History repair can restore an older accepted row, and handover can then delete
+      // it, while a newer refused and retried correction is still owed. The slot is read
+      // by record id, and its payload time guards it even when no row is shown.
       const owedTimes = [existing.changed_at, existing.outbox_changed_at].map(Date.parse).filter(Number.isFinite);
       if (existing.outbox_status != null && owedTimes.length > 0
         && Math.min(Math.max(...owedTimes), nowMs) > Date.parse(changed_at)) {
-        return mapMastery(existing);
+        return existing.id == null ? null : mapMastery(existing);
       }
 
       const record = {

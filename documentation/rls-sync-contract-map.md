@@ -707,11 +707,12 @@ service-role privileges. RPC execution grants and empty search paths are identic
 
 **Phone slot and acknowledgement.** The signed-in handle exposes `repositories.skillMastery`.
 `setSkillMastery` atomically writes the row and one `skill_mastery:<id>:update` slot.
-Its older-save guard compares against the later of the row's `changed_at` and the owed slot
-payload's `changed_at`: history repair can restore an older accepted row over a refused
-correction that a Retry then re-owes, and that owed correction must still win
-(MA-BUG-20261101-008, review round 2). The letter guard still reads only the row; that fix
-is open on the bug record. Its exact payload is
+Its older-save guard reads the owed slot by record id and compares against the later of the
+row's `changed_at` and the owed payload's `changed_at`, even when no row is stored: history
+repair can restore an older accepted row over a refused correction, handover can then delete
+that row, and a Retry re-owes the correction, which must still win (MA-BUG-20261101-008,
+post-build review rounds 1 and 2). The letter guard still reads only the row; that fix is
+open on the bug record. Its exact payload is
 `{ id, child_id, step_key, confirmed, changed_at, correction_id, changed_by, programme_id }`.
 `toSetSkillMasteryArgs` sends only the five RPC arguments above; `parseSetSkillMasteryResult`
 uses the letter result parser. `applyCorrectionAcknowledgement` in

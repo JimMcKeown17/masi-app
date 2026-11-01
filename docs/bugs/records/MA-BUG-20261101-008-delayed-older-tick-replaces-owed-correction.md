@@ -5,29 +5,29 @@ title: "A delayed older tracker save can replace a newer owed correction after h
 classification: product_defect
 subsystem: mastery-correction-slot
 
-severity_score: 4
-severity_band: S2
+severity_score: 2
+severity_band: S3
 severity_components:
-  user_impact: 2
-  data_security_privacy: 2
+  user_impact: 1
+  data_security_privacy: 1
   scope: 0
   recoverability: 0
 severity_override: none
-priority: P2
+priority: P3
 
 diagnosis_state: CONFIRMED
 delivery_state: FIX_PROPOSED
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 90
-confidence_basis: "Real-SQLite reproduction through the production repository, sync engine, retryFailedItem and saveHistoryPage loses the newer correction for both letter and skill ticks; guarding with the owed payload's time closes it for skill ticks."
+confidence_basis: "Real-SQLite reproductions through the production repository, sync engine, retryFailedItem, saveHistoryPage and handover cleanup lose the newer correction at the repository for letter and skill ticks; reading the owed slot by record id and guarding with its payload time closes both variants for skill ticks."
 
 created_at_utc: 2026-11-01T18:00:00Z
-updated_at_utc: 2026-11-01T18:00:00Z
+updated_at_utc: 2026-11-01T19:00:00Z
 first_observed_at: 2026-11-01T17:30:00Z
 last_observed_at: 2026-11-01T17:30:00Z
 
-known_occurrences: 1
+known_occurrences: 2
 known_affected_users: 0
 affected_user_ids: []
 exposure_denominator: no field exposure known; found by code review, never reported from a phone
@@ -49,7 +49,7 @@ support_incident_signatures: []
 evidence_paths: []
 github_issues: []
 
-data_safety_status: plausible loss of one tracker correction in a rare sequence; never observed in the field
+data_safety_status: latent at the repository; today's letter callers are protected by lessonSave's getCorrectionTimes pre-filter; never observed in the field
 workaround_status: the EA can re-make the newer correction once the tick is visible
 owner: unassigned
 duplicate_of: none
@@ -87,6 +87,7 @@ before it reaches the server, and an older tick becomes the final state.
 | Report | Source | Reporter/user | Observed time | Received time | Release/environment | Device/OS | Network | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | R1 | Codex adversarial review, confirmed by Claude | None (code review) | 2026-11-01T17:30:00Z | 2026-11-01T17:30:00Z | feat/numeracy-skill-mastery fb154dfe; main 297dbad3 for letters | None | None | `__tests__/skillMasteryCorrectionSync.test.js` regression; throwaway letter probe (same steps, not committed) |
+| R2 | Codex adversarial review round 2, confirmed by Claude | None (code review) | 2026-11-01T18:45:00Z | 2026-11-01T18:45:00Z | feat/numeracy-skill-mastery 5ed5eff8 | None | None | `__tests__/skillMasteryCorrectionSync.test.js` "the owed correction still guards the slot after handover deleted its repaired row" |
 
 ## Reproduction
 
@@ -115,6 +116,8 @@ Real SQLite with the production repositories and sync engine, transport mocked.
 - `setSkillMastery` and `setLetterMastery` guarded the slot with `existing.changed_at` from the row (`skillMasteryRepository.js:134` before the fix; `masteryRepository.js:134` on main).
 - `saveHistoryPage` repairs `terminal` rows, and `retryFailedItem` re-owes a terminal slot without restoring the row.
 - `getCorrectionTimes` and `getSkillCorrectionTimes` already include outbox payloads for exactly this divergence; the setter guard did not.
+- R2 variant: after history repair, handover cleanup (`deleteUndeliveredSkillMastery`) deletes the synced row while its terminal slot remains (documented behaviour). After reassignment and Retry, the slot is owed with no row; the guard joined the outbox through the row, saw no slot, and the older save replaced it.
+- Today's letter callers do not reach this: `lessonSave` skips any tap older than `getCorrectionTimes`, which unions every outbox payload regardless of status or row presence, and `LetterMasteryPanel` saves with now. The repository guard is the second line of defence. Maths callers (Tracks C/D) should mirror the lessonSave pre-filter with `getSkillCorrectionTimes`.
 
 ## Hypotheses
 
@@ -130,9 +133,11 @@ row's `changed_at`, so the owed newer payload was not protected.
 
 ## Suggested fix
 
-Select `json_extract(o.payload, '$.changed_at')` in the setter's keyed read and guard
-with the later of the row time and the owed payload time (same clamp to now). Applied
-to `skillMasteryRepository` on `feat/numeracy-skill-mastery` (review round 2). The
+Read the owed slot by the deterministic record id (not through the row), select
+`json_extract(o.payload, '$.changed_at')`, and guard with the later of the row time and
+the owed payload time (same clamp to now); return null when the guard keeps a slot that
+has no row. Applied to `skillMasteryRepository` on `feat/numeracy-skill-mastery`
+(post-build review rounds 1 and 2). The
 identical change to `masteryRepository` (letters) is proposed, not applied: it needs
 Jim's go-ahead and a mirrored regression in `letterMasteryCorrectionSync.test.js`.
 
@@ -149,6 +154,8 @@ Jim's go-ahead and a mirrored regression in `letterMasteryCorrectionSync.test.js
 | --- | --- | --- | --- |
 | 2026-11-01T17:30:00Z | Codex | Finding raised in the Track B round 2 adversarial review | High severity |
 | 2026-11-01T18:00:00Z | Claude | Reproduced for skill and letter ticks; skill guard fixed with regression | Letter fix deferred to Jim |
+| 2026-11-01T18:45:00Z | Codex | Round 2 raised the row-deleted-by-handover variant | High at the repository |
+| 2026-11-01T19:00:00Z | Claude | Reproduced; skill guard now reads the slot by record id; severity lowered after finding lessonSave's caller pre-filter | S3, P3 |
 
 ## Open questions
 

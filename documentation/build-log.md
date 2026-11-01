@@ -8446,7 +8446,7 @@ release or device gate was run in this documentation session.
 - `git diff --check`: passed. Only the five authorized documentation files changed.
   No hosted commands and no code changes.
 
-**Post-build Codex adversarial review, round 2 (gpt-6-astra, whole branch against `origin/main` 297dbad3)**
+**Post-build Codex adversarial review (build round 2), review round 1 (gpt-6-astra, whole branch against `origin/main` 297dbad3)**
 
 - Verdict needs-attention, one high finding: **real, fixed**. `setSkillMastery` guarded the
   single slot with the displayed row's `changed_at`. After a terminal 42501, a history page
@@ -8468,3 +8468,31 @@ release or device gate was run in this documentation session.
   1,415 tests passed**; PostgreSQL 17 harnesses (masi-numeracy-pg, databases prefixed
   `masi_history_rls_b2r2_`) all exit 0: skill-mastery 31/31, letter-mastery 20/20,
   assessment-history 144/144, reporting 132/132, history-authorization, ea-access, session-group 36/36.
+
+**Post-build Codex adversarial review, review round 2 (gpt-6-astra, at 5ed5eff8; hard cap reached)**
+
+- [high] The round-1 guard joined the outbox through the row, so it missed an owed slot with no
+  row: terminal 42501, history repair to an older tick, handover cleanup deletes that synced row
+  (its terminal slot stays, as the letter section documents), reassignment, Retry, then a delayed
+  older save replaced the slot. **Real, fixed**: the keyed read joins `sync_outbox` by the
+  deterministic record id; when the guard keeps a slot that has no row, `setSkillMastery`
+  returns null. Regression: "the owed correction still guards the slot after handover deleted
+  its repaired row" (RED on 5ed5eff8, GREEN after). Folded into MA-BUG-20261101-008.
+- Context found while fixing: `lessonSave` already skips any tap older than
+  `getCorrectionTimes`, which unions every outbox payload whatever its status or row, and
+  `LetterMasteryPanel` saves with now. So neither variant is reachable through today's letter
+  callers; the repository guard is the second line of defence. MA-BUG-20261101-008 lowered to
+  S3 (2), P3. Maths callers (Tracks C/D) should mirror lessonSave's pre-filter with
+  `getSkillCorrectionTimes`.
+- [medium] A history page fetched before handover and saved after it can re-insert a removed
+  tick. **Rejected as a recorded known risk**: the letter mastery page-apply contract
+  ("Page apply — mastery and handover") already accepts that a pre-handover page saved later
+  can leave a hidden row locally; readers stay current-delivery-scoped and lost coverage forces
+  a re-walk on return. The skill page merge is identical by design, and it is a timing race
+  (round-cap rule: record, do not add machinery).
+- Verification after the round-2 fix (Node 20.19.4): unit **490 suites / 7,846 tests passed**;
+  integration **101 suites / 1,416 tests passed**; doc-reading suites
+  (`assessmentItemDomainId.contract`, `readSupportIncidents`) rerun after the doc edits, 2 / 91
+  passed; the seven PostgreSQL harnesses all exit 0 (skill-mastery 31/31, letter-mastery 20/20,
+  assessment-history 144/144, reporting 132/132, history-authorization, ea-access,
+  session-group 36/36). Task 7 is still PENDING.
