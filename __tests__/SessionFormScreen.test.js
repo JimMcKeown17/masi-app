@@ -13,8 +13,8 @@ import BrandButton from '../src/components/common/BrandButton';
 const mockUseAuth = jest.fn();
 jest.mock('../src/context/AuthContext', () => ({ useAuth: () => mockUseAuth() }));
 jest.mock('../src/screens/lessons/LessonPickerScreen', () => {
-  const { View } = require('react-native');
-  return ({ navigation }) => <View testID="lesson-picker-stub" navigation={navigation} />;
+  const { View, Text } = require('react-native');
+  return ({ navigation, kind = 'literacy' }) => <View testID="lesson-picker-stub" navigation={navigation}><Text>picker:{kind}</Text></View>;
 });
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => ({ __esModule: true, default: () => null }), { virtual: true });
@@ -47,14 +47,15 @@ test('the literacy coach code renders the picker with navigation', () => {
   const navigation = { goBack: jest.fn() };
   const screen = render(<SessionFormScreen navigation={navigation} />);
   expect(screen.getByTestId('lesson-picker-stub').props.navigation).toBe(navigation);
+  expect(screen.getByText('picker:literacy')).toBeTruthy();
 });
 
-test.each([JOB_TITLE_CODES.LITERACY_COACH, 'tutor'])('a %s in numeracy gets coming soon', jobTitleCode => {
+test.each([JOB_TITLE_CODES.LITERACY_COACH, 'tutor'])('a %s in numeracy gets the numeracy picker', jobTitleCode => {
   useActiveProgrammeSubject.mockReturnValue({ subject: 'maths', isMaths: true, loading: false });
   mockUseAuth.mockReturnValue({ profile: { jobTitleCode, jobTitleName: 'Tutor' } });
   const screen = render(<SessionFormScreen />);
-  expectMessageFrame(screen, 'Session forms for Numeracy are coming soon.');
-  expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
+  expect(screen.getByText('picker:numeracy')).toBeTruthy();
+  expect(screen.queryByText(/coming soon/)).toBeNull();
 });
 test('SessionForm shows the lesson flow fallback when the subject is unknown', () => {
   useActiveProgrammeSubject.mockReturnValue({ subject: null, isMaths: false, loading: false });

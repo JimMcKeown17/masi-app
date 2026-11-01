@@ -1,4 +1,4 @@
-import { lastSeenLabel, lessonDateLabel, lessonHeaderSeenLabel, joinDetail } from '../src/utils/lessonDates';
+import { lastSeenLabel, lessonDateLabel, lessonHeaderSeenLabel, joinDetail, lessonRowDetail } from '../src/utils/lessonDates';
 
 const today = '2026-10-22';
 test('today reads Today ✓', () => expect(lastSeenLabel(today, today)).toBe('Today ✓'));
@@ -41,4 +41,10 @@ test('joinDetail binds each dot to the next detail, keeps details whole and skip
   expect(detail).not.toMatch(/· /);
   expect(detail.split(' ')).toEqual(['Gr\u00a02', '·\u00a0isiXhosa', '·\u00a0last\u00a0seen\u00a0Mon']);
   expect(joinDetail([])).toBe('');
+});
+
+test('numeracy next steps join the seen detail and wrap only before a step', () => {
+  const detail = lessonRowDetail('last seen Mon', [], { nextSteps: ['Count objects up to 5', 'Read numbers up to 5'] });
+  expect(detail.replace(/\u00a0/g, ' ')).toBe('last seen Mon · Next: Count objects up to 5 · Read numbers up to 5');
+  expect(detail.split(' ')).toEqual(['last\u00a0seen\u00a0Mon', '·\u00a0Next:\u00a0Count\u00a0objects\u00a0up\u00a0to\u00a05', '·\u00a0Read\u00a0numbers\u00a0up\u00a0to\u00a05']);
 });
