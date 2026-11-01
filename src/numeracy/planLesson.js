@@ -1,5 +1,6 @@
 import { isGroupMastered } from '../utils/groupMastery';
-import { groupStepState, childKnows, childReadyFor, curriculumStepKeys } from './groupSteps';
+import { groupStepState, childReadyFor, curriculumStepKeys } from './groupSteps';
+import { cardReadiness, pickNumeracyActivity, compareRecency, historyThroughLessonDate, newestMatching } from './cards';
 
 /** Curriculum = { edition, skills: Skill[] }
  *  Skill = { key, label, hint, group: 'main'|'counting', slot: 'warm_up'|'activity', steps: Step[] }
@@ -24,24 +25,6 @@ import { groupStepState, childKnows, childReadyFor, curriculumStepKeys } from '.
  */
 export const NUMERACY_ENGINE_VERSION = 1;
 
-const text = (value) => typeof value === 'string' ? value : '';
-const compareRecency = (a, b) => {
-  if (a === b) return 0;
-  if (a === null) return -1;
-  if (b === null) return 1;
-  for (const key of ['date', 'createdAt', 'id']) {
-    const left = text(a[key]);
-    const right = text(b[key]);
-    if (left !== right) return left < right ? -1 : 1;
-  }
-  return 0;
-};
-const taughtItems = (entry) => Array.isArray(entry.taught) ? entry.taught : [];
-const newestMatching = (history, matches) => history.reduce((latest, entry) => (
-  taughtItems(entry).some((item) => item != null && matches(item))
-    && compareRecency(entry, latest) > 0 ? entry : latest
-), null);
-
 /** Suggest cards from group readiness, rotating skills and activities by lesson recency. */
 export function planNumeracyLesson(input) {
   const { curriculum, knownByChild, activityCardCount, lessonDate, complete } = input;
@@ -49,20 +32,12 @@ export function planNumeracyLesson(input) {
   if (presentIds.length === 0) {
     return { engine_version: NUMERACY_ENGINE_VERSION, cards: [], reason: 'no_children', readySteps: [] };
   }
-  const history = (Array.isArray(input.history) ? input.history : []).filter((entry) => (
-    typeof entry?.date === 'string' && entry.date.length > 0 && entry.date <= lessonDate
-  ));
+  const history = historyThroughLessonDate(input.history, lessonDate);
   const lastTaught = (skillKey) => newestMatching(history, (item) => (
     typeof item.step_key === 'string' && item.step_key.split('.')[0] === skillKey
   ));
   // Stable sorting retains curriculum/file order when recency keys tie.
   const rank = (skills) => [...skills].sort((a, b) => compareRecency(lastTaught(a.key), lastTaught(b.key)));
-  const pickActivity = (step, slot) => {
-    const short = slot === 'warm_up' ? step.activities.filter((a) => a.minutes <= 5) : [];
-    const candidates = short.length > 0 ? short : step.activities;
-    const lastDone = (name) => newestMatching(history, (item) => item.step_key === step.key && item.activity === name);
-    return [...candidates].sort((a, b) => compareRecency(lastDone(a.name), lastDone(b.name)))[0].name;
-  };
   const stepKeys = curriculumStepKeys(curriculum);
   const hasReadyStep = (skill) => readySteps.includes(groupStepBySkill.get(skill.key));
   const warmSkills = curriculum.skills.filter((skill) => skill.slot === 'warm_up');
@@ -77,18 +52,11 @@ export function planNumeracyLesson(input) {
     ? reviewSteps(reviewWarm).sort((a, b) => b.size - a.size)[0].key
     : null;
   const makeCard = (skill, stepKey) => {
-    const ordered = [...skill.steps].sort((a, b) => a.size - b.size);
-    const index = ordered.findIndex((step) => step.key === stepKey);
-    const step = ordered[index];
-    const readyIds = readyIdsFor(step);
     return {
       slot: skill.slot,
-      step_key: step.key,
-      activity: pickActivity(step, skill.slot),
-      readyCount: readyIds.length,
-      presentCount: presentIds.length,
-      needHelp: presentIds.filter((id) => !readyIds.includes(id)),
-      canHelp: presentIds.filter((id) => childKnows(knownByChild, id, step.key)),
+      step_key: stepKey,
+      activity: pickNumeracyActivity({ curriculum, history, lessonDate, stepKey, slot: skill.slot }),
+      ...cardReadiness({ curriculum, presentChildIds: presentIds, knownByChild, stepKey }),
     };
   };
   const activityCards = rank(curriculum.skills.filter((skill) => skill.slot === 'activity' && hasReadyStep(skill)))
