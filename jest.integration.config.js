@@ -19,6 +19,7 @@ module.exports = {
     '<rootDir>/__tests__/LessonPickerScreen.test.js',
     '<rootDir>/__tests__/lessonDraftController.test.js',
     '<rootDir>/__tests__/lessonSave.test.js',
+    '<rootDir>/__tests__/numeracyLessonSave.test.js',
     '<rootDir>/__tests__/lessonInputs.test.js',
     '<rootDir>/__tests__/letterEvidenceYear.test.js',
     '<rootDir>/__tests__/LetterMasteryPanel.test.js',
