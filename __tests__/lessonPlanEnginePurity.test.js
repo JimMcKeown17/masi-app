@@ -6,6 +6,7 @@ import traverse from '@babel/traverse';
 const ROOT = path.resolve(__dirname, '..');
 const ENGINE = path.join(ROOT, 'src/lessonPlan/engine');
 const ALLOWED = new Set(['src/utils/decodability', 'src/constants/literacyConstants', 'src/utils/groupMastery']);
+const ENGINE_RULES = { root: 'src/lessonPlan/engine/', allowed: ALLOWED };
 const files = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
   const f = path.join(dir, e.name);
   return e.isDirectory() ? files(f) : f.endsWith('.js') ? [f] : [];
@@ -15,13 +16,13 @@ const target = (file, source) => path.relative(ROOT, path.resolve(path.dirname(f
 const isMember = (node, obj, prop) => node?.type === 'MemberExpression'
   && node.object.name === obj && node.property.name === prop;
 
-const auditEngineSource = (source, file) => {
+const auditEngineSource = (source, file, rules = ENGINE_RULES) => {
   const violations = [];
   const fail = (node, why) => violations.push(`${path.relative(ROOT, file)}:${node.loc.start.line}: ${why}`);
   const checkImport = (node, source) => {
     if (!source.startsWith('.')) return fail(node, `package import ${source}`);
     const t = target(file, source);
-    if (!t.startsWith('src/lessonPlan/engine/') && !ALLOWED.has(t)) fail(node, `import ${t}`);
+    if (!t.startsWith(rules.root) && !rules.allowed.has(t)) fail(node, `import ${t}`);
   };
   traverse(parse(source, { sourceType: 'module' }), {
     ImportDeclaration({ node }) { checkImport(node, node.source.value); },
@@ -61,5 +62,12 @@ test('the guard allows date arithmetic on input strings', () => {
 test('engine files are pure (spec §7.3)', () => {
   const violations = [...files(ENGINE), path.join(ROOT, 'src/utils/groupMastery.js')]
     .flatMap((f) => auditEngineSource(fs.readFileSync(f, 'utf8'), f));
+  expect(violations).toEqual([]);
+});
+
+test('numeracy files are pure', () => {
+  const rules = { root: 'src/numeracy/', allowed: new Set(['src/utils/groupMastery']) };
+  const violations = files(path.join(ROOT, 'src/numeracy'))
+    .flatMap((f) => auditEngineSource(fs.readFileSync(f, 'utf8'), f, rules));
   expect(violations).toEqual([]);
 });
