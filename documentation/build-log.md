@@ -7942,3 +7942,57 @@ checks out; partner approval skipped for now.
   re-pinned to `6f69090dbc90acf86c21fc7b794e353adc26fcf37ed6afdae24737f94c6f8731`;
   `npm run test:content` 21 / 21; EGMA, Number Card and Battery Jest suites 6 / 256 passed;
   `node scripts/number-card.cjs masi-egma-en-2026-1-draft` left the card unchanged.
+
+### 2026-10-31 — Numeracy: Number tracker, lesson plan and curriculum design (`docs/numeracy-tracker-design`)
+
+**What.** A brainstorm with Jim produced the approved design
+`docs/superpowers/specs/2026-10-31-numeracy-tracker-and-lessons-design.md` and a draft curriculum,
+`docs/numeracy/curriculum-draft-2026.1.{md,json}`. The curriculum has 37 steps across 10 maths
+skills, written for the partner to review. Docs only: no code, migrations or releases.
+
+**Inputs.**
+- The partner's Grade 1 weeks 1–4 (all within "Numbers 1 to 5"), Masi's paper Numeracy Skill
+  Tracker, and the RTI EGMA Toolkit (2014).
+- A background research workflow, with an adversarial verify pass, covering:
+  - the letter tracker and lesson planner on main (32 claims checked, none load-bearing wrong);
+  - EGMA against the WelaPLUS engine (47 checked);
+  - TaRL, CAPS and Wright prior art.
+
+**Decisions (Jim, 2026-10-31).**
+- Skill ladders: each skill climbs its own number steps.
+- Mastery is EGMA evidence or an EA tick, as for letters.
+- The child tracker is compact rows, with a group Wrap up after each lesson.
+- A simple tick, made meaningful by three fixed "Tick when" questions per step.
+- Every skill gets regular turns (the group skill taught least recently is suggested first), under
+  the three order rules.
+- No teaching jargon on EA screens.
+- No lesson-shape setting until a mixed-versus-focused comparison is actually scheduled. Then store it
+  per EA, because EAs make their own groups.
+- The partner edits a Google Doc; the JSON is the source.
+- Numeracy is not in November's field retest. It is trialled on test tracks in December.
+
+**Review.**
+- Builder check (two cold readers). Answers written into the spec:
+  - a fourth order rule (count aloud before skip counting);
+  - one activity per card, taken in turn;
+  - EGMA evidence across two Questions, with Core addition and subtraction feeding only "up to 20";
+  - a banned-word check in the verify script.
+- Check-solution review. Dropped, with Jim's agreement:
+  - `groups.lesson_shape`;
+  - `chosen_by`, which can be worked out from data already saved;
+  - "None of these yet" and `tracker_check`.
+
+  The EGMA-to-step mapping moved from the content file to code.
+
+**Curriculum draft.**
+- Made by a writer and a reviewer per skill, then a consistency pass.
+- A script verified it: 37 steps, `comes_after` matching the four rules, three tick items on every
+  step, every activity 4–8 minutes, no banned words.
+- All 75 tick answers were checked for arithmetic and range.
+- Of the 108 activities, 12 are the partner's as written, 91 adapted and 5 new.
+- Correction: the consistency pass gave Skip count an extra `read_numbers` prerequisite. It was
+  normalised to rule 4.
+
+**Dependency found.** The EGMA host gating (`programmeSubject`, the maths-only screens) lives on
+`feat/egma-maths-assessment`. That branch is unpushed and has no PR. Numeracy screens build on
+main after it merges. Data, planner and content can start now.
