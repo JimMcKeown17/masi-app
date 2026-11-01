@@ -1,3 +1,4 @@
+import { stepTitle } from '../numeracyLesson/copy';
 import { sortLettersByOrder } from './letterOrders';
 import { formatNameList } from './childNames';
 import { toLocalDateString } from './localDate';
@@ -18,6 +19,11 @@ export function buildSessionCompleteParams({ selectedChildren, selectedLetters, 
   };
 }
 
+export function buildNumeracyCompleteParams({ selectedChildren, taught, curriculum, sessionDateKey }) {
+  return { childCount: selectedChildren.length, childNames: selectedChildren.map(child => child.first_name || 'Child'),
+    steps: [...new Set(taught.map(card => card.step_key))].map(key => stepTitle(curriculum, key)), sessionDate: sessionDateKey };
+}
+
 export function describeCapturedPill(params, { isToday }) {
   const { childCount, sessionDate } = params;
   if (typeof childCount !== 'number' || !(childCount > 0)) {
@@ -33,7 +39,7 @@ export function describeCapturedPill(params, { isToday }) {
   return { text, spoken: text };
 }
 
-export function buildReceiptRows({ childNames, letters, readingLevel }) {
+export function buildReceiptRows({ childNames, letters, readingLevel, steps }) {
   const rows = [];
   if (childNames?.length) {
     rows.push({
@@ -41,6 +47,7 @@ export function buildReceiptRows({ childNames, letters, readingLevel }) {
       accessibilityLabel: 'Children: ' + formatNameList(childNames, { spoken: true }),
     });
   }
+  if (steps?.length) rows.push({ key: 'steps', label: 'Taught', value: steps.join(' · '), accessibilityLabel: 'Taught: ' + steps.join(' · ') });
   if (letters?.length) {
     rows.push({
       key: 'letters', label: 'Letters', value: letters,

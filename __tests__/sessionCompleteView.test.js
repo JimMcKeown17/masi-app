@@ -144,36 +144,36 @@ test('isToday uses the Johannesburg day under Auckland', () => {
 });
 
 describe('announcements', () => {
-  test('met today', () => {
+test('met today', () => {
     expect(view(goal(3)).announcement).toBe('Session captured. Saved for 2 children. 3 of 3 sessions today. Daily target reached.');
   });
-  test('below today', () => {
+test('below today', () => {
     expect(view(goal(2)).announcement).toBe('Session captured. Saved for 2 children. 2 of 3 sessions today. One more pair reaches your target.');
   });
-  test('back-dated', () => {
+test('back-dated', () => {
     expect(view(goal(3), { now: new Date('2026-10-14T09:00:00+02:00') }).announcement)
       .toBe('Session captured. Saved for 2 children, for Tuesday 13 October. 3 of 3 sessions today. Daily target reached.');
   });
-  test('fallback pill has no doubled full stop', () => {
+test('fallback pill has no doubled full stop', () => {
     expect(view(goal(2), { params: { ...params, childCount: undefined } }).announcement)
       .toBe('Session captured. Nice work — it’s saved. 2 of 3 sessions today. One more pair reaches your target.');
   });
-  test('zero sessions uses signed-in copy', () => {
+test('zero sessions uses signed-in copy', () => {
     expect(view(goal(0)).announcement)
       .toBe('Session captured. Saved for 2 children. No sessions yet today. Record your first session.');
   });
 });
 
 describe('captured pill', () => {
-  test('one child today', () => {
+test('one child today', () => {
     expect(describeCapturedPill({ childCount: 1, sessionDate: '2026-10-13' }, { isToday: true }))
       .toEqual({ text: 'Saved for 1 child', spoken: 'Saved for 1 child' });
   });
-  test('back-dated date uses the long spoken form', () => {
+test('back-dated date uses the long spoken form', () => {
     expect(describeCapturedPill({ childCount: 2, sessionDate: '2026-10-13' }, { isToday: false }))
       .toEqual({ text: 'Saved for 2 children · Tue 13 Oct', spoken: 'Saved for 2 children, for Tuesday 13 October' });
   });
-  test('missing date does not add a suffix', () => {
+test('missing date does not add a suffix', () => {
     expect(describeCapturedPill({ childCount: 2 }, { isToday: false }))
       .toEqual({ text: 'Saved for 2 children', spoken: 'Saved for 2 children' });
   });
@@ -184,7 +184,7 @@ describe('captured pill', () => {
 });
 
 describe('receipt', () => {
-  test('children, supplied letters and reading level have spoken labels', () => {
+test('children, supplied letters and reading level have spoken labels', () => {
     expect(buildReceiptRows({ childNames: ['Anelisa', 'Athenkosi'], letters: ['s', 'm', 'n', 'l'], readingLevel: '3 Letter Blends' }))
       .toEqual([
         { key: 'children', label: 'Children', value: 'Anelisa & Athenkosi', accessibilityLabel: 'Children: Anelisa and Athenkosi' },
@@ -192,11 +192,11 @@ describe('receipt', () => {
         { key: 'readingLevel', label: 'Reading level', value: '3 Letter Blends', accessibilityLabel: 'Reading level: 3 Letter Blends' },
       ]);
   });
-  test('omits absent and empty rows', () => {
+test('omits absent and empty rows', () => {
     expect(buildReceiptRows({ childNames: [], letters: undefined, readingLevel: null })).toEqual([]);
     expect(buildReceiptRows({ childNames: [], letters: [], readingLevel: '' })).toEqual([]);
   });
-  test('only letters gives one row', () => {
+test('only letters gives one row', () => {
     expect(buildReceiptRows({ letters: ['s', 'm'] })).toEqual([
       { key: 'letters', label: 'Letters', value: ['s', 'm'], accessibilityLabel: 'Letters: S, M' },
     ]);
@@ -262,4 +262,28 @@ test('receipt params with no teaching order keep selection order', () => {
   expect(buildReceiptRows(params)[0]).toEqual({
     key: 'letters', label: 'Letters', value: ['d', 's', 'n', 'a'], accessibilityLabel: 'Letters: D, S, N, A',
   });
+});
+
+test('literacy Session complete receipt is unchanged', () => {
+  const params = buildSessionCompleteParams({
+    selectedChildren: [{ first_name: 'Sipho' }], selectedLetters: ['a'], sessionReadingLevel: null, sessionDateKey: '2026-11-01',
+  });
+  expect(params).not.toHaveProperty('steps');
+  expect(buildReceiptRows(params)).toEqual([
+    { key: 'children', label: 'Children', value: 'Sipho', accessibilityLabel: 'Children: Sipho' },
+    { key: 'letters', label: 'Letters', value: ['a'], accessibilityLabel: 'Letters: A' },
+  ]);
+});
+
+test('numeracy receipt keeps distinct taught titles in order', () => {
+  const { buildNumeracyCompleteParams } = require('../src/utils/sessionCompleteView');
+  const curriculum = require('../content/numeracy-curriculum').getCurriculum();
+  const params = buildNumeracyCompleteParams({
+    selectedChildren: [], taught: [{ step_key: 'add.5' }, { step_key: 'count.5' }, { step_key: 'add.5' }],
+    curriculum, sessionDateKey: '2026-11-01',
+  });
+  expect(params.steps).toEqual(['Add · up to 5', 'Count objects · up to 5']);
+  const value = params.steps.join(' · ');
+  expect(buildReceiptRows(params)).toEqual([{ key: 'steps', label: 'Taught', value, accessibilityLabel: `Taught: ${value}` }]);
+  expect(buildReceiptRows({ ...params, steps: [] })).toEqual([]);
 });

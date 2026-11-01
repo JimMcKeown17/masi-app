@@ -33,4 +33,8 @@ describe('domain text input audit', () => {
     expect(readSource('src/screens/main/ProfileScreen.js')).not.toContain('NO_TEXT_SUGGESTIONS');
     expect(readSource('src/components/profile/ChangePasswordSheet.js')).not.toContain('NO_TEXT_SUGGESTIONS');
   });
+
+  test('numeracy session notes disable keyboard suggestions', () => {
+    expect(readSource('src/screens/numeracy/NumeracyWrapUpScreen.js')).toMatch(/placeholder="Add session notes…"\s+\{\.\.\.NO_TEXT_SUGGESTIONS\}/);
+  });
 });

@@ -49,6 +49,7 @@ import AssessmentResultsScreen from '../screens/assessments/AssessmentResultsScr
 import AssessmentHistoryScreen from '../screens/assessments/AssessmentHistoryScreen';
 import AssessmentDetailScreen from '../screens/assessments/AssessmentDetailScreen';
 import NumeracyLessonScreen from '../screens/numeracy/NumeracyLessonScreen';
+import NumeracyWrapUpScreen from '../screens/numeracy/NumeracyWrapUpScreen';
 import HowToTeachScreen from '../screens/numeracy/HowToTeachScreen';
 import NumberTrackerScreen from '../screens/numeracy/NumberTrackerScreen';
 import LetterTrackerScreen from '../screens/assessments/LetterTrackerScreen';
@@ -256,6 +257,7 @@ export function MainNavigator() {
         }}
       />
       <Stack.Screen name="NumeracyLesson" component={NumeracyLessonScreen} options={{ title: '' }} />
+      <Stack.Screen name="NumeracyWrapUp" component={NumeracyWrapUpScreen} options={{ title: 'Wrap up', headerLeftIcon: 'back' }} />
       <Stack.Screen name="HowToTeach" component={HowToTeachScreen} options={{ title: 'How to teach it' }} />
       <Stack.Screen
         name="Lesson"
