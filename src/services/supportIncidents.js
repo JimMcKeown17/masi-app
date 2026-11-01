@@ -108,6 +108,7 @@ export const observeStandingConditions = async handle => {
     (scope >= 'session_history_pull:' and scope < 'session_history_pull;') or
     (scope >= 'assessment_history_pull:' and scope < 'assessment_history_pull;') or
     (scope >= 'battery_run_history_pull:' and scope < 'battery_run_history_pull;') or
+    (scope >= 'skill_mastery_pull:' and scope < 'skill_mastery_pull;') or
     (scope >= 'letter_mastery_pull:' and scope < 'letter_mastery_pull;')`);
   const conditions = terminal.map(row => ({ kind: 'upload_terminal',
     parts: [row.table_name, row.record_id, row.operation, row.created_at, row.error_class, row.error_code], payload: terminalPayload(row) }));

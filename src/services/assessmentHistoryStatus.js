@@ -2,18 +2,19 @@ import { useSyncExternalStore } from 'react';
 import { isStaleActorError } from '../session/staleActor';
 import {
   createAssessmentHistoryStates, runBatteryRunHistoryPull, runAssessmentHistoryPull,
-  runLetterMasteryHistoryPull, batteryRunHistoryScope, assessmentHistoryScope, letterMasteryHistoryScope,
+  runLetterMasteryHistoryPull, runSkillMasteryHistoryPull, skillMasteryHistoryScope, batteryRunHistoryScope, assessmentHistoryScope, letterMasteryHistoryScope,
 } from './assessmentHistoryPull';
 import { resetHistoryWalkState } from './historyWalk';
 import { resolveDatabase } from '../db/repositories/repositoryRuntime';
 import { getActiveAcademicYear, getActiveProgrammeId } from '../db/repositories/domainRepositoryUtils';
 import { createSyncStateRepository } from '../db/repositories/syncStateRepository';
 
-const emptyResults = () => ({ batteryRuns: null, assessments: null, mastery: null });
+const emptyResults = () => ({ batteryRuns: null, assessments: null, mastery: null, skillMastery: null });
 const walks = [
   ['batteryRuns', runBatteryRunHistoryPull],
   ['assessments', runAssessmentHistoryPull],
   ['mastery', runLetterMasteryHistoryPull],
+  ['skillMastery', runSkillMasteryHistoryPull],
 ];
 
 export const createAssessmentHistoryStore = ({
@@ -123,14 +124,15 @@ export const createAssessmentHistoryStore = ({
     const programmeId = await getActiveProgrammeId(db, userId);
     const year = await getActiveAcademicYear(db);
     const stateRepo = repositories?.syncState || createSyncStateRepository({ database });
-    const [batteryRuns, assessments, mastery] = await Promise.all([
+    const [batteryRuns, assessments, mastery, skillMastery] = await Promise.all([
       programmeId ? stateRepo.getPullState(batteryRunHistoryScope(userId, programmeId)) : null,
       programmeId ? stateRepo.getPullState(assessmentHistoryScope(userId, programmeId)) : null,
       stateRepo.getPullState(letterMasteryHistoryScope(userId)),
+      stateRepo.getPullState(skillMasteryHistoryScope(userId)),
     ]);
     // Read-time context only: preserve durable cursors and session-history semantics.
     const withYear = state => state ? { ...state, expectedWindowStart: year?.starts_on ?? null } : null;
-    return { batteryRuns: withYear(batteryRuns), assessments: withYear(assessments), mastery };
+    return { batteryRuns: withYear(batteryRuns), assessments: withYear(assessments), mastery, skillMastery };
   };
   return { start, reset, getPullStates, getSnapshot: () => snapshot,
     subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };

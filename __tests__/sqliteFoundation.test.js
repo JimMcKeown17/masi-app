@@ -63,6 +63,7 @@ const SERVER_BACKED_TABLES = [
   'assessments',
   'assessment_items',
   'letter_mastery',
+  'skill_mastery',
 ];
 
 const expectSqliteConstraintFailure = async (operation) => {
@@ -140,7 +141,7 @@ describe('SQLite migration runner', () => {
       await runMigrations(db);
       await runMigrations(db);
 
-      expect(CURRENT_SCHEMA_VERSION).toBe(20);
+      expect(CURRENT_SCHEMA_VERSION).toBe(21);
       expect(await getUserVersion(db)).toBe(CURRENT_SCHEMA_VERSION);
       expect(await getTableNames(db)).toEqual(expect.arrayContaining([
         'schema_migrations',
@@ -206,7 +207,7 @@ describe('SQLite migration runner', () => {
     }
   });
 
-  test('creates the full clean-slate local mirror with 25 server-backed tables', async () => {
+  test('creates the full clean-slate local mirror with 26 server-backed tables', async () => {
     const db = createBetterSqliteTestDatabase();
 
     try {
@@ -214,7 +215,7 @@ describe('SQLite migration runner', () => {
 
       const tableNames = await getTableNames(db);
       expect(tableNames).toEqual(expect.arrayContaining(SERVER_BACKED_TABLES));
-      expect(tableNames.filter((name) => SERVER_BACKED_TABLES.includes(name))).toHaveLength(25);
+      expect(tableNames.filter((name) => SERVER_BACKED_TABLES.includes(name))).toHaveLength(26);
     } finally {
       await db.closeAsync();
     }
@@ -561,6 +562,7 @@ describe('SQLite debug dump', () => {
         failedOutboxRows: [],
         supportIncidents: [],
         letterMastery: [],
+        skillMastery: [],
         generatedAt: expect.any(String),
       });
     } finally {
@@ -605,6 +607,7 @@ describe('SQLite debug dump', () => {
           { version: 18, name: 'sessions_group_history_reference' },
           { version: 19, name: 'classes_letter_order_edition' },
           { version: 20, name: 'field_diagnostics' },
+          { version: 21, name: 'skill_mastery' },
         ],
         tableCounts: expect.objectContaining({
           schools: 1,
@@ -614,6 +617,7 @@ describe('SQLite debug dump', () => {
         failedOutboxRows: [],
         supportIncidents: [],
         letterMastery: [],
+        skillMastery: [],
         generatedAt: expect.any(String),
       });
       expect(new Date(dump.generatedAt).toString()).not.toBe('Invalid Date');

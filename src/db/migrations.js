@@ -999,6 +999,33 @@ create table if not exists lesson_drafts (
       create index idx_support_incident_queue_status on support_incident_queue (status, next_attempt_at, created_at);
     `,
   },
+  {
+    version: 21,
+    name: 'skill_mastery',
+    sql: `
+      create table skill_mastery (
+        id text primary key,
+        child_id text not null references children(id) on delete cascade,
+        step_key text not null check (
+          step_key glob '[a-z_]*.[0-9a-z]*'
+          and step_key not glob '*.*.*'
+          and substr(step_key, 1, instr(step_key, '.') - 1) not glob '*[^a-z_]*'
+          and substr(step_key, instr(step_key, '.') + 1) not glob '*[^0-9a-z]*'
+        ),
+        confirmed integer not null check (confirmed in (0, 1)),
+        changed_at text not null,
+        correction_id text not null,
+        changed_by text not null,
+        programme_id text,
+        created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        ${LOCAL_SYNC_COLUMNS},
+        server_changed_at text,
+        server_correction_id text
+      );
+      create unique index idx_skill_mastery_child_key on skill_mastery(child_id, step_key);
+    `,
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

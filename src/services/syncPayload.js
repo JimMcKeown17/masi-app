@@ -1,6 +1,7 @@
 import { SERVER_COLUMNS } from './syncServerColumns';
 import { toSubmitArgs } from './assessmentFamilyPayload';
 import { toSetLetterMasteryArgs } from './letterMasteryCorrection';
+import { toSetSkillMasteryArgs } from './skillMasteryCorrection';
 import { isStampedOperation } from '../db/repositories/rowVersion';
 import {
   assessmentItemDomainId,
@@ -35,6 +36,7 @@ const LEGACY_KEYS_TO_STRIP = {
 export const buildSyncPayload = (tableName, record, operation) => {
   if (tableName === 'assessments') return toSubmitArgs(record);
   if (tableName === 'letter_mastery') return toSetLetterMasteryArgs(record);
+  if (tableName === 'skill_mastery') return toSetSkillMasteryArgs(record);
   const tableLegacyKeys = LEGACY_KEYS_TO_STRIP[tableName] || [];
   const keysToStrip = new Set([...LOCAL_ONLY_KEYS_TO_STRIP, ...tableLegacyKeys]);
   if (tableName === 'battery_runs') keysToStrip.add('updated_at');

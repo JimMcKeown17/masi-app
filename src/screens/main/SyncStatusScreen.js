@@ -67,7 +67,7 @@ export default function SyncStatusScreen() {
   const { user } = useAuth();
   const { running, pageVersion, runVersion } = useSessionHistoryStatus();
   const assessmentHistory = useAssessmentHistoryStatus();
-  const [pullStates, setPullStates] = useState([null, null, null, null]);
+  const [pullStates, setPullStates] = useState([null, null, null, null, null]);
   const history = describeCombinedHistoryState({ running: running || assessmentHistory.running, pullStates });
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -75,7 +75,7 @@ export default function SyncStatusScreen() {
       services.sessionHistory.store.getPullState(user?.id),
       services.assessmentHistory.store.getPullStates(user?.id),
     ]).then(([session, states]) => {
-      if (active) setPullStates([session, states.batteryRuns, states.assessments, states.mastery]);
+      if (active) setPullStates([session, states.batteryRuns, states.assessments, states.mastery, states.skillMastery]);
     }).catch((error) => {
       console.error('Error loading history status:', error);
     });

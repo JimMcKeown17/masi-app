@@ -36,7 +36,7 @@ test('repositories, components, hooks, upload and lesson persistence never start
     expect({ file: relative, found }).toEqual({ file: relative, found: false });
   }
 });
-test('fresh starts at +1, +7 and +14 minutes make no RPC; +16 minutes makes three delta calls', async () => {
+test('fresh starts at +1, +7 and +14 minutes make no RPC; +16 minutes makes four delta calls', async () => {
   const initial = Date.parse('2026-10-21T09:00:00Z');
   let now = initial;
   const clock = jest.spyOn(Date, 'now').mockImplementation(() => now);
@@ -44,7 +44,7 @@ test('fresh starts at +1, +7 and +14 minutes make no RPC; +16 minutes makes thre
   try {
     const store = f.makeStore();
     await store.start({ userId: 'user-1' });
-    expect(f.server.calls).toHaveLength(3);
+    expect(f.server.calls).toHaveLength(4);
     f.server.calls.length = 0;
     for (const minutes of [1, 7, 14]) {
       now = initial + minutes * 60_000;
@@ -53,6 +53,6 @@ test('fresh starts at +1, +7 and +14 minutes make no RPC; +16 minutes makes thre
     }
     now = initial + 16 * 60_000;
     await store.start({ userId: 'user-1' });
-    expect(f.server.calls.map(call => call.name)).toEqual(['get_battery_run_history_page', 'get_assessment_history_page', 'get_letter_mastery_page']);
+    expect(f.server.calls.map(call => call.name)).toEqual(['get_battery_run_history_page', 'get_assessment_history_page', 'get_letter_mastery_page', 'get_skill_mastery_page']);
   } finally { clock.mockRestore(); await f.db.closeAsync(); }
 });

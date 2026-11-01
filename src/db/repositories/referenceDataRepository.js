@@ -83,6 +83,7 @@ const REFERENCE_TABLES = {
       { tableName: 'battery_runs', column: 'programme_id' },
       { tableName: 'assessments', column: 'programme_id' },
       { tableName: 'letter_mastery', column: 'programme_id' },
+      { tableName: 'skill_mastery', column: 'programme_id' },
     ],
     orderBy: 'sort_order, name',
   },

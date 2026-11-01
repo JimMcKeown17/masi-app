@@ -30,7 +30,7 @@ beforeEach(() => {
   useSessionHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0 });
   getSessionHistoryPullState.mockResolvedValue(null);
   const complete = { lastPulledAt: '2026-10-21T10:00:00Z', cursor: '{"complete":true}' };
-  getAssessmentHistoryPullStates.mockResolvedValue({ batteryRuns: complete, assessments: complete, mastery: complete });
+  getAssessmentHistoryPullStates.mockResolvedValue({ batteryRuns: complete, assessments: complete, mastery: complete, skillMastery: complete });
 });
 
 
@@ -208,7 +208,7 @@ test('complete sessions with an incomplete assessment walk do not show Up to dat
   const complete = { lastPulledAt: '2026-10-21T10:00:00Z', cursor: '{"complete":true}' };
   getSessionHistoryPullState.mockResolvedValue(complete);
   getAssessmentHistoryPullStates.mockResolvedValue({ batteryRuns: complete,
-    assessments: { updatedAt: '2026-10-21T08:00:00Z', cursor: '{"complete":false}' }, mastery: complete });
+    assessments: { updatedAt: '2026-10-21T08:00:00Z', cursor: '{"complete":false}' }, mastery: complete, skillMastery: complete });
   const screen = renderScreen();
   await screen.findByText('History not fully downloaded yet');
   expect(screen.queryByText('Up to date')).toBeNull();
@@ -216,11 +216,22 @@ test('complete sessions with an incomplete assessment walk do not show Up to dat
   expect(getAssessmentHistoryPullStates).toHaveBeenCalledWith('user-1');
 });
 
-test.each(['pageVersion', 'runVersion'])('assessment %s reloads the four History states', async version => {
+test.each(['pageVersion', 'runVersion'])('assessment %s reloads the five History states', async version => {
   mockUseOffline.mockReturnValue(offline());
   const screen = renderScreen();
   await waitFor(() => expect(getAssessmentHistoryPullStates).toHaveBeenCalledTimes(1));
   useAssessmentHistoryStatus.mockReturnValue({ running: false, pageVersion: 0, runVersion: 0, [version]: 1 });
   screen.rerender(<AllProviders><SyncStatusScreen /></AllProviders>);
   await waitFor(() => expect(getAssessmentHistoryPullStates).toHaveBeenCalledTimes(2));
+});
+
+test.each(['batteryRuns', 'assessments', 'mastery', 'skillMastery'])('History requires the %s state to be up to date', async key => {
+  mockUseOffline.mockReturnValue(offline());
+  const complete = { lastPulledAt: '2026-10-21T10:00:00Z', cursor: '{"complete":true}' };
+  getSessionHistoryPullState.mockResolvedValue(complete);
+  const states = { batteryRuns: complete, assessments: complete, mastery: complete, skillMastery: complete };
+  getAssessmentHistoryPullStates.mockResolvedValue({ ...states, [key]: { ...complete, cursor: '{"complete":false}' } });
+  const screen = renderScreen();
+  await screen.findByText('History not fully downloaded yet');
+  expect(screen.queryByText('Up to date')).toBeNull();
 });

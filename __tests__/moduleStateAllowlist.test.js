@@ -25,6 +25,8 @@ const ALLOWLIST = {
   'src/db/repositories/rowVersion.js:VERSIONED_TABLES': 'device-level fixed sync policy',
   'src/services/offlineSync.js:UPDATE_PATCH_EXCLUDED_COLUMNS': 'device-level fixed sync policy',
   'src/services/offlineSync.js:UPDATE_BY_ID_TABLES': 'device-level fixed sync policy',
+  // Built once from the bundled curriculum file; fixed step keys, never an EA's runtime data.
+  'src/db/repositories/skillMasteryRepository.js:KNOWN_STEP_KEYS': 'device-level fixed bundled curriculum',
   'src/db/migrations.js:explicitDatabaseMigrationQueues': 'per connection',
   // Both registration and lookup require NODE_ENV=test; production cannot use it.
   'src/db/repositories/repositoryRuntime.js:ambientHandleForTests': 'device-level test harness adapter; inert outside NODE_ENV=test',

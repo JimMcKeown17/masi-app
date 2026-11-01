@@ -537,6 +537,8 @@ the current-state model better than Zazi's per-session carry-forward.
 
 ### Data and lifecycle
 
+- [ ] Unify `letter_mastery` and `skill_mastery` into one mastery table (ADR 0013); revisit on a third mastery domain.
+
 - [ ] **No-location release gates:** manual clock-in/out now save without location and carry the
   reason through SQLite and the upload payload (PR #65). `20261015120000_time_entry_location_optional.sql`
   is applied to the hosted backend (its status columns are present; the Plan 3 device pass read them
@@ -796,6 +798,9 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 - [ ] Give the EA a comprehensible history/surface for what Head Office changed.
 
 ## 5. Product and UX
+
+- [ ] Numeracy group heat map (Zazi's `groupLetterProgress.js` as prior art); not needed to teach.
+- [ ] Lesson-shape comparison (mixed vs focused): a per-EA setting, assigned by EA or by school. Design it when a comparison is scheduled (numeracy spec §6.4).
 
 - [ ] **Masi's second letter order edition:** add the edition schedule in the same migration that
   widens the class edition check constraint. The first edition, `2026-10-23`, needs no schedule

@@ -135,7 +135,7 @@ The current SQLite schema is defined by `src/db/migrations.js`. It includes:
 - grouping: `groups`, `group_ea_assignments`, `grouping_versions`,
   `class_grouping_state`, `child_group_memberships`;
 - work records: `time_entries`, `sessions`, `session_attendees`, `assessments`,
-  `assessment_items`, `letter_mastery`;
+  `assessment_items`, `letter_mastery`, `skill_mastery`;
 - device and sync: `local_state`, `sync_state`, `sync_outbox`, `schema_migrations`, and local-only
   `lesson_drafts` (v17; group-history references are v18).
 

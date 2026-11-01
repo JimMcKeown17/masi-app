@@ -16,7 +16,7 @@ import { StaleActorError } from '../src/session/staleActor';
 import { createAssessmentHistoryStates } from '../src/services/assessmentHistoryPull';
 import { resetHistoryWalkState } from '../src/services/historyWalk';
 
-const B = 'get_battery_run_history_page', A = 'get_assessment_history_page', M = 'get_letter_mastery_page';
+const B = 'get_battery_run_history_page', A = 'get_assessment_history_page', M = 'get_letter_mastery_page', S = 'get_skill_mastery_page';
 describe('assessment history store', () => {
   let f, store;
   beforeEach(async () => { f = await createHistoryStoreFixture(); store = f.makeStore(); });
@@ -31,9 +31,9 @@ describe('assessment history store', () => {
     expect(f.server.calls).toEqual([]);
     references.resolve();
     await pending;
-    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M]);
-    expect(store.getSnapshot()).toEqual({ running: false, pageVersion: 3, runVersion: 1,
-      lastResults: { batteryRuns: { status: 'complete', pages: 1 }, assessments: { status: 'complete', pages: 1 }, mastery: { status: 'complete', pages: 1 } } });
+    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M, S]);
+    expect(store.getSnapshot()).toEqual({ running: false, pageVersion: 4, runVersion: 1,
+      lastResults: { batteryRuns: { status: 'complete', pages: 1 }, assessments: { status: 'complete', pages: 1 }, mastery: { status: 'complete', pages: 1 }, skillMastery: { status: 'complete', pages: 1 } } });
   });
 
   test.each(['fresh', 'previously completed'])('%s reference cache hydrates a non-null assessment tool before the history family and cursor commit', async cache => {
@@ -68,8 +68,8 @@ describe('assessment history store', () => {
     release.resolve();
     await Promise.all([first, ...waiting]);
     expect(f.referenceDataReady).toHaveBeenCalledTimes(2);
-    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M, B, A, M]);
-    expect(store.getSnapshot()).toMatchObject({ running: false, runVersion: 2, pageVersion: 6 });
+    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M, S, B, A, M, S]);
+    expect(store.getSnapshot()).toMatchObject({ running: false, runVersion: 2, pageVersion: 8 });
   });
 
   test('a class persisted mid-pass is re-walked by the trailing pass', async () => {
@@ -107,7 +107,7 @@ describe('assessment history store', () => {
     await act(async () => { aRelease.resolve(); await old; });
     expect(result.current).toBe(before);
     await act(async () => { bRelease.resolve(); await next; });
-    expect(result.current).toMatchObject({ running: false, pageVersion: 3, lastResults: {
+    expect(result.current).toMatchObject({ running: false, pageVersion: 4, lastResults: {
       batteryRuns: { status: 'complete' }, assessments: { status: 'complete' }, mastery: { status: 'complete' },
     } });
     expect((await store.getPullStates('user-1')).batteryRuns).toBeNull();
@@ -118,16 +118,16 @@ describe('assessment history store', () => {
     expect(await store.getPullStates('user-1')).toMatchObject({
       batteryRuns: { scope: 'battery_run_history_pull:user-1:' + PROGRAMME },
       assessments: { scope: 'assessment_history_pull:user-1:' + PROGRAMME },
-      mastery: { scope: 'letter_mastery_pull:user-1' },
+      mastery: { scope: 'letter_mastery_pull:user-1' }, skillMastery: { scope: 'skill_mastery_pull:user-1' },
     });
-    expect(await store.getPullStates('user-2')).toEqual({ batteryRuns: null, assessments: null, mastery: null });
+    expect(await store.getPullStates('user-2')).toEqual({ batteryRuns: null, assessments: null, mastery: null, skillMastery: null });
     await f.db.runAsync("update staff_programme_assignments set programme_id = 'programme-b' where user_id = 'user-1'");
     expect(await store.getPullStates('user-1')).toMatchObject({ batteryRuns: null, assessments: null,
-      mastery: { scope: 'letter_mastery_pull:user-1' } });
+      mastery: { scope: 'letter_mastery_pull:user-1' }, skillMastery: { scope: 'skill_mastery_pull:user-1' } });
     await f.db.runAsync("update staff_programme_assignments set ended_at = '2099-01-01'");
     expect(await store.getPullStates('user-1')).toMatchObject({ batteryRuns: null, assessments: null,
-      mastery: { scope: 'letter_mastery_pull:user-1' } });
-    expect(await store.getPullStates(null)).toEqual({ batteryRuns: null, assessments: null, mastery: null });
+      mastery: { scope: 'letter_mastery_pull:user-1' }, skillMastery: { scope: 'skill_mastery_pull:user-1' } });
+    expect(await store.getPullStates(null)).toEqual({ batteryRuns: null, assessments: null, mastery: null, skillMastery: null });
   });
 
   const changeServerYear = newFirst => {
@@ -151,7 +151,7 @@ describe('assessment history store', () => {
     await start();
     expect(observedRecovery).toBe(true);
     expect(f.refreshReferenceData).toHaveBeenCalledTimes(1);
-    expect(f.server.calls.map(call => call.name)).toEqual([B, A, B, A, M]);
+    expect(f.server.calls.map(call => call.name)).toEqual([B, A, B, A, M, S]);
     const states = await store.getPullStates('user-1');
     for (const state of [states.batteryRuns, states.assessments]) {
       expect(JSON.parse(state.cursor)).toMatchObject({ complete: true, windowStart: '2027-01-15' });
@@ -175,7 +175,7 @@ describe('assessment history store', () => {
     changeServerYear(newFirst);
     await start();
     expect(f.refreshReferenceData).toHaveBeenCalledTimes(1);
-    expect(f.server.calls.map(call => call.name)).toEqual([B, B, A, M]);
+    expect(f.server.calls.map(call => call.name)).toEqual([B, B, A, M, S]);
     expect(f.server.calls[0].args.p_academic_year_id).toBe('year-2026');
     expect(f.server.calls[1].args).toMatchObject({ p_academic_year_id: 'year-2027', p_after_id: null });
     expect(f.server.calls[2].args.p_academic_year_id).toBe('year-2027');
@@ -189,7 +189,7 @@ describe('assessment history store', () => {
     const log = jest.spyOn(console, 'warn').mockImplementation(() => {});
     await start();
     expect(f.refreshReferenceData).toHaveBeenCalledTimes(1);
-    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M]);
+    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M, S]);
     expect(store.getSnapshot().lastResults).toMatchObject({ batteryRuns: { status: 'year_mismatch' },
       assessments: { status: 'year_mismatch' }, mastery: { status: 'complete' } });
     expect((await getActiveAcademicYear(f.db)).id).toBe('year-2026');
@@ -201,14 +201,14 @@ describe('assessment history store', () => {
     f.refreshReferenceData.mockResolvedValue(undefined);
     await start();
     expect(f.refreshReferenceData).toHaveBeenCalledTimes(1);
-    expect(f.server.calls.map(call => call.name)).toEqual([B, B, A, M]);
+    expect(f.server.calls.map(call => call.name)).toEqual([B, B, A, M, S]);
     expect(store.getSnapshot().lastResults.batteryRuns.status).toBe('year_mismatch');
   });
 
   test('a disabled walk permits the other walks to run', async () => {
     f.server.disabled.add(B);
     await start();
-    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M]);
+    expect(f.server.calls.map(call => call.name)).toEqual([B, A, M, S]);
     expect(store.getSnapshot().lastResults).toMatchObject({ batteryRuns: { status: 'disabled' }, mastery: { status: 'complete' } });
   });
 
@@ -226,7 +226,7 @@ describe('assessment history store', () => {
     f.server.onRequest = () => resetHistoryWalkState(states.batteryRuns);
     await start();
     expect(f.server.calls.map(call => call.name)).toEqual([B]);
-    expect(store.getSnapshot().lastResults).toEqual({ batteryRuns: { status: 'cancelled', pages: 0 }, assessments: null, mastery: null });
+    expect(store.getSnapshot().lastResults).toEqual({ batteryRuns: { status: 'cancelled', pages: 0 }, assessments: null, mastery: null, skillMastery: null });
     expect(await f.db.getAllAsync('select * from sync_state')).toEqual([]);
   });
 

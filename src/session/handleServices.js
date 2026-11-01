@@ -11,6 +11,7 @@ import { createGroupingVersionsRepository } from '../db/repositories/groupingVer
 import { createSessionsRepository } from '../db/repositories/sessionsRepository';
 import { createAssessmentsRepository } from '../db/repositories/assessmentsRepository';
 import { createBatteryRunsRepository } from '../db/repositories/batteryRunsRepository';
+import { createSkillMasteryRepository } from '../db/repositories/skillMasteryRepository';
 import { createMasteryRepository } from '../db/repositories/masteryRepository';
 import { createTimeEntriesRepository } from '../db/repositories/timeEntriesRepository';
 import { createReferenceDataRepository, createSchoolsRepository } from '../db/repositories/referenceDataRepository';
@@ -27,7 +28,7 @@ import { createSessionHistoryStore } from '../services/sessionHistoryStatus';
 import { createAssessmentHistoryStates } from '../services/assessmentHistoryPull';
 import { createAssessmentHistoryStore } from '../services/assessmentHistoryStatus';
 import {
-  isMasteryInputsComplete, sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
+  skillMasteryCompletenessByChild, isMasteryInputsComplete, sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
 } from '../services/pullCoverage';
 import { getLatestAuthSession } from './signedInHandle';
 import { createLessonDraftController } from '../services/lessonDraftController';
@@ -49,6 +50,7 @@ export const createHandleServices = (handle) => {
     assessments: createAssessmentsRepository(options),
     batteryRuns: createBatteryRunsRepository(options),
     mastery: createMasteryRepository(options),
+    skillMastery: createSkillMasteryRepository(options),
     timeEntries: createTimeEntriesRepository(options),
     schools: createSchoolsRepository(options),
     syncOutbox: createSyncOutboxRepository(options),
@@ -147,6 +149,9 @@ export const createHandleServices = (handle) => {
     assessmentHistory: {
       start: ({ force = false } = {}) => assessmentStore.start({ userId: handle.userId, force }),
       store: assessmentStore,
+      skillMasteryCompletenessByChild: ({ childIds } = {}) => skillMasteryCompletenessByChild({
+        database: handle, userId: handle.userId, childIds,
+      }),
       masteryInputsComplete: ({ childIds } = {}) => isMasteryInputsComplete({
         database: handle, userId: handle.userId, childIds,
       }),

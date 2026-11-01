@@ -11,7 +11,7 @@ export const terminalPayload = row => {
   let wirePayload; let wirePayloadError; let serverRecordId = row.record_id;
   try {
     wirePayload = buildSyncPayload(row.table_name, typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload, row.operation);
-    serverRecordId = row.table_name === 'letter_mastery' ? null : wirePayload?.id ?? wirePayload?.p_assessment?.id ?? row.record_id;
+    serverRecordId = ['letter_mastery', 'skill_mastery'].includes(row.table_name) ? null : wirePayload?.id ?? wirePayload?.p_assessment?.id ?? row.record_id;
   } catch (error) { wirePayload = null; wirePayloadError = error.message; }
   return { table: row.table_name, operation: row.operation, recordId: row.record_id, serverRecordId,
     errorClass: row.error_class, errorCode: row.error_code, lastError: row.last_error, retryCount: row.retry_count,

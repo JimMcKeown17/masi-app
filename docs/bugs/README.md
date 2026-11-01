@@ -22,6 +22,7 @@ Sweep phone incident receipts and report what is unrecorded.
 | ID | Title | Severity | Priority | Diagnosis | Delivery | Verification | Known users | Cause confidence | Updated | Record |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 <!-- Rows are added newest first. -->
+| MA-BUG-20261101-008 | A delayed older tracker save can replace a newer owed correction after history repair and Retry | S3 (2) | P3 | CONFIRMED | FIX_PROPOSED | NOT_TESTED | 0 | 90% | 2026-11-01 | [record](records/MA-BUG-20261101-008-delayed-older-tick-replaces-owed-correction.md) |
 | MA-BUG-20261101-007 | Maths correction panel says "Change Item 5" without the sum or its current mark | S3 (2) | P3 | CONFIRMED | FIXED_IN_CODE | E2E_REPRO_CLOSED | 1 (test) | 90% | 2026-11-01 | [record](records/MA-BUG-20261101-007-maths-correction-panel-hides-which-item-and-mark.md) |
 | MA-BUG-20261101-006 | Finger flash tiles repeat the answer under the prompt | S3 (1) | P3 | CONFIRMED | FIXED_IN_CODE | E2E_REPRO_CLOSED | 1 (test) | 95% | 2026-11-01 | [record](records/MA-BUG-20261101-006-maths-finger-flash-repeats-answer.md) |
 | MA-BUG-20261101-005 | Maths number sentences and practice items break across lines | S3 (1) | P3 | CONFIRMED | FIXED_IN_CODE | E2E_REPRO_CLOSED | 1 (test) | 95% | 2026-11-01 | [record](records/MA-BUG-20261101-005-maths-number-sentences-break-across-lines.md) |

@@ -231,10 +231,11 @@ const runCases = (databaseUrl) => {
     AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_policies WHERE schemaname = 'private' AND tablename = 'history_pull_rollout')`,
   'Rollout is private, RLS enabled, and has no policies'));
   check('rollout-seed', sqlAssert(`
-    (SELECT count(*) = 3 AND bool_and(enabled) FROM private.history_pull_rollout WHERE user_id IS NULL)
+    (SELECT count(*) = 4 AND bool_and(enabled) FROM private.history_pull_rollout WHERE user_id IS NULL)
     AND private.history_pull_enabled('assessments', '${CLASS_ONLY}')
     AND private.history_pull_enabled('battery_runs', '${CLASS_ONLY}')
-    AND private.history_pull_enabled('letter_mastery', '${CLASS_ONLY}')`, 'Three enabled everyone rows'));
+    AND private.history_pull_enabled('letter_mastery', '${CLASS_ONLY}')
+    AND private.history_pull_enabled('skill_mastery', '${CLASS_ONLY}')`, 'Four enabled everyone rows'));
   check('rollout-precedence-and-default', `BEGIN;
     INSERT INTO private.history_pull_rollout (feature, user_id, enabled) VALUES ('assessments', '${CLASS_ONLY}', false);
     ${sqlAssert(`NOT private.history_pull_enabled('assessments', '${CLASS_ONLY}')
@@ -254,7 +255,7 @@ const runCases = (databaseUrl) => {
     INSERT INTO private.history_pull_rollout (feature, user_id, enabled, note)
       VALUES ('assessments', '${CLASS_ONLY}', true, 'controller enabled');
     ${migrationSql}
-    ${sqlAssert(`(SELECT count(*) = 3 FROM private.history_pull_rollout WHERE user_id IS NULL)
+    ${sqlAssert(`(SELECT count(*) = 4 FROM private.history_pull_rollout WHERE user_id IS NULL)
       AND NOT private.history_pull_enabled('assessments', '${UNRELATED}')
       AND private.history_pull_enabled('assessments', '${CLASS_ONLY}')
       AND (SELECT note = 'controller disabled' FROM private.history_pull_rollout WHERE feature = 'assessments' AND user_id IS NULL)`,

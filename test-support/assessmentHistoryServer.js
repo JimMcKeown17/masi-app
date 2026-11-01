@@ -1,4 +1,4 @@
-import { letterMasteryDomainId } from '../src/db/domainId';
+import { letterMasteryDomainId, skillMasteryDomainId } from '../src/db/domainId';
 import { compareServerTuples, serverTimestampMicros } from '../src/utils/serverTimestamps';
 import { uuid } from './assessmentHistoryFixtures';
 
@@ -9,7 +9,7 @@ export const createHistoryServer = (lists = {}) => {
     server.calls.push({ name, args });
     if (server.onRequest) await server.onRequest(name, args);
     if (server.disabled.has(name)) return { data: null, error: { code: 'MR001', message: 'rollout_disabled' } };
-    if (name !== 'get_letter_mastery_page' && args.p_academic_year_id !== server.year) {
+    if (name !== 'get_letter_mastery_page' && name !== 'get_skill_mastery_page' && args.p_academic_year_id !== server.year) {
       return { data: null, error: { code: 'MR002', message: 'academic_year_mismatch' } };
     }
     const source = server.lists[name];
@@ -40,3 +40,11 @@ export const deferred = () => {
   const promise = new Promise(done => { resolve = done; });
   return { promise, resolve };
 };
+
+export const skillMasteryRow = (childId, stepKey, at, extra = {}) => ({
+  id: skillMasteryDomainId(childId, stepKey),
+  child_id: childId, step_key: stepKey, confirmed: true,
+  changed_at: at, correction_id: uuid(900), changed_by: 'user-2', programme_id: null,
+  created_at: at, updated_at: at, child_first_name: 'Server', child_last_name: 'Child',
+  child_preferred_name: null, ...extra,
+});

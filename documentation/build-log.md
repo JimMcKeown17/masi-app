@@ -5618,6 +5618,7 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content` | PASS: `# tests 43`, `# pass 43`, `# fail 0`; exit 0. | EGRA 5 + numeracy 22 + EGMA 16. The plan's 26 predates EGMA and undercounts Task 3 by one; corrected pre-EGMA total is 27, with 43 after EGMA. The script retains all three verify files. |
 | 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run content:numeracy-doc && git diff --exit-code docs/numeracy/curriculum-draft-2026.1.md` | PASS: printed the absolute path of `docs/numeracy/curriculum-draft-2026.1.md`; no diff; exit 0. | Renderer reproduces the committed readable document byte for byte, including its single final newline; no hand edits. |
 | 2026-11-01 | `git diff --stat origin/main -- content/egra` | PASS: no output; exit 0. | EGRA unchanged. Also ran `git diff --stat origin/main -- content/egma`: no output; exit 0. |
+| 2026-11-01 | `env -u SUPABASE_ACCESS_TOKEN npm run sqlite:staging:push` (Track B worktree, isolated helper, `project_ref=segygjzpujphwvrubusm`) | PASS: applied `20261101120000_skill_mastery_current_state.sql`; verify query `true, 0, false` (switch on, no rows, anon cannot execute); advisors add only the accepted SECURITY DEFINER class for the two new RPCs. | Numeracy Track B Task 7 with Jim's go-ahead. Preconditions: only the numeracy test account assigned; pending set and dry run were exactly this migration. |
 
 ## Decision Register
 
@@ -8334,3 +8335,176 @@ Track D task.
   early; `planLesson.js` carries the same shape with those notes as line comments.
 - `planNumeracyLesson` assumes every step has at least one activity (the content verify script
   requires 2–3); a step with none would throw when picked.
+
+### 2026-11-01 — Numeracy Track B: skill_mastery data and sync (`feat/numeracy-skill-mastery`)
+
+Tasks 1–6 built the parallel numeracy tick contract. Hosted application is pending at
+Task 7. Claude ran every count below in the worktree (Codex built each task; Claude
+reviewed each diff, reran the checks and committed).
+
+**What shipped**
+
+- **Task 1 — `4194c5ce`:** server current-state table and correction receipts, deterministic
+  id, writer-or-deliverer SELECT, `set_skill_mastery`, `get_skill_mastery_page`, independent
+  history switch, child-history guard and RESTRICT child FKs. Reporting includes received
+  skill correction receipts by their writer even after another correction wins. Added the
+  disposable PostgreSQL harness, CI wiring and ADR 0013.
+- **Task 2 — `508ff9f6`:** SQLite v21 and `skillMasteryDomainId`, with phone/server UUID parity
+  and key-shape tests. Tasks 1 and 2 were rebased onto `origin/main` `297dbad3` (Track A #138)
+  before Tasks 3–6. The rebase, after #128 and Track A #138, was conflict-free.
+- **Task 3 — `412c6664`:** handle-bound `skillMasteryRepository`; curriculum-checked writes,
+  cross-EA/Programme reads, correction times and atomic acknowledgement. Fix **`078f296d`**
+  later added the `KNOWN_STEP_KEYS` module-state allowlist entry.
+- **Task 4 — `0ee9dab8`:** one correction RPC per outbox slot, acknowledgement with CAS,
+  dependency/retry classification, payload columns, export/incident wire evidence, local
+  no-history child-delete guard and Programme reference retargeting.
+- **Task 5 — `31352e69`:** shape-validated history pages, independent fourth history walk,
+  handover cleanup and coverage, per-child tick completeness, pull-failure observation and
+  the fifth combined History state on Sync status.
+- **Task 6:** contract map, domain terms, PRD work-record list, three open roadmap items
+  and this entry. No code changes.
+
+**Verification — Node 20.19.4 throughout**
+
+Every Jest command below uses `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+
+| Gate | Command / suite selection | Result |
+|---|---|---|
+| Tasks 1–2 after rebase | `npx jest __tests__/skillMastery*.test.js __tests__/sqliteFoundation.test.js __tests__/fieldDiagnosticsMigration.test.js __tests__/letterMasteryIdParity.test.js` (the skill suites present at Tasks 1–2) | 5 suites / 36 tests passed |
+| Task 3 | `npx jest __tests__/skillMasteryRepository.test.js __tests__/productionBindingStatic.test.js __tests__/handleServices.test.js __tests__/masteryRepository.test.js` | 4 suites / 91 tests passed |
+| Task 4 | `npx jest __tests__/skillMasteryCorrectionSync.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/letterMasteryRpcError.test.js __tests__/syncContractCompleteness.test.js __tests__/syncContractServerSchema.test.js __tests__/classifyErrorHardening.test.js __tests__/offlineSyncOutbox.test.js __tests__/debugExport.test.js __tests__/childrenRepository.test.js __tests__/referenceDataRepository.test.js __tests__/readSupportIncidents.test.js __tests__/sqliteFoundation.test.js` | 12 suites / 284 tests passed |
+| Task 5 | `npx jest __tests__/skillMastery*.test.js __tests__/assessmentHistoryStatus.test.js __tests__/historyPullTriggerBudget.test.js __tests__/syncStatusScreen.test.js __tests__/supportIncidentObserver.test.js __tests__/pullCoverage.test.js __tests__/handleServices.test.js __tests__/assessmentHistoryPull.test.js __tests__/letterMasteryHandover.test.js __tests__/letterMasteryHistoryPage.test.js __tests__/moduleStateAllowlist.test.js` | 16 suites / 235 tests passed |
+| Full unit suite, after Task 5 and before Task 6 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand` | 490 suites / 7,844 tests passed; exit 0 |
+| Integration suite, after Task 5 and before Task 6 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest -c jest.integration.config.js` | 101 suites / 1,414 tests passed; exit 0 |
+| Both suites rerun with Task 6's docs in the tree | same two commands | Unit 490 suites / 7,844 tests; integration 101 suites / 1,414 tests; both exit 0 |
+
+Disposable PostgreSQL 17: container `masi-numeracy-pg`, `127.0.0.1:65433`, database
+names prefixed `masi_history_rls_b2r2_`. Each command used the disposable harness environment;
+all exited 0. This is local PostgreSQL proof, separate from hosted application and devices.
+
+| Command | Result |
+|---|---|
+| `npm run verify:skill-mastery:postgres` | 31/31 cases |
+| `npm run verify:letter-mastery:postgres` | 20/20 cases |
+| `npm run verify:assessment-history:postgres` | 144/144 cases |
+| `npm run verify:reporting:postgres` | 132/132 cases, including `reporting-skill-receipts` and `reader-executable-functions` |
+| `npm run verify:history-authorization:postgres` | 31 passed checks plus 18 invalid-argument checks |
+| `npm run verify:ea-access:postgres` | 43/43 cases |
+| `npm run verify:session-group:postgres` | 36/36 cases |
+
+**Review findings and surprises**
+
+Claude reviewed each Codex diff.
+
+- Task 3's plan file list omitted `__tests__/handleServices.test.js`. Its exact repository-key
+  assertion needed `skillMastery`; fixed and committed with Task 3.
+- Task 3's module-scope `new Set` for `KNOWN_STEP_KEYS` failed the T16 inventory in
+  `moduleStateAllowlist.test.js`. Only the Task 5 full run caught it. Fix `078f296d` records
+  it as device-level fixed bundled curriculum in the allowlist.
+- Task 4 needed two pinned-list updates outside the plan's list:
+  `readSupportIncidents.test.js` server-table count 18 → 19, with `skill_mastery` excluded
+  from the resolver loop like `letter_mastery` because `RESOLVE_COLUMNS` has no correction
+  tables; and `sqliteFoundation.test.js` debug dump shape gaining `skillMastery: []`.
+- Task 4 removed the `PUSH_PENDING_TABLES` exception from `syncContractCompleteness.test.js`
+  as designed. Task 5 changed `assessmentHistoryPull.test.js`'s distinct walk-state count 3 → 4.
+- The `offlineSync.js` letter branches are byte-identical to `origin/main`.
+  `git diff origin/main -- src/services/offlineSync.js` removes only the two table-list lines:
+  the `23505` `requiresRpcAcknowledgement` list and the payload `TypeError` → `22023` list.
+  PR #128's `recordedFailure` and `truncateUtf8` changes are untouched; skill failures flow
+  through them.
+- Both server skill tables use `ON DELETE RESTRICT`: a child-delete race fails with `23503`
+  instead of erasing an acknowledged tick and receipt. Letters retain cascade and the latent
+  race. Data clean-up must delete skill rows and receipts before children. SQLite retains
+  local cascade behind its no-history guard.
+
+**Decisions and ownership**
+
+The ready-children planner rule (which children a lesson plan is ready for, using
+`skillMasteryCompletenessByChild` as `complete.ticks`) belongs to Tracks C and D. Track B
+only provides the completeness answer. Track B owns the numeracy CONTEXT terms: Maths skill,
+Step, Step key, Skill mastery and Known step. Known-step implications are domain rules here;
+no Track C implementation is claimed. Numeracy capture screens remain Track D's work.
+
+**Task 7 gate — APPLIED to `masi-app-sqlite` 2026-11-01 (Jim: "Yes to the four decisions")**
+
+Run from the Track B worktree through the isolated helper (`env -u SUPABASE_ACCESS_TOKEN`,
+because the shell's exported token was stale and returned 401; stored login worked). Every
+summary printed `project_ref=segygjzpujphwvrubusm`.
+
+- Step 1 precondition: active `numeracy` staff = one row, the test account
+  `test+numeracy@masinyusane.org` (Thandi Numeracy, assigned 2026-10-31). No field EA.
+- Step 2: `sqlite:staging:migrations` showed only `20261101120000` local-without-remote;
+  `sqlite:staging:dry-run` would push exactly `20261101120000_skill_mastery_current_state.sql`.
+- Step 3: `sqlite:staging:push` applied it.
+- Step 4: `history_pull_enabled('skill_mastery', …)` = true, `skill_mastery` rows = 0,
+  anon EXECUTE on `set_skill_mastery` = false (authenticated = true), latest migration
+  `20261101120000`. Advisors: two `authenticated_security_definer_function_executable`
+  warnings name `set_skill_mastery` and `get_skill_mastery_page`. They are the same accepted
+  class as `set_letter_mastery` and `get_letter_mastery_page` (12 such warnings in total, all
+  RPCs that check the caller inside); no other warning names a `skill_mastery` object.
+
+**Task 6 checks performed in this session**
+
+- Step 5: `rg -n "skill_mastery|skillMastery|Skill mastery" documentation/rls-sync-contract-map.md CONTEXT.md PRD.md documentation/ROADMAP.md` checked the standing-doc placements.
+  Added function and test names were checked with `rg -l` across `src/`, `supabase/`,
+  `scripts/`, `__tests__/`, `test-support/` and `docs/`; file paths were also checked against
+  the file inventory and relative links resolved from their document. No dangling new
+  implementation references. `groupLetterProgress.js` is explicitly Zazi prior art, cited
+  by the approved numeracy spec, not a Masi implementation claim. `PUSH_PENDING_TABLES`
+  describes a removed historical exception, not a current symbol.
+- `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/assessmentItemDomainId.contract.test.js`:
+  **1 suite / 5 tests passed, exit 0**.
+- `git diff --check`: passed. Only the five authorized documentation files changed.
+  No hosted commands and no code changes.
+
+**Post-build Codex adversarial review (build round 2), review round 1 (gpt-6-astra, whole branch against `origin/main` 297dbad3)**
+
+- Verdict needs-attention, one high finding: **real, fixed**. `setSkillMastery` guarded the
+  single slot with the displayed row's `changed_at`. After a terminal 42501, a history page
+  repairs the row to an older accepted tick while the outbox keeps the refused newer payload;
+  Retry plus a transport failure re-owes that payload as `failed`. A delayed older save
+  (lesson saves pass `changedAt: change.madeAt`) then passed the guard and replaced the slot,
+  so the newer un-confirm and its correction id never reached the server. Reproduced on real
+  SQLite with the production repository, `retryFailedItem`, `syncAll` and `saveHistoryPage`.
+  Fix: the existing keyed read also selects the owed slot payload's `changed_at`, and the guard
+  uses the later of the two (same clamp to now). Regression:
+  `skillMasteryCorrectionSync.test.js` "a delayed older save never replaces a newer owed
+  correction that history repair hid from the row" (RED before, GREEN after).
+- The letter repository on main has the identical guard; a throwaway probe of the same
+  sequence against `masteryRepository` lost Tuesday's correction too. Recorded as
+  MA-BUG-20261101-008 (letter fix proposed, not applied here: it is outside Track B and needs
+  Jim's go-ahead). The skill copy now differs from the letter mirror by this guard only.
+- Verification after the fix (Node 20.19.4): unit `npm test -- --runInBand` **490 suites /
+  7,845 tests passed**; integration `npx jest -c jest.integration.config.js` **101 suites /
+  1,415 tests passed**; PostgreSQL 17 harnesses (masi-numeracy-pg, databases prefixed
+  `masi_history_rls_b2r2_`) all exit 0: skill-mastery 31/31, letter-mastery 20/20,
+  assessment-history 144/144, reporting 132/132, history-authorization, ea-access, session-group 36/36.
+
+**Post-build Codex adversarial review, review round 2 (gpt-6-astra, at 5ed5eff8; hard cap reached)**
+
+- [high] The round-1 guard joined the outbox through the row, so it missed an owed slot with no
+  row: terminal 42501, history repair to an older tick, handover cleanup deletes that synced row
+  (its terminal slot stays, as the letter section documents), reassignment, Retry, then a delayed
+  older save replaced the slot. **Real, fixed**: the keyed read joins `sync_outbox` by the
+  deterministic record id; when the guard keeps a slot that has no row, `setSkillMastery`
+  returns null. Regression: "the owed correction still guards the slot after handover deleted
+  its repaired row" (RED on 5ed5eff8, GREEN after). Folded into MA-BUG-20261101-008.
+- Context found while fixing: `lessonSave` already skips any tap older than
+  `getCorrectionTimes`, which unions every outbox payload whatever its status or row, and
+  `LetterMasteryPanel` saves with now. So neither variant is reachable through today's letter
+  callers; the repository guard is the second line of defence. MA-BUG-20261101-008 lowered to
+  S3 (2), P3. Maths callers (Tracks C/D) should mirror lessonSave's pre-filter with
+  `getSkillCorrectionTimes`.
+- [medium] A history page fetched before handover and saved after it can re-insert a removed
+  tick. **Rejected as a recorded known risk**: the letter mastery page-apply contract
+  ("Page apply — mastery and handover") already accepts that a pre-handover page saved later
+  can leave a hidden row locally; readers stay current-delivery-scoped and lost coverage forces
+  a re-walk on return. The skill page merge is identical by design, and it is a timing race
+  (round-cap rule: record, do not add machinery).
+- Verification after the round-2 fix (Node 20.19.4): unit **490 suites / 7,846 tests passed**;
+  integration **101 suites / 1,416 tests passed**; doc-reading suites
+  (`assessmentItemDomainId.contract`, `readSupportIncidents`) rerun after the doc edits, 2 / 91
+  passed; the seven PostgreSQL harnesses all exit 0 (skill-mastery 31/31, letter-mastery 20/20,
+  assessment-history 144/144, reporting 132/132, history-authorization, ea-access,
+  session-group 36/36). Task 7 is still PENDING.
