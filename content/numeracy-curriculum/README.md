@@ -90,7 +90,8 @@ metadata.
 The banned words are “counting on” / “count on”, “counting all” / “count all”,
 “subitise” / “subitize” and their endings, “number bond(s)”, “rung(s)”,
 “ladder(s)”, “band(s)”, and “strategy” and its endings (including “strategies”).
-Matching ignores case and respects word boundaries, so ordinary words such as
+Phrases match across any spacing or a hyphen. Matching ignores case and respects
+word boundaries, so ordinary words such as
 “husband”, “abandon” and “bandage” are allowed. “Rubber band” in `needs` would
 be rejected: write “elastic”. Partner notes may still use these terms.
 
@@ -142,7 +143,8 @@ leave no loops, and preserve the four starting steps.
 
 Tick questions use `a + b` for Add, `a take away b` for Take away, and
 `I have N. You see M.` for Number pairs (for example, `I have 5. You see 2.`).
-The verifier reads the first integer in the expected answer and checks the
+The expected answer must start with a whole nonnegative number; any words after
+it are allowed. Question numbers must be whole numbers. The verifier checks the
 sum or difference. Number pairs must make the step's size. Every integer in
 each question and expected answer must be no bigger than the step's size,
 including tick questions for the other skills. Keep these wording patterns

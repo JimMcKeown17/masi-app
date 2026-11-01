@@ -23,7 +23,7 @@ const SKILLS = [
 ];
 const FROZEN_EDITIONS = Object.freeze({});
 const ORDER_OVERRIDES = Object.freeze({});
-const BANNED_WORDS = [/\bcount(?:ing)? on\b/i, /\bcount(?:ing)? all\b/i, /\bsubiti[sz]\w*/i, /\bnumber bonds?\b/i,
+const BANNED_WORDS = [/\bcount(?:ing)?[\s-]+on\b/i, /\bcount(?:ing)?[\s-]+all\b/i, /\bsubiti[sz]\w*/i, /\bnumber[\s-]+bonds?\b/i,
   /\brungs?\b/i, /\bladders?\b/i, /\bbands?\b/i, /\bstrateg\w*/i];
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -134,9 +134,13 @@ function checkTicks(curriculum) {
           }
         }
         if (typeof ask !== 'string' || typeof answer !== 'string') continue;
-        const x = answer.match(/\d+/)?.[0];
+        const x = answer.match(/^\d+(?=\s|$)/)?.[0];
+        if (['add', 'subtract', 'number_pairs'].includes(step.skill) && x === undefined) {
+          report('expected answer must start with a whole number');
+          continue;
+        }
         if (step.skill === 'add') {
-          const match = ask.match(/(\d+)\s*\+\s*(\d+)/);
+          const match = ask.match(/(?<![\d.,-])(\d+)(?![\d.,-])\s*\+\s*(?<![\d.,-])(\d+)(?![\d.,-])/);
           if (!match) report('can\'t find a sum like "2 + 3"');
           else {
             const [, a, b] = match.map(Number);
@@ -144,7 +148,7 @@ function checkTicks(curriculum) {
           }
         }
         if (step.skill === 'subtract') {
-          const match = ask.match(/(\d+)\s+take away\s+(\d+)/);
+          const match = ask.match(/(?<![\d.,-])(\d+)(?![\d.,-])\s+take away\s+(?<![\d.,-])(\d+)(?![\d.,-])/);
           if (!match) report('can\'t find a sum like "5 take away 2"');
           else {
             const [, a, b] = match.map(Number);
@@ -152,7 +156,7 @@ function checkTicks(curriculum) {
           }
         }
         if (step.skill === 'number_pairs') {
-          const match = ask.match(/I have (\d+)\b[\s\S]*?\bsee (\d+)/i);
+          const match = ask.match(/I have (?<![\d.,-])(\d+)(?![\d,-]|\.\d)[\s\S]*?\bsee (?<![\d.,-])(\d+)(?![\d,-]|\.\d)/i);
           if (!match) report('can\'t find "I have 5. You see 2."');
           else {
             const [, total, seen] = match.map(Number);
@@ -374,7 +378,8 @@ test('getStep finds a step with its skill, size, label and order', () => {
   const c = getCurriculum();
   const add10 = getStep(c, 'add.10');
   assert.deepEqual([add10.key, add10.skill, add10.label, add10.size], ['add.10', 'add', 'up to 10', 10]);
-  assert.deepEqual(add10.comes_after, ['add.5', 'count.10']);
+  assert.deepEqual(sorted(add10.comes_after),
+    sorted(applyOrderOverride(expectedComesAfter(c, add10), ORDER_OVERRIDES['add.10'])));
   assert.deepEqual([getStep(c, 'skip_count.5s').size, getStep(c, 'skip_count.5s').label], [50, '5s to 50']);
   assert.equal(getStep(c, 'number_pairs.10').label, 'pairs that make 10');
   assert.equal(getStep(c, 'add.5').tick_when.ask[0], '2 + 3');
@@ -399,8 +404,8 @@ test('content is deep-frozen for every reader', () => {
   assert.equal(getStep(getCurriculum(), 'add.5').tick_when.ask[0], '2 + 3');
 });
 
-function broken(mutate) {
-  const c = structuredClone(getCurriculum()); mutate(c); return checkCurriculum(c);
+function broken(mutate, options) {
+  const c = structuredClone(getCurriculum()); mutate(c); return checkCurriculum(c, options);
 }
 
 test('every bundled edition passes every check', () => {
@@ -479,6 +484,16 @@ test('plain words: banned words are caught in every EA-facing field, whatever th
   for (const [mutate, pattern] of cases) assert.match(broken(mutate).join('\n'), pattern);
 });
 
+test('plain words: banned phrases are caught across any spacing or a hyphen', () => {
+  for (const phrase of ['count on', 'counting on', 'count all', 'counting all', 'number bond', 'number bonds']) {
+    for (const separator of ['\u00a0', '  ', '\t', '\n', '-']) {
+      const text = phrase.replace(' ', separator);
+      const errors = broken(c => { getStep(c, 'add.10').goal = `Children use ${text} today.`; });
+      assert.ok(errors.includes(`add.10 goal: uses the banned word "${text}"`), JSON.stringify(text));
+    }
+  }
+});
+
 test('plain words: ordinary words that contain a banned word, and partner notes, are allowed', () => {
   const errors = broken(c => {
     const t = c.skills[5].steps[1];
@@ -508,8 +523,8 @@ test('order: the expected arrows follow the four rules', () => {
 
 test('order: a missing or extra arrow is caught unless an override records it', () => {
   const drop = c => { c.skills[5].steps[1].comes_after = ['add.5']; };
-  assert.match(broken(drop).join('\n'), /add\.10.*missing "count\.10"/);
-  assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('compare.5'); }).join('\n'), /add\.10.*unexpected "compare\.5"/);
+  assert.match(broken(drop, { orderOverrides: {} }).join('\n'), /add\.10.*missing "count\.10"/);
+  assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('compare.5'); }, { orderOverrides: {} }).join('\n'), /add\.10.*unexpected "compare\.5"/);
   const c = structuredClone(getCurriculum()); drop(c);
   assert.deepEqual(checkCurriculum(c, { orderOverrides: { 'add.10': { remove: ['count.10'] } } }), []);
 });
@@ -531,7 +546,7 @@ test('order: the documented partner edit (JSON change plus override entry) passe
 });
 
 test('order: an unknown key or a loop is caught', () => {
-  assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('add.7'); }).join('\n'), /add\.10.*"add\.7" is not a step/);
+  assert.match(broken(c => { c.skills[5].steps[1].comes_after.push('add.7'); }, { orderOverrides: {} }).join('\n'), /add\.10.*"add\.7" is not a step/);
   const c = structuredClone(getCurriculum());
   c.skills[5].steps[0].comes_after.push('add.10');
   assert.match(checkCurriculum(c, { orderOverrides: { 'add.5': { add: ['add.10'] } } }).join('\n'), /loop: .*add\.5.*add\.10/);
@@ -552,6 +567,47 @@ test('ticks: the sums are checked for add, take away and number pairs', () => {
   assert.match(broken(c => { c.skills[7].steps[1].tick_when.expected[2] = '7'; }).join('\n'), /number_pairs\.10 tick item 3: 10 with 2 seen leaves 8, not 7/);
   assert.match(broken(c => { c.skills[7].steps[1].tick_when.ask[0] = 'I have 5. You see 3. How many are under the paper?'; }).join('\n'), /number_pairs\.10 tick item 1: must make 10/);
   assert.match(broken(c => { c.skills[5].steps[0].tick_when.ask[0] = 'two plus three'; }).join('\n'), /add\.5 tick item 1: can't find a sum like "2 \+ 3"/);
+});
+
+test('ticks: decimals, signs and glued digits are not read as whole numbers', () => {
+  for (const [key, ask, answer] of [
+    ['add.5', '2 + 3', '5'],
+    ['subtract.5', '5 take away 0', '5'],
+    ['number_pairs.5', 'I have 5. You see 0. How many are hidden?', '5'],
+  ]) {
+    for (const malformed of ['5.1', '-5', '5,1', 'about 5']) {
+      const errors = broken(c => {
+        const tick = getStep(c, key).tick_when;
+        tick.ask[0] = ask; tick.expected[0] = malformed;
+      });
+      assert.ok(errors.includes(`${key} tick item 1: expected answer must start with a whole number`),
+        `${key}: ${malformed}: ${errors.join('\n')}`);
+    }
+    assert.deepEqual(broken(c => {
+      const tick = getStep(c, key).tick_when;
+      tick.ask[0] = ask; tick.expected[0] = `${answer} (five)`;
+    }), []);
+  }
+  const cases = [
+    ['add.5', '1.2 + 3', '5', 'can\'t find a sum like "2 + 3"'],
+    ['add.5', '-2 + 3', '5', 'can\'t find a sum like "2 + 3"'],
+    ['add.5', '2 + 3.5', '5', 'can\'t find a sum like "2 + 3"'],
+    ['add.5', '1,2 + 3', '5', 'can\'t find a sum like "2 + 3"'],
+    ['subtract.5', '5 take away 2.5', '3', 'can\'t find a sum like "5 take away 2"'],
+    ['subtract.5', '-5 take away 2', '3', 'can\'t find a sum like "5 take away 2"'],
+    ['number_pairs.10', 'I have 10. You see 2.5. How many are hidden?', '8', 'can\'t find "I have 5. You see 2."'],
+  ];
+  for (const [key, ask, answer, message] of cases) {
+    const errors = broken(c => {
+      const tick = getStep(c, key).tick_when;
+      tick.ask[0] = ask; tick.expected[0] = answer;
+    });
+    assert.ok(errors.includes(`${key} tick item 1: ${message}`), `${ask}: ${errors.join('\n')}`);
+  }
+  assert.ok(broken(c => {
+    const tick = getStep(c, 'number_pairs.5').tick_when;
+    tick.ask[0] = 'I have 5. You see 1. How many are hidden?'; tick.expected[0] = '-4';
+  }).includes('number_pairs.5 tick item 1: expected answer must start with a whole number'));
 });
 
 test('ticks: every number in a tick item is within the step size', () => {
