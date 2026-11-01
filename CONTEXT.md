@@ -80,7 +80,7 @@ ClassDetail, session/attendee pickers, groups, daily session targets, or deliver
 Assessing a control child does not create a delivery assignment.
 
 **History reference child**:
-A child record a phone holds only because the child attended a session, or has an assessment, Battery Run or letter mastery record, the EA may read; it carries identity and display name and nothing else.
+A child record a phone holds only because the child attended a session, or has an assessment, Battery Run, letter mastery or skill mastery record, the EA may read; it carries identity and display name and nothing else.
 _Avoid_: treating a history reference child as roster, enrollment, assessment scope, or write authority; "phantom child", "stub child", "ghost row".
 
 **Assessment scope vs delivery scope** (the two-tier access model):
@@ -143,12 +143,41 @@ The EA's current working classification for a child in the literacy programme. I
 
 The `READING_LEVELS` ladder in `src/constants/literacyConstants.js` (Cannot blend → 2/3/4 Letter Blends → Word → Sentence → Paragraph Reading) **is the blending progression**, so **"blending level" is a synonym for "reading level"** — use "reading level". Today the value is a single EA-set label; the agreed destination is to make this *known* side **evidence-based** — demonstrated blending of combinations of the child's known letters at length 2/3/4 (see `documentation/teaching-quality-analytics.md`).
 
+**Maths skill**:
+One of the ten things the tracker follows (§4.1).
+
+**Step**:
+One number size within a skill. Steps include the ones below them: "up to 10" also covers 1–5.
+
+**Step key**:
+The stable id of a step, `<skill>.<size>`, for example `add.10` or `skip_count.5s`. A key's meaning never changes; a changed meaning gets a new key.
+
+These meanings come from the numeracy design §3; §4.1 there lists the ten skills.
+See **Band** below for EGMA's assessment item term; the words are not interchangeable.
+_Avoid_: "band" for a step (it is EGMA's word). Use skill and step in EA copy.
+
 **What the child knows**:
-The EA's current statement of where each child is: **Letter mastery** and **Current reading level**. This is the app's central output. It is how Head Office learns what every child knows and what level they are at. It is current child state, not history: a later update replaces the earlier statement, while sessions and assessments keep the historical record.
+The EA's current statement of where each child is: **Letter mastery**, **Skill mastery (tick)** and **Current reading level**. This is the app's central output. It is how Head Office learns what every child knows and what level they are at. It is current child state, not history: a later update replaces the earlier statement, while sessions and assessments keep the historical record.
 
 **Letter mastery**:
 The letters an EA is sure a child has mastered. A letter is mastered if **either** source says so (settled 2026-09-23). **Assessment evidence**: each letter takes its status from the newest non-skipped Letter result **from the current academic year** in the selected language that reached that letter, whether standalone, WelaPLUS Q1 or Full EGRA, and whoever recorded it. A letter the chart does not ask, or the child does not reach in time, keeps its earlier evidence (Jim, 2026-10-27; DBE English HL 3 never asks q, v, x or z). The active year's start and end dates are inclusive; with no active year there is no assessment evidence, while EA confirmations still count (lesson-plan C23, Assessment Results Plan 3 Task 10). Read the stored item prompts, correctness and `metadata.reached`; case-fold both prompts and the language's 26 tracker letters. In that result, a letter in that set is mastered when every reached occurrence is correct. This evidence is computed when shown, never stored as a confirmation, and an EA cannot un-mark it; a new result is how it changes. **EA confirmation**: an EA taps that they are sure the child has mastered the letter, stored in `letter_mastery`. Letter mastery is part of **What the child knows**, so it is current state, not academic-year history. The stored confirmation is **one current record per child, letter and language code**, with the last writer in `changed_by`; `letter_mastery.language` holds `en`/`xh`/`af`/`zu`. Any current deliverer's confirmation counts, whoever recorded it and in any Programme. A refused (terminal) correction never counts. Built in Assessment Results Plan 2; hosted application and device checks remain Task 7. A confirmation made in the session tracker keeps the language of the tracker it was tapped in; saving never re-derives it. The tracker and the Letter mastery ranking both take the language from the child's active class membership, preferring the active academic year; a child with no active class shows 0/26 in the ranking and the row cannot open the tracker. An unknown class language supplies no assessment evidence or English fallback; the tracker shows “No letter set for this class language.”
 _Avoid_: "taught letters", "coach-taught", "ticks". The retired `letter_mastery.source = 'taught'` value and some older docs use "taught", which is misleading: teaching is recorded as **Letters focused**, not as mastery.
+
+**Skill mastery (tick)**:
+An EA's tick is one current record per child and step key in `skill_mastery`.
+It counts from any current deliverer and any Programme. The last writer is kept in
+`changed_by`. The most recently made correction wins. A refused correction never counts.
+The server accepts any well-formed step key, including keys outside the phone's bundled
+curriculum. The phone checks its curriculum when an EA writes a tick. This is current
+child state, with no academic-year bound. Hosted application remains Task 7.
+
+**Known step**:
+A step that EGMA shows, that an EA ticked, or that sits below a known step in the same maths
+skill. Higher steps include lower ones: knowing Add up to 10 implies Add up to 5. Implied
+steps are worked out when needed and never written as ticks. Removing the higher tick
+returns each lower step to its own evidence and tick state. EGMA evidence wins over a tick;
+an EA cannot remove that evidence by unticking. EGMA evidence uses the active academic year
+and Programme; ticks count across both.
 
 **Letters focused**:
 The letters an EA worked on in one literacy session (`sessions.activities.letters_focused`). A record of teaching in that session, not a claim about what the child knows.
@@ -412,7 +441,7 @@ The EA who made a change, stamped on its outbox row from the signed-in EA handle
 - A **Session** belongs to exactly one **Programme** and optionally one **Class**.
 - A **Session** records its **Group** as history. A phone may hold a session whose group it does not have (after a handover or a deleted group); that reference grants no roster, edit or assignment access.
 - An **EA** holds a **Class assignment** (assessment scope) and, within it, a **Delivery assignment** over a subset of that class (delivery scope). A **Class** may have several active **Class assignments** — one per co-EA sharing it.
-- A **Session**, **Assessment**, **Battery Run** or **Letter mastery** record hydrated onto a phone may carry a **History reference child** outside the EA's scopes; the reference grants neither **Delivery** nor **Assessment scope** and is never uploaded.
+- A **Session**, **Assessment**, **Battery Run**, **Letter mastery** or **Skill mastery** (`skill_mastery`) record hydrated onto a phone may carry a **History reference child** outside the EA's scopes; the reference grants neither **Delivery** nor **Assessment scope** and is never uploaded.
 
 ## Example dialogue
 
@@ -488,6 +517,7 @@ The EA who made a change, stamped on its outbox row from the signed-in EA handle
   - **Assessment history, current academic year only** — granted by **class** assignment. Serves EA turnover (an incoming EA sees the baseline the previous EA captured) and control-group comparison, and lets co-EAs sharing a class coordinate the assessment divvy (each sees the other's assessments so nobody double-assesses). Bounded to the current academic year through the `child_class_memberships.academic_year_id` window so multi-year prior history is not exposed. **Mid-year moves (settled 2026-09-21):** an EA with an active class assignment sees a child's current-year assessments if the child was a member of that class at *any* point in the current academic year. After a move, both the old-class and the new-class EA see that year's assessments. The rule does not use only the child's current class, and it does not use the class the child was in on the assessment date.
   - **Session / delivery history** — granted by **delivery** assignment only, and is **capturer-agnostic**: an EA who holds (or held) a delivery assignment on a child reads every session that child attended, including sessions the previous EA captured. A pure-assessor (class scope, no delivery) does not read the delivering EA's session diary; being a control child for that assessor does not imply that nobody else delivers to the child. **The session is one complete delivery-history aggregate:** owning the session or qualifying through any attendee grants the complete parent plus every attendee row, including coattendee attendance, grade snapshot, notes, and child-keyed facts already stored in the parent activities JSON. A child-sliced attendee list would falsely imply privacy while the parent still carries all-child facts. Future genuinely restricted per-child facts must live behind a separate authorization contract rather than being added to this aggregate. **Implementation status:** the predicate and positively authorized keyset page RPC are applied to hosted `masi-app-sqlite` and passed the rollback-only six-actor PostgreSQL matrix plus authenticated/anonymous PostgREST probes on 2026-09-04. The mobile session-history pull uses this delivery-history boundary; verification and remaining native gates are recorded in `documentation/build-log.md`.
   - **Letter mastery** — **not** assessment history. It is current state (**What the child knows**), so it follows the *current* relationship. It is visible to the last writer (`changed_by`) and to every EA who **currently** delivers to the child (an active delivery assignment). There is no academic-year bound, because a letter mastered last year is still known. Former deliverers and class-only assessors who are not the last writer do not see it. A child's current delivering EA may **add or remove an EA confirmation** whoever recorded it. The record notes who changed it last. When two corrections conflict, the **most recently made** one wins: the server keeps whichever has the later correction time and treats a correction time in the future as the server's current time, so a phone that was offline cannot undo a newer correction made elsewhere (Jim, 2026-10-08; this replaces the 2026-09-23 "latest server write wins"). Assessment-evidence letters stay locked until the next assessment (settled 2026-09-21/23). Built in Assessment Results Plan 2: `set_letter_mastery` fixes each correction's effective time when the server first receives it, so a retry cannot move it. This supersedes ADR-0005's grouping of `letter_mastery` with assessment reads; see ADR-0005's 2026-09-21 follow-up.
+- **Skill mastery has the same visibility as Letter mastery.** The last writer and every current direct deliverer can read it, across Programmes and years. Former deliverers and class-only assessors who are not the last writer cannot. A current deliverer may add or remove an EA tick whoever recorded it. The most recently made correction wins; the server clamps future times on first receipt, and retries keep that effective time. EGMA evidence remains locked. Hosted application is pending at Task 7.
 - **Submitted assessments are immutable (settled 2026-09-21).** Correcting an answer is an edit only until the assessment is submitted, and it is locked after. EAs may add assessments and answers but may not change or delete them; a later correction is a new attempt. Head Office's Q11 calibration marks remain additional rows, never edits of the EA's rows (ADR-0004).
 - **An EA may assess a child in their class without holding a delivery assignment on that child, and without creating one.** Assessment write is authorized by **class** scope (`current_user_can_write_for_child` grants via the class-assignment branch). This is deliberate: control-group children must be assessable without being delivered to, and creating a delivery assignment just to assess would pollute "My Children", session pickers, and delivery-count reporting with children the EA does not actually run the intervention with. Assessing never implies delivering.
 - **Replacement / group-composition edits are authorized by *group* scope, a third tier below class scope.** Seeing the replacement pool (the class roster) is **class**-scoped; editing a specific delivery group's membership requires **group** scope — an active `group_ea_assignments` row on that group, or having created it (`current_user_can_write_for_group`). So a co-EA who merely shares the classroom can see and assess your children but **cannot** reach into your delivery groups. In the shared-class divvy (two EAs across 1A/1B/1C), each EA owns their own groups, so group scope cleanly separates edit authority. Head Office edits groups through the future dashboard. See ADR-0005.

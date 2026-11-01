@@ -8334,3 +8334,114 @@ Track D task.
   early; `planLesson.js` carries the same shape with those notes as line comments.
 - `planNumeracyLesson` assumes every step has at least one activity (the content verify script
   requires 2–3); a step with none would throw when picked.
+
+### 2026-11-01 — Numeracy Track B: skill_mastery data and sync (`feat/numeracy-skill-mastery`)
+
+Tasks 1–6 built the parallel numeracy tick contract. Hosted application is pending at
+Task 7. Claude ran every count below in the worktree (Codex built each task; Claude
+reviewed each diff, reran the checks and committed).
+
+**What shipped**
+
+- **Task 1 — `4194c5ce`:** server current-state table and correction receipts, deterministic
+  id, writer-or-deliverer SELECT, `set_skill_mastery`, `get_skill_mastery_page`, independent
+  history switch, child-history guard and RESTRICT child FKs. Reporting includes received
+  skill correction receipts by their writer even after another correction wins. Added the
+  disposable PostgreSQL harness, CI wiring and ADR 0013.
+- **Task 2 — `508ff9f6`:** SQLite v21 and `skillMasteryDomainId`, with phone/server UUID parity
+  and key-shape tests. Tasks 1 and 2 were rebased onto `origin/main` `297dbad3` (Track A #138)
+  before Tasks 3–6. The rebase, after #128 and Track A #138, was conflict-free.
+- **Task 3 — `412c6664`:** handle-bound `skillMasteryRepository`; curriculum-checked writes,
+  cross-EA/Programme reads, correction times and atomic acknowledgement. Fix **`078f296d`**
+  later added the `KNOWN_STEP_KEYS` module-state allowlist entry.
+- **Task 4 — `0ee9dab8`:** one correction RPC per outbox slot, acknowledgement with CAS,
+  dependency/retry classification, payload columns, export/incident wire evidence, local
+  no-history child-delete guard and Programme reference retargeting.
+- **Task 5 — `31352e69`:** shape-validated history pages, independent fourth history walk,
+  handover cleanup and coverage, per-child tick completeness, pull-failure observation and
+  the fifth combined History state on Sync status.
+- **Task 6:** contract map, domain terms, PRD work-record list, three open roadmap items
+  and this entry. No code changes.
+
+**Verification — Node 20.19.4 throughout**
+
+Every Jest command below uses `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`.
+
+
+| Gate | Command / suite selection | Result |
+|---|---|---|
+| Tasks 1–2 after rebase | `npx jest __tests__/skillMastery*.test.js __tests__/sqliteFoundation.test.js __tests__/fieldDiagnosticsMigration.test.js __tests__/letterMasteryIdParity.test.js` (the skill suites present at Tasks 1–2) | 5 suites / 36 tests passed |
+| Task 3 | `npx jest __tests__/skillMasteryRepository.test.js __tests__/productionBindingStatic.test.js __tests__/handleServices.test.js __tests__/masteryRepository.test.js` | 4 suites / 91 tests passed |
+| Task 4 | `npx jest __tests__/skillMasteryCorrectionSync.test.js __tests__/letterMasteryCorrectionSync.test.js __tests__/letterMasteryRpcError.test.js __tests__/syncContractCompleteness.test.js __tests__/syncContractServerSchema.test.js __tests__/classifyErrorHardening.test.js __tests__/offlineSyncOutbox.test.js __tests__/debugExport.test.js __tests__/childrenRepository.test.js __tests__/referenceDataRepository.test.js __tests__/readSupportIncidents.test.js __tests__/sqliteFoundation.test.js` | 12 suites / 284 tests passed |
+| Task 5 | `npx jest __tests__/skillMastery*.test.js __tests__/assessmentHistoryStatus.test.js __tests__/historyPullTriggerBudget.test.js __tests__/syncStatusScreen.test.js __tests__/supportIncidentObserver.test.js __tests__/pullCoverage.test.js __tests__/handleServices.test.js __tests__/assessmentHistoryPull.test.js __tests__/letterMasteryHandover.test.js __tests__/letterMasteryHistoryPage.test.js __tests__/moduleStateAllowlist.test.js` | 16 suites / 235 tests passed |
+| Full unit suite, after Task 5 and before Task 6 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand` | 490 suites / 7,844 tests passed; exit 0 |
+| Integration suite, after Task 5 and before Task 6 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest -c jest.integration.config.js` | 101 suites / 1,414 tests passed; exit 0 |
+| Both suites rerun with Task 6's docs in the tree | same two commands | Unit 490 suites / 7,844 tests; integration 101 suites / 1,414 tests; both exit 0 |
+
+Disposable PostgreSQL 17: container `masi-numeracy-pg`, `127.0.0.1:65433`, database
+names prefixed `masi_history_rls_b2r2_`. Each command used the disposable harness environment;
+all exited 0. This is local PostgreSQL proof, separate from hosted application and devices.
+
+| Command | Result |
+|---|---|
+| `npm run verify:skill-mastery:postgres` | 31/31 cases |
+| `npm run verify:letter-mastery:postgres` | 20/20 cases |
+| `npm run verify:assessment-history:postgres` | 144/144 cases |
+| `npm run verify:reporting:postgres` | 132/132 cases, including `reporting-skill-receipts` and `reader-executable-functions` |
+| `npm run verify:history-authorization:postgres` | 31 passed checks plus 18 invalid-argument checks |
+| `npm run verify:ea-access:postgres` | 43/43 cases |
+| `npm run verify:session-group:postgres` | 36/36 cases |
+
+**Review findings and surprises**
+
+Claude reviewed each Codex diff.
+
+- Task 3's plan file list omitted `__tests__/handleServices.test.js`. Its exact repository-key
+  assertion needed `skillMastery`; fixed and committed with Task 3.
+- Task 3's module-scope `new Set` for `KNOWN_STEP_KEYS` failed the T16 inventory in
+  `moduleStateAllowlist.test.js`. Only the Task 5 full run caught it. Fix `078f296d` records
+  it as device-level fixed bundled curriculum in the allowlist.
+- Task 4 needed two pinned-list updates outside the plan's list:
+  `readSupportIncidents.test.js` server-table count 18 → 19, with `skill_mastery` excluded
+  from the resolver loop like `letter_mastery` because `RESOLVE_COLUMNS` has no correction
+  tables; and `sqliteFoundation.test.js` debug dump shape gaining `skillMastery: []`.
+- Task 4 removed the `PUSH_PENDING_TABLES` exception from `syncContractCompleteness.test.js`
+  as designed. Task 5 changed `assessmentHistoryPull.test.js`'s distinct walk-state count 3 → 4.
+- The `offlineSync.js` letter branches are byte-identical to `origin/main`.
+  `git diff origin/main -- src/services/offlineSync.js` removes only the two table-list lines:
+  the `23505` `requiresRpcAcknowledgement` list and the payload `TypeError` → `22023` list.
+  PR #128's `recordedFailure` and `truncateUtf8` changes are untouched; skill failures flow
+  through them.
+- Both server skill tables use `ON DELETE RESTRICT`: a child-delete race fails with `23503`
+  instead of erasing an acknowledged tick and receipt. Letters retain cascade and the latent
+  race. Data clean-up must delete skill rows and receipts before children. SQLite retains
+  local cascade behind its no-history guard.
+
+**Decisions and ownership**
+
+The ready-children planner rule (which children a lesson plan is ready for, using
+`skillMasteryCompletenessByChild` as `complete.ticks`) belongs to Tracks C and D. Track B
+only provides the completeness answer. Track B owns the numeracy CONTEXT terms: Maths skill,
+Step, Step key, Skill mastery and Known step. Known-step implications are domain rules here;
+no Track C implementation is claimed. Numeracy capture screens remain Track D's work.
+
+**Task 7 gate — PENDING**
+
+Nothing applied to `masi-app-sqlite`. The branch is not pushed or merged. Jim runs Task 7:
+precondition query, pending list and dry run, explicit yes, migration push, verification,
+then merge. This branch must not merge before the hosted migration is applied. No hosted,
+release or device gate was run in this documentation session.
+
+**Task 6 checks performed in this session**
+
+- Step 5: `rg -n "skill_mastery|skillMastery|Skill mastery" documentation/rls-sync-contract-map.md CONTEXT.md PRD.md documentation/ROADMAP.md` checked the standing-doc placements.
+  Added function and test names were checked with `rg -l` across `src/`, `supabase/`,
+  `scripts/`, `__tests__/`, `test-support/` and `docs/`; file paths were also checked against
+  the file inventory and relative links resolved from their document. No dangling new
+  implementation references. `groupLetterProgress.js` is explicitly Zazi prior art, cited
+  by the approved numeracy spec, not a Masi implementation claim. `PUSH_PENDING_TABLES`
+  describes a removed historical exception, not a current symbol.
+- `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/assessmentItemDomainId.contract.test.js`:
+  **1 suite / 5 tests passed, exit 0**.
+- `git diff --check`: passed. Only the five authorized documentation files changed.
+  No hosted commands and no code changes.
