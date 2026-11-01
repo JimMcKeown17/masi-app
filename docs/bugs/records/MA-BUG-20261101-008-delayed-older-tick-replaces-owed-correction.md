@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_PROPOSED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 90
-confidence_basis: "Real-SQLite reproductions through the production repository, sync engine, retryFailedItem, saveHistoryPage and handover cleanup lose the newer correction at the repository for letter and skill ticks; reading the owed slot by record id and guarding with its payload time closes both variants for skill ticks."
+confidence_basis: "Real-SQLite reproductions through the production repository, sync engine, retryFailedItem, saveHistoryPage and handover cleanup lose the newer correction at the repository for letter and skill ticks; reading the owed slot by record id and guarding with its payload time closes both variants for skill and letter ticks in local regression tests."
 
 created_at_utc: 2026-11-01T18:00:00Z
-updated_at_utc: 2026-11-01T19:00:00Z
+updated_at_utc: 2026-11-01T18:57:07Z
 first_observed_at: 2026-11-01T17:30:00Z
 last_observed_at: 2026-11-01T17:30:00Z
 
@@ -47,9 +47,10 @@ field_report_ids: []
 support_incident_keys: []
 support_incident_signatures: []
 evidence_paths: []
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/141
 
-data_safety_status: latent at the repository; today's letter callers are protected by lessonSave's getCorrectionTimes pre-filter; never observed in the field
+data_safety_status: repository guard fixed and locally verified for letters; lessonSave retains its getCorrectionTimes pre-filter; no field observation or release claimed
 workaround_status: the EA can re-make the newer correction once the tick is visible
 owner: unassigned
 duplicate_of: none
@@ -138,14 +139,17 @@ Read the owed slot by the deterministic record id (not through the row), select
 the owed payload time (same clamp to now); return null when the guard keeps a slot that
 has no row. Applied to `skillMasteryRepository` on `feat/numeracy-skill-mastery`
 (post-build review rounds 1 and 2). The
-identical change to `masteryRepository` (letters) is proposed, not applied: it needs
-Jim's go-ahead and a mirrored regression in `letterMasteryCorrectionSync.test.js`.
+identical change to `masteryRepository` (letters) is now implemented on
+`fix/letter-owed-correction-guard` under issue #141, with Jim's authorization.
+Both mirrored real-SQLite regressions fail before the fix and pass after it; the
+tracker also handles a kept-back `null` result without changing taught state or
+showing a save error.
 
 ## Verification plan
 
 - [x] Add a regression test that fails for the demonstrated mechanism (skill).
 - [x] Verify the targeted correction locally (skill).
-- [ ] Apply and verify the letter fix.
+- [x] Apply and verify the letter fix locally (real SQLite, mocked transport; no device or hosted verification).
 - [ ] Identify the exact release/build containing both fixes.
 
 ## Timeline
@@ -156,7 +160,8 @@ Jim's go-ahead and a mirrored regression in `letterMasteryCorrectionSync.test.js
 | 2026-11-01T18:00:00Z | Claude | Reproduced for skill and letter ticks; skill guard fixed with regression | Letter fix deferred to Jim |
 | 2026-11-01T18:45:00Z | Codex | Round 2 raised the row-deleted-by-handover variant | High at the repository |
 | 2026-11-01T19:00:00Z | Claude | Reproduced; skill guard now reads the slot by record id; severity lowered after finding lessonSave's caller pre-filter | S3, P3 |
+| 2026-11-01T18:57:07Z | Codex + Claude | Jim authorized letter fix under #141; both mirrored repository regressions proved slot overwrite in RED, then passed with the skill guard; panel null-result regression also RED then GREEN | FIXED_IN_CODE / LOCAL_TESTED on `fix/letter-owed-correction-guard`; release/build open |
 
 ## Open questions
 
-- Should the letter fix ship on its own branch before the numeracy merge?
+- Which release/build will contain the letter fix?
