@@ -26,7 +26,7 @@ test('no lesson in progress reads as null', async () => {
 test('create keeps the lesson context, mints the session id and fills empty defaults', async () => {
   const draft = await repo.create(start);
   expect(draft).toEqual({
-    id: 'id-1', session_id: 'id-2', ...start,
+    id: 'id-1', session_id: 'id-2', kind: 'literacy', ...start,
     plan: null, plan_fixed_at: null, ticks: { letters: [], blends: [], books: [] },
     tracker_changes: {}, reading_level_changes: {}, notes: null,
     created_at: expect.any(String), updated_at: expect.any(String),
@@ -182,7 +182,7 @@ test('a committed discard removes the draft and frees the slot', async () => {
 test('minimal creation fills every optional field without creating synced work', async () => {
   const draft = await repo.create({ programme_id: 'p', group_id: 'g', lesson_date: '2026-10-19' });
   expect(draft).toEqual({
-    id: 'id-1', session_id: 'id-2', programme_id: 'p', group_id: 'g', lesson_date: '2026-10-19',
+    id: 'id-1', session_id: 'id-2', kind: 'literacy', programme_id: 'p', group_id: 'g', lesson_date: '2026-10-19',
     class_id: null, language_code: null, pack_id: null,
     attendance: { childIds: [], absentChildIds: [], addedChildIds: [] },
     plan: null, plan_fixed_at: null, ticks: { letters: [], blends: [], books: [] },
