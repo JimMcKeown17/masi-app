@@ -8024,3 +8024,223 @@ main after it merges. Data, planner and content can start now.
   Render: signed out, `/api/masi-app/*` answers 401 instead of 404. The website merged as
   masi-web-nextjs #56 (`e39e242`), and production serves the 308 `/operations/field-app` redirect.
   Remaining: remove `MASI_SUPABASE_*` from Vercel, and a signed-in check of the live dashboard.
+
+### 2026-10-31 — First-sweep small bugs (`fix/first-sweep-small-bugs`)
+
+Implemented locally, uncommitted, using Node v20.19.4. No Supabase CLI, EAS, network,
+package/dependency or native-project commands/changes. Existing branch retained. Record 007
+changed concurrently after the initially clean status; Codex did not edit it. Record 008 untouched.
+
+- **#124 / MA-BUG-002 and 003:** ReportProblemSheet now renders Replace and Remove in
+  one spacing.sm (8 dp) flex row, matching default-brand tertiary buttons, image-outline
+  and trash-outline icons, full screenshot accessibility labels. Before attachment,
+  Attach a screenshot is unchanged. Picker/sending guards and removal are tested.
+  BrandButton already forwards accessibilityLabel; no pass-through change needed.
+  Tertiary controls have no minWidth, 2 dp horizontal padding, 20 dp icons and 8 dp
+  icon gaps; 15 dp labels Replace/Remove fit the 312 dp body of a 360 dp sheet by
+  source inspection. Jest does not measure native text/Yoga; physical acceptance remains open.
+- **#125 / MA-BUG-006:** BottomSheet supplies spacing.md body padding only with a footer,
+  for both body modes; caller bodyContentStyle composes last. Removed BlendPoolSheet's
+  redundant bottom padding. Reduced ConfirmSheet/SkipNoticeSheet footer padding 24→8
+  and ChangePasswordSheet 16→0 to preserve their body-to-action spacing. Confirm's
+  accessory margin separates body elements, so it stays. Updated design-system Sheets.
+- **#126 / MA-BUG-004:** Dedicated recordedFailure keeps nonempty details and hint;
+  errorMessage remains concise for console and preflight callers. No existing outbox
+  last_error/reason cap was found (SQLite TEXT). Reused incidentPayloads.truncateUtf8
+  and the existing diagnostics 2,048-byte string budget; stored reasons include policy
+  prefixes within that cap. Real SQLite public sync-path tests use MV001/stale_version,
+  version detail, null/nonempty hint and an oversized multibyte hint. terminalPayload
+  copies the stored lastError, verified through its public builder.
+- **#127 / MA-BUG-005:** Installed Application.nativeBuildVersion wins on its platform,
+  with config fallback (Android remains numeric; iOS string). Commit comes from extra.
+  app.config uses EAS_BUILD_GIT_COMMIT_HASH, otherwise execFileSync git rev-parse HEAD
+  in the checkout with a 1,000 ms timeout and quiet stderr; failure returns null.
+  releaseLabel and buildMessage both derive version (build), or version without build.
+  AppReleaseInfo does not display buildMessage, so no UI removal is needed; preserve
+  the exported field for compatibility. Deleted unused constants/releaseMetadata.json.
+
+RED evidence, before the corresponding implementation:
+
+| Slice | Failing assertion / output | RED count |
+| --- | --- | --- |
+| #124 | Unable to find an element with text: Replace, at getByText('Replace') | 1 failed, 21 passed, 22 total |
+| #125 | paddingBottom: Expected 16, Received 0, for scrollable and plain footer bodies | 2 failed, 32 passed, 34 total |
+| #126 | Expected substring stale_version followed by details: children id=child-ho-1 incoming row_version=2 stored row_version=10; received Server has a newer version of this record (stale_version): stale_version | 3 failed, 17 passed, 20 total |
+| #127 metadata | Expected native build 55, extra commit and 1.5.0 (55); received null build, unknown commit and sqlite-critical-hardening | 2 failed, 1 passed, 3 total |
+| #127 config | Expected EAS/local SHA or null-on-git-failure; Received undefined for extra.gitCommit | 3 failed, 3 total |
+
+The first plain-body test traversal was corrected to select the host View; the retained
+RED above is the discriminating spacing assertion, not that test-harness error.
+
+Error reason consumer trace (source inspection): offlineSync finalizers store last_error
+and propagate lastSyncError to domain rows; syncOutboxRepository maps last_error to
+failed item reason; SyncStatusScreen renders item.reason; debugDump exports lastError
+with optional export-size markers; terminalPayload/backlogPayload copy stored values.
+OfflineContext passes result/count status, and syncStatusPresenter/homeAttention derive
+needs-attention copy from counts/status, without parsing diagnostic prose. The incident
+reader displays payloads/uses table and record identity, not message equality. No exact
+stale_version match or end-anchored message match was found. classifyError/dispositionFor
+use error.code. Special foreign_owner equality is unchanged. The legacy RLS healer did
+match /row-level security|42501/i; it now prefers stored error_code, retaining text fallback
+only for missing/OTHER legacy codes and preserving the authenticated-denial prefix guard.
+A regression adds RLS-looking hint text to an MV001 terminal and proves it cannot be healed.
+
+Server source check: supabase/migrations/20261030120000_incident_receipts.sql validates
+schema-2 envelope keys and allows unrestricted nested diagnostic content. No releaseLabel
+or gitCommit nested allowlist found under supabase/. Field names/envelope shape unchanged.
+No live database, publication, device or hosted receipt proof is claimed. Contract-map and
+LEARNING updates explain diagnostic prose versus stable policy codes.
+
+Footer sheet source audit:
+
+| Footer sheet | Before → after body edge to divider (dp) | Footer top padding before → after | Decision |
+| --- | --- | --- | --- |
+| ConfirmSheet | No divider; body-to-actions 24 → 24 | 24 → 8 | Shared 16 replaces part of footer gap; accessory margin 16 remains between body elements. |
+| SelectSheet | 0 → 16 (when footer supplied) | 8 → 8 | Keep search/list and row interior padding; footer-free mode unchanged. |
+| SkipNoticeSheet | No divider normally; body-to-actions 24 → 24; scrolling divider 0 → 16 | 24 → 8 | Keep list card interior padding and inter-body margins. |
+| BlendPoolSheet | 16 → 16 | 8 → 8 | Remove tiles paddingBottom 16; shared body padding replaces it. |
+| MakeGroupSheet | 0 → 16 | 8 → 8 | Note margin separates error from list; retained. |
+| OtherLetterSheet | 0 → 16 | 8 → 8 | Grid has no bottom compensation. |
+| ChangePasswordSheet | No divider; body-to-actions 16 → 16 | 16 → 0 | Shared 16 replaces footer spacing; field/note margins retained. |
+| ReportProblemSheet | 0 → 16 | 8 → 8 | Attachment marginTop is internal and retained. |
+| SendDiagnosticsSheet | 0 → 16 | 8 → 8 | Root fix supplies the missing pre-divider space. |
+| LetterTrackerBottomSheet | Grid 0 → 16 | 8 → 8 | Keep intrinsic missing-state text padding 16 and loading-area padding 32. |
+| LessonWrapUpScreen date sheet | 0 → 16 | 8 → 8 | Calendar month/week gaps are internal and retained. |
+| QuestionGalleryRunScreen | 0 → 16 | 8 → 8 | Result stack gap separates body elements; retained. |
+
+Gaps are source-defined container spacing, not measured glyph-to-divider distances. Text
+descenders, row interiors (SelectSheet rows have 16 dp vertical padding), empty-state
+padding, button padding and the 1 dp divider are excluded. In LetterTracker's missing
+state, preserved text interior padding makes the text-to-divider inset 16 → 32 dp;
+loading-area interior padding makes its content inset 32 → 48 dp. Those are intrinsic
+state containers rather than footer compensation. The default grid receives exactly one
+16 dp footer spacer. Footer top padding lies below a divider and cannot replace padding above it.
+
+Additional local fit evidence: fontTools measured the installed Figtree 800 face at the
+actual 15 dp textButton size. Glyph advances: Replace 55.875 dp, Remove 57.150 dp;
+including two 20 dp icons, their 8 dp gaps, button padding and row gap gives 185.025 dp
+within the 312 dp body. This is font/source proof, not a native screenshot/device pass.
+
+Verification (every JavaScript command prefixed with
+PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH):
+
+- Each changed/new test file and direct-name render/config consumers: 36 suites,
+  630 tests passed, 0 snapshots (serial targeted run).
+- Additional SelectSheet and MakeGroupSheet roster consumers: 2 suites, 18 tests
+  passed. Combined targeted coverage: 38 distinct suites, 648 tests passed.
+- Full npm test -- --silent: 465 suites, 7,388 tests, 14 snapshots passed;
+  0 failed (144.584 s).
+- npm run test:types: exit 0, no TypeScript diagnostics.
+- git diff --check: exit 0, no whitespace errors.
+- Follow-up changed tests (ChangePasswordSheet, offlineSyncUpdateById, debugExport):
+  3 suites, 66 tests passed, including code-based RLS-heal regression.
+
+Exact targeted per-file counts (all passed):
+
+| Test file | Passed |
+| --- | ---: |
+| AppNavigator.headers.test.js | 38 |
+| BatteryOverviewScreen.test.js | 76 |
+| BottomSheet.test.js | 34 |
+| ChangePasswordSheet.test.js | 35 |
+| ClassDetailScreen.test.js | 20 |
+| ConfirmSheet.test.js | 9 |
+| EditChildScreen.test.js | 18 |
+| GroupPickerBottomSheet.test.js | 7 |
+| LessonWrapUp.save.test.js | 17 |
+| LessonWrapUpScreen.test.js | 35 |
+| LetterTrackerBottomSheet.plan5.test.js | 3 |
+| LetterTrackerBottomSheet.test.js | 15 |
+| ProfileDiagnostics.test.js | 22 |
+| ProfileScreen.layout.test.js | 40 |
+| ProfileScreen.releaseMetadata.test.js | 13 |
+| QuestionGalleryScreen.test.js | 30 |
+| SelectSheet.test.js | 15 |
+| SkipNoticeSheet.test.js | 7 |
+| Toast.test.js | 21 |
+| assessmentScope.test.js | 16 |
+| debugExport.test.js | 11 |
+| domainTextInputAudit.test.js | 4 |
+| lessonRosterSheets.test.js | 3 |
+| letterOrderAgreement.test.js | 4 |
+| offlineSyncUpdateById.test.js | 20 |
+| previewContentConfig.test.js | 28 |
+| profileCaptureModeToggle.test.js | 1 |
+| profileComponents.test.js | 11 |
+| questionGallery.test.js | 20 |
+| releaseCommitConfig.test.js | 3 |
+| releaseGateConfig.test.js | 8 |
+| releaseMetadata.test.js | 3 |
+| runtimeDiagnostics.test.js | 1 |
+| sentryBuildConfig.test.js | 5 |
+| sessionCompleteNavigation.test.js | 3 |
+| supabaseProjectConfig.test.js | 8 |
+| task5ActionsBinding.test.js | 4 |
+| task5AuthRaces.test.js | 40 |
+
+Records 002–006 and registry rows now link issues #124–127 and state FIXED_IN_CODE /
+LOCAL_TESTED. 003–006 are CONFIRMED. 002 stays HYPOTHESIS: the row removes the symptom
+on paper, but keyboard-open geometry has not been accepted on A03s.
+
+Open gates for 2026-10-31: A03s keyboard-open screenshot row and all footer-sheet visuals;
+iPhone sheet/keyboard and accessibility smoke; repeat MV001 device gate and inspect
+its receipt detail; inspect a bundle from the next installed build/update for build,
+commit and derived identity. No device/release/hosted checks were run in this session.
+
+#### Claude review and MA-BUG-20261030-007
+
+- **Review of the Codex diff.**
+  - **Healer change:** the RLS healer now prefers the stored `error_code`. I checked it. Real auth-loss denials are stored as `42501` (`dispositionFor` → `normalizeErrorCode`), so they still heal. `UPDATE_NOT_APPLIED` text never mentioned row-level security, so the old rule never healed it either. Without the change, a server `details` string containing "42501" could make an unrelated terminal row healable. Accepted.
+  - **`extra.gitCommit`:** safe for OTA compatibility, because `runtimeVersion` uses the `appVersion` policy, not a fingerprint.
+  - **Profile release info:** it shows `Version x (Build y)` from expo-application, not `releaseLabel`, so the derived label duplicates nothing on screen.
+  - **Records 004–006:** confidence raised (95/95/90) to match their tests.
+- **MA-BUG-20261030-007 (the photo picker's Done step): not an app bug.**
+  - On the A03s, `android.provider.action.PICK_IMAGES` resolves to Google's updatable system picker (`com.google.android.photopicker`).
+  - `adb shell am start -a android.provider.action.PICK_IMAGES -t 'image/*'` sent a plain single-pick intent with no app involved. One tap showed "Selected", "1 photos or videos selected", Preview and Done, and the picker stayed open. The UI was read with uiautomator only, with no screenshot taken, because the gallery holds children's images.
+  - Record 007: CONFIRMED / NO_PRODUCT_CHANGE. The only app-side option, expo-image-picker `legacy: true`, would swap the privacy-scoped picker for a file browser to save one tap.
+- **Codex adversarial review, round 1 (gpt-6-astra): needs-attention, one medium finding, accepted.**
+  - **Finding:** the screenshot row unmounted the "Attach a screenshot" button that opened the picker. A TalkBack or VoiceOver user would lose their place on return.
+  - **Fix:** one stable `screenshot-actions` row. The opener is relabelled Attach → Replace and never remounted; Remove is added beside it. When Remove unmounts itself, focus goes back to Attach on the next frame (`findNodeHandle` + `setAccessibilityFocus`, the BottomSheet pattern).
+  - **RED:** a mount tracker wrapped around the real BrandButton recorded `["Remove screenshot", "Replace screenshot"]` after attaching, when only Remove should mount. A first attempt compared host `.instance`, which is `null` in this renderer and proved nothing, so it was replaced.
+  - **GREEN:** `ProfileDiagnostics.test.js` 23/23; the suites rendering ReportProblemSheet, Profile or BottomSheet 18/18 suites, 335 tests; `npm run test:types` passes.
+  - The healer, config, release-metadata and spacing changes had no material findings.
+- **Codex adversarial review, round 2 (gpt-6-astra): approve, no material findings.** It confirmed in memory that the focus is deferred and is cancelled on close, on a handle change and on unmount. The suites it named (ProfileDiagnostics, BottomSheet, offlineSyncUpdateById, releaseMetadata, releaseCommitConfig, runtimeDiagnostics, debugExport, ChangePasswordSheet) were rerun here: 8 suites, 130 tests passed.
+- **Open for the A03s (Jim signs in to `.kbtest`; Metro from this worktree):**
+  - Change password, Report a problem and Edit child after the keyboard closes (from #123);
+  - the screenshot row with the keyboard open;
+  - footer sheet spacing;
+  - TalkBack: the picker return and Remove focus;
+  - a repeat of gate 5 to read the MV001 detail in its receipt.
+  
+  iPhone smoke after that.
+
+#### 2026-10-31 follow-up: A03s device checks
+
+Galaxy A03s, `.kbtest` debug build on Metro from this worktree (`2fa92cf`), signed in as
+`test@masinyusane.org`, default text size. The phone was claimed from the Zazi session first.
+
+| Check | Result |
+|---|---|
+| Change password, keyboard open → closed (two cycles, two fields) | Pass: sheet flush to the bottom; pixel diff against the first cycle limited to the focus ring and clock |
+| Report a problem, keyboard closed after typing | Pass: flush; no page showing below the sheet |
+| Edit child, two keyboard cycles (Age, First name) | Pass: pixel-identical to the pre-keyboard screen except the focused field's border; Save changes visible |
+| Screenshot row with the keyboard open (002) | Pass: Replace and Remove visible above the footer; Remove clears the attachment and Attach returns |
+| Screenshot row look (003) | Matched red pair, but the 8 dp row gap was barely wider than each button's own 8 dp icon-label gap, so the pair read as one run of text. **Changed:** row gap `spacing.sm` → `spacing.lg` (24 dp). Rechecked on the phone; the test now asserts the token. ProfileDiagnostics + BottomSheet 2 suites / 57 tests pass |
+| Footer spacing (006) | Pass: Send diagnostics text descender to divider 32 px ≈ 18 dp (was ≈ 4 dp); divider to Send 15 px |
+| Upload failure detail (004): gate 5 repeated | Pass. Wi-Fi off (`cmd wifi`), age edit of test child `83f09838…` saved locally; server copy raised to `row_version` 10 through the isolated helper (`project_ref=segygjzpujphwvrubusm`); Wi-Fi on. Sync log and receipt `d96747fb` (`ut:0123d1be`): `… (stale_version): stale_version \| details: children id=83f09838-… incoming row_version=3 stored row_version=10`. The pull then restored the server copy (age 6) and Home shows "1 item needs attention". Conditions key on table/record/operation/outbox time/class/code, not text, so the detail cannot fragment them |
+| Release identity (005) | Partial. Profile "Version 1.5.0 (Build 1)"; receipt `6049e8f2` has `releaseLabel` "1.5.0 (1)", `buildNumber` 1 (yesterday's said "sqlite-critical-hardening"). `gitCommit` still "unknown": this debug APK has no dev client, so expo-constants reads the `assets/app.config` embedded at build time (unzipped from the installed APK: no `gitCommit`; it was built before this fix). Metro's manifest and `expo config` both carry `2fa92cf…`. EAS builds embed the config on the build server where `EAS_BUILD_GIT_COMMIT_HASH` is set; check the commit on the next real build, not a build made for this |
+| TalkBack focus | Stopped at Jim's direction ("Talkback is not a concern of mine"). One adb tap activated Remove without a double-tap, so that run proved nothing; TalkBack was turned off again |
+
+**New finding, recorded as MA-BUG-20261031-001 (not fixed here):** with the keyboard open, Edit
+child's scroll area ends 157 px (= 90 dp at scale 1.75) above the keyboard, exactly its
+`keyboardVerticalOffset={90}`. Same prop on Add child, Create class and Edit class. iOS likely
+needs an offset (status bar + header ≈ 91 dp), so the fix waits for an iPhone check.
+
+Also seen, not recorded: Sync status showed "Last Synced: Never" beside "All saved and synced"
+after a Metro reload. Unverified on a release build.
+
+**Staging left behind:** test child `83f09838…` has `preferred_name = 'HO edit (A03 gate 5 repeat)'`,
+`row_version = 10`; one diagnostics and one upload-failure receipt from `test@masinyusane.org`.
+`.kbtest` keeps its failed outbox row ("1 item needs attention").
+
+**Open:** iPhone smoke for #124–#127; the commit in a bundle from the next EAS build (005).

@@ -1,3 +1,4 @@
+import { truncateUtf8 } from './incidentPayloads';
 import { buildSyncPayload } from './syncPayload';
 import { normalizeErrorCode } from '../utils/normalizeErrorCode';
 import { SERVER_COLUMNS } from './syncServerColumns';
@@ -539,12 +540,20 @@ const isHealableRlsError = (record) => {
   const err = record?.last_error;
   if (typeof err !== 'string') return false;
   if (err.startsWith(AUTHENTICATED_DENIAL_MARKER)) return false;
+  if (record.error_code && record.error_code !== 'OTHER') return record.error_code === '42501';
   return RLS_ERROR_SIGNATURE.test(err);
 };
 
 const errorMessage = (error) => (
   error?.message || error?.code || String(error || 'Unknown sync error')
 );
+
+// Match the existing diagnostic string budget; leave console/preflight messages concise.
+const recordedFailure = error => truncateUtf8([
+  errorMessage(error),
+  ...['details', 'hint'].flatMap(key => typeof error?.[key] === 'string' && error[key].trim()
+    ? [key + ': ' + error[key]] : []),
+].join(' | '), 2048);
 
 // child_class_memberships recurs (class moves) and needs its distinct archived rows for audit
 // history, so it cannot use a deterministic-pair id. Before an active insert, reconcile against the
@@ -889,7 +898,7 @@ const finalizeRetriableFailure = async ({
     where id = ?
       and updated_at = ?
       and status = 'in_flight'
-  `, errorClass, errorCode, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+  `, errorClass, errorCode, truncateUtf8(reason, 2048), nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
   if ((failureResult?.changes || 0) === 0) {
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -922,7 +931,7 @@ const finalizeTerminalFailure = async ({
     where id = ?
       and updated_at = ?
       and status = 'in_flight'
-  `, errorCode, retryCount, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at);
+  `, errorCode, retryCount, truncateUtf8(reason, 2048), timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
   if ((failureResult?.changes || 0) === 0) {
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -949,7 +958,7 @@ const finalizeOutboxOnlyTerminalFailure = async ({
         next_retry_at = null,
         updated_at = ?
     where id = ? and updated_at = ? and status = ?
-  `, reason, timestamp(), outboxRecord.id, outboxRecord.updated_at, outboxRecord.status);
+  `, truncateUtf8(reason, 2048), timestamp(), outboxRecord.id, outboxRecord.updated_at, outboxRecord.status);
   return (result?.changes || 0) > 0;
 });
 
@@ -998,7 +1007,7 @@ const finalizeManyRetriableFailure = async ({ database, records, tableName, reas
               next_retry_at = ?,
               updated_at = ?
           where id = ? and updated_at = ? and status = 'in_flight'
-        `, errorClass, errorCode, reason, nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
+        `, errorClass, errorCode, truncateUtf8(reason, 2048), nextRetryTimestamp(outboxRecord.retry_count || 0), timestamp(), outboxRecord.id, outboxRecord.updated_at);
 
         if ((failureResult?.changes || 0) === 0) {
           await restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
@@ -1163,7 +1172,7 @@ export const createOutboxSyncEngine = ({
           })
         : false;
       const classification = classifyError(serverResult.error, config, { parentEvidencePending });
-      let reason = errorMessage(serverResult.error);
+      let reason = recordedFailure(serverResult.error);
       if (classification.reason) {
         reason = `${classification.reason}: ${reason}`;
       }
@@ -1248,7 +1257,7 @@ export const createOutboxSyncEngine = ({
       // row in_flight. finalize-retriable with inFlightRecord when we have it (its updated_at makes
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
       // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).
-      const reason = errorMessage(error) || 'Sync record processing threw';
+      const reason = recordedFailure(error) || 'Sync record processing threw';
       try {
         await finalizeRetriableFailure({
           database,
@@ -1297,7 +1306,7 @@ export const createOutboxSyncEngine = ({
           continue;
         }
         const record = wave[index];
-        const reason = errorMessage(outcome.reason) || 'Fallback record processing threw';
+        const reason = recordedFailure(outcome.reason) || 'Fallback record processing threw';
         try { await outboxRepository.markReady(record.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
       }
@@ -1369,7 +1378,7 @@ export const createOutboxSyncEngine = ({
       // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
       // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
       // hits → failed+backoff); else the originals (CAS misses → restore pending).
-      const reason = errorMessage(error) || 'Batch processing threw';
+      const reason = recordedFailure(error) || 'Batch processing threw';
       try {
         await finalizeManyRetriableFailure({
           database,
@@ -1736,7 +1745,7 @@ export const createOutboxSyncEngine = ({
           applyRecordResult(outboxRecord, config, recordResult);
         } catch (error) {
           if (isStaleActorError(error)) throw error;
-          const reason = errorMessage(error) || 'Unhandled sync error';
+          const reason = recordedFailure(error) || 'Unhandled sync error';
           const tableNameForRow = getConfig(outboxRecord.table_name)?.tableName || outboxRecord.table_name;
           try {
             await finalizeRetriableFailure({ database, outboxRecord, tableName: tableNameForRow, outboxRepository, reason, ...dispositionFor(error, { transport: true }) });

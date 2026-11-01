@@ -4,6 +4,13 @@ This is the current source of truth for how the SQLite app writes local rows, pu
 
 Use this map before changing any synced table, repository producer, outbox operation, migration, RLS policy, or Supabase payload allowlist. A table-level policy audit is not enough: the contract is the combination of producer fields, sync operation shape, RLS visibility, dependency ordering, and tests/probes.
 
+Upload diagnostic reasons preserve the server message, nonempty PostgREST details and hint
+as `message | details: ... | hint: ...`, bounded to 2,048 UTF-8 bytes including policy
+prefixes in persisted outbox errors. Incident `lastError` copies that stored value.
+Retry/disposition classification uses error codes. Auth-restore healing prefers the stored
+code; only legacy rows without a meaningful code use the old RLS text signature, and the
+authenticated-denial prefix continues to exclude genuine denials.
+
 ## Backend Scope
 
 - Backend: `masi-app-sqlite`

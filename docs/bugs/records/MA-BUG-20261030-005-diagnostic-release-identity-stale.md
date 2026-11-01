@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: NO_FIX_PROPOSED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
-root_cause_confidence_pct: 85
-confidence_basis: The values come from a hand-written JSON file unchanged since the SQLite cutover, and EAS remote versioning never writes versionCode into the Expo config the export reads.
+root_cause_confidence_pct: 95
+confidence_basis: The values come from a hand-written JSON file unchanged since the SQLite cutover, and EAS remote versioning never writes versionCode into the Expo config the export reads. Tests reproduced the null build, the 'unknown' commit and the frozen label, then the derived values.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-30T23:30:00Z
+updated_at_utc: 2026-10-31T09:57:55Z
 first_observed_at: 2026-10-30T16:45:07Z
 last_observed_at: 2026-10-30T16:57:44Z
 
@@ -50,7 +50,8 @@ field_report_ids: []
 support_incident_keys: []
 support_incident_signatures: []
 evidence_paths: []
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/127
 
 data_safety_status: no data risk; misleading diagnostics
 workaround_status: use observed.application.version/build and update.id instead
@@ -139,19 +140,18 @@ The A03s gates; any bundle shows it.
 
 ## Root cause
 
-Release identity comes from a static file nobody updates and from an Expo
-config field that remote versioning leaves empty.
+Static JSON identity and config-only build numbers omit remotely assigned native versions. Public metadata/export tests confirm the mechanism.
 
 ## Suggested fix
 
-Derive identity from the running binary and build: `expo-application` for the
-build number on both platforms, and the EAS build's git commit
-(`EAS_BUILD_GIT_COMMIT_HASH` into `extra` at build time) for the commit. Drop
-or derive the free-text label.
+Use installed native build on the matching platform with config fallback, extra.gitCommit with unknown fallback, and derived version/build label and buildMessage. app.config captures EAS commit or synchronous local HEAD with timeout and null-on-failure; static JSON removed.
 
 ## Verification plan
 
-- [ ] Unit test that the export uses the native build number.
+- [x] Local public-interface regression tests passed (see first-sweep build-log entry for exact counts).
+- [x] A03s check (2026-10-31): build number and label from the installed binary; commit pending the next EAS build.
+
+- [x] Unit test that the export uses the native build number.
 - [ ] Check a bundle from the next build.
 
 ## Timeline
@@ -160,7 +160,9 @@ or derive the free-text label.
 | --- | --- | --- | --- |
 | 2026-10-30T16:45:07Z | Phone | First affected receipt | `dg:9be72255` |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep; source traced |
+| 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #127; RED → GREEN evidence in build log; device checks pending |
+| 2026-10-31T09:57:55Z | Claude | Partly device-checked | Profile reads "1.5.0 (Build 1)" and diagnostics receipt `6049e8f2` carries `releaseLabel` "1.5.0 (1)", `buildNumber` 1 (the debug APK is versionCode 1). `gitCommit` was still "unknown": this debug APK has no dev client, so expo-constants reads the `assets/app.config` embedded at build time (built before this fix; verified by unzipping the APK), while Metro's manifest does carry the SHA. EAS embeds the config on the build server with `EAS_BUILD_GIT_COMMIT_HASH`; check on the next build |
 
 ## Open questions
 
-- Does Profile's release information show the stale label to EAs too?
+- AppReleaseInfo displays native version/build, backend, device and update; it does not display buildMessage or releaseLabel.

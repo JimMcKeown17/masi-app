@@ -327,7 +327,7 @@ test('Next focuses New then Confirm, and Done submits the same form', async () =
 test('header toggle and footer stay outside the scrolling fields', () => {
   const ui = renderSheet();
   const sheet = ui.UNSAFE_getByType(BottomSheet);
-  expect(sheet.props).toMatchObject({ maxHeight: '100%', keyboardAvoiding: true, scrollable: true, footerStyle: { borderTopWidth: 0, paddingTop: spacing.md } });
+  expect(sheet.props).toMatchObject({ maxHeight: '100%', keyboardAvoiding: true, scrollable: true, footerStyle: { borderTopWidth: 0, paddingTop: 0 } });
   const scroll = ui.UNSAFE_getByType(ScrollView);
   expect(scroll.props).toMatchObject({ keyboardShouldPersistTaps: 'handled', scrollEventThrottle: 16 });
   expect(scroll.findAllByType(TextField)).toHaveLength(3);

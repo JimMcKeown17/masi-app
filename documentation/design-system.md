@@ -495,7 +495,7 @@ Back is consumed and does nothing (the capture stop card's contract), and the gr
 `displaySheetTitle`, subtitle `textParagraph`, radius 22, grabber 36×4/control, `shadows.sheet`,
 sides 24 and keyboard-down bottom padding `max(insets.bottom, 24)`. The footer has a divider;
 `footerStyle` merges last onto its View, allowing a caller to remove the divider or change padding.
-Optional content styles compose with the scroll container. Set `scrollable=false` for a child `FlatList`.
+When a footer is present, both scrollable and plain bodies receive 16 dp (spacing.md) bottom padding before the footer divider. Footer-free sheets receive no added body padding. Callers should not duplicate this spacer; bodyContentStyle composes last and can override it. Optional content styles compose with the scroll container. Set `scrollable=false` for a child `FlatList`.
 Optional `panelRole` sets the panel's role and `accessibilityViewIsModal`; `ConfirmSheet` uses
 `alertdialog`.
 

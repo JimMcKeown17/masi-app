@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
-import releaseMetadata from '../constants/releaseMetadata.json';
+import * as Application from 'expo-application';
+import { Platform } from 'react-native';
 
 const fallback = (value, defaultValue = 'unknown') => (
   value === undefined || value === null || value === '' ? defaultValue : value
@@ -16,13 +17,19 @@ export const getReleaseMetadata = () => {
   const expoConfig = Constants.expoConfig || {};
   const extra = expoConfig.extra || {};
 
+  const appVersion = fallback(expoConfig.version);
+  const iosBuildNumber = (Platform.OS === 'ios' ? Application.nativeBuildVersion : null) || expoConfig.ios?.buildNumber || null;
+  const nativeAndroidBuild = Platform.OS === 'android' ? Application.nativeBuildVersion : null;
+  const androidVersionCode = nativeAndroidBuild ? Number(nativeAndroidBuild) : expoConfig.android?.versionCode ?? null;
+  const build = Platform.OS === 'ios' ? iosBuildNumber : Platform.OS === 'android' ? androidVersionCode : null;
+  const releaseLabel = build == null ? appVersion : appVersion + ' (' + build + ')';
   return {
-    appVersion: fallback(expoConfig.version),
-    iosBuildNumber: expoConfig.ios?.buildNumber ?? null,
-    androidVersionCode: expoConfig.android?.versionCode ?? null,
-    releaseLabel: fallback(releaseMetadata.releaseLabel),
-    buildMessage: fallback(releaseMetadata.buildMessage),
-    gitCommit: fallback(releaseMetadata.gitCommit),
+    appVersion,
+    iosBuildNumber,
+    androidVersionCode,
+    releaseLabel,
+    buildMessage: releaseLabel,
+    gitCommit: fallback(extra.gitCommit),
     runtimeVersion: expoConfig.runtimeVersion ?? null,
     runtimeVersionSummary: summarizeRuntimeVersion(expoConfig.runtimeVersion),
     updateUrl: expoConfig.updates?.url ?? null,

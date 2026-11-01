@@ -1,10 +1,11 @@
 import React from 'react';
-import { BackHandler, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { BackHandler, KeyboardAvoidingView, ScrollView, StyleSheet } from 'react-native';
 import { act, fireEvent } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import ReportProblemSheet from '../src/components/profile/ReportProblemSheet';
 import SendDiagnosticsSheet from '../src/components/profile/SendDiagnosticsSheet';
 import { StaleActorError } from '../src/session/staleActor';
+import { spacing } from '../src/constants/colors';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 const handle = { userId: 'ea-1', epoch: 1, isCurrent: () => true };
@@ -20,6 +21,18 @@ jest.mock('expo-modules-core', () => ({
 jest.mock('expo-image-picker', () => {
   mockPickerLoaded();
   return { launchImageLibraryAsync: mockLauncher };
+});
+
+// Records each BrandButton mount (by accessible name) so a test can tell a relabel from a remount.
+const mockButtonMounts = [];
+jest.mock('../src/components/common/BrandButton', () => {
+  const ReactLib = require('react');
+  const Actual = jest.requireActual('../src/components/common/BrandButton').default;
+  const Tracked = ReactLib.forwardRef((props, ref) => {
+    ReactLib.useEffect(() => { mockButtonMounts.push(props.accessibilityLabel || props.label); }, []);
+    return ReactLib.createElement(Actual, { ...props, ref });
+  });
+  return { __esModule: true, default: Tracked };
 });
 
 beforeEach(() => { jest.clearAllMocks(); mockNativeModule.mockReturnValue(null); });
@@ -215,4 +228,58 @@ test('attaching a screenshot passes original-format metadata with the report', a
   expect(onSubmit).toHaveBeenCalledWith({ message: 'Please see the screenshot', screenshotFile: {
     uri: 'file:///private/picker/shot.heic', extension: 'heic', mimeType: 'image/heic', fileSize: 1234,
   } });
+});
+
+test('attached screenshot actions share a row, accessible names and lifecycle guards', async () => {
+  mockNativeModule.mockReturnValue({});
+  mockLauncher.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///private/shot.png', mimeType: 'image/png' }] });
+  const sending = deferred();
+  const screen = render(<ReportProblemSheet visible handle={handle} onClose={jest.fn()} onSubmit={() => sending.promise} />);
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Attach a screenshot' })); });
+  expect(screen.getByText('Replace')).toBeTruthy();
+  expect(screen.getByText('Remove')).toBeTruthy();
+  const row = screen.getByTestId('screenshot-actions');
+  expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: spacing.lg });
+  expect(row.findByProps({ accessibilityLabel: 'Replace screenshot', accessibilityRole: 'button' })).toBeTruthy();
+  expect(row.findByProps({ accessibilityLabel: 'Remove screenshot', accessibilityRole: 'button' })).toBeTruthy();
+  const picking = deferred();
+  mockLauncher.mockReturnValueOnce(picking.promise);
+  fireEvent.press(screen.getByRole('button', { name: 'Replace screenshot' }));
+  expect(screen.getByRole('button', { name: 'Replace screenshot' }).props.accessibilityState).toMatchObject({ disabled: true, busy: true });
+  expect(screen.getByRole('button', { name: 'Remove screenshot' })).toBeDisabled();
+  await act(async () => picking.resolve({ canceled: true }));
+  fireEvent.press(screen.getByRole('button', { name: 'Remove screenshot' }));
+  expect(screen.queryByText('Screenshot attached.')).toBeNull();
+  mockLauncher.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///private/shot.png', mimeType: 'image/png' }] });
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Attach a screenshot' })); });
+  fireEvent.changeText(screen.getByLabelText('What went wrong?'), 'Test report');
+  fireEvent.press(screen.getByRole('button', { name: 'Send' }));
+  expect(screen.getByRole('button', { name: 'Replace screenshot' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Remove screenshot' })).toBeDisabled();
+  await act(async () => sending.resolve({ error: 'Retry' }));
+});
+
+test('the button that opened the picker stays mounted as Replace, and Remove returns focus to Attach', async () => {
+  const ReactNative = require('react-native');
+  mockNativeModule.mockReturnValue({});
+  mockLauncher.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file:///private/shot.png', mimeType: 'image/png' }] });
+  const screen = render(<ReportProblemSheet visible handle={handle} onClose={jest.fn()} onSubmit={jest.fn()} />);
+  await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+  mockButtonMounts.length = 0;
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Attach a screenshot' })); });
+  // Only Remove is new: the opener is relabelled in place, so screen-reader focus survives the picker.
+  expect(screen.getByRole('button', { name: 'Replace screenshot' })).toBeTruthy();
+  expect(mockButtonMounts).toEqual(['Remove screenshot']);
+  const node = jest.spyOn(ReactNative, 'findNodeHandle').mockImplementation(ref => (ref ? 301 : null));
+  const focus = jest.spyOn(ReactNative.AccessibilityInfo, 'setAccessibilityFocus').mockImplementation(() => {});
+  try {
+    mockButtonMounts.length = 0;
+    fireEvent.press(screen.getByRole('button', { name: 'Remove screenshot' }));
+    await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+    expect(screen.getByRole('button', { name: 'Attach a screenshot' })).toBeTruthy();
+    expect(mockButtonMounts).toEqual([]);
+    expect(focus).toHaveBeenCalledWith(301);
+  } finally {
+    node.mockRestore(); focus.mockRestore();
+  }
 });

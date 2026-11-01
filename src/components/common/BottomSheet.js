@@ -156,6 +156,7 @@ export default function BottomSheet({
           style={[styles.scrollArea, remainingScrollViewProps.style]}
           contentContainerStyle={[
             styles.bodyContent,
+            footer ? styles.bodyWithFooter : null,
             scrollContentStyle,
             bodyContentStyle,
           ]}
@@ -163,7 +164,7 @@ export default function BottomSheet({
           {children}
         </ScrollView>
       ) : (
-        <View style={[styles.bodyContent, bodyContentStyle]}>
+        <View style={[styles.bodyContent, footer ? styles.bodyWithFooter : null, bodyContentStyle]}>
           {children}
         </View>
       )}
@@ -272,6 +273,7 @@ const styles = StyleSheet.create({
   bodyContent: {
     paddingHorizontal: spacing.lg,
   },
+  bodyWithFooter: { paddingBottom: spacing.md },
   footer: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
