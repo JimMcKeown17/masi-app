@@ -674,10 +674,9 @@ the panel only.
 
 ## Skill mastery: numeracy ticks, one current record per child and step (Numeracy Track B)
 
-**Hosted migration NOT applied (Task 7, Jim's gate). This branch must not merge before
-Task 7 applies `20261101120000_skill_mastery_current_state.sql` to `masi-app-sqlite`.**
-The server and phone implementation is built; hosted application and device verification
-remain separate gates. [ADR 0013](../docs/adr/0013-numeracy-ticks-in-a-parallel-skill-mastery-table.md)
+**Applied to `masi-app-sqlite` 2026-11-01 (Task 7, Jim's go-ahead):
+`20261101120000_skill_mastery_current_state.sql`.** Device verification remains a separate
+gate (numeracy capture screens are Track D). [ADR 0013](../docs/adr/0013-numeracy-ticks-in-a-parallel-skill-mastery-table.md)
 accepts a parallel contract. Unless stated below, behavior is **identical to letter mastery**
 in the preceding section, including receipt clamping, winner ordering, refusal handling and
 the phone acknowledgement table. This track adds no EA capture screen.

@@ -5618,6 +5618,7 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content` | PASS: `# tests 43`, `# pass 43`, `# fail 0`; exit 0. | EGRA 5 + numeracy 22 + EGMA 16. The plan's 26 predates EGMA and undercounts Task 3 by one; corrected pre-EGMA total is 27, with 43 after EGMA. The script retains all three verify files. |
 | 2026-11-01 | `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run content:numeracy-doc && git diff --exit-code docs/numeracy/curriculum-draft-2026.1.md` | PASS: printed the absolute path of `docs/numeracy/curriculum-draft-2026.1.md`; no diff; exit 0. | Renderer reproduces the committed readable document byte for byte, including its single final newline; no hand edits. |
 | 2026-11-01 | `git diff --stat origin/main -- content/egra` | PASS: no output; exit 0. | EGRA unchanged. Also ran `git diff --stat origin/main -- content/egma`: no output; exit 0. |
+| 2026-11-01 | `env -u SUPABASE_ACCESS_TOKEN npm run sqlite:staging:push` (Track B worktree, isolated helper, `project_ref=segygjzpujphwvrubusm`) | PASS: applied `20261101120000_skill_mastery_current_state.sql`; verify query `true, 0, false` (switch on, no rows, anon cannot execute); advisors add only the accepted SECURITY DEFINER class for the two new RPCs. | Numeracy Track B Task 7 with Jim's go-ahead. Preconditions: only the numeracy test account assigned; pending set and dry run were exactly this migration. |
 
 ## Decision Register
 
@@ -8425,12 +8426,23 @@ only provides the completeness answer. Track B owns the numeracy CONTEXT terms: 
 Step, Step key, Skill mastery and Known step. Known-step implications are domain rules here;
 no Track C implementation is claimed. Numeracy capture screens remain Track D's work.
 
-**Task 7 gate — PENDING**
+**Task 7 gate — APPLIED to `masi-app-sqlite` 2026-11-01 (Jim: "Yes to the four decisions")**
 
-Nothing applied to `masi-app-sqlite`. The branch is not pushed or merged. Jim runs Task 7:
-precondition query, pending list and dry run, explicit yes, migration push, verification,
-then merge. This branch must not merge before the hosted migration is applied. No hosted,
-release or device gate was run in this documentation session.
+Run from the Track B worktree through the isolated helper (`env -u SUPABASE_ACCESS_TOKEN`,
+because the shell's exported token was stale and returned 401; stored login worked). Every
+summary printed `project_ref=segygjzpujphwvrubusm`.
+
+- Step 1 precondition: active `numeracy` staff = one row, the test account
+  `test+numeracy@masinyusane.org` (Thandi Numeracy, assigned 2026-10-31). No field EA.
+- Step 2: `sqlite:staging:migrations` showed only `20261101120000` local-without-remote;
+  `sqlite:staging:dry-run` would push exactly `20261101120000_skill_mastery_current_state.sql`.
+- Step 3: `sqlite:staging:push` applied it.
+- Step 4: `history_pull_enabled('skill_mastery', …)` = true, `skill_mastery` rows = 0,
+  anon EXECUTE on `set_skill_mastery` = false (authenticated = true), latest migration
+  `20261101120000`. Advisors: two `authenticated_security_definer_function_executable`
+  warnings name `set_skill_mastery` and `get_skill_mastery_page`. They are the same accepted
+  class as `set_letter_mastery` and `get_letter_mastery_page` (12 such warnings in total, all
+  RPCs that check the caller inside); no other warning names a `skill_mastery` object.
 
 **Task 6 checks performed in this session**
 
