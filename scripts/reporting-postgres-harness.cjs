@@ -231,6 +231,27 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
   }
   c.value('accounts-delivery-count', account(UUID_EA_A,"a#>>'{counts,delivery_children}'"),'3');
   c.value('received-mastery-ledger', `BEGIN; INSERT INTO public.letter_mastery_corrections(correction_id,child_id,letter,language,confirmed,requested_at,effective_at,changed_by,received_at) VALUES(gen_random_uuid(),'${UUID_C1}','s','en',true,now(),now(),'${UUID_EA_A}',now()); ${account(UUID_EA_A,"(a#>>'{activity,last_data_received_at}')::timestamptz=now()")} ROLLBACK;`,'t');
+  // The receipt ledger attributes activity even after another EA wins the current row.
+  c.value('reporting-skill-receipts', `BEGIN;
+    INSERT INTO public.child_ea_assignments(child_id,user_id,created_by)
+      VALUES('${UUID_C1}','${UUID_EA_NOPROG}','${UUID_EA_A}');
+    SET LOCAL ROLE authenticated;
+    SET LOCAL request.jwt.claim.sub = '${UUID_EA_NOPROG}';
+    DO $$ BEGIN PERFORM public.set_skill_mastery('71000000-0000-0000-0000-000000000001','${UUID_C1}','unknown_skill.99',true,'2026-10-01'); END $$;
+    RESET ROLE;
+    ${account(UUID_EA_NOPROG, `(a#>>'{activity,last_data_received_at}')::timestamptz = (SELECT received_at FROM public.skill_mastery_corrections WHERE correction_id='71000000-0000-0000-0000-000000000001')`)}
+    SET LOCAL ROLE authenticated;
+    SET LOCAL request.jwt.claim.sub = '${UUID_EA_NOPROG}';
+    DO $$ BEGIN PERFORM public.set_skill_mastery('71000000-0000-0000-0000-000000000002','${UUID_C1}','unknown_skill.99',false,'2026-10-02'); END $$;
+    RESET ROLE;
+    UPDATE public.skill_mastery_corrections SET received_at=now()+interval '1 second'
+      WHERE correction_id='71000000-0000-0000-0000-000000000002';
+    SET LOCAL ROLE authenticated;
+    SET LOCAL request.jwt.claim.sub = '${UUID_EA_A}';
+    DO $$ BEGIN PERFORM public.set_skill_mastery('71000000-0000-0000-0000-000000000003','${UUID_C1}','unknown_skill.99',true,'2026-10-03'); END $$;
+    RESET ROLE;
+    ${account(UUID_EA_NOPROG, `(a#>>'{activity,last_data_received_at}')::timestamptz = (SELECT received_at FROM public.skill_mastery_corrections WHERE correction_id='71000000-0000-0000-0000-000000000002') AND (SELECT changed_by='${UUID_EA_A}' FROM public.skill_mastery WHERE child_id='${UUID_C1}' AND step_key='unknown_skill.99')`)}
+    ROLLBACK;`, 't\nt');
   check('daily-sessions', `${call('daily',[UUID_EA_MOVE])}->'sessions' @> '[{"day":"2026-10-20","programme_code":"literacy","sessions":1},{"day":"2026-10-21","programme_code":"literacy","sessions":1}]'::jsonb`);
   check('daily-clock-sast', `${call('daily',[UUID_EA_A],'2026-10-20','2026-10-20')}->'clock' @> '[{"day":"2026-10-20","entries":2,"completed_minutes":510}]'::jsonb AND ${call('daily',[UUID_EA_A],'2026-10-19','2026-10-19')}->'clock'='[]'::jsonb`);
   check('daily-clock-minutes', `${call('daily')}->'clock' @> '[{"day":"2026-10-20","completed_minutes":510}]'::jsonb`);
