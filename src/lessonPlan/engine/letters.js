@@ -3,6 +3,7 @@ import {
   SUGGESTED_LETTER_COUNT,
 } from './constants';
 import { isLessonPlanSession } from './history';
+import { isGroupMastered } from '../../utils/groupMastery';
 
 const letterStepsFromPack = (pack) => {
   const steps = Array.isArray(pack?.letter_steps) ? pack.letter_steps : [];
@@ -11,12 +12,6 @@ const letterStepsFromPack = (pack) => {
 
 export const teachingOrderFromPack = (pack) => letterStepsFromPack(pack)
   .flatMap((entry) => (Array.isArray(entry?.new_letters) ? entry.new_letters : []));
-
-export const isLetterGroupMastered = (covered, present) => {
-  if (present <= 0) return false;
-  if (present < 3) return covered === present;
-  return 5 * covered >= 4 * present || present - covered <= 1;
-};
 
 export const usablePack = ({ pack, languageCode }) => {
   if (!pack || !Object.prototype.hasOwnProperty.call(PACK_LANGUAGE_BY_CODE, languageCode)) return null;
@@ -64,7 +59,7 @@ export const planLetters = ({ languageCode, pack, alphabet, children, childSessi
       .filter((letter) => typeof letter === 'string')
       .map((letter) => letter.toLowerCase());
   const childKnown = presentChildren.map(knownLettersFor);
-  const known = order.filter((letter) => isLetterGroupMastered(
+  const known = order.filter((letter) => isGroupMastered(
     childKnown.filter((letters) => letters.has(letter.toLowerCase())).length,
     presentChildren.length
   ));

@@ -5,7 +5,7 @@ import traverse from '@babel/traverse';
 
 const ROOT = path.resolve(__dirname, '..');
 const ENGINE = path.join(ROOT, 'src/lessonPlan/engine');
-const ALLOWED = new Set(['src/utils/decodability', 'src/constants/literacyConstants']);
+const ALLOWED = new Set(['src/utils/decodability', 'src/constants/literacyConstants', 'src/utils/groupMastery']);
 const files = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
   const f = path.join(dir, e.name);
   return e.isDirectory() ? files(f) : f.endsWith('.js') ? [f] : [];
@@ -59,6 +59,7 @@ test('the guard allows date arithmetic on input strings', () => {
 });
 
 test('engine files are pure (spec §7.3)', () => {
-  const violations = files(ENGINE).flatMap((f) => auditEngineSource(fs.readFileSync(f, 'utf8'), f));
+  const violations = [...files(ENGINE), path.join(ROOT, 'src/utils/groupMastery.js')]
+    .flatMap((f) => auditEngineSource(fs.readFileSync(f, 'utf8'), f));
   expect(violations).toEqual([]);
 });
