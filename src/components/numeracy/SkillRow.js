@@ -1,0 +1,38 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { borderRadius, colors, spacing } from '../../constants/colors';
+import { typeRoles } from '../../constants/typography';
+import { TRACKER_COLUMNS } from '../../numeracyLesson/trackerModel';
+import { stepPhrase } from '../../numeracyLesson/copy';
+import StepTile from './StepTile';
+
+export const TILE_SIZE = 44;
+export const TILE_GAP = 6;
+
+export default function SkillRow({ row, onPressTile, onPressSkill, readOnly, curriculum }) {
+  return <View style={styles.row}>
+    <View style={styles.heading}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${row.label}, steps`} onPress={() => onPressSkill?.(row)} style={styles.skill}>
+        <Text style={styles.title}>{row.label}</Text><Text accessible={false} style={styles.info}>ⓘ</Text>
+      </Pressable>
+      <Text style={styles.hint}>{row.hint}</Text>
+    </View>
+    <View style={styles.strip}>
+      {TRACKER_COLUMNS.map((column, index) => <View key={column} style={styles.cell}>
+        {row.tiles.filter(tile => tile.column === index).map(tile => <StepTile key={tile.stepKey} tile={tile}
+          label={stepPhrase(curriculum, tile.stepKey)} size={TILE_SIZE} disabled={readOnly}
+          onPress={() => onPressTile?.(tile.stepKey)} />)}
+      </View>)}
+    </View>
+  </View>;
+}
+const styles = StyleSheet.create({
+  row: { backgroundColor: colors.surface, borderRadius: borderRadius.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap', marginBottom: spacing.xs },
+  skill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  title: { ...typeRoles.textRowTitle, color: colors.text },
+  info: { ...typeRoles.textBody, color: colors.textSecondary },
+  hint: { ...typeRoles.textCaption, color: colors.textSecondary },
+  strip: { flexDirection: 'row', gap: TILE_GAP },
+  cell: { width: TILE_SIZE, gap: TILE_GAP },
+});
