@@ -1247,7 +1247,7 @@ Run: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm test -- --runInBand &
 Expected: exit 0, with suite and test counts noted against the Task 0 baseline. No literacy test file
 changed except those named in Tasks 1–12.
 
-- [ ] **Step 3: Whole-branch Codex adversarial review**
+- [x] **Step 3: Whole-branch Codex adversarial review**
 
 Run `/codex:adversarial-review --model gpt-6-astra --base origin/main`. Engage each finding, fix,
 and rerun until no new substantive finding. Stop at the round cap for rare timing races, and record

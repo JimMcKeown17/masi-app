@@ -5642,6 +5642,10 @@ Branch `feat/numeracy-screens`. Baseline (Task 0, clean `git archive` of `29e85c
 | 2026-11-01 | Task 13 full integration gate: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: **111 suites / 1,521 tests**, exit 0 | +10 suites / +105 tests on the baseline. |
 | 2026-11-01 | Task 13 `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content` and `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:types` | PASS: content 45/45, exit 0; types `tsc --noEmit -p tsconfig.assessment-questions.json` exit 0 | |
 | 2026-11-01 | Literacy test files: `git diff --stat origin/main...HEAD -- __tests__` | PASS: 16 existing test files modified, every one named in Tasks 1–12 (pins for v22/kind/exports, rewritten coming-soon cases, additive cases) | Found and reverted pure indentation churn in `sessionCompleteView.test.js` (Task 11's mechanical tidy had de-indented 11 existing literacy tests); the file now differs from main by additions only, 48/48. No whitespace-only churn elsewhere (`git diff -w` vs raw line counts equal for every modified test and source file). |
+| 2026-11-01 | Whole-branch Codex adversarial review, round 1 (`adversarial-review --base origin/main --model gpt-6-astra`, at `f3ca0375`) | needs-attention: 4 findings (2 high, 2 medium); 2 fixed, 2 rejected | Fixed in `e026fa9b`: (1) opening How to teach it neither saved nor froze the plan, so a history page or `skill_mastery` result landing while the EA taught could change what Wrap up recorded as `taught` (RED: no draft row after opening the card; GREEN: `NumeracyLessonScreen.test.js` 10/10); (2) `useNumeracyLessonDraft` lacked literacy's `if (!active)` check before `controller.open`, so a start abandoned during its group read could replace the shared controller's lesson (RED: `open` called once after unmount; GREEN: `useNumeracyLessonDraft.test.js` 13/13). Rejected: confirming the programme on draft resume (plan Global Constraints list the capture points; the save refuses `PROGRAMME_NOT_ACTIVE`/`PROGRAMME_NOT_NUMERACY` inside its transaction, so nothing is written under the wrong programme) and surfacing kept-back ticks (plan Review Focus 2: "The save succeeds, the tick is not written, and no error shows"). |
+| 2026-11-01 | Targeted suites after round 1: NumeracyLessonScreen, useNumeracyLessonDraft, HowToTeachScreen, LessonFlowNavigation, LessonScreen, NumeracyWrapUpScreen, NumeracyWrapUp.save, numeracyCopyPlainWords and 6 static guards | PASS: 14 suites / 457 tests | |
+| 2026-11-01 | Whole-branch Codex adversarial review, round 2 (at `e026fa9b`; run because round 1 found a real correctness bug in the saved `taught` record) | approve: no material findings | Cap of 2 rounds reached; no further round. |
+| 2026-11-01 | Full gates after round 1: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: **516 suites / 8,165 tests**, exit 0; **111 suites / 1,523 tests**, exit 0 | +2 tests (the two regressions). Final against the Task 0 baseline: unit +20 suites / +232 tests, integration +10 suites / +107 tests. |
 
 ## Decision Register
 
@@ -8619,3 +8623,33 @@ suites do not establish 360 dp layout, A03s timing, native navigation or phone-t
 ready yet"; StepSheet "Known", "Assessment", "Close steps"; discard sheet "Its ticks and notes will be
 deleted." and "Keep lesson"; SwapSheet title "Choose a step"; "Steps can't be updated for this child";
 "Couldn't load steps. Close and try again."; How to teach it "{activity} · {n} min".
+
+**Whole-branch Codex review (Task 13 Step 3).** Round 1 (`gpt-6-astra`, at `f3ca0375`) returned
+needs-attention with four findings. Two were real and fixed in `e026fa9b`, each with a regression
+test written red first:
+
+- *How to teach it did not freeze the plan.* Before any change, the lesson plan recomputes whenever
+  its inputs change. An EA who opened How to teach it and taught for several minutes could come back
+  to different cards if a history page or a `skill_mastery` sync landed meanwhile, and Wrap up would
+  record the new cards as taught. Opening How to teach it now calls `ensureDraft()` first, which saves
+  the draft and freezes the plan (P2 amended: Swap, How to teach it or Wrap up). It also means a
+  force-quit while teaching resumes the same lesson. Residual: an EA who teaches straight from the
+  lesson screen without opening How to teach it still sees an unfrozen plan, which can visibly change
+  on screen until the first Swap or Wrap up.
+- *An abandoned start could open the shared controller.* Literacy's open effect checks `active`
+  before `controller.open`; the numeracy copy had lost that line. Restored.
+
+Two were rejected against explicit plan clauses: confirming the programme on draft resume (the
+plan's capture points are the picker, a new draft, the tracker load, each immediate tick and the
+save; the save refuses inside its transaction, so a resumed draft after a programme move can only
+fail to save, never write under the wrong programme), and showing kept-back ticks after a save
+(Review Focus 2). Round 2 (at `e026fa9b`) approved with no material findings; the two-round cap was
+reached. Final gates: unit 516 / 8,165, integration 111 / 1,523, content 45/45, types exit 0.
+
+**Also fixed in Task 13.** Task 11's mechanical tidy had de-indented 11 existing literacy tests in
+`sessionCompleteView.test.js`; restored in `7f2f9349`, so the file differs from main by additions
+only.
+
+**Literacy follow-up filed:** [#144](https://github.com/JimMcKeown17/masi-app/issues/144) (label
+`needs-triage`), "Literacy lesson plan ignores letter knowledge that finishes downloading while the
+lesson is open".
