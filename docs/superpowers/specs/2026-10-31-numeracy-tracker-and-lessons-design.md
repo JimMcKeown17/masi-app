@@ -435,7 +435,10 @@ and evidence, as with letters.
   counts as knowing nothing (Masi's rule).
 - **A skill's group step** is the first step in size order that isn't group-known. A skill with every
   step group-known is finished.
-- **A skill is ready** when every `comes_after` key of its group step is group-known.
+- **A skill is ready** when enough present children are ready for its group step, using the same
+  group threshold as group-known. A child is ready for a step when they know every step in its
+  `comes_after`. A step with no `comes_after` is ready for everyone. (Jim, 2026-11-01.) A group of 3,
+  each missing a different earlier step, was otherwise "ready" with nobody ready.
 - **On a first lesson** no special rule is needed. With no data, every group step is the skill's first
   step, and only the four starting steps are ready.
 
@@ -448,11 +451,13 @@ and evidence, as with letters.
 - Take the top warm-up skill, plus the top two activity skills (the activity-card count). For each
   card, pick the step's activity this group has done least recently (§4.3).
 - If a pool runs dry: with no ready warm-up skill, the warm-up becomes a review of a known step from the
-  same pool; with no ready activity skills, show "This group knows every step that's ready. Use Swap to
+  same pool that enough present children are ready for (the highest such step in the least recently
+  taught skill; no such step means no warm-up card); with no ready activity skills, show "This group knows every step that's ready. Use Swap to
   choose a step." Never suggest a step that isn't ready.
-- **For each card**, list the present children who don't yet know the card's previous step
-  ("still on up to 5") under "need extra help". Children who already know the card's step appear as "can
-  help a partner". This matches the partner's pairs.
+- **For each card**, list the present children who are not ready yet (missing any earlier step)
+  under "need extra help", shown with the step they are still on ("still on up to 5"), so the list
+  always matches "N of M are ready". Children who already know the card's step appear as "can help
+  a partner". This matches the partner's pairs.
 - **Why "last taught" rather than "weakest first":** it gives every skill regular turns. "Weakest first"
   can trap a group on the one skill it finds hardest. (Jim agreed, 2026-10-31.)
 
