@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: HYPOTHESIS
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 40
 confidence_basis: Timing measured on video; the code path awaits the full write transaction before it updates the tile and locks the grid meanwhile, which fits, but write time and render time were not separated.
 
 created_at_utc: 2026-11-03T20:05:00Z
-updated_at_utc: 2026-11-03T21:10:00Z
+updated_at_utc: 2026-11-03T22:30:00Z
 first_observed_at: 2026-11-03T19:36:00Z
 last_observed_at: 2026-11-03T19:38:00Z
 
@@ -147,7 +147,7 @@ sample of the tile pixel marks the change frame.
 
 ## Root cause
 
-Not established. The tap waits for the database write before it repaints. Which part dominates is
+Not established. Root cause still not separated (write time vs render time); the fix removes the wait on the write and limits re-rendering to the tapped row. The tap waits for the database write before it repaints. Which part dominates is
 unknown.
 
 ## Suggested fix
@@ -161,9 +161,9 @@ change speeds up Wrap up chips and the letter tracker.
 
 - [x] Reproduce the original end-user workflow on the affected release or
       closest faithful environment.
-- [ ] Add or identify a regression test that fails for the demonstrated causal
+- [x] Add or identify a regression test that fails for the demonstrated causal
       mechanism.
-- [ ] Verify the targeted correction locally.
+- [x] Verify the targeted correction locally.
 - [ ] Run the closest representative E2E flow on a physical device when the
       bug is device-, lifecycle-, SQLite-, or network-sensitive.
 - [ ] Verify local durability and backend convergence for data/sync incidents.
@@ -178,6 +178,7 @@ change speeds up Wrap up chips and the letter tracker.
 | 2026-11-03T19:38:00Z | Claude | Measured in device gate W6 on the A03s | Video, frame sampling |
 | 2026-11-03T20:05:00Z | Claude | Report recorded | `/bug-user` intake; fix not started (needs Jim's go) |
 | 2026-11-03T21:10:00Z | Jim / Claude | Fix approved by Jim; Codex building it on `feat/numeracy-screens` (optimistic tile change, writes serialised in tap order, rollback from SQLite on failure, only the tapped row re-renders). | Issue #147 |
+| 2026-11-03T22:30:00Z | Claude / Codex | Fixed in code on `feat/numeracy-screens`: `c0650d23` (tile changes at once through the pending overlay; SkillRow memoised) and `145cd988` (Codex review round 1 found the panel's own write queue could reorder taps across closing and reopening the screen; each tap now goes straight to the signed-in handle's transaction queue). Round 2 approved. Unit 517/8,183, integration 111/1,530. The A03s timing recheck decides whether the fix meets the 300 ms target. | PR #145 |
 
 ## Open questions
 

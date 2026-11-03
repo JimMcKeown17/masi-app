@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: PROBABLE
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 60
 confidence_basis: Reproduced on the A03s for numeracy; both Wrap up ScrollViews adjust for the keyboard only on iOS (automaticallyAdjustKeyboardInsets) and use no keyboard-avoiding wrapper, while Android runs edge-to-edge so the window does not resize. Literacy is unverified on device.
 
 created_at_utc: 2026-11-03T20:05:00Z
-updated_at_utc: 2026-11-03T21:10:00Z
+updated_at_utc: 2026-11-03T22:30:00Z
 first_observed_at: 2026-11-03T19:43:00Z
 last_observed_at: 2026-11-03T19:43:00Z
 
@@ -148,9 +148,9 @@ can't ship without it.
 
 - [x] Reproduce the original end-user workflow on the affected release or
       closest faithful environment.
-- [ ] Add or identify a regression test that fails for the demonstrated causal
+- [x] Add or identify a regression test that fails for the demonstrated causal
       mechanism.
-- [ ] Verify the targeted correction locally.
+- [x] Verify the targeted correction locally.
 - [ ] Run the closest representative E2E flow on a physical device when the
       bug is device-, lifecycle-, SQLite-, or network-sensitive. (Both Wrap up screens, A03s and iPhone.)
 - [ ] Verify local durability and backend convergence for data/sync incidents. (Not applicable.)
@@ -165,6 +165,7 @@ can't ship without it.
 | 2026-11-03T19:43:00Z | Claude | Observed in device gate W5 on the A03s | Screenshot and UI dump |
 | 2026-11-03T20:05:00Z | Claude | Report recorded | `/bug-user` intake; fix not started (needs Jim's go) |
 | 2026-11-03T21:10:00Z | Jim / Claude | Fix approved by Jim; Codex building one shared scroll component for both Wrap up screens on `feat/numeracy-screens`. | Issue #148 |
+| 2026-11-03T22:30:00Z | Claude / Codex | Fixed in code on `feat/numeracy-screens` `44fc8a70`: new shared `FormScrollView` (Android lift = keyboard height + bottom inset; keeps the end in view while notes is focused) used by both Wrap up screens; guard test added. Codex review round 2 approved. | PR #145 |
 
 ## Open questions
 
