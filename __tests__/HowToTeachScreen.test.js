@@ -18,3 +18,14 @@ test.each([{ stepKey: 'unknown', activity: 'unknown' }, { stepKey: 'add.5', acti
   const view = renderWithProviders(<HowToTeachScreen navigation={navigation} route={{ params }} />);
   expect(view.getByText("This step isn't in this version of the app.")).toBeTruthy(); expect(view.queryByText(/You need:/)).toBeNull();
 });
+test('the last line clears the bottom safe area (Android navigation bar)', () => {
+  const { ScrollView } = require('react-native');
+  const { SafeAreaInsetsContext } = require('react-native-safe-area-context');
+  const { spacing } = require('../src/constants/colors');
+  const step = getStep(getCurriculum(), 'add.5'); const activity = step.activities[0];
+  const view = renderWithProviders(<SafeAreaInsetsContext.Provider value={{ top: 24, right: 0, bottom: 48, left: 0 }}>
+    <HowToTeachScreen navigation={navigation} route={{ params: { stepKey: step.key, activity: activity.name } }} />
+  </SafeAreaInsetsContext.Provider>);
+  const style = [view.UNSAFE_getByType(ScrollView).props.contentContainerStyle].flat(Infinity).reduce((all, part) => ({ ...all, ...part }), {});
+  expect(style.paddingBottom).toBe(48 + spacing.lg);
+});

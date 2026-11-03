@@ -3,14 +3,17 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getCurriculum, getStep } from '../../../content/numeracy-curriculum';
 import { keepSumsTogether } from '../../numeracyLesson/copy';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
+import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
 export default function HowToTeachScreen({ navigation, route }) {
   const onScroll = useHeaderHairline(navigation);
+  // No sticky footer here, so the scroll content clears the navigation bar itself (edge-to-edge).
+  const paddingBottom = useScrollBottomPadding();
   const step = getStep(getCurriculum(), route.params?.stepKey);
   const activity = step?.activities.find(item => item.name === route.params?.activity);
-  return <ScrollView style={styles.screen} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}>
+  return <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingBottom }]} onScroll={onScroll} scrollEventThrottle={16}>
     {activity ? <>
       <Text style={styles.goal}>{keepSumsTogether(step.goal)}</Text>
       <Text style={styles.heading}>{keepSumsTogether(`${activity.name} · ${activity.minutes} min`)}</Text>
