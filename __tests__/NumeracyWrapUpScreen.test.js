@@ -113,3 +113,17 @@ screenTest('a pending removal shows not yet even when a higher stored tick impli
   await waitFor(async () => expect(await changes()).toEqual({}));
   expect(chip(view, 'Ticked')).toBeTruthy();
 });
+
+screenTest('focused notes scroll to the end when the Android keyboard opens', async () => {
+  const { Platform, ScrollView } = require('react-native');
+  const emitter = require('react-native/Libraries/EventEmitter/RCTDeviceEventEmitter').default;
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const scroll = jest.spyOn(ScrollView.prototype, 'scrollToEnd').mockClear();
+  const view = mount(); await ready(view);
+  fireEvent(view.getByPlaceholderText('Add session notes…'), 'focus');
+  scroll.mockClear();
+  await act(async () => emitter.emit('keyboardDidShow', { endCoordinates: { height: 300 } }));
+  expect(scroll).toHaveBeenCalledWith({ animated: true });
+  view.unmount();
+  jest.restoreAllMocks();
+});
