@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: PROBABLE
-delivery_state: FIX_PROPOSED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 75
 confidence_basis: Reproduced on the A03s; the screen's ScrollView pads its content with spacing.lg only and has no footer or bottom inset, while Android runs edge-to-edge (edgeToEdgeEnabled true), so the last line can sit under the navigation bar.
 
 created_at_utc: 2026-11-03T20:05:00Z
-updated_at_utc: 2026-11-03T20:05:00Z
+updated_at_utc: 2026-11-03T21:10:00Z
 first_observed_at: 2026-11-03T19:33:00Z
 last_observed_at: 2026-11-03T19:33:00Z
 
@@ -52,11 +52,12 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261103-001/a03-how-to-teach-it-scrolled-to-end.png
-github_issues: []
+github_issues:
+  - "#146"
 
 data_safety_status: No data risk; display only.
 workaround_status: None on the screen; the hidden line is the activity's "You need" list.
-owner: unassigned
+owner: Claude (fix on PR #145)
 duplicate_of: none
 possible_duplicate_of: []
 ---
@@ -144,9 +145,9 @@ other footerless scrolling screens do. Also check for a shared helper before add
 
 - [x] Reproduce the original end-user workflow on the affected release or
       closest faithful environment.
-- [ ] Add or identify a regression test that fails for the demonstrated causal
+- [x] Add or identify a regression test that fails for the demonstrated causal
       mechanism.
-- [ ] Verify the targeted correction locally.
+- [x] Verify the targeted correction locally.
 - [ ] Run the closest representative E2E flow on a physical device when the
       bug is device-, lifecycle-, SQLite-, or network-sensitive.
 - [ ] Verify local durability and backend convergence for data/sync incidents. (Not applicable.)
@@ -160,6 +161,7 @@ other footerless scrolling screens do. Also check for a shared helper before add
 | --- | --- | --- | --- |
 | 2026-11-03T19:33:00Z | Claude | Observed in device gate W on the A03s | Screenshot |
 | 2026-11-03T20:05:00Z | Claude | Report recorded | `/bug-user` intake; fix not started (needs Jim's go) |
+| 2026-11-03T21:10:00Z | Jim / Claude | Fix approved by Jim. Fixed in code on `feat/numeracy-screens` commit `ec4569dd` (scroll content padded with `useScrollBottomPadding()`); new test pins `paddingBottom` = bottom inset + `spacing.lg`. Waits for the A03s recheck on the next build. | Issue #146 |
 
 ## Open questions
 

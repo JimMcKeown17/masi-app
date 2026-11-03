@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_PROPOSED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 95
 confidence_basis: The subtitle is a fixed literacy string in src/utils/sessionGoalPresentation.js ("N more pairs reach your target."), used for every EA regardless of programme; seen on Home and Session complete for a numeracy EA.
 
 created_at_utc: 2026-11-03T20:05:00Z
-updated_at_utc: 2026-11-03T20:05:00Z
+updated_at_utc: 2026-11-03T21:10:00Z
 first_observed_at: 2026-11-03T19:35:00Z
 last_observed_at: 2026-11-03T19:44:00Z
 
@@ -53,11 +53,12 @@ support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261103-004/a03-home-numeracy-pairs-target.png
   - docs/bugs/evidence/MA-BUG-20261103-004/a03-session-complete-numeracy-pairs-target.png
-github_issues: []
+github_issues:
+  - "#149"
 
 data_safety_status: No data risk; wording only.
 workaround_status: Not needed; the count itself is right.
-owner: unassigned
+owner: Claude (fix on PR #145)
 duplicate_of: none
 possible_duplicate_of: []
 ---
@@ -141,9 +142,9 @@ EA's programme and keep "pairs" for literacy.
 
 - [x] Reproduce the original end-user workflow on the affected release or
       closest faithful environment.
-- [ ] Add or identify a regression test that fails for the demonstrated causal
+- [x] Add or identify a regression test that fails for the demonstrated causal
       mechanism.
-- [ ] Verify the targeted correction locally.
+- [x] Verify the targeted correction locally.
 - [ ] Run the closest representative E2E flow on a physical device when the
       bug is device-, lifecycle-, SQLite-, or network-sensitive.
 - [ ] Verify local durability and backend convergence for data/sync incidents. (Not applicable.)
@@ -158,7 +159,8 @@ EA's programme and keep "pairs" for literacy.
 | 2026-11-03T19:35:00Z | Claude | Observed on Home in device gate W | Screenshot |
 | 2026-11-03T19:44:00Z | Claude | Observed again on Session complete | Screenshot |
 | 2026-11-03T20:05:00Z | Claude | Report recorded | `/bug-user` intake; wording is Jim's call |
+| 2026-11-03T21:10:00Z | Jim / Claude | Jim chose "N more lessons to reach your target." for every EA. Fixed in code on `feat/numeracy-screens` commit `df8632f2`; Home, Session complete, gauge and announcement tests updated. | Issue #149 |
 
 ## Open questions
 
-- Which wording does Jim want: one phrase for everyone, or per subject?
+- Answered 2026-11-03: one phrase for everyone, "N more lessons to reach your target."

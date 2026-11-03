@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: PROBABLE
-delivery_state: FIX_PROPOSED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 60
 confidence_basis: Reproduced on the A03s for numeracy; both Wrap up ScrollViews adjust for the keyboard only on iOS (automaticallyAdjustKeyboardInsets) and use no keyboard-avoiding wrapper, while Android runs edge-to-edge so the window does not resize. Literacy is unverified on device.
 
 created_at_utc: 2026-11-03T20:05:00Z
-updated_at_utc: 2026-11-03T20:05:00Z
+updated_at_utc: 2026-11-03T21:10:00Z
 first_observed_at: 2026-11-03T19:43:00Z
 last_observed_at: 2026-11-03T19:43:00Z
 
@@ -52,11 +52,12 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261103-003/a03-wrap-up-notes-keyboard-open.png
-github_issues: []
+github_issues:
+  - "#148"
 
 data_safety_status: No data risk; the typed text was kept and saved with the session.
 workaround_status: Type, close the keyboard, then scroll down to read what was typed.
-owner: unassigned
+owner: Claude (fix on PR #145)
 duplicate_of: none
 possible_duplicate_of: []
 ---
@@ -163,6 +164,7 @@ can't ship without it.
 | --- | --- | --- | --- |
 | 2026-11-03T19:43:00Z | Claude | Observed in device gate W5 on the A03s | Screenshot and UI dump |
 | 2026-11-03T20:05:00Z | Claude | Report recorded | `/bug-user` intake; fix not started (needs Jim's go) |
+| 2026-11-03T21:10:00Z | Jim / Claude | Fix approved by Jim; Codex building one shared scroll component for both Wrap up screens on `feat/numeracy-screens`. | Issue #148 |
 
 ## Open questions
 

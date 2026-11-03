@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: HYPOTHESIS
-delivery_state: FIX_PROPOSED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 40
 confidence_basis: Timing measured on video; the code path awaits the full write transaction before it updates the tile and locks the grid meanwhile, which fits, but write time and render time were not separated.
 
 created_at_utc: 2026-11-03T20:05:00Z
-updated_at_utc: 2026-11-03T20:05:00Z
+updated_at_utc: 2026-11-03T21:10:00Z
 first_observed_at: 2026-11-03T19:36:00Z
 last_observed_at: 2026-11-03T19:38:00Z
 
@@ -52,11 +52,12 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261103-002/a03-number-tracker-four-taps-show-touches.mp4
-github_issues: []
+github_issues:
+  - "#147"
 
 data_safety_status: No data risk observed; each tap was written and synced (server rows checked).
 workaround_status: Wait for each tile to change before tapping the next one.
-owner: unassigned
+owner: Claude (fix on PR #145)
 duplicate_of: none
 possible_duplicate_of: []
 ---
@@ -176,6 +177,7 @@ change speeds up Wrap up chips and the letter tracker.
 | --- | --- | --- | --- |
 | 2026-11-03T19:38:00Z | Claude | Measured in device gate W6 on the A03s | Video, frame sampling |
 | 2026-11-03T20:05:00Z | Claude | Report recorded | `/bug-user` intake; fix not started (needs Jim's go) |
+| 2026-11-03T21:10:00Z | Jim / Claude | Fix approved by Jim; Codex building it on `feat/numeracy-screens` (optimistic tile change, writes serialised in tap order, rollback from SQLite on failure, only the tapped row re-renders). | Issue #147 |
 
 ## Open questions
 
