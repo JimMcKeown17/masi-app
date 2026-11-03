@@ -5646,6 +5646,11 @@ Branch `feat/numeracy-screens`. Baseline (Task 0, clean `git archive` of `29e85c
 | 2026-11-01 | Targeted suites after round 1: NumeracyLessonScreen, useNumeracyLessonDraft, HowToTeachScreen, LessonFlowNavigation, LessonScreen, NumeracyWrapUpScreen, NumeracyWrapUp.save, numeracyCopyPlainWords and 6 static guards | PASS: 14 suites / 457 tests | |
 | 2026-11-01 | Whole-branch Codex adversarial review, round 2 (at `e026fa9b`; run because round 1 found a real correctness bug in the saved `taught` record) | approve: no material findings | Cap of 2 rounds reached; no further round. |
 | 2026-11-01 | Full gates after round 1: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: **516 suites / 8,165 tests**, exit 0; **111 suites / 1,523 tests**, exit 0 | +2 tests (the two regressions). Final against the Task 0 baseline: unit +20 suites / +232 tests, integration +10 suites / +107 tests. |
+| 2026-11-03 | Device gate W on the Galaxy A03s, Android preview build 57 (EAS `899e7e04`, from `6b0267a9`), 360 dp, default text | W1–W8 pass on the A03 except four bugs: MA-BUG-20261103-001 to -004 | Details in `documentation/device-gates-sqlite-backend-2026-07.md` §W. Not exercised: a real Swap (only one option offered) and W2's "still on …" case. iPhone (iOS 27, `64c39f8d`) is Jim's. |
+| 2026-11-03 | Fixes `ec4569dd` (001), `df8632f2` (004), `c0650d23` + `145cd988` (002), `44fc8a70` (003): each RED first, then GREEN | PASS: HowToTeachScreen 4/4; goal-copy suites 130/130; FormScrollView + both Wrap up screens + keyboard guard 52/52; NumberTracker unit 27/27, integration 26/26 | 002's new tests: tile changes before the write finishes, second tile while pending, order across close and reopen, failed write rolls back only its own tile. |
+| 2026-11-03 | Codex adversarial review of the fix commits (`--base 6b0267a9 --model gpt-6-astra`), round 1 at `44fc8a70` | needs-attention: 1 high, fixed | The tracker's own write queue outlived the screen, so tick, untick, close, reopen, tick could commit the old untick last (reproduced). Fixed in `145cd988` by submitting each tap to the signed-in handle's transaction queue at tap time. |
+| 2026-11-03 | Codex adversarial review round 2 at `145cd988` | approve: no material findings | Reviewer's in-memory harness ran 21 ordering, failure and stale-handle scenarios. |
+| 2026-11-03 | Full gates at `145cd988`: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `npm run test:integration`; `npm run test:content` | PASS: **517 suites / 8,183 tests**; **111 / 1,530**; content exit 0 | +1 suite / +18 tests and +7 integration tests on the 2026-11-01 Task 13 gates. A03s recheck on the next build still open. |
 
 ## Decision Register
 
@@ -8653,3 +8658,39 @@ only.
 **Literacy follow-up filed:** [#144](https://github.com/JimMcKeown17/masi-app/issues/144) (label
 `needs-triage`), "Literacy lesson plan ignores letter knowledge that finishes downloading while the
 lesson is open".
+
+### 2026-11-03 — Numeracy screens: A03s device gate W and four fixes (feat/numeracy-screens)
+
+Claude ran gate W on the Galaxy A03s with Android preview build 57 (EAS `899e7e04`, from `6b0267a9`)
+against staging, as the numeracy test EA and, for W7, the literacy test EA. The picker, lesson plan,
+resume, Wrap up offline save and sync, tracker layout and literacy screens passed. The picker
+settled in about 484 ms. Four bugs were recorded (docs PR #150, issues #146–#149) and Jim approved
+fixing all four the same day:
+
+- **MA-BUG-20261103-001** How to teach it has no sticky footer, so under edge-to-edge its last line
+  sat under the navigation bar. Padded with `useScrollBottomPadding()`.
+- **MA-BUG-20261103-004** "N more pairs reach your target" became "N more lessons to reach your
+  target." for every EA (Jim's wording).
+- **MA-BUG-20261103-003** Both Wrap up screens adjusted for the keyboard on iOS only. New
+  `FormScrollView` lifts the scroll area on Android by keyboard height plus the bottom inset (the
+  formula Toast already uses) and, while notes is focused, scrolls to the end when the keyboard
+  opens, when the viewport's own layout changes (the reliable moment on Android; the keyboard effect
+  can run before the viewport shrinks) and when the text grows. A guard keeps
+  `automaticallyAdjustKeyboardInsets` inside it. Not used: `react-native-keyboard-controller`, a
+  native module, which would rule out an over-the-air update to the 1.5.0 builds. The child and
+  class forms keep their own keyboard setup and its open 90 dp bug (MA-BUG-20261031-001).
+- **MA-BUG-20261103-002** A tracker tap waited for the guarded SQLite write before repainting
+  (466–817 ms) and locked the grid. The tile now changes at once through the tracker model's pending
+  overlay; `tickStepNow` is unchanged. Write time and render time were never measured apart, so the
+  A03s recheck is the test of the fix.
+
+**Review lesson.** Codex's first version kept its own write queue inside the panel. Review round 1
+showed the queue outliving the screen: tick, untick, close, reopen, tick could commit the old untick
+last. Two queues were each deciding order. The signed-in handle's `withTransaction` already orders
+every write in call order, so the fix deleted the panel's queue and calls `tickStepNow` at tap time.
+Round 2 approved.
+
+**Open.** A03s recheck on the next build (all four, plus a real Swap, W2's "still on …" case and the
+letter tracker's tap timing, which uses the same wait-then-repaint pattern and has no baseline).
+ForgotPasswordScreen enables its keyboard avoidance on iOS only (found by code scan, not seen on a
+phone, not recorded as a bug).
