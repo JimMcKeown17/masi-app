@@ -618,7 +618,7 @@ describe('HomeScreen', () => {
 
     expect(await screen.findByLabelText('2 of 3 sessions today. Below target.')).toBeTruthy();
     expect(screen.getByText('2 of 3 sessions today')).toBeTruthy();
-    expect(screen.getByText('One more pair reaches your target.')).toBeTruthy();
+    expect(screen.getByText('One more lesson to reach your target.')).toBeTruthy();
     expect(mockGetSessionsTodayGoal).toHaveBeenCalledWith(expect.objectContaining({ userId: 'ea-1' }));
   });
 

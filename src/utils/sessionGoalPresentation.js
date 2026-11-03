@@ -24,6 +24,7 @@ export function getGaugeAccessibilityLabel({ state, count, target, ceiling }) {
 }
 
 // Moved verbatim from HomeScreen.js.
+// Subject-neutral on purpose: literacy pairs and numeracy groups both count lessons (Jim, 2026-11-03).
 export const getGoalCopy = (goal, isSignedIn) => {
   if (!goal) return null;
   if (goal.state === 'no_target') {
@@ -54,7 +55,7 @@ export const getGoalCopy = (goal, isSignedIn) => {
   return {
     title: goal.count + ' of ' + goal.target + ' sessions today',
     subtitle: remaining === 1
-      ? 'One more pair reaches your target.'
-      : remaining + ' more pairs reach your target.',
+      ? 'One more lesson to reach your target.'
+      : remaining + ' more lessons to reach your target.',
   };
 };

@@ -68,7 +68,7 @@ test('4/7 from layer keeps 3 of 7 and the earned slice exists', () => {
   const v = view(goal(4, 7, 7));
   expect(v.gauge.fromGoal).toEqual({ count: 3, target: 7, ceiling: 7, state: 'below' });
   expect(v.gauge.earned).toEqual({ color: colors.red500 });
-  expect(v.card.fromCopy).toEqual({ title: '3 of 7 sessions today', subtitle: '4 more pairs reach your target.' });
+  expect(v.card.fromCopy).toEqual({ title: '3 of 7 sessions today', subtitle: '4 more lessons to reach your target.' });
 });
 
 test('5 → 6 drops the suffix', () => {
@@ -148,7 +148,7 @@ describe('announcements', () => {
     expect(view(goal(3)).announcement).toBe('Session captured. Saved for 2 children. 3 of 3 sessions today. Daily target reached.');
   });
   test('below today', () => {
-    expect(view(goal(2)).announcement).toBe('Session captured. Saved for 2 children. 2 of 3 sessions today. One more pair reaches your target.');
+    expect(view(goal(2)).announcement).toBe('Session captured. Saved for 2 children. 2 of 3 sessions today. One more lesson to reach your target.');
   });
   test('back-dated', () => {
     expect(view(goal(3), { now: new Date('2026-10-14T09:00:00+02:00') }).announcement)
@@ -156,7 +156,7 @@ describe('announcements', () => {
   });
   test('fallback pill has no doubled full stop', () => {
     expect(view(goal(2), { params: { ...params, childCount: undefined } }).announcement)
-      .toBe('Session captured. Nice work — it’s saved. 2 of 3 sessions today. One more pair reaches your target.');
+      .toBe('Session captured. Nice work — it’s saved. 2 of 3 sessions today. One more lesson to reach your target.');
   });
   test('zero sessions uses signed-in copy', () => {
     expect(view(goal(0)).announcement)

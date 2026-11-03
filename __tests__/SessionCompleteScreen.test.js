@@ -94,7 +94,7 @@ test('3/3 today reads "Daily target reached." once, as the headline', async () =
 test('2/3 shows "Session captured." and the sub-line', async () => {
   const screen = renderScreen();
   expect(await screen.findByText('Session\ncaptured.')).toBeTruthy();
-  expect(screen.getByText('One more pair reaches your target.')).toBeTruthy();
+  expect(screen.getByText('One more lesson to reach your target.')).toBeTruthy();
 });
 
 test('back-dated: date on the pill, static gauge', async () => {
