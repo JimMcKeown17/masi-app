@@ -9,7 +9,7 @@ import StepTile from './StepTile';
 export const TILE_SIZE = 44;
 export const TILE_GAP = 6;
 
-export default function SkillRow({ row, onPressTile, onPressSkill, readOnly, curriculum }) {
+function SkillRow({ row, onPressTile, onPressSkill, readOnly, curriculum }) {
   return <View style={styles.row}>
     <View style={styles.heading}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${row.label}, steps`} onPress={() => onPressSkill?.(row)} style={styles.skill}>
@@ -36,3 +36,14 @@ const styles = StyleSheet.create({
   strip: { flexDirection: 'row', gap: TILE_GAP },
   cell: { width: TILE_SIZE, gap: TILE_GAP },
 });
+
+// The model is rebuilt for each tap; compare the primitive fields this row renders.
+export default React.memo(SkillRow, (a, b) =>
+  a.curriculum === b.curriculum && a.readOnly === b.readOnly &&
+  a.onPressTile === b.onPressTile && a.onPressSkill === b.onPressSkill &&
+  a.row.skillKey === b.row.skillKey && a.row.label === b.row.label && a.row.hint === b.row.hint &&
+  a.row.tiles.length === b.row.tiles.length && a.row.tiles.every((tile, i) => {
+    const other = b.row.tiles[i];
+    return tile.stepKey === other.stepKey && tile.column === other.column &&
+      tile.sizeLabel === other.sizeLabel && tile.state === other.state && tile.next === other.next;
+  }));

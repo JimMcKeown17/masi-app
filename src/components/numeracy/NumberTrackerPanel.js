@@ -27,7 +27,11 @@ export default function NumberTrackerPanel({ child, isDelivery = true }) {
   const [programmeId, setProgrammeId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState(null);
-  const [updatingStep, setUpdatingStep] = useState(null);
+  const [pending, setPending] = useState({});
+  const pendingRef = useRef({});
+  const queue = useRef([]);
+  const sequence = useRef(0);
+  const recovering = useRef(false);
   const [openSkill, setOpenSkill] = useState(null);
   const loadGeneration = useRef(0);
   const writeInFlight = useRef(false);
@@ -60,12 +64,15 @@ export default function NumberTrackerPanel({ child, isDelivery = true }) {
   useMasterySyncRefresh('skill_mastery', backgroundReload);
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  const model = useMemo(() => buildTrackerModel({ curriculum, ticks, evidence, userId: user.id }), [curriculum, ticks, evidence, user.id]);
+  const model = useMemo(() => buildTrackerModel({ curriculum, ticks, evidence, pending, userId: user.id }), [curriculum, ticks, evidence, pending, user.id]);
   const rows = model.sections.flatMap(section => section.rows);
   const row = rows.find(item => item.skillKey === openSkill);
   const readOnly = !isDelivery || !programmeId;
-  const onTap = async stepKey => {
-    if (readOnly || updatingStep || writeInFlight.current) return;
+  const tapRef = useRef(null);
+  const onTap = useCallback(stepKey => tapRef.current(stepKey), []);
+  const onPressSkill = useCallback(item => setOpenSkill(item.skillKey), []);
+  tapRef.current = stepKey => {
+    if (readOnly || recovering.current) return;
     const skill = rows.find(item => item.tiles.some(tile => tile.stepKey === stepKey));
     const index = skill?.tiles.findIndex(tile => tile.stepKey === stepKey);
     const tile = skill?.tiles[index];
@@ -76,36 +83,59 @@ export default function NumberTrackerPanel({ child, isDelivery = true }) {
       setNote(`Known because '${getStep(curriculum, higher.stepKey).label}' is ticked.`);
       return;
     }
-    writeInFlight.current = true;
+    const id = ++sequence.current;
+    const confirmed = tile.state !== 'ticked';
+    pendingRef.current = { ...pendingRef.current, [stepKey]: { mastered: confirmed, madeAt: new Date().toISOString(), id } };
+    setPending(pendingRef.current);
     ++loadGeneration.current;
     setNote(null);
-    setUpdatingStep(stepKey);
-    try {
-      const record = await tickStepNow({ handle, programmeId, childId: child.id, stepKey, confirmed: tile.state !== 'ticked' });
-      if (record) setTicks(previous => [...previous.filter(item => item.step_key !== stepKey), record]);
-    } catch (error) {
-      if (error instanceof NumeracyTickError && error.code === 'PROGRAMME_CHANGED') {
-        setProgrammeId(null);
-        setNote(PROGRAMME_CHANGED_NOTE);
-      } else setNote('Step update was not saved. Please try again.');
-      return;
-    } finally {
+    queue.current.push({ stepKey, confirmed, id });
+    if (writeInFlight.current) return;
+    writeInFlight.current = true;
+    void (async () => {
+      try {
+        while (queue.current.length) {
+          const next = queue.current.shift();
+          const record = await tickStepNow({ handle, programmeId, childId: child.id, stepKey: next.stepKey, confirmed: next.confirmed });
+          ++loadGeneration.current;
+          if (record) setTicks(previous => [...previous.filter(item => item.step_key !== next.stepKey), record]);
+          if (pendingRef.current[next.stepKey]?.id === next.id) {
+            const remaining = { ...pendingRef.current };
+            delete remaining[next.stepKey];
+            pendingRef.current = remaining;
+            setPending(remaining);
+          }
+        }
+      } catch (error) {
+        recovering.current = true;
+        queue.current = [];
+        pendingRef.current = {};
+        setPending({});
+        ++loadGeneration.current;
+        writeInFlight.current = false;
+        await loadData({ background: true });
+        if (error instanceof NumeracyTickError && error.code === 'PROGRAMME_CHANGED') {
+          setProgrammeId(null);
+          setNote(PROGRAMME_CHANGED_NOTE);
+        } else setNote('Step update was not saved. Please try again.');
+        recovering.current = false;
+        return;
+      }
       writeInFlight.current = false;
-      setUpdatingStep(null);
-      loadData({ background: true });
-    }
-    Promise.resolve(refreshSyncStatus()).catch(() => {});
-    triggerBackgroundSync?.();
+      await loadData({ background: true });
+      Promise.resolve(refreshSyncStatus()).catch(() => {});
+      triggerBackgroundSync?.();
+    })();
   };
 
   if (loading) return <ActivityIndicator color={colors.text} />;
   return <View>
     <Text style={styles.progress}>{`Number tracker · ${model.knownCount} / ${model.total} steps`}</Text>
     {note ? <Text style={styles.note}>{note}</Text> : null}
-    <NumberTrackerGrid model={model} curriculum={curriculum} readOnly={readOnly || !!updatingStep}
-      onPressTile={onTap} onPressSkill={item => setOpenSkill(item.skillKey)} />
+    <NumberTrackerGrid model={model} curriculum={curriculum} readOnly={readOnly}
+      onPressTile={onTap} onPressSkill={onPressSkill} />
     <StepSheet visible={!!row} row={row} curriculum={curriculum} childFirstName={child.first_name}
-      onDismiss={() => setOpenSkill(null)} onTick={onTap} readOnly={readOnly || !!updatingStep} />
+      onDismiss={() => setOpenSkill(null)} onTick={onTap} readOnly={readOnly} />
   </View>;
 }
 const styles = StyleSheet.create({

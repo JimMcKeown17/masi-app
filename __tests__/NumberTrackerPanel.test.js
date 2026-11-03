@@ -197,3 +197,55 @@ test('the open skill sheet ticks through the same writer and rebuilds its row', 
   await waitFor(async () => expect(await rows()).toHaveLength(2));
   expect((await rows()).map(row => row.step_key).sort()).toEqual(['add.10', 'add.5']);
 });
+test('a tap changes the tile before the write finishes', async () => {
+  const s = render(); await ready(s);
+  const release = holdWrite();
+  fireEvent.press(tile(s, 'add.5'));
+  expect(tile(s, 'add.5', 'Ticked')).toBeTruthy();
+  expect(await rows()).toEqual([]);
+  await act(async () => { release.resolve(); });
+  await waitFor(async () => expect(await outbox()).toHaveLength(1));
+});
+test('a second tile can be tapped while the first write is pending', async () => {
+  const s = render(); await ready(s); const release = holdWrite();
+  fireEvent.press(tile(s, 'add.5'));
+  fireEvent.press(tile(s, 'count.5'));
+  expect(tile(s, 'add.5', 'Ticked')).toBeTruthy();
+  expect(tile(s, 'count.5', 'Ticked')).toBeTruthy();
+  expect(await rows()).toHaveLength(0);
+  await act(async () => { release.resolve(); });
+  await waitFor(async () => expect(await rows()).toHaveLength(2));
+  expect((await rows()).every(row => row.confirmed === 1)).toBe(true);
+  expect(await outbox()).toHaveLength(2);
+  await waitFor(() => expect(mockOffline.refreshSyncStatus).toHaveBeenCalledTimes(1));
+  expect(mockOffline.triggerBackgroundSync).toHaveBeenCalledTimes(1);
+});
+test('tick then untick of one tile lands in order', async () => {
+  const s = render(); await ready(s); const release = holdWrite();
+  fireEvent.press(tile(s, 'add.5')); fireEvent.press(tile(s, 'add.5', 'Ticked'));
+  expect(tile(s, 'add.5')).toBeTruthy();
+  await act(async () => { release.resolve(); });
+  await waitFor(async () => expect((await rows())[0]?.confirmed).toBe(0));
+  expect(await outbox()).toHaveLength(1);
+  expect(tile(s, 'add.5')).toBeTruthy();
+});
+test('a failed write rolls the tile back from SQLite and shows the note', async () => {
+  const s = render(); await ready(s);
+  await fixtureWriter.execAsync("create trigger reject_add before insert on skill_mastery begin select raise(abort, 'injected failure'); end;");
+  const release = holdWrite(); fireEvent.press(tile(s, 'add.5'));
+  expect(tile(s, 'add.5', 'Ticked')).toBeTruthy();
+  await act(async () => { release.resolve(); });
+  await s.findByText('Step update was not saved. Please try again.');
+  expect(tile(s, 'add.5')).toBeTruthy();
+  expect(await rows()).toHaveLength(0); expect(await outbox()).toHaveLength(0);
+});
+test('queued taps after a failed write are not written', async () => {
+  const s = render(); await ready(s);
+  await fixtureWriter.execAsync("create trigger reject_add before insert on skill_mastery when new.step_key = 'add.5' begin select raise(abort, 'injected failure'); end;");
+  const release = holdWrite(); fireEvent.press(tile(s, 'add.5')); fireEvent.press(tile(s, 'count.5'));
+  expect(tile(s, 'count.5', 'Ticked')).toBeTruthy();
+  await act(async () => { release.resolve(); });
+  await s.findByText('Step update was not saved. Please try again.');
+  expect(tile(s, 'count.5')).toBeTruthy();
+  expect(await rows()).toHaveLength(0); expect(await outbox()).toHaveLength(0);
+});
