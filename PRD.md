@@ -137,7 +137,8 @@ The current SQLite schema is defined by `src/db/migrations.js`. It includes:
 - work records: `time_entries`, `sessions`, `session_attendees`, `assessments`,
   `assessment_items`, `letter_mastery`, `skill_mastery`;
 - device and sync: `local_state`, `sync_state`, `sync_outbox`, `schema_migrations`, and local-only
-  `lesson_drafts` (v17; group-history references are v18).
+  `lesson_drafts` (v17; group-history references are v18; v22 adds the local-only draft `kind`,
+  `literacy` or `numeracy`).
 
 `documentation/DATABASE_SCHEMA_GUIDE.md` is a relational-modelling primer, not a current schema
 reference. The RLS and synchronization behavior is authoritative only in
@@ -303,6 +304,44 @@ Native back swipe, force-quit recovery, A03s timing and server convergence remai
 Submitted history is currently view-only. Saved-session editing may not ship until attendee removal
 is correct.
 
+### 6.6a Numeracy sessions
+
+Numeracy EAs (`useActiveProgrammeSubject().isMaths === true`, from the programme, not the job
+title) get the same group-first route: **Who are you teaching? → lesson plan → How to teach it →
+Wrap up → Save lesson → Session complete** (numeracy design
+[spec](docs/superpowers/specs/2026-10-31-numeracy-tracker-and-lessons-design.md) §6, Track D
+[plan](docs/superpowers/plans/2026-11-01-numeracy-d-screens.md)).
+
+- The picker reuses the literacy picker (`kind="numeracy"`), with a "Next: …" line of step names
+  per group from the numeracy planner over the group's roster. A leftover draft of the other
+  subject shows a note and **Discard it**, never the other subject's screens.
+- The lesson plan shows attendance, "Group N · M min lesson" (M = the chosen activities' minutes),
+  a Warm-up and two Activity cards. Each card shows its step, "{r} of {p} are ready", the
+  children still on an earlier step and the children who can help a partner (never the same
+  child twice). **Swap** offers every step the group could do now; with no ready activity step,
+  **Choose a step** adds a "Practise again" card. **How to teach it** shows the step's goal and
+  the card's activity: numbered steps and what's needed.
+- The plan freezes (and the draft is saved) on the first Swap, on opening How to teach it, or on
+  Wrap up →. Before that it follows attendance and new
+  maths data (history pages and `skill_mastery` sync results) while the lesson is open.
+- Wrap up asks "Who can do these without help?" with a Tick when strip per taught step and one chip
+  per taught step per child; chips only add ticks, and the "N / 37 ›" sheet can untick. Every
+  change is held in the draft until **Save lesson**, which has no empty-save confirmation.
+- Save writes, in one SQLite transaction: the session with `activities.numeracy =
+  { curriculum_edition, plan, plan_reason?, taught }`, its attendees, each held tick through
+  `setSkillMastery` (skipping a tick older than an owed correction, or for a step key the
+  bundled curriculum no longer has, as "kept back"), and the draft discard. The programme must
+  still be active and a numeracy programme inside that transaction (`PROGRAMME_NOT_NUMERACY`).
+  A back-dated lesson saves `plan: null, plan_reason: 'past_date'` and keeps `taught`.
+  Session complete adds a **Taught** receipt row (`src/services/numeracyLessonSave.js:26`,
+  `src/numeracyLesson/numeracyRecord.js:9`, `src/numeracy/planRecord.js:33`).
+- The **Number tracker** opens from the class row and ticks at once
+  (`src/services/numeracyTick.js`), re-checking the programme inside each write.
+
+Device acceptance is gate
+[W1–W9](documentation/device-gates-sqlite-backend-2026-07.md#w-numeracy-screens-track-d-2026-11),
+not yet run.
+
 ### 6.7 Assessments
 
 - Select from the class assessment roster: **"Your children"** then **"Rest of the class"**,
@@ -419,9 +458,9 @@ Initial Sentry posture (independent of the diagnostic lane):
 
 ### 7.1 Additional session forms
 
-Numeracy Coach, ZZ Coach, and Yeboneer requirements have not been gathered or implemented. Each form
-needs its own domain specification and persistence contract. Do not clone the Literacy form and
-rename fields.
+The numeracy lesson flow is built (§6.6a; device gate W open). ZZ Coach and Yeboneer requirements
+have not been gathered or implemented. Each form needs its own domain specification and persistence
+contract. Do not clone the Literacy form and rename fields.
 
 ### 7.2 Group-centred sessions
 

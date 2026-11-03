@@ -41,7 +41,7 @@ test('lesson_drafts is local only: exactly these columns and no sync bookkeeping
   expect(columns).toEqual([
     'id', 'slot', 'session_id', 'programme_id', 'group_id', 'class_id',
     'language_code', 'pack_id', 'lesson_date', 'attendance', 'plan', 'plan_fixed_at', 'ticks',
-    'tracker_changes', 'reading_level_changes', 'notes', 'created_at', 'updated_at',
+    'tracker_changes', 'reading_level_changes', 'notes', 'created_at', 'updated_at', 'kind',
   ]);
   expect(await db.getAllAsync('pragma foreign_key_list(lesson_drafts)')).toEqual([]);
 });

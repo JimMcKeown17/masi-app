@@ -28,7 +28,10 @@ export const lessonHeaderSeenLabel = (lastSeenOn, today) => {
 };
 // A group with no suggested letters (isiZulu, a class still to choose) shows only when it was seen.
 // The update message is a sentence, so it wraps between its words; only its dot stays bound.
-export const lessonRowDetail = (seen, letters = [], { needsAppUpdate } = {}) => needsAppUpdate
+// Numeracy's next steps are separate details, so a long line wraps before a step, never inside one.
+export const lessonRowDetail = (seen, letters = [], { needsAppUpdate, nextSteps } = {}) => nextSteps?.length
+  ? joinDetail([seen, `Next: ${nextSteps[0]}`, ...nextSteps.slice(1)])
+  : needsAppUpdate
   ? [joinDetail([seen]), UPDATE_APP_LETTERS_MESSAGE].filter(Boolean).join(' · ')
   : joinDetail([seen, letters.length ? `letters ${letters.join(' ')}` : null]);
 export const lessonDateLabel = (lessonDate, today) => lessonDate === today

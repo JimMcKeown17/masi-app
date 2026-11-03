@@ -278,3 +278,37 @@ Jest navigation and real-SQLite durability coverage do not establish native iOS 
 behaviour, A03s timing or phone-to-server convergence. Record results here and in the lesson-flow
 Verification Register subsection of the build log. Task 12's ADR and PR/review closure are separate
 from these physical-device gates.
+
+## W. Numeracy screens (Track D, 2026-11)
+
+Device acceptance for the numeracy screens built on `feat/numeracy-screens`: the Number tracker,
+Record's "Who are you teaching?" for numeracy, the lesson plan with Swap, How to teach it, Wrap up
+and Save lesson, and Home's lesson card by kind
+([plan](../docs/superpowers/plans/2026-11-01-numeracy-d-screens.md) Task 13 Step 4). It needs Jim's
+yes for EAS **preview** builds from the branch head (Android and iOS) and for staging test data on
+`masi-app-sqlite` (confirm `project_ref=segygjzpujphwvrubusm`): a numeracy test EA with an active
+`numeracy` assignment, one class, six children and one group. Run on the Galaxy A03s at 360 dp
+(`wm density 320`) and one iPhone, at default text size, with no screen-reader checks. Fresh
+install, and wait for the first sync to finish before checking. A failure gets an MA-BUG record
+before any fix. Record build ids, source revision, platform and evidence with each result.
+
+**Status 2026-11-03.** A03 run on Android preview build 57 (EAS `899e7e04`, from `6b0267a9`),
+fresh install, staging test EA `test+numeracy@masinyusane.org` (Thandi Numeracy) plus the literacy
+test EA for W7. W1–W8 passed on the A03 apart from four bugs (fixed in code on the branch after
+the run and waiting for an A03 recheck on the next build: MA-BUG-20261103-001 (How to teach it, last
+line under the navigation bar), -002 (tracker tap 466–817 ms), -003 (Wrap up notes under the
+keyboard, literacy too) and -004 ("pairs" target copy)). Not yet exercised: a real Swap and W2's "still on …" case. iPhone (iOS build 27, EAS `64c39f8d`) is
+Jim's and pending. W9 waits for the EGMA freeze. Jest and real-SQLite suites cover the logic (build
+log, "2026-11-01 — Numeracy Track D: screens").
+
+| Gate | Check | Builds needed | Result |
+|---|---|---|---|
+| W1 | Record: "Who are you teaching?" shows Up next with a "Next: …" line; no literacy text anywhere (no letters, no reading level, no letter tracker icon) | `preview`, Android + iOS | **A03 57: pass.** Up next with a "Next: …" line; no letters, reading level or letter tracker icon. Polish for the wording pass: detail lines begin with "·". iPhone pending. |
+| W2 | Lesson plan: "Group N · M min lesson", a Warm-up and two Activity cards, "N of M are ready"; after ticking two children back on the tracker, "still on …" names them and they are not in "can help"; nothing clipped at 360 dp | `preview`, Android + iOS | **A03 57: pass.** "Group 1 · 18 min lesson", Warm-up rotated, two Activity cards, "6 of 6 are ready", "Anele and Lwazi can help a partner"; nothing clipped at 360 dp. Not checked: the "still on …" case after ticking two children back. Content note for the partner: two activity cards in one lesson were both called "Count and show". iPhone pending. |
+| W3 | How to teach it: opens from a card; goal, numbered steps and needs readable while scrolling; sums don't break across lines; Back returns to the same plan | `preview`, Android + iOS | **A03 57: pass with one bug.** Opens from a card; goal, numbered steps, sums kept together; Back returns to the same plan. **Bug MA-BUG-20261103-001:** the last line ("You need: …") stays under the navigation bar (fixed in `ec4569dd`). iPhone pending. |
+| W4 | Swap and resume: Swap a card; leave with Keep, reopen from Home's "Lesson in progress": same cards; force-quit and reopen: same | `preview`, Android + iOS | **A03 57: resume pass; Swap not exercised.** Keep, then resume from Home's "Lesson in progress", and after a force-quit: same cards. The Swap sheet offered only the card's current step (right for this group's empty tracker, but nothing could be swapped), so a real swap is still untested. Polish: a one-option Swap sheet is a dead end. iPhone pending. |
+| W5 | Wrap up: strips collapse and open; chips tick and untick a new tick; "N / 37 ›" opens the sheet, untick a stored tick, Done; **Save lesson** in airplane mode gives Session complete with a Taught row; back online, sync clears; a staging read-only query shows the session's `activities.numeracy` keys (`curriculum_edition`, `plan`, `taught`) and the `skill_mastery` rows. iPhone: keyboard behaviour on the Notes field | `preview`, Android + iOS | **A03 57: pass with one bug.** Chips tick and untick; the tracker sheet unticks a stored tick; Save lesson offline gave Session complete with the Taught row; online, everything synced in about 12 s. Staging read-only check: `activities.numeracy` has `curriculum_edition`, `plan` and `taught`, and the `skill_mastery` rows match. **Bug MA-BUG-20261103-003:** the Notes field stays under the keyboard (literacy Wrap up has the same setup). **Bug MA-BUG-20261103-004:** Home and Session complete say "N more pairs reach your target" (fixed in `df8632f2`). iPhone keyboard check pending. |
+| W6 | Number tracker: opened from the class row; tiles fit with no sideways scroll; a tap ticks and unticks at once (< 300 ms by eye on the A03s); an implied tile explains itself; the ⓘ step sheet shows Tick when and the Tick button; an offline tick syncs later | `preview`, Android + iOS | **A03 57: fail on timing.** Tiles fit 360 dp with no sideways scroll; the implied note explains itself; the step sheet shows Tick when and Tick; an offline tick synced later. **Bug MA-BUG-20261103-002:** finger-down to tile change 467, 466, 817 and 550 ms (screen recording with show touches), and a quick second tap is ignored while a write runs. iPhone pending. |
+| W7 | Literacy EA unchanged: letter tracker icon, the literacy lesson flow and Home's lesson card behave as before | `preview`, Android + iOS | **A03 57: pass.** Literacy test EA: picker, lesson, leave guard, resume, discard and the letter tracker buttons unchanged. iPhone pending. |
+| W8 | Timing: picker rows < 500 ms after focus on the A03s (Share logs timing line) | `preview`, Android | **A03 57: pass.** About 484 ms from touch to settled picker rows (screen recording). |
+| W9 | After the EGMA freeze: Assessment tiles lock (EGMA results stay `-draft` until the freeze before December, so amber/Assessment tiles are covered by Jest fixtures only until then) | `preview` after the freeze, Android + iOS | pending |

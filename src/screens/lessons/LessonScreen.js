@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CommonActions, useFocusEffect, usePreventRemove } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
+import { useLessonExitGuard } from '../../hooks/useLessonExitGuard';
 import { useLessonDraft } from '../../hooks/useLessonDraft';
 import { useProgrammeTodayKey } from '../../hooks/useProgrammeTodayKey';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
@@ -44,34 +45,11 @@ export default function LessonScreen({ navigation, route }) {
   const [addVisible, setAddVisible] = useState(false);
   const [otherVisible, setOtherVisible] = useState(false);
   const [discardVisible, setDiscardVisible] = useState(false);
-  const [leaveAction, setLeaveAction] = useState(null);
-  const [pendingExit, setPendingExit] = useState(null);
+  const { leaveAction, setLeaveAction, requestExit } = useLessonExitGuard({ navigation, route, status,
+    restartRoute: 'Lesson', restartParams: { groupId, upNextGroupId } });
   const childKey = JSON.stringify(draft?.attendance.childIds ?? []);
   const error = lesson.error && lesson.error !== inputError
     ? typeof lesson.error === 'string' ? lesson.error : lesson.error.message : actionError;
-
-  usePreventRemove(status === 'ready', ({ data }) => setLeaveAction(data.action));
-  useEffect(() => {
-    if (status !== 'ready') return;
-    const state = navigation.getState();
-    const index = state.routes.findIndex(item => item.key === route.key);
-    if (state.routes[index - 1]?.name !== 'SessionForm') return;
-    // A kept lesson leaves to where the EA started; the picker below would reopen it on focus.
-    navigation.dispatch(current => {
-      const lessonIndex = current.routes.findIndex(item => item.key === route.key);
-      if (lessonIndex < 1 || current.routes[lessonIndex - 1].name !== 'SessionForm') return CommonActions.reset(current);
-      const routes = current.routes.filter((_, i) => i !== lessonIndex - 1);
-      return CommonActions.reset({ ...current, routes, index: current.index - 1 });
-    });
-  }, [status, navigation, route.key]);
-  // These actions run after the committed empty render has released usePreventRemove.
-  useEffect(() => {
-    if (status === 'missing') navigation.goBack();
-    if (status !== 'empty' || !pendingExit) return;
-    setPendingExit(null);
-    if (pendingExit === 'back') navigation.goBack();
-    else navigation.replace('Lesson', { groupId, upNextGroupId });
-  }, [status, pendingExit, navigation, groupId, upNextGroupId]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -125,7 +103,7 @@ export default function LessonScreen({ navigation, route }) {
   const discardAndExit = restart => attempt(async () => {
     await discard();
     setDiscardVisible(false);
-    setPendingExit(restart ? 'restart' : 'back');
+    requestExit(restart ? 'restart' : 'back');
   });
   const chooseClass = id => attempt(() => apply(transitions.chooseClass, { classId: id }));
   const chooseLanguage = languageCode => attempt(() => apply(transitions.chooseLanguage, { languageCode }));

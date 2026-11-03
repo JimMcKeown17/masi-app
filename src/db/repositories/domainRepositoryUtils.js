@@ -212,6 +212,10 @@ export const getActiveProgrammeId = async (db, userId) => {
   return assignment?.programme_id || null;
 };
 
+export const getProgrammeById = async (db, programmeId) => db.getFirstAsync(
+  'select id, code from programmes where id = ?', programmeId,
+);
+
 export const hasActiveProgrammeAssignment = async (db, userId, programmeId) => Boolean(await db.getFirstAsync(`
   select 1 from staff_programme_assignments
   where user_id = ? and programme_id = ? and ended_at is null

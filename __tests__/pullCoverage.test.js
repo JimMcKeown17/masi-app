@@ -3,7 +3,7 @@ jest.mock('../src/services/supabaseClient', () => ({
   ...require('../test-support/supabaseTestConfig'), supabase: {} }));
 
 import {
-  skillMasteryCompletenessByChild, isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete,
+  assessmentCompletenessByChild, skillMasteryCompletenessByChild, isCoverageWalkComplete, isSessionHistoryComplete, isMasteryInputsComplete,
   sessionHistoryCompletenessByChild, sessionHistoryCoveredChildIds, masteryCompletenessByChild,
 } from '../src/services/pullCoverage';
 import * as syncStateRepositories from '../src/db/repositories/syncStateRepository';
@@ -242,6 +242,28 @@ describe('isMasteryInputsComplete through real walks', () => {
     wall = Date.parse('2026-09-01T09:00:00Z');
   });
   afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
+
+  test('assessment completeness ignores the letter cursor', async () => {
+    await assessments();
+    const options = { database: db, userId: 'user-1', childIds: ['child-a', 'child-b'] };
+    expect(await assessmentCompletenessByChild(options)).toEqual({ 'child-a': true, 'child-b': true });
+    expect(await masteryCompletenessByChild(options)).toEqual({ 'child-a': false, 'child-b': false });
+    await db.runAsync("update class_ea_assignments set unassigned_at = '2026-11-01'");
+    expect(await assessmentCompletenessByChild(options)).toEqual({ 'child-a': false, 'child-b': false });
+  });
+
+  test('numeracy completeness reads ticks from skill mastery coverage', async () => {
+    const { loadNumeracyCompleteness } = require('../src/numeracyLesson/inputs/numeracyInputs');
+    const ticks = { 'child-a': true }, evidence = { 'child-a': false };
+    const services = { assessmentHistory: {
+      skillMasteryCompletenessByChild: jest.fn(async () => ticks),
+      assessmentCompletenessByChild: jest.fn(async () => evidence),
+    } };
+    const options = { childIds: ['child-a'], programmeId: 'programme-a', academicYear: { id: 'year-2026', starts_on: '2026-01-15' } };
+    expect(await loadNumeracyCompleteness({ services, ...options })).toEqual({ ticks, evidence });
+    expect(services.assessmentHistory.skillMasteryCompletenessByChild).toHaveBeenCalledWith({ childIds: options.childIds });
+    expect(services.assessmentHistory.assessmentCompletenessByChild).toHaveBeenCalledWith(options);
+  });
 
   test('per-child mastery answers match isMasteryInputsComplete, including a child in an unheld class', async () => {
     await both();

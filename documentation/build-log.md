@@ -5620,6 +5620,38 @@ where the store builds listen; the `preview` EAS environment holds all five Sent
 | 2026-11-01 | `git diff --stat origin/main -- content/egra` | PASS: no output; exit 0. | EGRA unchanged. Also ran `git diff --stat origin/main -- content/egma`: no output; exit 0. |
 | 2026-11-01 | `env -u SUPABASE_ACCESS_TOKEN npm run sqlite:staging:push` (Track B worktree, isolated helper, `project_ref=segygjzpujphwvrubusm`) | PASS: applied `20261101120000_skill_mastery_current_state.sql`; verify query `true, 0, false` (switch on, no rows, anon cannot execute); advisors add only the accepted SECURITY DEFINER class for the two new RPCs. | Numeracy Track B Task 7 with Jim's go-ahead. Preconditions: only the numeracy test account assigned; pending set and dry run were exactly this migration. |
 
+### 2026-11-01 — Numeracy Track D: screens (Verification Register)
+
+Branch `feat/numeracy-screens`. Baseline (Task 0, clean `git archive` of `29e85cc8`): unit 496 suites / 7,933 tests, integration 101 / 1,416. Codex built each task; Claude reviewed each diff, reran the checks and committed. Narrative: "2026-11-01 — Numeracy Track D: screens (feat/numeracy-screens)" at the end of this log.
+
+| Date | Command/Check | Result | Notes |
+| --- | --- | --- | --- |
+| 2026-11-01 | Task 1 `6cca57eb` (draft kind, SQLite v22): Step 4 suites plus skillMasteryMigration, LessonScreen, lessonSave, LessonPickerScreen, debugExport | PASS: 11 suites / 200 tests; `lessonDraftsKind.test.js` (real SQLite, integration list) 9/9 | Literacy pins updated for the new column only: 2 expected rows gain `kind: 'literacy'`, the column list gains `kind`, the debug-dump migration list gains v22. |
+| 2026-11-01 | Task 2 `49eee394` (inputs, evidence reader, completeness): Step 4 suites plus lessonInputs, sharedClientStatic, moduleStateAllowlist, LessonScreen, LessonPickerScreen | PASS: 11 suites / 212 tests; integration numeracyInputs + handleServices 2 / 47; assessmentRegistry 28/28 | The first (contaminated) baseline caught a real regression: `assessmentRegistry.test.js`'s exact-export pin lacked `MATHS_EVIDENCE_CODES`; fixed in the Task 2 commit. |
+| 2026-11-01 | Task 3 `756e1f9a` (card helpers, stored plan): Step 4 suites plus numeracyKnownSteps, numeracyEvidence, numeracyInputs | PASS: 9 suites / 94 tests | Track C "planner is unchanged" literals checked against the original `planLesson.js` from a temporary copy (deleted). |
+| 2026-11-01 | Task 4 `9d1683f8` (copy, plain-words guard): numeracyCopy, numeracyCopyPlainWords, numeracyCards, lessonPlanEnginePurity, designSystemGuard; `npm run test:content` | PASS: 5 suites / 351 tests; content 45/45, exit 0 | Banned list moved to `content/numeracy-curriculum/bannedWords.cjs`, shared by `verify.cjs` and the new static scan. |
+| 2026-11-01 | Task 5 `7e46a86e` (transitions, record, one-transaction save): Step 4 suites plus numeracyCopyPlainWords, sharedClientStatic, lessonDraftsKind, lessonDraftController | PASS: 11 suites / 111 tests; integration numeracyLessonSave + lessonSave 49 tests (11 real-SQLite numeracy save tests incl. sync through a mocked `set_skill_mastery`) | `historyPullTriggerBudget` regex gains `numeracyLessonSave`. |
+| 2026-11-01 | Task 6 `2351ea65` (tracker model, tiles, rows, step sheet): Step 4 suites plus letterStateColors, LetterTrackerBottomSheet, lessonPlanEnginePurity, moduleStateAllowlist, historyPullTriggerBudget | PASS: 10 suites / 372 tests | Width rests on constants (6×44 + 5×6 = 294 ≤ 296 dp) and a render test; device W6 checks it. |
+| 2026-11-01 | Task 7 `ef649233` (Number tracker screen, immediate ticks): Step 4 suites plus numeracyCopyPlainWords, sharedClientStatic, productionBindingStatic, moduleStateAllowlist, NumberTrackerGrid, StepSheet | PASS: 14 suites / 474 tests; integration NumberTrackerPanel 18/18 | LetterMasteryPanel and LetterTrackerScreen.plan5 pass unmodified. Review fix: a load failure no longer shows the programme-changed note (logged; grid stays read-only until a confirmed load). |
+| 2026-11-01 | Task 8 `847bd0a7` (`useNumeracyLessonDraft`): hook suite plus historyPullTriggerBudget, useLessonDraft, moduleStateAllowlist, sharedClientStatic, productionBindingStatic, numeracyCopyPlainWords, lessonPlanEnginePurity, lessonDraftController | PASS: 9 suites / 85 tests; integration 12/12 | Real SQLite default handle with real history stores and a fake history server; only OfflineContext is mocked. |
+| 2026-11-01 | Task 9 `c70a72a7` (Record → numeracy picker): numeracy picker, SessionForm, programme switch, literacy picker, navigation, lessonInputs, lessonDates, plain words plus 5 static guards | PASS: 13 suites / 464 tests; integration numeracy + literacy pickers 34/34; picker loader 2–3 ms for 6 groups × 6 children | `SessionFormScreen.test.js` "coming soon" case rewritten to "gets the numeracy picker" (the copy was deleted, as planned); `SessionFormProgrammeSwitch.test.js` rewritten as the plan required. LessonPickerScreen, LessonFlowNavigation, lessonInputs unmodified. |
+| 2026-11-01 | Task 10 `49b0b848` (lesson plan, Swap, How to teach it, `useLessonExitGuard`): Step 4 suites; integration NumeracyLessonScreen + LessonFlowNavigation + LessonPickerScreen.numeracy + useNumeracyLessonDraft; 7 static guards | PASS: 8 suites / 450 tests; integration 4 / 39; static 7 / 28 | `LessonScreen.test.js` and `LessonFlowNavigation.test.js` pass unmodified (P16). Review fix: the exit guard re-ran every render on a new `restartParams` object (repeated `goBack()` on `missing`); now keyed on its JSON. |
+| 2026-11-01 | Task 11 `96580603` (Wrap up, deferred tracker sheet, Session complete): Step 4 suites; integration NumeracyWrapUpScreen + NumeracyWrapUp.save + NumberTrackerSheet + LessonWrapUp.save + NumeracyLessonScreen; 8 further suites | PASS: 11 suites / 487 tests; integration 5 / 39; further 8 / 86 | Literacy Wrap up suites and LetterTrackerBottomSheet unmodified. An extra test ("a pending removal shows not yet even when a higher stored tick implies the step") caught a real chip bug during the build. |
+| 2026-11-01 | Task 12 `f6ad0b6b` (Home resumes by kind): homeAttention, HomeScreen, sharedClient, productionBinding, moduleState, designSystemGuard | PASS: 6 suites / 435 tests; integration HomeScreen 55/55 | Home fixtures gain `kind: 'literacy'` and `route: 'Lesson'` (real rows always carry kind). |
+| 2026-11-01 | Task 13 full unit gate: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand` | PASS: **516 suites / 8,163 tests**, exit 0 | +20 suites / +230 tests on the Task 0 baseline. |
+| 2026-11-01 | Task 13 full integration gate: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: **111 suites / 1,521 tests**, exit 0 | +10 suites / +105 tests on the baseline. |
+| 2026-11-01 | Task 13 `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:content` and `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:types` | PASS: content 45/45, exit 0; types `tsc --noEmit -p tsconfig.assessment-questions.json` exit 0 | |
+| 2026-11-01 | Literacy test files: `git diff --stat origin/main...HEAD -- __tests__` | PASS: 16 existing test files modified, every one named in Tasks 1–12 (pins for v22/kind/exports, rewritten coming-soon cases, additive cases) | Found and reverted pure indentation churn in `sessionCompleteView.test.js` (Task 11's mechanical tidy had de-indented 11 existing literacy tests); the file now differs from main by additions only, 48/48. No whitespace-only churn elsewhere (`git diff -w` vs raw line counts equal for every modified test and source file). |
+| 2026-11-01 | Whole-branch Codex adversarial review, round 1 (`adversarial-review --base origin/main --model gpt-6-astra`, at `f3ca0375`) | needs-attention: 4 findings (2 high, 2 medium); 2 fixed, 2 rejected | Fixed in `e026fa9b`: (1) opening How to teach it neither saved nor froze the plan, so a history page or `skill_mastery` result landing while the EA taught could change what Wrap up recorded as `taught` (RED: no draft row after opening the card; GREEN: `NumeracyLessonScreen.test.js` 10/10); (2) `useNumeracyLessonDraft` lacked literacy's `if (!active)` check before `controller.open`, so a start abandoned during its group read could replace the shared controller's lesson (RED: `open` called once after unmount; GREEN: `useNumeracyLessonDraft.test.js` 13/13). Rejected: confirming the programme on draft resume (plan Global Constraints list the capture points; the save refuses `PROGRAMME_NOT_ACTIVE`/`PROGRAMME_NOT_NUMERACY` inside its transaction, so nothing is written under the wrong programme) and surfacing kept-back ticks (plan Review Focus 2: "The save succeeds, the tick is not written, and no error shows"). |
+| 2026-11-01 | Targeted suites after round 1: NumeracyLessonScreen, useNumeracyLessonDraft, HowToTeachScreen, LessonFlowNavigation, LessonScreen, NumeracyWrapUpScreen, NumeracyWrapUp.save, numeracyCopyPlainWords and 6 static guards | PASS: 14 suites / 457 tests | |
+| 2026-11-01 | Whole-branch Codex adversarial review, round 2 (at `e026fa9b`; run because round 1 found a real correctness bug in the saved `taught` record) | approve: no material findings | Cap of 2 rounds reached; no further round. |
+| 2026-11-01 | Full gates after round 1: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npm run test:integration` | PASS: **516 suites / 8,165 tests**, exit 0; **111 suites / 1,523 tests**, exit 0 | +2 tests (the two regressions). Final against the Task 0 baseline: unit +20 suites / +232 tests, integration +10 suites / +107 tests. |
+| 2026-11-03 | Device gate W on the Galaxy A03s, Android preview build 57 (EAS `899e7e04`, from `6b0267a9`), 360 dp, default text | W1–W8 pass on the A03 except four bugs: MA-BUG-20261103-001 to -004 | Details in `documentation/device-gates-sqlite-backend-2026-07.md` §W. Not exercised: a real Swap (only one option offered) and W2's "still on …" case. iPhone (iOS 27, `64c39f8d`) is Jim's. |
+| 2026-11-03 | Fixes `ec4569dd` (001), `df8632f2` (004), `c0650d23` + `145cd988` (002), `44fc8a70` (003): each RED first, then GREEN | PASS: HowToTeachScreen 4/4; goal-copy suites 130/130; FormScrollView + both Wrap up screens + keyboard guard 52/52; NumberTracker unit 27/27, integration 26/26 | 002's new tests: tile changes before the write finishes, second tile while pending, order across close and reopen, failed write rolls back only its own tile. |
+| 2026-11-03 | Codex adversarial review of the fix commits (`--base 6b0267a9 --model gpt-6-astra`), round 1 at `44fc8a70` | needs-attention: 1 high, fixed | The tracker's own write queue outlived the screen, so tick, untick, close, reopen, tick could commit the old untick last (reproduced). Fixed in `145cd988` by submitting each tap to the signed-in handle's transaction queue at tap time. |
+| 2026-11-03 | Codex adversarial review round 2 at `145cd988` | approve: no material findings | Reviewer's in-memory harness ran 21 ordering, failure and stale-handle scenarios. |
+| 2026-11-03 | Full gates at `145cd988`: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `npm run test:integration`; `npm run test:content` | PASS: **517 suites / 8,183 tests**; **111 / 1,530**; content exit 0 | +1 suite / +18 tests and +7 integration tests on the 2026-11-01 Task 13 gates. A03s recheck on the next build still open. |
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |
@@ -8508,3 +8540,157 @@ summary printed `project_ref=segygjzpujphwvrubusm`.
   passed; the seven PostgreSQL harnesses all exit 0 (skill-mastery 31/31, letter-mastery 20/20,
   assessment-history 144/144, reporting 132/132, history-authorization, ea-access,
   session-group 36/36). Task 7 is still PENDING.
+
+### 2026-11-01 — Numeracy Track D: screens (feat/numeracy-screens)
+
+Track D gives numeracy EAs their screens, on top of Tracks A (curriculum), B (`skill_mastery`) and
+C (planner). Plan: `docs/superpowers/plans/2026-11-01-numeracy-d-screens.md`; spec:
+`docs/superpowers/specs/2026-10-31-numeracy-tracker-and-lessons-design.md`. Jim accepted every plan
+call (P1–P16) and open-question answer on 2026-11-01. Codex built Tasks 1–12; Claude reviewed each
+diff, reran the checks and committed with the plan's messages. Counts are in the Verification
+Register subsection "Numeracy Track D: screens".
+
+**What shipped**
+
+- **Draft kind (Task 1, SQLite v22).** `lesson_drafts.kind` (`literacy` | `numeracy`, local only,
+  fixed after create), a numeracy draft shape in the repository validator, `.kind` on
+  `LessonDraftCorruptError`, and `lessonRouteForDraft`.
+- **Inputs (Task 2).** `MATHS_EVIDENCE_CODES`, `getMathsEvidenceResults`,
+  `assessmentCompletenessByChild` (the assessment half of `masteryCompletenessByChild`, unchanged
+  behaviour), `getProgrammeById`, `confirmNumeracyProgramme` (fresh read, never the subject cache)
+  and the numeracy lesson inputs, which read completeness before the data it describes.
+- **Cards and stored plan (Task 3).** `cardReadiness`, `pickNumeracyActivity`, `cardHelpLists` (P5),
+  `stillOnStep` (P4), `swapOptions`, `storeNumeracyPlan`, `isNumeracyPlanSuperseded`,
+  `savedNumeracyPlan`.
+- **Copy (Task 4).** Every EA string in `src/numeracyLesson/copy.js`, built from content; one banned
+  word list for content and screens, enforced by a Babel-based static scan.
+- **Save (Task 5).** Pure draft transitions, `buildNumeracySessionRecord`, and `saveNumeracyLesson`:
+  one transaction for the programme and authority checks, session, attendees, held ticks (with the
+  correction-time pre-filter and retired-key skip, both counted as kept back) and the draft discard.
+- **Tracker (Tasks 6–7).** `buildTrackerModel`, `StepTile`, `SkillRow`, `NumberTrackerGrid`,
+  `StepSheet`, `NumberTrackerPanel` (immediate ticks through `tickStepNow`, which re-checks the
+  programme inside its write), the `NumberTracker` route from the class row, and
+  `useMasterySyncRefresh` (the letter refresh hook now wraps it).
+- **Lesson (Tasks 8–10).** `useNumeracyLessonDraft` (freeze on first Swap or Wrap up, P2; refresh on
+  `skill_mastery` sync and history pages while unfrozen), the numeracy picker (`kind="numeracy"`,
+  "Next: …" line, P12 leftover-draft note with Discard it in both directions), the Record branch on
+  `isMaths === true` (P11), `NumeracyLessonScreen`, `LessonCard`, `SwapSheet`, **Choose a step**,
+  `HowToTeachScreen` (P8) and `useLessonExitGuard`, shared with the literacy Lesson screen (P16).
+- **Wrap up and Home (Tasks 11–12).** `NumeracyWrapUpScreen`, `TickWhenStrip`, `WrapUpStepRow`,
+  `NumberTrackerSheet` (deferred mode, no sync subscription), the Taught receipt row (P15), and
+  Home's lesson card routed by kind and shown only when the kind matches the subject.
+- **Docs (Task 13).** CONTEXT (Number tracker, Lesson shape, draft kind, numeracy capture flow; the
+  stale "coming soon" sentence replaced), PRD §6.6a, contract map (Track D save order, draft kind,
+  numeracy evidence completeness, Home routing), design system "Numeracy components" and
+  `masteryStateColors`, LEARNING (why `kind` beat inference; need help versus can help), gate §W,
+  ROADMAP.
+
+**Deviations from the plan (all reviewed and accepted)**
+
+- `swapCard` also appends at `index === cards.length` (slot `activity`), so Choose a step needs no
+  other transition; `swapOptions`' review fallback takes each skill's highest eligible step and does
+  not fall back further when that step is taken.
+- `stillOnStep` returns `null` when the only missing earlier steps are retired keys; `needHelpLine`
+  then lists those children as "{names} is/are not ready yet" (new copy).
+- Unknown or retired step keys never throw in copy: titles fall back to the raw key, strips and Tick
+  when lines return nothing; How to teach it shows "This step isn't in this version of the app."
+- `StepTile` takes its spoken phrase as a `label` prop; `SkillRow`/`NumberTrackerGrid` take
+  `curriculum`; the panel renders the "Number tracker · n / total steps" line itself.
+- `lessonRowDetail` puts each "Next:" step in its own no-break unit so the line wraps between steps at
+  360 dp.
+- `NumberTrackerSheet` takes `programmeId` and `academicYear` for its evidence read; inside the sheet
+  the skill button opens nothing (no sheet over a sheet).
+- The discard confirm sheet reuses literacy's body "Its ticks and notes will be deleted." and cancel
+  label "Keep lesson".
+
+**Known risks and open items**
+
+- A frozen draft resumed across a curriculum edition that retired one of its card step keys would
+  throw while rendering (`cardReadiness` and the hook's step lookup assume the key exists). Rare
+  (needs an OTA content change mid-lesson); not handled, per the rare-edge-case rule.
+- Wrap up's Save is enabled before the planner inputs load; an early press shows the generic "Couldn't
+  save the lesson. Try again." (same as literacy). If the inputs never load, a numeracy lesson cannot
+  be saved from Wrap up.
+- On a load failure the Number tracker grid is read-only and shows no note (it logs).
+- `sessionCompleteView.js` (a util) now imports `numeracyLesson/copy.js`, which imports the draft
+  controller module for its error class. Works; a layering smell only.
+- A pending tile in the deferred sheet looks the same as a stored one.
+- Literacy follow-up (not fixed here, literacy must not change): `useLessonDraft` reloads participant
+  inputs only on lesson identity, participants or retry, so letter-mastery completeness that lands
+  while a literacy lesson is open never reaches its supersession rule. Filed as a GitHub issue (see
+  the review section below).
+
+**Device gate W: pending.** Not run: it waits for Jim's go for EAS preview builds and staging test
+data. Gate §W lists W1–W8 and W9 (Assessment tiles lock, after the EGMA freeze). Jest and real-SQLite
+suites do not establish 360 dp layout, A03s timing, native navigation or phone-to-server convergence.
+
+**New EA copy for Jim's wording pass** (the plan's quoted copy is verbatim): "{names} is/are not
+ready yet"; StepSheet "Known", "Assessment", "Close steps"; discard sheet "Its ticks and notes will be
+deleted." and "Keep lesson"; SwapSheet title "Choose a step"; "Steps can't be updated for this child";
+"Couldn't load steps. Close and try again."; How to teach it "{activity} · {n} min".
+
+**Whole-branch Codex review (Task 13 Step 3).** Round 1 (`gpt-6-astra`, at `f3ca0375`) returned
+needs-attention with four findings. Two were real and fixed in `e026fa9b`, each with a regression
+test written red first:
+
+- *How to teach it did not freeze the plan.* Before any change, the lesson plan recomputes whenever
+  its inputs change. An EA who opened How to teach it and taught for several minutes could come back
+  to different cards if a history page or a `skill_mastery` sync landed meanwhile, and Wrap up would
+  record the new cards as taught. Opening How to teach it now calls `ensureDraft()` first, which saves
+  the draft and freezes the plan (P2 amended: Swap, How to teach it or Wrap up). It also means a
+  force-quit while teaching resumes the same lesson. Residual: an EA who teaches straight from the
+  lesson screen without opening How to teach it still sees an unfrozen plan, which can visibly change
+  on screen until the first Swap or Wrap up.
+- *An abandoned start could open the shared controller.* Literacy's open effect checks `active`
+  before `controller.open`; the numeracy copy had lost that line. Restored.
+
+Two were rejected against explicit plan clauses: confirming the programme on draft resume (the
+plan's capture points are the picker, a new draft, the tracker load, each immediate tick and the
+save; the save refuses inside its transaction, so a resumed draft after a programme move can only
+fail to save, never write under the wrong programme), and showing kept-back ticks after a save
+(Review Focus 2). Round 2 (at `e026fa9b`) approved with no material findings; the two-round cap was
+reached. Final gates: unit 516 / 8,165, integration 111 / 1,523, content 45/45, types exit 0.
+
+**Also fixed in Task 13.** Task 11's mechanical tidy had de-indented 11 existing literacy tests in
+`sessionCompleteView.test.js`; restored in `7f2f9349`, so the file differs from main by additions
+only.
+
+**Literacy follow-up filed:** [#144](https://github.com/JimMcKeown17/masi-app/issues/144) (label
+`needs-triage`), "Literacy lesson plan ignores letter knowledge that finishes downloading while the
+lesson is open".
+
+### 2026-11-03 — Numeracy screens: A03s device gate W and four fixes (feat/numeracy-screens)
+
+Claude ran gate W on the Galaxy A03s with Android preview build 57 (EAS `899e7e04`, from `6b0267a9`)
+against staging, as the numeracy test EA and, for W7, the literacy test EA. The picker, lesson plan,
+resume, Wrap up offline save and sync, tracker layout and literacy screens passed. The picker
+settled in about 484 ms. Four bugs were recorded (docs PR #150, issues #146–#149) and Jim approved
+fixing all four the same day:
+
+- **MA-BUG-20261103-001** How to teach it has no sticky footer, so under edge-to-edge its last line
+  sat under the navigation bar. Padded with `useScrollBottomPadding()`.
+- **MA-BUG-20261103-004** "N more pairs reach your target" became "N more lessons to reach your
+  target." for every EA (Jim's wording).
+- **MA-BUG-20261103-003** Both Wrap up screens adjusted for the keyboard on iOS only. New
+  `FormScrollView` lifts the scroll area on Android by keyboard height plus the bottom inset (the
+  formula Toast already uses) and, while notes is focused, scrolls to the end when the keyboard
+  opens, when the viewport's own layout changes (the reliable moment on Android; the keyboard effect
+  can run before the viewport shrinks) and when the text grows. A guard keeps
+  `automaticallyAdjustKeyboardInsets` inside it. Not used: `react-native-keyboard-controller`, a
+  native module, which would rule out an over-the-air update to the 1.5.0 builds. The child and
+  class forms keep their own keyboard setup and its open 90 dp bug (MA-BUG-20261031-001).
+- **MA-BUG-20261103-002** A tracker tap waited for the guarded SQLite write before repainting
+  (466–817 ms) and locked the grid. The tile now changes at once through the tracker model's pending
+  overlay; `tickStepNow` is unchanged. Write time and render time were never measured apart, so the
+  A03s recheck is the test of the fix.
+
+**Review lesson.** Codex's first version kept its own write queue inside the panel. Review round 1
+showed the queue outliving the screen: tick, untick, close, reopen, tick could commit the old untick
+last. Two queues were each deciding order. The signed-in handle's `withTransaction` already orders
+every write in call order, so the fix deleted the panel's queue and calls `tickStepNow` at tap time.
+Round 2 approved.
+
+**Open.** A03s recheck on the next build (all four, plus a real Swap, W2's "still on …" case and the
+letter tracker's tap timing, which uses the same wait-then-repaint pattern and has no baseline).
+ForgotPasswordScreen enables its keyboard avoidance on iOS only (found by code scan, not seen on a
+phone, not recorded as a bug).

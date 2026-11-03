@@ -25,14 +25,16 @@ export default function SessionFormScreen({ navigation }) {
     );
   }
 
-  if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH && !isMaths) {
+  if (isMaths === true) return <LessonPickerScreen navigation={navigation} kind="numeracy" />;
+
+  if (profile?.jobTitleCode === JOB_TITLE_CODES.LITERACY_COACH) {
     return <LessonPickerScreen navigation={navigation} />;
   }
 
   return (
     <View style={styles.container}>
       <Text style={styles.message}>
-        Session forms for {isMaths ? 'Numeracy' : profile?.jobTitleName || 'your role'} are coming soon.
+        Session forms for {profile?.jobTitleName || 'your role'} are coming soon.
       </Text>
     </View>
   );

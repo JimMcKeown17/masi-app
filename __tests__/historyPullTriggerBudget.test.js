@@ -26,11 +26,11 @@ test('every history start belongs to the seven pinned trigger rows', () => {
 });
 test('repositories, components, hooks, upload and lesson persistence never start history', () => {
   const forbidden = files.filter(file => /src\/(db\/repositories|components|hooks)\//.test(file)
-    || /src\/services\/(offlineSync|lessonSave)\.js$/.test(file));
+    || /src\/services\/(offlineSync|lessonSave|numeracyLessonSave|numeracyTick)\.js$/.test(file));
   for (const file of forbidden) {
     const relative = path.relative(root, file), source = fs.readFileSync(file, 'utf8');
     // Task 9's panel-only hook observes page versions; it must never start a pull.
-    const pageObserver = relative === 'src/hooks/useLetterMasterySyncRefresh.js';
+    const pageObserver = relative === 'src/hooks/useMasterySyncRefresh.js';
     const found = /sessionHistory\.start|assessmentHistory\.start/.test(source)
       || (!pageObserver && /assessmentHistory/.test(source));
     expect({ file: relative, found }).toEqual({ file: relative, found: false });

@@ -1,0 +1,31 @@
+jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Ionicons' }));
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
+import { fireEvent } from '@testing-library/react-native';
+import { renderWithProviders } from '../test-support/renderWithProviders';
+import { getCurriculum } from '../content/numeracy-curriculum';
+import { buildTrackerModel, TRACKER_COLUMNS } from '../src/numeracyLesson/trackerModel';
+import { stepPhrase } from '../src/numeracyLesson/copy';
+import NumberTrackerGrid from '../src/components/numeracy/NumberTrackerGrid';
+import { TILE_SIZE, TILE_GAP } from '../src/components/numeracy/SkillRow';
+import { colors } from '../src/constants/colors';
+
+test('the grid fits a 360 dp phone', () => {
+  const curriculum = getCurriculum();
+  const model = buildTrackerModel({ curriculum });
+  const widest = Math.max(...model.sections.flatMap(s => s.rows).map(r => r.tiles.length));
+  expect(widest * TILE_SIZE + (widest - 1) * TILE_GAP).toBeLessThanOrEqual(296);
+  expect(TRACKER_COLUMNS.length * TILE_SIZE + (TRACKER_COLUMNS.length - 1) * TILE_GAP).toBe(294);
+  const onPressTile = jest.fn();
+  const grid = props => <View style={{ width: 360, paddingHorizontal: 32 }}><NumberTrackerGrid model={model} curriculum={curriculum} onPressTile={onPressTile} {...props} /></View>;
+  const screen = renderWithProviders(grid());
+  for (const step of curriculum.skills.flatMap(s => s.steps)) expect(screen.getByRole('button', { name: `${stepPhrase(curriculum, step.key)}, Not yet` })).toBeTruthy();
+  for (const text of ['Ticked', 'Assessment', 'Not yet', 'Counting']) expect(screen.getByText(text)).toBeTruthy();
+  const first = screen.getByRole('button', { name: 'Count objects up to 5, Not yet' });
+  expect(StyleSheet.flatten(first.props.style)).toMatchObject({ width: 44, height: 44, borderStyle: 'dashed', borderColor: colors.primary });
+  fireEvent.press(first);
+  expect(onPressTile).toHaveBeenCalledWith('count.5');
+  screen.rerender(grid({ readOnly: true }));
+  fireEvent.press(screen.getByRole('button', { name: 'Count objects up to 5, Not yet' }));
+  expect(onPressTile).toHaveBeenCalledTimes(1);
+});

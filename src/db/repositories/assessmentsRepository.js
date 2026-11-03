@@ -13,7 +13,7 @@ import { chunkArray, sqlPlaceholders } from './sqliteRepositoryUtils';
 import { validateMathsResult } from '../../assessment-questions/egma/validateMathsResult';
 import { validateResult } from '../../assessment-questions/contractTest/validateResult';
 import { assertSubmitShape } from '../../services/assessmentFamilyPayload';
-import { LETTER_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
+import { LETTER_EVIDENCE_CODES, MATHS_EVIDENCE_CODES } from '../../utils/assessmentRegistry';
 import { eligibleLetterResults } from '../../utils/letterMastery';
 import { toLocalDateString } from '../../utils/localDate';
 import { SERVER_COLUMNS } from '../../services/syncServerColumns';
@@ -275,6 +275,16 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     });
   };
 
+  const getMathsEvidenceResults = async ({ userId, programmeId, childIds, academicYear } = {}) => {
+    const db = await resolveDatabase(database);
+    const year = academicYear === undefined ? await getActiveAcademicYear(db) : academicYear;
+    if (!year) return [];
+    return getQuestionResults({
+      userId, programmeId, childIds, questionCodes: MATHS_EVIDENCE_CODES,
+      sinceDate: year.starts_on, untilDate: year.ends_on,
+    });
+  };
+
   // The child's eligible letter results in one language this academic year, newest first.
   const letterEvidenceFor = async ({ userId, childId, language } = {}) => eligibleLetterResults(
     await getLetterEvidenceResults({ userId, childId }), { childId, languageCode: language },
@@ -346,6 +356,7 @@ export const createAssessmentsRepository = ({ database } = {}) => {
     getQuestionResults,
     getLetterResults,
     getLetterEvidenceResults,
+    getMathsEvidenceResults,
     letterEvidenceFor,
     countResults,
     saveHistoryPage,

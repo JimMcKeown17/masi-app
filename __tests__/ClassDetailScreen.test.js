@@ -292,3 +292,18 @@ test('literacy actions stay hidden until the first programme read settles', () =
   expect(screen.queryByRole('button', { name: 'Letter tracker for Amahle Dlamini' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'View results for Amahle Dlamini' })).toBeNull();
 });
+
+test('the class row shows the Number tracker only for a confirmed numeracy EA', () => {
+  useActiveProgrammeSubject.mockReturnValue({ isMaths: true, loading: false });
+  const s = renderClassDetail();
+  fireEvent.press(s.getByLabelText('Number tracker for Amahle Dlamini'));
+  expect(navigation.navigate).toHaveBeenCalledWith('NumberTracker', { child });
+  useActiveProgrammeSubject.mockReturnValue({ isMaths: true, loading: true });
+  s.rerender(<ClassDetailScreen navigation={navigation} route={route} />);
+  expect(s.queryByLabelText('Number tracker for Amahle Dlamini')).toBeNull();
+  expect(s.queryByLabelText('Letter tracker for Amahle Dlamini')).toBeNull();
+  useActiveProgrammeSubject.mockReturnValue({ isMaths: false, loading: false });
+  s.rerender(<ClassDetailScreen navigation={navigation} route={route} />);
+  expect(s.queryByLabelText('Number tracker for Amahle Dlamini')).toBeNull();
+  expect(s.getByLabelText('Letter tracker for Amahle Dlamini')).toBeTruthy();
+});

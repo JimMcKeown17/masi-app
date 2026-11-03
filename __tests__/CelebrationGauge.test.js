@@ -42,7 +42,7 @@ test('2/3 static: final accessible image, numeral, suffix, heading and sub-line'
     fontFamily: typeRoles.textRowTitle.fontFamily, fontSize: 24, lineHeight: 28, marginLeft: 1,
   });
   expect(screen.getByText('2 of 3 sessions today')).toHaveStyle(typeRoles.displayHeading);
-  expect(screen.getByText('One more pair reaches your target.')).toHaveStyle(typeRoles.textSmall);
+  expect(screen.getByText('One more lesson to reach your target.')).toHaveStyle(typeRoles.textSmall);
   expect(screen.queryByTestId('gauge-earned', hidden)).toBeNull();
 });
 

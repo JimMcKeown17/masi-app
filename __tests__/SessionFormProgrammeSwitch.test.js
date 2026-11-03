@@ -1,6 +1,6 @@
-// Review finding (2026-10-31): a cached literacy subject must never let Record open the lesson
-// flow (which resumes a retained literacy draft) after the EA moves to numeracy under the same
-// sign-in. Real hook + real SessionFormScreen; only the programme read and the picker are faked.
+// A cached literacy subject must never mount the literacy picker after the EA moves
+// to numeracy under the same sign-in. Real hook + real SessionFormScreen; only the
+// programme read and the picker are faked. The numeracy picker is now available.
 import React from 'react';
 import { act, render } from '@testing-library/react-native';
 import { JOB_TITLE_CODES } from '../src/constants/jobTitles';
@@ -18,13 +18,13 @@ jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({
 jest.mock('../src/services/activeProgrammeGate', () => ({ getActiveProgrammeGate: (...args) => mockGate(...args) }));
 jest.mock('@react-navigation/native', () => ({ useFocusEffect: cb => require('react').useEffect(cb, [cb]) }));
 const mockPickerMounts = jest.fn();
-jest.mock('../src/screens/lessons/LessonPickerScreen', () => () => {
-  mockPickerMounts();
-  const { View } = require('react-native');
-  return <View testID="lesson-picker-stub" />;
+jest.mock('../src/screens/lessons/LessonPickerScreen', () => ({ kind = 'literacy' }) => {
+  mockPickerMounts(kind);
+  const { View, Text } = require('react-native');
+  return <View testID="lesson-picker-stub"><Text>picker:{kind}</Text></View>;
 });
 
-test('after a move to numeracy, Record never opens the lesson flow from the cached literacy subject', async () => {
+test('after a move to numeracy, Record mounts only the numeracy picker', async () => {
   expect(JOB_TITLE_CODES.LITERACY_COACH).toBeTruthy();
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: 'literacy' } });
   const first = render(<SessionFormScreen navigation={{}} />);
@@ -38,21 +38,23 @@ test('after a move to numeracy, Record never opens the lesson flow from the cach
   const screen = render(<SessionFormScreen navigation={{}} />);
   expect(screen.queryByTestId('lesson-picker-stub')).toBeNull();
   await act(async () => resolve({ hasActiveProgramme: true, programme: { code: 'numeracy' } }));
-  expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
-  expect(mockPickerMounts).not.toHaveBeenCalled();
+  expect(screen.getByText('picker:numeracy')).toBeTruthy();
+  expect(screen.queryByText('picker:literacy')).toBeNull();
+  expect(mockPickerMounts).not.toHaveBeenCalledWith('literacy');
 });
 
-test('a failed programme read never reopens the lesson flow for a known numeracy EA', async () => {
+test('a failed programme read never mounts the literacy picker for a known numeracy EA', async () => {
   mockGate.mockResolvedValue({ hasActiveProgramme: true, programme: { code: 'numeracy' } });
   const first = render(<SessionFormScreen navigation={{}} />);
-  await first.findByText('Session forms for Numeracy are coming soon.');
+  await first.findByText('picker:numeracy');
   first.unmount();
   mockPickerMounts.mockClear();
   mockGate.mockRejectedValue(new Error('read failed'));
   const screen = render(<SessionFormScreen navigation={{}} />);
   await act(async () => {});
-  expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
-  expect(mockPickerMounts).not.toHaveBeenCalled();
+  expect(screen.getByText('picker:numeracy')).toBeTruthy();
+  expect(screen.queryByText('picker:literacy')).toBeNull();
+  expect(mockPickerMounts).not.toHaveBeenCalledWith('literacy');
 });
 
 test('maths confirmed on another screen covers a failed first read on Record', async () => {
@@ -61,6 +63,7 @@ test('maths confirmed on another screen covers a failed first read on Record', a
   mockGate.mockRejectedValue(new Error('read failed'));
   const screen = render(<SessionFormScreen navigation={{}} />);
   await act(async () => {});
-  expect(screen.getByText('Session forms for Numeracy are coming soon.')).toBeTruthy();
-  expect(mockPickerMounts).not.toHaveBeenCalled();
+  expect(screen.getByText('picker:numeracy')).toBeTruthy();
+  expect(screen.queryByText('picker:literacy')).toBeNull();
+  expect(mockPickerMounts).not.toHaveBeenCalledWith('literacy');
 });

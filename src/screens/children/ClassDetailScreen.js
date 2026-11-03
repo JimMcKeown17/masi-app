@@ -95,6 +95,7 @@ export default function ClassDetailScreen({ route, navigation }) {
       <ClassChildRow child={child} groupName={group?.name} groupColor={group ? getGroupDotColor(groupIndex) : undefined}
         onPressResults={isMaths ? undefined : () => navigation.navigate('ChildResults', { child, classItem })}
         onPressGroup={() => openGroupPicker(child)}
+        onPressNumberTracker={maths === true && !subjectLoading ? () => navigation.navigate('NumberTracker', { child }) : undefined}
         onPressLetterTracker={isMaths ? undefined : () => navigation.navigate('LetterTracker', { child, classItem })}
         onPressEdit={() => navigation.navigate('EditChild', { childId: child.id })} />
     </View>;

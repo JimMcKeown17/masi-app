@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { useSignedInEA } from '../../context/SignedInEAContext';
 import { useAuth } from '../../context/AuthContext';
@@ -35,6 +35,7 @@ import TextField from '../../components/common/TextField';
 import BrandButton from '../../components/common/BrandButton';
 import InlineNote from '../../components/common/InlineNote';
 import ConfirmSheet from '../../components/common/ConfirmSheet';
+import FormScrollView from '../../components/forms/FormScrollView';
 import StickyActionFooter from '../../components/forms/StickyActionFooter';
 
 const toggleMark = (draft, childId, letter, change) => {
@@ -67,6 +68,7 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   const { draft, apply, beginSave, endSave } = lesson;
   const today = useProgrammeTodayKey();
   const onScroll = useHeaderHairline(navigation);
+  const [notesFocused, setNotesFocused] = useState(false);
   const [metadata, setMetadata] = useState(null);
   const [dateVisible, setDateVisible] = useState(false);
   const dateLabel = draft ? lessonDateLabel(draft.lesson_date, today) : null;
@@ -198,8 +200,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
   };
   const displayedError = error?.message ?? (typeof lesson.error === 'string' ? lesson.error : null);
   return <View style={styles.screen}>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}
-      keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
+    <FormScrollView keepEndVisible={notesFocused} style={styles.scroll} contentContainerStyle={styles.content} onScroll={onScroll} scrollEventThrottle={16}
+      keyboardShouldPersistTaps="handled">
       {dateLabel ? <Text testID="wrap-up-lesson-date" style={styles.note}>Lesson on {dateLabel}</Text> : null}
       {letters.length ? <View style={styles.heading}>
         <Text accessibilityRole="header" accessibilityLabel={`Who knows ${letters.join(' ')} without help?`} style={styles.title}>
@@ -216,10 +218,10 @@ export default function LessonWrapUpScreen({ navigation, route }) {
         onNoOneNew={() => edit(transitions.toggleNoOneNew, id)}
         onOpenTracker={() => setTrackerId(id)} onOpenLevel={() => setLevelId(id)} /> : null) : null}
       {draft ? <>
-        <TextField label="Notes (optional)" value={draft.notes ?? ''} multiline
+        <TextField onFocus={() => setNotesFocused(true)} onBlur={() => setNotesFocused(false)} label="Notes (optional)" value={draft.notes ?? ''} multiline
           onChangeText={text => edit(transitions.setNotes, text)} placeholder="Add session notes…" {...NO_TEXT_SUGGESTIONS} />
       </> : null}
-    </ScrollView>
+    </FormScrollView>
     <StickyActionFooter hideOnKeyboard style={styles.footer}>
       {ids.length === 0 && draft ? <InlineNote live="assertive">Mark at least one child as here.</InlineNote> : null}
       {displayedError ? <InlineNote live="assertive">{displayedError}</InlineNote> : null}

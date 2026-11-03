@@ -75,7 +75,7 @@ test('upgrading a populated v20 database adds the table and leaves letter_master
   const before = JSON.stringify(await db.getAllAsync('select * from letter_mastery order by id'));
   expect(await db.getFirstAsync("select name from sqlite_master where name = 'skill_mastery'")).toBeNull();
   await runMigrations(db);
-  expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 21 });
+  expect(await db.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 22 });
   expect(JSON.stringify(await db.getAllAsync('select * from letter_mastery order by id'))).toBe(before);
   expect(await db.getFirstAsync("select name from sqlite_master where type = 'table' and name = 'skill_mastery'"))
     .toEqual({ name: 'skill_mastery' });

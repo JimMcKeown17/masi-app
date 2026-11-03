@@ -1026,6 +1026,11 @@ create table if not exists lesson_drafts (
       create unique index idx_skill_mastery_child_key on skill_mastery(child_id, step_key);
     `,
   },
+  {
+    version: 22,
+    name: 'lesson_drafts_kind',
+    sql: "alter table lesson_drafts add column kind text not null default 'literacy' check (kind in ('literacy', 'numeracy'));",
+  },
 ];
 
 // Derived from the migration list so it never drifts when a migration is added.

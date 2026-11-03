@@ -106,7 +106,7 @@ export const shapePickerModel = input => shapeResolvedPickerModel({
 export const loadPickerRanking = async ({ handle, repositories, base, today, groups,
   getChildrenInGroup, children, childrenGroups }) => {
   const draft = await repositories.lessonDrafts.getActive();
-  if (draft) return { draftId: draft.id };
+  if (draft) return { draftId: draft.id, draftKind: draft.kind };
   const loadedBase = base ?? await loadLessonBase({ handle, repositories, today });
   if (loadedBase.missing) return loadedBase;
   const membersByGroup = Object.fromEntries(groups.map(group => [group.id,

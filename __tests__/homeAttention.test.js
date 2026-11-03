@@ -44,9 +44,9 @@ test('three names, or none known, still read naturally', () => {
 test('lessonInProgressFromDraft names the present children this phone knows', () => {
   const draft = { id: 'draft-1', attendance: { childIds: ['c1', 'c2', 'c3'], absentChildIds: ['c2'], addedChildIds: [] } };
   const children = [{ id: 'c1', first_name: 'Amahle' }, { id: 'c2', first_name: 'Lulu' }];
-  expect(lessonInProgressFromDraft(draft, children)).toEqual({ draftId: 'draft-1', childNames: ['Amahle'] });
+  expect(lessonInProgressFromDraft(draft, children)).toEqual({ draftId: 'draft-1', childNames: ['Amahle'], route: 'Lesson' });
   expect(lessonInProgressFromDraft({ ...draft, attendance: { childIds: ['c2'], absentChildIds: ['c2'], addedChildIds: [] } }, children))
-    .toEqual({ draftId: 'draft-1', childNames: [] }); // everyone absent: still a lesson in progress
+    .toEqual({ draftId: 'draft-1', childNames: [], route: 'Lesson' }); // everyone absent: still a lesson in progress
   expect(lessonInProgressFromDraft(null, children)).toBeNull();
 });
 
@@ -134,4 +134,19 @@ describe('deriveHomeAttentionItems', () => {
     expect(MAX_ATTENTION_ITEMS).toBe(2);
     expect(items.map((item) => item.kind)).toEqual(['sync_attention', 'auto_clock_out']);
   });
+});
+
+test.each([['numeracy', 'NumeracyLesson'], ['literacy', 'Lesson']])(
+  'a %s draft carries its %s resume route through the attention card', (kind, route) => {
+    const draft = { id: 'route-draft', kind, attendance: { childIds: [], absentChildIds: [], addedChildIds: [] } };
+    const lessonInProgress = lessonInProgressFromDraft(draft, []);
+    expect(lessonInProgress).toEqual({ draftId: draft.id, childNames: [], route });
+    expect(deriveHomeAttentionItems({ ...base, lessonInProgress })[0]).toMatchObject({
+      route, params: { draftId: draft.id }, title: 'Lesson in progress', subtitle: 'Resume',
+    });
+  }
+);
+
+test('a lesson in progress with a missing route defaults to Lesson', () => {
+  expect(deriveHomeAttentionItems({ ...base, lessonInProgress: lesson })[0].route).toBe('Lesson');
 });

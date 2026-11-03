@@ -1,4 +1,9 @@
 import { sharedInstructionsFor } from '../assessment-questions';
+import { egmaCatalog } from '../../content/egma';
+
+export const MATHS_EVIDENCE_CODES = Object.freeze([...new Set(
+  egmaCatalog.assessments.flatMap(form => form.questions.map(question => question.questionCode)),
+)]);
 
 export const LETTER_EVIDENCE_CODES = ['letter_sounds'];
 

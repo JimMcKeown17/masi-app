@@ -897,10 +897,14 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
 
 ## 7. Assessment content and additional forms
 
-- [ ] **Finalize and build the Numeracy and 1000 Stories session forms** (Jim, 2026-09-23: a
-  deliberate push in parallel with the history work, not a pilot gate). Only Literacy exists. The
-  first pilot stays Literacy-only. Jim supplies the form requirements; the earlier numeracy
-  comparison draft was lost with its temporary folder and must be redone.
+- [ ] **Numeracy screens (Track D): device gate W and Jim's wording pass.** The numeracy lesson
+  flow and Number tracker are built on `feat/numeracy-screens` (2026-11-01,
+  [plan](../docs/superpowers/plans/2026-11-01-numeracy-d-screens.md), PRD §6.6a). Remaining:
+  device gate [W1–W8](./device-gates-sqlite-backend-2026-07.md#w-numeracy-screens-track-d-2026-11)
+  (needs Jim's go for EAS preview builds and staging test data), W9 after the EGMA freeze, and
+  Jim's wording pass on the new EA copy listed in the PR.
+- [ ] **Finalize and build the 1000 Stories session form** (Jim, 2026-09-23: a deliberate push in
+  parallel with the history work, not a pilot gate). Jim supplies the form requirements.
 - [ ] Yebo (Yeboneer) session form: deferred by Jim on 2026-09-23. Zazi iZandi sessions belong to
   the separate Zazi app, not Masi.
 - [ ] **Full EGRA 2026.1: device gate and field materials.** One Battery, `egra@2026.1`, in
@@ -973,7 +977,7 @@ tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTest
     supersede the draft, a second default migration, and the freeze upgrade tests.
 - [ ] **Later maths work:** an isiXhosa form (a new form in the same pack); an alternate Core EGMA
   form for midline/endline; maths coverage on Home and Assessments and a maths "% assessed"
-  stat; maths Child Results; the numeracy session form; and revisiting the 60-second stop rule
+  stat; maths Child Results; and revisiting the 60-second stop rule
   (stop at 4 was "accepted for now" by Jim; changing it needs a new Question and Battery
   version).
 - [ ] Configure Word Reading score bands. Until then the Words ranking remains neutral, and the

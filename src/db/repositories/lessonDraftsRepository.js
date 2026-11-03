@@ -4,6 +4,9 @@ import { decodeJson, encodeJson, timestamp } from './sqliteRepositoryUtils';
 import { parseDateKey } from '../../utils/sessionDateFormat';
 import { READING_LEVELS } from '../../constants/literacyConstants';
 import { LANGUAGE_LABELS } from '../../utils/assessmentRegistry';
+import { STEP_KEY_PATTERN } from './skillMasteryRepository';
+
+export const LESSON_DRAFT_KINDS = Object.freeze(['literacy', 'numeracy']);
 
 export class LessonDraftExistsError extends Error {
   constructor(draftId) {
@@ -33,18 +36,19 @@ export class LessonDraftContextError extends Error {
 }
 
 export class LessonDraftCorruptError extends Error {
-  constructor(draftId, fields) {
+  constructor(draftId, fields, kind) {
     super(`Lesson draft ${draftId} has unreadable fields: ${[...fields].sort().join(', ')}`);
     this.name = 'LessonDraftCorruptError';
     this.code = 'LESSON_DRAFT_CORRUPT';
     this.draftId = draftId;
     this.fields = [...fields].sort();
+    this.kind = kind;
   }
 }
 
 const JSON_COLUMNS = ['attendance', 'plan', 'ticks', 'tracker_changes', 'reading_level_changes'];
 const INPUT_COLUMNS = [
-  'programme_id', 'group_id', 'class_id', 'language_code', 'pack_id', 'lesson_date',
+  'kind', 'programme_id', 'group_id', 'class_id', 'language_code', 'pack_id', 'lesson_date',
   ...JSON_COLUMNS, 'plan_fixed_at', 'notes',
 ];
 const isPlainObject = (value) => value !== null && typeof value === 'object'
@@ -84,12 +88,6 @@ const validateJson = (value, field, ancestors = []) => {
 
 const validateDraft = (draft) => {
   for (const field of ['programme_id', 'group_id']) check(nonEmptyString(draft[field]), field);
-  for (const field of ['class_id', 'pack_id']) {
-    check(draft[field] === null || nonEmptyString(draft[field]), field);
-  }
-  check(draft.language_code === null || isLanguageCode(draft.language_code), 'language_code');
-  if (draft.class_id === null) check(draft.language_code === null, 'language_code');
-  if (draft.class_id === null || draft.language_code === null) check(draft.pack_id === null, 'pack_id');
   try { parseDateKey(draft.lesson_date); } catch { check(false, 'lesson_date'); }
   check(draft.notes === null || typeof draft.notes === 'string', 'notes');
   check(draft.plan === null || isPlainObject(draft.plan), 'plan');
@@ -103,6 +101,19 @@ const validateDraft = (draft) => {
     check(draft.attendance[key].every((id) => draft.attendance.childIds.includes(id)), `attendance.${key}`);
   }
 
+  check(LESSON_DRAFT_KINDS.includes(draft.kind), 'kind');
+  if (draft.kind === 'numeracy') validateNumeracyShape(draft);
+  else validateLiteracyShape(draft);
+  for (const field of JSON_COLUMNS) validateJson(draft[field], field);
+};
+
+const validateLiteracyShape = (draft) => {
+  for (const field of ['class_id', 'pack_id']) {
+    check(draft[field] === null || nonEmptyString(draft[field]), field);
+  }
+  check(draft.language_code === null || isLanguageCode(draft.language_code), 'language_code');
+  if (draft.class_id === null) check(draft.language_code === null, 'language_code');
+  if (draft.class_id === null || draft.language_code === null) check(draft.pack_id === null, 'pack_id');
   check(isPlainObject(draft.ticks), 'ticks');
   for (const key of ['letters', 'blends']) stringArray(draft.ticks[key], `ticks.${key}`);
   check(Array.isArray(draft.ticks.books), 'ticks.books');
@@ -130,7 +141,38 @@ const validateDraft = (draft) => {
   for (const [childId, level] of Object.entries(draft.reading_level_changes)) {
     check(nonEmptyString(childId) && READING_LEVELS.includes(level), `reading_level_changes.${childId}`);
   }
-  for (const field of JSON_COLUMNS) validateJson(draft[field], field);
+};
+
+const validateNumeracyShape = (draft) => {
+  check(draft.language_code === null, 'language_code');
+  check(draft.pack_id === null, 'pack_id');
+  check(draft.class_id === null || typeof draft.class_id === 'string', 'class_id');
+  check(isPlainObject(draft.ticks) && Object.keys(draft.ticks).length === 1
+    && Object.prototype.hasOwnProperty.call(draft.ticks, 'taught'), 'ticks');
+  check(draft.ticks.taught === null || Array.isArray(draft.ticks.taught), 'ticks.taught');
+  if (draft.ticks.taught !== null) draft.ticks.taught.forEach((card, index) => {
+    const field = `ticks.taught.${index}`;
+    check(isPlainObject(card), field);
+    check(Object.keys(card).length === 3
+      && ['slot', 'step_key', 'activity'].every((key) => Object.prototype.hasOwnProperty.call(card, key)), field);
+    check(['warm_up', 'activity'].includes(card.slot), `${field}.slot`);
+    check(typeof card.step_key === 'string' && STEP_KEY_PATTERN.test(card.step_key), `${field}.step_key`);
+    check(nonEmptyString(card.activity), `${field}.activity`);
+  });
+  check(isPlainObject(draft.tracker_changes), 'tracker_changes');
+  for (const [childId, steps] of Object.entries(draft.tracker_changes)) {
+    const childField = `tracker_changes.${childId}`;
+    check(nonEmptyString(childId) && isPlainObject(steps), childField);
+    for (const [stepKey, mark] of Object.entries(steps)) {
+      const field = `${childField}.${stepKey}`;
+      check(STEP_KEY_PATTERN.test(stepKey) && isPlainObject(mark), field);
+      check(typeof mark.mastered === 'boolean', `${field}.mastered`);
+      check(isIsoTime(mark.madeAt), `${field}.madeAt`);
+      check(!Object.prototype.hasOwnProperty.call(mark, 'languageCode'), `${field}.languageCode`);
+    }
+  }
+  check(isPlainObject(draft.reading_level_changes)
+    && Object.keys(draft.reading_level_changes).length === 0, 'reading_level_changes');
 };
 
 const decodeDraft = (row) => {
@@ -143,7 +185,7 @@ const decodeDraft = (row) => {
     draft[field] = decodeJson(row[field], unreadable);
     if (draft[field] === unreadable) fields.push(field);
   }
-  if (fields.length) throw new LessonDraftCorruptError(row.id, fields);
+  if (fields.length) throw new LessonDraftCorruptError(row.id, fields, row.kind);
   return draft;
 };
 const encodeColumn = (field, value) => JSON_COLUMNS.includes(field) ? encodeJson(value) : value;
@@ -160,7 +202,7 @@ const sameValue = (left, right) => {
 };
 
 const checkFixedContext = (draft, patch) => {
-  const fixed = ['id', 'programme_id', 'group_id', 'session_id'];
+  const fixed = ['id', 'programme_id', 'group_id', 'session_id', 'kind'];
   if (draft.class_id !== null) fixed.push('class_id');
   if (draft.language_code !== null) fixed.push('language_code', 'pack_id');
   if (draft.plan_fixed_at !== null) fixed.push('plan', 'plan_fixed_at');
@@ -187,7 +229,7 @@ export const createLessonDraftsRepository = ({ database, idFactory = uuidv4 } = 
     validateKeys(input, INPUT_COLUMNS);
     const now = timestamp();
     const draft = {
-      class_id: null, language_code: null, pack_id: null,
+      kind: 'literacy', class_id: null, language_code: null, pack_id: null,
       attendance: { childIds: [], absentChildIds: [], addedChildIds: [] },
       plan: null, plan_fixed_at: null, ticks: { letters: [], blends: [], books: [] },
       tracker_changes: {}, reading_level_changes: {}, notes: null,

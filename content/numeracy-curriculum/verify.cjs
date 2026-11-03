@@ -23,8 +23,7 @@ const SKILLS = [
 ];
 const FROZEN_EDITIONS = Object.freeze({});
 const ORDER_OVERRIDES = Object.freeze({});
-const BANNED_WORDS = [/\bcount(?:ing)?[\s-]+on\b/i, /\bcount(?:ing)?[\s-]+all\b/i, /\bsubiti[sz]\w*/i, /\bnumber[\s-]+bonds?\b/i,
-  /\brungs?\b/i, /\bladders?\b/i, /\bbands?\b/i, /\bstrateg\w*/i];
+const { BANNED_WORDS } = require('./bannedWords.cjs');
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fieldsOf = value => isObject(value) ? value : {};

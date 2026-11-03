@@ -8,7 +8,7 @@ import { compareChildNames, formatChildName } from '../../utils/childNames';
 import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { useProgrammeTodayKey } from '../../hooks/useProgrammeTodayKey';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
-import { loadPickerRanking, loadPickerLetters } from '../../lessonPlan/inputs/lessonInputs';
+import { loadLessonBase, loadPickerRanking, loadPickerLetters } from '../../lessonPlan/inputs/lessonInputs';
 import { isStaleActorError } from '../../session/staleActor';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
@@ -25,6 +25,12 @@ import GroupLessonRow from '../../components/lessons/GroupLessonRow';
 import MakeGroupSheet from '../../components/lessons/MakeGroupSheet';
 import PutInGroupSheet from '../../components/lessons/PutInGroupSheet';
 
+import { confirmNumeracyProgramme } from '../../services/numeracyProgramme';
+import { loadNumeracyPickerNext } from '../../numeracyLesson/inputs/numeracyPicker';
+import { PROGRAMME_CHANGED_NOTE } from '../../numeracyLesson/copy';
+import { lessonRouteForDraft } from '../../utils/lessonDraftRoutes';
+import ConfirmSheet from '../../components/common/ConfirmSheet';
+
 const itemKey = item => item.key;
 const UngroupedChildRow = React.memo(function UngroupedChildRow({ child, className, onPut }) {
   const put = useCallback(() => onPut(child.id), [onPut, child.id]);
@@ -36,7 +42,7 @@ const UngroupedChildRow = React.memo(function UngroupedChildRow({ child, classNa
     <BrandButton label="Put in a group" variant="tertiary" size="sm" onPress={put} />
   </View>;
 });
-export default function LessonPickerScreen({ navigation }) {
+export default function LessonPickerScreen({ navigation, kind = 'literacy' }) {
   const { handle } = useSignedInEA();
   const { repositories, services } = handle;
   const { children, groups, childrenGroups, getChildrenInGroup, makeGroup, addChildToGroup } = useChildren();
@@ -52,34 +58,71 @@ export default function LessonPickerScreen({ navigation }) {
   const [makingGroup, setMakingGroup] = useState(false);
   const [putChildId, setPutChildId] = useState(null);
 
+  const [leftover, setLeftover] = useState(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [programmeId, setProgrammeId] = useState(null);
   useFocusEffect(useCallback(() => {
     let active = true;
+    const routeDraft = draft => {
+      if (draft.kind === kind) navigation.replace(lessonRouteForDraft(draft), { draftId: draft.id });
+      else { setLeftover(draft); setModel(null); setError(null); setMissing(null); }
+    };
     const load = async () => {
       try {
-        const picker = await loadPickerRanking({ handle, repositories, today, groups,
+        // A refresh keeps the current rows on screen until the new read lands, as literacy does.
+        let base;
+        if (kind === 'numeracy') {
+          const confirmed = await confirmNumeracyProgramme({ handle, userId: handle.userId });
+          if (!active || !handle.isCurrent()) return;
+          setProgrammeId(confirmed);
+          if (!confirmed) { setLeftover(null); setModel(null); setMissing(null); setError(PROGRAMME_CHANGED_NOTE); return; }
+          base = await loadLessonBase({ handle, repositories, today, programmeId: confirmed });
+        }
+        const picker = await loadPickerRanking({ handle, repositories, base, today, groups,
           getChildrenInGroup: sortedMembers, children, childrenGroups });
         if (!active || !handle.isCurrent()) return;
-        if (picker.draftId) { navigation.replace('Lesson', { draftId: picker.draftId }); return; }
+        if (picker.draftId) { routeDraft({ id: picker.draftId, kind: picker.draftKind }); return; }
+        setLeftover(null);
         if (picker.missing) { setMissing(picker.missing); setModel(null); setError(null); return; }
         setModel(picker); setError(null); setMissing(null);
+        if (kind === 'numeracy') {
+          const next = await loadNumeracyPickerNext({ handle, repositories, services, base: picker.base, ranking: picker });
+          if (!active || !handle.isCurrent()) return;
+          setModel({ ...picker, historyComplete: next.historyComplete,
+            rows: picker.rows.map(row => ({ ...row, nextSteps: next.nextByGroup[row.groupId] })) });
+          return;
+        }
         const letters = await loadPickerLetters({ handle, repositories, services, base: picker.base, ranking: picker });
         if (!active || !handle.isCurrent()) return;
         setModel({ ...picker, historyComplete: letters.historyComplete,
           rows: picker.rows.map(row => ({ ...row, ...letters.lettersByGroup[row.groupId] })) });
       } catch (caught) {
         if (!active || !handle.isCurrent() || isStaleActorError(caught)) return;
-        if (caught.name === 'LessonDraftCorruptError') navigation.replace('Lesson', { draftId: caught.draftId });
+        if (caught.name === 'LessonDraftCorruptError') routeDraft({ id: caught.draftId, kind: caught.kind });
         else setError(caught.message);
       }
     };
     void load();
     return () => { active = false; };
   }, [handle, repositories, services, navigation, today, groups, sortedMembers,
-    children, childrenGroups, pageVersion, runVersion]));
+    children, childrenGroups, pageVersion, runVersion, kind, reload]));
 
-  const start = useCallback(groupId => navigation.navigate('Lesson', {
+  const start = useCallback(groupId => navigation.navigate(kind === 'numeracy' ? 'NumeracyLesson' : 'Lesson', {
     groupId, upNextGroupId: model.upNextGroupId,
-  }), [navigation, model?.upNextGroupId]);
+    ...(kind === 'numeracy' ? { programmeId } : {}),
+  }), [navigation, model?.upNextGroupId, kind, programmeId]);
+  const discard = async () => {
+    setConfirmDiscard(false);
+    try {
+      await services.lessonDraft.open({ draftId: leftover.id });
+      await services.lessonDraft.discard();
+      if (handle.isCurrent()) setReload(value => value + 1);
+    } catch (caught) {
+      if (handle.isCurrent() && !isStaleActorError(caught)) setError(caught.message);
+    }
+  };
+  const leftoverSubject = leftover?.kind === 'numeracy' ? 'numeracy' : 'reading';
   const openMakeGroup = useCallback(() => setMakingGroup(true), []);
   const closeMakeGroup = useCallback(() => setMakingGroup(false), []);
   const closePutGroup = useCallback(() => setPutChildId(null), []);
@@ -114,12 +157,18 @@ export default function LessonPickerScreen({ navigation }) {
       ListHeaderComponent={<View style={styles.header}>
         {error ? <InlineNote>{error}</InlineNote> : null}
         {missing === 'academic_year' ? <InlineNote>The school year hasn't downloaded yet. Connect to the internet, then open this again.</InlineNote> : null}
-        {!model && !error && !missing ? <ActivityIndicator color={colors.primary} /> : null}
+        {leftover ? <>
+          <InlineNote>{`An older ${leftoverSubject} lesson is still open. It can't be saved now.`}</InlineNote>
+          <BrandButton label="Discard it" onPress={() => setConfirmDiscard(true)} />
+        </> : null}
+        {!model && !error && !missing && !leftover ? <ActivityIndicator color={colors.primary} /> : null}
         {model && model.historyComplete === false ? <InlineNote tone="warning">Still downloading past lessons. Suggestions may repeat.</InlineNote> : null}
         {upNext ? <UpNextCard row={upNext} today={today} onStart={start} /> : null}
       </View>}
       ListEmptyComponent={model && children.length === 0 ? <EmptyState title="No children yet"
         body="Add children to a class to start lessons." /> : null} />
+    <ConfirmSheet visible={confirmDiscard} title={`Discard the ${leftoverSubject} lesson?`}
+      body="Its ticks and notes will be deleted." confirmLabel="Discard" cancelLabel="Keep lesson" onConfirm={discard} onCancel={() => setConfirmDiscard(false)} />
     <MakeGroupSheet visible={makingGroup} onDismiss={closeMakeGroup} ungrouped={model?.ungrouped ?? []}
       classes={classes} makeGroup={makeGroup} handle={handle} />
     <PutInGroupSheet visible={putChildId !== null} onDismiss={closePutGroup} childId={putChildId}
