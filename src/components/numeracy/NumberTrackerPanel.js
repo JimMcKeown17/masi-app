@@ -29,12 +29,10 @@ export default function NumberTrackerPanel({ child, isDelivery = true }) {
   const [note, setNote] = useState(null);
   const [pending, setPending] = useState({});
   const pendingRef = useRef({});
-  const queue = useRef([]);
   const sequence = useRef(0);
-  const recovering = useRef(false);
   const [openSkill, setOpenSkill] = useState(null);
   const loadGeneration = useRef(0);
-  const writeInFlight = useRef(false);
+  const writeInFlight = useRef(0);
   const { skillMastery, assessments } = repositories;
 
   const loadData = useCallback(async ({ background = false } = {}) => {
@@ -72,7 +70,7 @@ export default function NumberTrackerPanel({ child, isDelivery = true }) {
   const onTap = useCallback(stepKey => tapRef.current(stepKey), []);
   const onPressSkill = useCallback(item => setOpenSkill(item.skillKey), []);
   tapRef.current = stepKey => {
-    if (readOnly || recovering.current) return;
+    if (readOnly) return;
     const skill = rows.find(item => item.tiles.some(tile => tile.stepKey === stepKey));
     const index = skill?.tiles.findIndex(tile => tile.stepKey === stepKey);
     const tile = skill?.tiles[index];
@@ -89,42 +87,39 @@ export default function NumberTrackerPanel({ child, isDelivery = true }) {
     setPending(pendingRef.current);
     ++loadGeneration.current;
     setNote(null);
-    queue.current.push({ stepKey, confirmed, id });
-    if (writeInFlight.current) return;
-    writeInFlight.current = true;
+    ++writeInFlight.current;
+    // Submit at tap time: the signed-in handle orders writes across every panel and mount.
+    const write = tickStepNow({ handle, programmeId, childId: child.id, stepKey, confirmed });
     void (async () => {
+      let programmeChanged = false;
       try {
-        while (queue.current.length) {
-          const next = queue.current.shift();
-          const record = await tickStepNow({ handle, programmeId, childId: child.id, stepKey: next.stepKey, confirmed: next.confirmed });
-          ++loadGeneration.current;
-          if (record) setTicks(previous => [...previous.filter(item => item.step_key !== next.stepKey), record]);
-          if (pendingRef.current[next.stepKey]?.id === next.id) {
-            const remaining = { ...pendingRef.current };
-            delete remaining[next.stepKey];
-            pendingRef.current = remaining;
-            setPending(remaining);
-          }
-        }
+        const record = await write;
+        if (record) setTicks(previous => [...previous.filter(item => item.step_key !== stepKey), record]);
       } catch (error) {
-        recovering.current = true;
-        queue.current = [];
-        pendingRef.current = {};
-        setPending({});
-        ++loadGeneration.current;
-        writeInFlight.current = false;
-        await loadData({ background: true });
-        if (error instanceof NumeracyTickError && error.code === 'PROGRAMME_CHANGED') {
+        programmeChanged = error instanceof NumeracyTickError && error.code === 'PROGRAMME_CHANGED';
+        if (programmeChanged) {
           setProgrammeId(null);
           setNote(PROGRAMME_CHANGED_NOTE);
         } else setNote('Step update was not saved. Please try again.');
-        recovering.current = false;
-        return;
+      } finally {
+        ++loadGeneration.current;
+        if (pendingRef.current[stepKey]?.id === id) {
+          const remaining = { ...pendingRef.current };
+          delete remaining[stepKey];
+          pendingRef.current = remaining;
+          setPending(remaining);
+        }
+        --writeInFlight.current;
+        if (writeInFlight.current === 0) {
+          await loadData({ background: true });
+          if (programmeChanged) {
+            setProgrammeId(null);
+            setNote(PROGRAMME_CHANGED_NOTE);
+          }
+          Promise.resolve(refreshSyncStatus()).catch(() => {});
+          triggerBackgroundSync?.();
+        }
       }
-      writeInFlight.current = false;
-      await loadData({ background: true });
-      Promise.resolve(refreshSyncStatus()).catch(() => {});
-      triggerBackgroundSync?.();
     })();
   };
 
