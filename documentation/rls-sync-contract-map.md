@@ -2321,17 +2321,18 @@ v2 identity/validation/quotas/grants and the local Storage policy model.
 Hosted apply/read-back, native build/old-binary OTA, default-text A03s/iPhone,
 first real sweeps, field convergence and no-recurrence remain independent gates.
 
-## Website reporting functions (`masi_reporting_*_v1`, 2026-10-31)
+## Website reporting functions (`masi_reporting_*`, v1 2026-10-31; v2 2026-11-04)
 
-The Masi website's Django backend reads app data **only** through nine functions created by
-`supabase/migrations/20261031180000_masi_reporting_v1.sql`. Spec: `masi-web-nextjs`
+The Masi website's Django backend reads app data **only** through reporting functions: nine v1
+functions created by `supabase/migrations/20261031180000_masi_reporting_v1.sql`, plus two additive
+v2 functions in `supabase/migrations/20261104132732_masi_reporting_v2.sql`. Spec: `masi-web-nextjs`
 `docs/superpowers/specs/2026-10-30-masi-app-dashboard-design.md`. Plan A:
 `docs/superpowers/plans/2026-10-31-masi-reporting-functions-plan.md`.
 
 **Principal:** `masi_reporting_reader`.
 - `LOGIN`, `NOINHERIT`, created with **no password**; the password is set out of band at rollout.
 - `default_transaction_read_only = on`, `statement_timeout = 15s`.
-- Holds `USAGE` on `public` only, no table privileges, and `EXECUTE` on the nine functions only.
+- Holds `USAGE` on `public` only, no table privileges, and `EXECUTE` on the eleven reporting functions only.
   `anon`, `authenticated` and `service_role` cannot execute them.
 
 **Function rules:**
@@ -2352,6 +2353,32 @@ The Masi website's Django backend reads app data **only** through nine functions
 | `ea_detail_v1(user_id, from, to)` | as above, plus `groups`, `classes`, `children` | Latest-N lists with totals, current groups, 12 weekly buckets |
 | `sessions_v1`, `assessments_v1`, `time_entries_v1` | as named | Row-level exports (no GPS coordinates); `completed_battery_runs` |
 | `incidents_v1(user_ids, from, to, kinds)` | `mobile_support_incidents` | Receipts with release identity and a 2 KB summary; no payloads |
+| `ea_detail_v2(user_id, from, to)` | v1 sources plus `child_group_memberships`, `child_class_memberships` | v1 document plus each group's `created_at` and `classes: [{class_id, class_name, grade}]` |
+| `incidents_v2(user_ids, from, to, kinds)` | `mobile_support_incidents` | v1 receipts plus nullable diagnostic `detail`; no raw payloads |
+
+**v2 contract (approved real-data fixes spec rev 4, sections 4.1, 4.6, 5.1):**
+
+- Both functions have standalone atomic bodies, the same ownership, empty search path and grants
+  as v1, and their exact v2 `function_version` in success and refusal documents. v1 is unchanged.
+- Incident detail maps the phone's `scopeFamily`, `failureKind`, `errorClass`, `errorCode`,
+  `table`, `operation`, `recordId`, `errorName`, `failingForHours` and `lastFailureMessage`
+  to the corresponding snake_case fields. Missing values are null; hours remain numeric;
+  `last_failure_message` is limited to 500 characters. The existing summary is unchanged.
+- Group classes union the non-archived explicit class with distinct current classes of active
+  members (`removed_at IS NULL`, child not archived). The copied roster resolver selects the
+  latest open membership in a non-archived class by `enrolled_at DESC, class_id ASC`, with no
+  academic-year filter. Classes sort by name, then id for ties; absent classes give `[]`.
+  Existing `members`, `class_name`, `grade` and all other v1 fields retain their semantics.
+- Caps/refusals remain: incidents accept at most 90 elapsed days and 5,000 matching receipts;
+  EA detail accepts at most 120 inclusive dates and 100 active assigned groups, keeping
+  latest 300 sessions / 200 time entries / 200 assessments with full totals and 12 weeks.
+- Apply SQL first; callers switch separately. Drop exactly the superseded v1 signatures only
+  after no callers remain and the release has run for at least a week; cleanup raises the
+  Django rollback floor.
+- The harness audits atomic bodies, function safety and user-function dependencies across all
+  reporting versions; its executable-function allowlist includes both v2 signatures.
+  `npm run verify:reporting:postgres` on disposable PG17 17.11 (2026-11-04): 181 cases passed,
+  including the v2 behaviour, cap, refusal and grant cases.
 
 **Harness:** `npm run verify:reporting:postgres` (disposable local PG17, `masi_history_rls_`
 prefix; `MASI_REPORTING_KEEP=1` retains the database for the Django and website end-to-end checks).

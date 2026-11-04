@@ -36,6 +36,8 @@ const UUID_G1 = '44000000-0000-0000-0000-000000000001';
 const childId = (n) => `54000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const runId = (n) => `74000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const REPORTING_FUNCTIONS = [
+  'public.masi_reporting_incidents_v2(uuid[], timestamp with time zone, timestamp with time zone, text[])',
+  'public.masi_reporting_ea_detail_v2(uuid, date, date)',
   'public.masi_reporting_accounts_v1()',
   'public.masi_reporting_roster_v1(uuid[])',
   'public.masi_reporting_assessed_children_v1(uuid[], date, date)',
@@ -264,6 +266,43 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
   check('detail-score-max-null', `${detail()}#>'{assessments,rows}' @> '[{"question_code":"letter_sounds","score_max":null}]'::jsonb`);
   check('detail-letters', `${detail()}#>'{sessions,rows}' @> '[{"letters_focused":["s","a"]}]'::jsonb`);
   check('detail-groups', `${detail()}->'groups' @> '[{"group_id":"${UUID_G1}","members":2,"class_name":"K1"}]'::jsonb`);
+  const detailV2 = (id = UUID_EA_A) => detail(id).replace('_v1(', '_v2(');
+  const groupClasses = (call = detailV2()) => `(SELECT g->'classes' FROM jsonb_array_elements(${call}->'groups') g WHERE g->>'group_id'='${UUID_G1}')`;
+  const classDoc = (id, name) => JSON.stringify([{class_id:id,class_name:name,grade:'R'}]);
+  const groupCreatedAt = runPsql({databaseUrl,sql:`SELECT created_at FROM public.groups WHERE id='${UUID_G1}';`,label:'detail-v2-original-created-at'});
+  check('detail-v2-created-at', `(SELECT (g->>'created_at')::timestamptz = '${groupCreatedAt}'::timestamptz FROM jsonb_array_elements(${detailV2()}->'groups') g WHERE g->>'group_id'='${UUID_G1}')`);
+  check('detail-v2-explicit-and-members-deduplicated', `${groupClasses()}='${classDoc(UUID_K1,'K1')}'::jsonb`);
+  // Rollbacks isolate all v2 fixtures from the original v1 expectations.
+  const groupCase = (name, setup, expected) => c.value(name, `BEGIN; ${setup}
+SET LOCAL ROLE masi_reporting_reader; SELECT ${groupClasses()}='${expected}'::jsonb; ROLLBACK;`, 't');
+  groupCase('detail-v2-classes-from-members', `UPDATE public.groups SET class_id=NULL WHERE id='${UUID_G1}';`, classDoc(UUID_K1,'K1'));
+  groupCase('detail-v2-empty-explicit', `DELETE FROM public.child_group_memberships WHERE group_id='${UUID_G1}';`, classDoc(UUID_K1,'K1'));
+  groupCase('detail-v2-empty-archived-explicit', `DELETE FROM public.child_group_memberships WHERE group_id='${UUID_G1}'; UPDATE public.groups SET class_id='${UUID_K2}' WHERE id='${UUID_G1}';`, '[]');
+  groupCase('detail-v2-neither', `DELETE FROM public.child_group_memberships WHERE group_id='${UUID_G1}'; UPDATE public.groups SET class_id=NULL WHERE id='${UUID_G1}';`, '[]');
+  groupCase('detail-v2-exclusions', `UPDATE public.groups SET class_id=NULL WHERE id='${UUID_G1}';
+UPDATE public.child_group_memberships SET removed_at=now() WHERE group_id='${UUID_G1}';
+INSERT INTO public.child_group_memberships(child_id,group_id) VALUES ('${childId(4)}','${UUID_G1}'),('${childId(5)}','${UUID_G1}'),('${childId(6)}','${UUID_G1}');`, '[]');
+  c.value('detail-v2-archived-group-excluded', `BEGIN; UPDATE public.groups SET archived_at=now() WHERE id='${UUID_G1}';
+SET LOCAL ROLE masi_reporting_reader; SELECT ${detailV2()}->'groups'='[]'::jsonb; ROLLBACK;`, 't');
+  c.value('detail-v2-ended-assignment-excluded', `BEGIN; UPDATE public.group_ea_assignments SET unassigned_at=now() WHERE group_id='${UUID_G1}';
+SET LOCAL ROLE masi_reporting_reader; SELECT ${detailV2()}->'groups'='[]'::jsonb; ROLLBACK;`, 't');
+  // Name order (K3 < Z1) is the reverse of id order (K1 < K3), so this pins sorting by class name.
+  groupCase('detail-v2-class-union-sorted', `UPDATE public.classes SET name='Z1' WHERE id='${UUID_K1}'; UPDATE public.groups SET class_id='${UUID_K3}' WHERE id='${UUID_G1}';`, JSON.stringify([{class_id:UUID_K3,class_name:'K3',grade:'R'},{class_id:UUID_K1,class_name:'Z1',grade:'R'}]));
+  for (const [name,enrolled,expected] of [['latest','2027-01-01',UUID_K3],['tie','2026-01-01',UUID_K1]]) {
+    c.value(`detail-v2-current-class-${name}`, `BEGIN;
+UPDATE public.groups SET class_id=NULL WHERE id='${UUID_G1}';
+DELETE FROM public.child_group_memberships WHERE group_id='${UUID_G1}';
+INSERT INTO public.child_group_memberships(child_id,group_id) VALUES ('${childId(12)}','${UUID_G1}');
+UPDATE public.child_class_memberships SET enrolled_at='${enrolled}' WHERE child_id='${childId(12)}' AND class_id='${UUID_K3}';
+SET LOCAL ROLE masi_reporting_reader;
+SELECT ${groupClasses()}='${classDoc(expected,expected===UUID_K1?'K1':'K3')}'::jsonb
+AND (SELECT r->>'class_id' FROM jsonb_array_elements(public.masi_reporting_roster_v1(${ids([UUID_EA_A])})->'rows') r WHERE r->>'child_id'='${childId(12)}')='${expected}';
+ROLLBACK;`, 't');
+  }
+  check('detail-v2-v1-parity', `(${detailV2()} - 'function_version' - 'groups')=(${detail()} - 'function_version' - 'groups') AND
+(SELECT jsonb_agg(g - 'classes' - 'created_at' ORDER BY g->>'group_id') FROM jsonb_array_elements(${detailV2()}->'groups') g)=
+(SELECT jsonb_agg(g ORDER BY g->>'group_id') FROM jsonb_array_elements(${detail()}->'groups') g)`);
+  check('detail-v2-latest-n', `(${detailV2(UUID_EA_BULK)} - 'function_version' - 'groups')=(${detail(UUID_EA_BULK)} - 'function_version' - 'groups')`);
   check('detail-weekly', `jsonb_array_length(${detail()}->'weekly')=12 AND ${detail()}#>>'{weekly,11,week_start}'='2026-10-26'`);
   check('detail-unknown-user', `${detail('ffffffff-ffff-ffff-ffff-ffffffffffff')}#>>'{assessments,total}'='0' AND ${detail('ffffffff-ffff-ffff-ffff-ffffffffffff')}#>>'{sessions,total}'='0' AND ${detail('ffffffff-ffff-ffff-ffff-ffffffffffff')}#>>'{time_entries,total}'='0'`);
   check('sessions-rows', `${call('sessions')}->'rows' @> '[{"id":"${UUID_SESSION_A}","class_name":"K1","present_count":2}]'::jsonb`);
@@ -280,6 +319,49 @@ jsonb_object_keys(public.masi_reporting_accounts_v1()) k;`, '["academic_year", "
   check('incidents-kinds-filter', `jsonb_array_length(${incidents("ARRAY['ea_report']")}->'rows')=1`);
   check('incidents-user-filter', `NOT (${incidents()}->'rows' @> '[{"reporter_id":"${UUID_EA_TEST}"}]'::jsonb)`);
   check('incidents-v1-receipt-nulls', `${incidents()}->'rows' @> '[{"summary":"Save button hidden","first_seen_at":null,"last_seen_at":null}]'::jsonb`);
+  const incidentsV2 = (kinds='NULL') => incidents(kinds).replace('_v1(', '_v2(');
+  const nullDetail = Object.fromEntries(['scope_family','failure_kind','error_class','error_code','table_name','operation','record_id','error_name','failing_for_hours','last_failure_message'].map(k=>[k,null]));
+  check('incidents-v2-human-null-detail', `${incidentsV2("ARRAY['ea_report']")}->'rows' @> '${JSON.stringify([{detail:nullDetail}])}'::jsonb`);
+  check('incidents-v2-v1-parity', `(SELECT COALESCE(jsonb_agg(r - 'detail' ORDER BY r->>'id'),'[]') FROM jsonb_array_elements(${incidentsV2()}->'rows') r)=
+(SELECT COALESCE(jsonb_agg(r ORDER BY r->>'id'),'[]') FROM jsonb_array_elements(${incidents()}->'rows') r)`);
+  const incidentCase = (name, kind, payload, expected) => c.value(name, `BEGIN;
+INSERT INTO public.mobile_support_incidents(reporter_id,kind,repeat_key,report_id,payload,observed,received_at)
+VALUES ('${UUID_EA_A}','${kind}','v2-detail-fixture',gen_random_uuid(),'${JSON.stringify(payload)}','{}','2026-10-22T10:00Z');
+SET LOCAL ROLE masi_reporting_reader;
+SELECT (SELECT r->'detail' FROM jsonb_array_elements(${incidentsV2()}->'rows') r WHERE r->>'repeat_key'='v2-detail-fixture')='${JSON.stringify({...nullDetail,...expected})}'::jsonb;
+ROLLBACK;`, 't');
+  incidentCase('incidents-v2-pull-detail','pull_failing',
+    {scopeFamily:'session_history_pull',failureKind:'query',failingForHours:68.5,lastFailureMessage:'AuthUnavailableError: auth unavailable'},
+    {scope_family:'session_history_pull',failure_kind:'query',failing_for_hours:68.5,last_failure_message:'AuthUnavailableError: auth unavailable'});
+  incidentCase('incidents-v2-message-bound','pull_failing',{lastFailureMessage:'x'.repeat(501)},{last_failure_message:'x'.repeat(500)});
+  incidentCase('incidents-v2-terminal-detail','upload_terminal',
+    {table:'sessions',operation:'insert',recordId:UUID_SESSION_A,errorClass:'terminal',errorCode:'42501',lastError:'not a pull failure message'},
+    {table_name:'sessions',operation:'insert',record_id:UUID_SESSION_A,error_class:'terminal',error_code:'42501'});
+  incidentCase('incidents-v2-app-error','app_error_caught',{errorName:'TypeError',message:'caught'},{error_name:'TypeError'});
+  incidentCase('incidents-v2-breaker','reconcile_breaker_tripped',{scopeFamily:'children'},{scope_family:'children'});
+  for (const [kind, args, refusals] of [
+    ['ea_detail', `'${UUID_EA_A}','2026-10-01','2026-10-31'`, [
+      ["NULL,'2026-10-01','2026-10-31'",'p_user_id'],
+      [`'${UUID_EA_A}',NULL,'2026-10-31'`,'p_from'],
+      [`'${UUID_EA_A}','2026-10-01',NULL`,'p_to'],
+      [`'${UUID_EA_A}','2026-10-31','2026-10-01'`,'p_from'],
+      [`'${UUID_EA_A}','2026-01-01','2026-01-01'::date+120`,'p_to']]],
+    ['incidents', `${ids([UUID_EA_A])},'2026-10-01','2026-11-01',NULL`, [
+      ["NULL,'2026-10-01','2026-11-01',NULL",'p_user_ids'],
+      [`${ids([UUID_EA_A])},NULL,'2026-11-01',NULL`,'p_from'],
+      [`${ids([UUID_EA_A])},'2026-10-01',NULL,NULL`,'p_to'],
+      [`${ids([UUID_EA_A])},'2026-11-01','2026-10-01',NULL`,'p_from'],
+      [`${ids([UUID_EA_A])},'2026-01-01','2026-04-01T00:00:01Z',NULL`,'p_to']]]
+  ]) {
+    const fn = `public.masi_reporting_${kind}_v2`;
+    check(`${kind}-v2-success-version`, `${fn}(${args})->>'function_version'='masi_reporting_${kind}_v2'`);
+    refusals.forEach(([badArgs,argument],i) => check(`${kind}-v2-refusal-${i}`, `${fn}(${badArgs}) @> '{"function_version":"masi_reporting_${kind}_v2","error":"invalid_argument","argument":"${argument}"}'::jsonb`));
+  }
+  check('detail-v2-span-boundary', `NOT(public.masi_reporting_ea_detail_v2('${UUID_EA_A}','2026-01-01','2026-01-01'::date+119) ? 'error')`);
+  check('incidents-v2-span-boundary', `NOT(public.masi_reporting_incidents_v2(${ids([UUID_EA_A])},'2026-01-01','2026-04-01',NULL) ? 'error')`);
+  check('detail-v2-empty-groups', `${detailV2(UUID_EA_NOPROG)}->'groups'='[]'::jsonb`);
+  check('incidents-v2-empty-ids', `public.masi_reporting_incidents_v2(ARRAY[]::uuid[],'2026-10-01','2026-11-01',NULL)->'rows'='[]'::jsonb`);
+  check('incidents-v2-empty-kinds', `${incidentsV2('ARRAY[]::text[]')}->'rows'='[]'::jsonb`);
   check('assessments-legacy-null-question', `${call('assessments')}->'rows' @> '[{"question_code":null}]'::jsonb`);
   check('assessments-skipped-labelled', `${call('assessments')}->'rows' @> '[{"stopped_reason":"skipped_child_refused"}]'::jsonb`);
   check('assessments-completed-runs', `jsonb_array_length(${call('assessments')}->'completed_battery_runs')=2 AND ${call('assessments')}->'rows' @> '[{"battery_status":"abandoned"},{"battery_status":"in_progress"}]'::jsonb`);
@@ -308,12 +390,17 @@ WHERE n.nspname IN ('public','private') AND has_function_privilege('masi_reporti
   c.state('reader-set-updated-at-refused', READER_SQL('SELECT private.set_updated_at();'), '42501');
   // Each future allowlist entry must also add an explicit auth-null refusal case.
   c.value('audit-atomic-bodies', `SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-WHERE n.nspname='public' AND p.proname LIKE 'masi\\_reporting\\_%\\_v1' AND p.prosqlbody IS NULL;`, '0');
+WHERE n.nspname='public' AND p.proname LIKE 'masi\\_reporting\\_%' AND p.prosqlbody IS NULL;`, '0');
+  c.value('audit-function-security', `SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname='public' AND p.proname LIKE 'masi\\_reporting\\_%'
+AND (p.provolatile<>'s' OR NOT p.prosecdef OR pg_get_userbyid(p.proowner)<>'postgres'
+OR NOT COALESCE(p.proconfig @> ARRAY['search_path=""'],false)
+OR EXISTS(SELECT 1 FROM aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE'));`, '0');
   const dependencies = `SELECT count(*) FROM pg_depend d JOIN pg_proc f ON f.oid=d.objid
 WHERE d.classid='pg_proc'::regclass AND f.proname LIKE 'masi\\_reporting\\_%' AND d.refclassid='pg_proc'::regclass;`;
   c.value('audit-no-user-function-deps', dependencies, '0');
   c.value('audit-denylist', `SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-WHERE n.nspname='public' AND p.proname LIKE 'masi\\_reporting\\_%\\_v1'
+WHERE n.nspname='public' AND p.proname LIKE 'masi\\_reporting\\_%'
 AND lower(pg_get_functiondef(p.oid)) ~ '(nextval|setval|set_config|pg_advisory|lo_|pg_notify|dblink|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_read_file|pg_ls_dir|pg_stat_reset)';`, '0');
   c.value('audit-negative-control', `BEGIN;
 CREATE FUNCTION public.masi_reporting_probe_v0() RETURNS void LANGUAGE sql STABLE SECURITY DEFINER SET search_path=''
@@ -344,15 +431,20 @@ INSERT INTO public.children(id,first_name,last_name,created_by) SELECT id,'Cap',
   const ranged = (fn) => `public.masi_reporting_${fn}_v1(${capIds},'2026-01-01','2026-04-02')`;
   function pair(name, limit, setup, overflow, call, arrays, exactSetup = '', decoy = '') {
     const size = arrays.map(key => `jsonb_array_length(d->'${key}')`).join('+');
-    for (const extra of [false,true]) {
-      const label = `cap-${name}-${extra?'plus-one':'exact'}`;
-      const sql = `BEGIN; ${setup} ${exactSetup} ${decoy} ${extra?overflow:''}
-SET LOCAL ROLE masi_reporting_reader;
-WITH result AS (SELECT ${call} AS d)
-SELECT ${extra ? `d->>'error'='too_much_data' AND (d->>'row_count')::bigint=${limit+1} AND NOT (d ?| ARRAY['rows','accounts','sessions','clock','assessments','completed_battery_runs','groups','time_entries','weekly'])` : `NOT(d ? 'error') AND (${size})=${limit}`} FROM result;
-ROLLBACK;`;
-      assert.equal(runPsql({ databaseUrl, sql, label }), 't', label);
-      summary[label]='passed';
+    const versions = ['incidents','detail-groups'].includes(name) ? ['v1','v2'] : ['v1'];
+    for (const version of versions) {
+      const versionedCall = call.replace('_v1(', `_${version}(`);
+      const expectedVersion = versionedCall.match(/public\.(masi_reporting_\w+)\(/)[1];
+      for (const extra of [false,true]) {
+        const label = `cap-${name}${version==='v1'?'':'-v2'}-${extra?'plus-one':'exact'}`;
+        const sql = `BEGIN; ${setup} ${exactSetup} ${decoy} ${extra?overflow:''}
+  SET LOCAL ROLE masi_reporting_reader;
+  WITH result AS (SELECT ${versionedCall} AS d)
+  SELECT d->>'function_version'='${expectedVersion}' AND ${extra ? `d->>'error'='too_much_data' AND (d->>'row_count')::bigint=${limit+1} AND NOT (d ?| ARRAY['rows','accounts','sessions','clock','assessments','completed_battery_runs','groups','time_entries','weekly'])` : `NOT(d ? 'error') AND (${size})=${limit}`} FROM result;
+  ROLLBACK;`;
+        assert.equal(runPsql({ databaseUrl, sql, label }), 't', label);
+        summary[label]='passed';
+      }
     }
   }
   const accountInsert = (count) => `INSERT INTO auth.users(id) SELECT md5('cap-account-'||n)::uuid FROM generate_series(1,${count}) n;
