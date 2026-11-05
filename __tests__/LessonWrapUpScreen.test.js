@@ -37,10 +37,12 @@ jest.mock('../src/utils/masteryState', () => ({
 
 const mockChildren = { c1: { id: 'c1', first_name: 'Amahle', last_name: 'Child', reading_level: 'Cannot blend' },
   c2: { id: 'c2', first_name: 'Lulu', last_name: 'Child', reading_level: '2 Letter Blends' } };
-const mockHandle = { userId: 'ea', isCurrent: () => true, repositories: { children: {
+const mockHandle = { userId: 'ea', isCurrent: () => true, repositories: {
+  sessions: { countLiteracyLessons: jest.fn(async () => 12) },
+  children: {
   getChildrenByIds: jest.fn(async () => mockChildren),
   getWriteAuthority: jest.fn(async () => ({ c1: { attend: true, deliver: true, level: true }, c2: { attend: true, deliver: true, level: true } })),
-} } };
+  } } };
 let mockInitial, mockDraft, mockApply, mockBeginSave, mockEndSave, mockOrderLoading, mockSetDraft;
 function mockUseLessonDraft() {
   const [draft, setDraft] = React.useState(mockInitial);
@@ -75,6 +77,7 @@ beforeEach(() => {
   mockHandle.repositories.children.getWriteAuthority.mockImplementation(async () => ({
     c1: { attend: true, deliver: true, level: true }, c2: { attend: true, deliver: true, level: true },
   }));
+  mockHandle.repositories.sessions.countLiteracyLessons.mockReset().mockResolvedValue(12);
   jest.spyOn(Date.prototype, 'toISOString').mockReturnValue('2026-10-22T09:12:34.000Z');
 });
 afterEach(() => jest.restoreAllMocks());
@@ -87,6 +90,31 @@ test('the heading asks who learned something new; no ticked letters skips the se
   const empty = mount(); await ready(empty);
   expect(empty.queryByText('Who learned something new today?')).toBeNull();
   expect(empty.queryByText(/Teaching it today doesn't count/)).toBeNull();
+});
+const PLAIN_RULE = "Tap a letter if the child knows it without help. Teaching it today doesn't count.";
+const BOLD_RULE = 'Only tap a letter the child knows on their own.';
+const BOLD_DETAIL = "If they wait, guess or need your help, leave it. Teaching it today doesn't count.";
+test('in the first 10 lessons the rule is a bold amber note; it counts only this EA\'s lessons', async () => {
+  mockHandle.repositories.sessions.countLiteracyLessons.mockResolvedValue(9);
+  const view = mount(); await ready(view);
+  const note = await view.findByTestId('wrap-up-letter-rule');
+  expect(within(note).getByText(BOLD_RULE)).toBeTruthy();
+  expect(within(note).getByText(BOLD_DETAIL)).toBeTruthy();
+  expect(StyleSheet.flatten(note.props.style)).toMatchObject({ backgroundColor: colors.warningBg });
+  expect(view.queryByText(PLAIN_RULE)).toBeNull();
+  expect(mockHandle.repositories.sessions.countLiteracyLessons).toHaveBeenCalledWith({ userId: 'ea' });
+});
+test('from the tenth saved lesson the rule is the plain line', async () => {
+  mockHandle.repositories.sessions.countLiteracyLessons.mockResolvedValue(10);
+  const view = mount(); await ready(view);
+  expect(await view.findByText(PLAIN_RULE)).toBeTruthy();
+  expect(view.queryByTestId('wrap-up-letter-rule')).toBeNull();
+});
+test('a failed lesson count shows the bold note', async () => {
+  mockHandle.repositories.sessions.countLiteracyLessons.mockRejectedValue(new Error('disk'));
+  const view = mount(); await ready(view);
+  expect(await view.findByTestId('wrap-up-letter-rule')).toBeTruthy();
+  expect(view.queryByText("Couldn't save the lesson. Try again.")).toBeNull();
 });
 test('each child is a card whose letter tracker and reading level are matching labelled rows', async () => {
   const view = mount(); await ready(view);

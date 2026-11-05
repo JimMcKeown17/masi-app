@@ -73,3 +73,12 @@ field for that reason (2026-10-31). Removed: the chip, `toggleNoOneNew`, `ticks.
 `activities.lesson.tracker_check`, now `'marked'` or `null`; an older draft's leftover
 `noOneNew` is ignored. A bolder "only tap what the child knows" warning is being mocked up
 (canvas row W1–W4) and lands in the same OTA.
+
+## Update 2026-11-05: bold rule for the first 10 lessons
+
+Jim chose W1 (amber box) for an EA's first 10 saved literacy lessons, then the plain line. The
+count is derived, not stored: `sessions.countLiteracyLessons({ userId })` counts the EA's own
+sessions with `activities.lesson` (any programme), so a reinstall or new phone gives the same
+answer. An unknown count shows the bold note. Follow-up for Head Office reporting, not built:
+flag EAs who mark nearly every taught letter as known, or whose marks disagree with the child's
+next assessment; a banner cannot stop reflexive tapping, the data check can.
