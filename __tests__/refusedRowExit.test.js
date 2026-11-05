@@ -264,13 +264,58 @@ test('a payload changed after its receipt was sent gets no exit', async () => {
     "update sync_outbox set payload = json_set(payload, '$.sign_in_time', '2026-11-04T06:00:00.000Z') where id = ?", ENTRY_OUTBOX));
   expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'waiting', canRemove: false });
   expect(await engine.removeDeliveredItem(ENTRY_OUTBOX)).toMatchObject({ removed: false });
-  // A forced re-send that is refused again changes the revision too.
+  // Back to the delivered content: the exit is offered again.
   await h.withTransaction(txn => txn.runAsync(
     "update sync_outbox set payload = json_set(payload, '$.sign_in_time', '2026-11-04T07:00:00.000Z') where id = ?", ENTRY_OUTBOX));
   expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'delivered' });
+});
+
+// The proof matches content, not timestamps: EAs pull to refresh constantly, and each forced
+// re-send that is refused again gives the row a new updated_at with the same content.
+test('a forced re-send refused again keeps the exit: the content the office holds is unchanged', async () => {
+  await refuseTimeEntry();
+  await syncAndReport();
+  const before = await outboxRow(ENTRY_OUTBOX);
+  await engine.syncAll({ force: true });
+  const after = await outboxRow(ENTRY_OUTBOX);
+  expect(after).toMatchObject({ status: 'terminal', error_code: '42501' });
+  expect(after.updated_at).not.toBe(before.updated_at);
+  expect(after.payload).toBe(before.payload);
+  expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'delivered', canRemove: true });
+  expect(reports()).toHaveLength(1);
+  expect(await engine.removeDeliveredItem(ENTRY_OUTBOX)).toEqual({ removed: true });
+});
+
+test('a refused child insert keeps the exit across a forced re-send that stamps a new row version', async () => {
+  const CHILD_ID = '30000000-0000-4000-8000-000000000001';
+  const CHILD_OUTBOX = `children:${CHILD_ID}:insert`;
+  await h.withTransaction(txn => txn.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
+    values (?, 'Thandi', 'Mbeki', ?, 'pending')`, CHILD_ID, h.userId));
+  await h.services.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: CHILD_ID, operation: 'insert',
+    payload: { id: CHILD_ID, first_name: 'Thandi', last_name: 'Mbeki', created_by: h.userId } });
+  await syncAndReport();
+  expect(await itemFor(CHILD_OUTBOX)).toMatchObject({ delivery: 'delivered', canRemove: true });
+  const sentVersion = JSON.parse((await outboxRow(CHILD_OUTBOX)).payload).row_version;
+  await engine.syncAll({ force: true });
+  expect(JSON.parse((await outboxRow(CHILD_OUTBOX)).payload)).toMatchObject({ first_name: 'Thandi', row_version: sentVersion + 1 });
+  expect(await itemFor(CHILD_OUTBOX)).toMatchObject({ delivery: 'delivered', canRemove: true });
+  // A content change is still a new revision.
+  await h.withTransaction(txn => txn.runAsync(
+    "update sync_outbox set payload = json_set(payload, '$.first_name', 'Thandiwe') where id = ?", CHILD_OUTBOX));
+  expect(await itemFor(CHILD_OUTBOX)).toMatchObject({ delivery: 'waiting', canRemove: false });
+});
+
+test('a cut copy stays a support case while the row is unchanged, across forced re-sends', async () => {
+  await h.services.repositories.timeEntries.saveTimeEntry({
+    id: ENTRY_ID, user_id: h.userId, sign_in_time: '2026-11-04T07:00:00.000Z', sync_status: 'pending',
+  });
+  await enlargeEntry(70000);
+  await syncAndReport();
+  expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'support', canRemove: false });
   await engine.syncAll({ force: true });
   expect(await outboxRow(ENTRY_OUTBOX)).toMatchObject({ status: 'terminal' });
-  expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'waiting', canRemove: false });
+  expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'support', canRemove: false });
+  expect(await engine.removeDeliveredItem(ENTRY_OUTBOX)).toMatchObject({ removed: false, delivery: 'support' });
 });
 
 test('a last-seen refresh after delivery keeps the exit while the row is unchanged', async () => {

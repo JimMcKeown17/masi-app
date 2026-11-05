@@ -8802,8 +8802,8 @@ table, column or outbox op type. The contract is in `documentation/rls-sync-cont
   Home subtitle "The office has a copy". The plan's "Connect to the internet so the office gets a
   copy." is used offline.
 
-**Known limits.** A refused history row that a forced pass re-sends and the server refuses again
-gets a new revision, so its exit waits for the next receipt send (up to a day). A crash mid-pass
+**Known limits.** A refused row whose content changes after its receipt was sent waits for the
+next receipt send (up to a day). A crash mid-pass
 leaves claimed refused rows in flight and the next pass makes them pending (one extra attempt). A
 schema-1 receipt can never prove delivery ("Send diagnostics, then contact support."). After a
 reinstall a trailing `class_grouping_state` regroup is no longer forced through.
@@ -8814,3 +8814,8 @@ reinstall a trailing `class_grouping_state` regroup is no longer forced through.
 back `pending`, thrown ones `failed`), and the exit, display-name, Home, sign-out, 24 h and copy
 tests. Final: unit 519 suites / 8,232 tests passed (`npx jest`); integration 111 suites / 1,536 tests passed
 (`npx jest -c jest.integration.config.js`). No SQL changed, so no PostgreSQL harness was run.
+
+**Follow-up after orchestrator review (2026-11-05).**
+- The proof now matches content, not `updated_at`: a forced re-send refused again keeps the exit.
+  The digest also leaves out the claim's send-time `row_version` stamp, because resendable inserts
+  on versioned tables (children, enrollments, memberships) are stamped on every send.

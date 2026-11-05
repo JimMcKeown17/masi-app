@@ -21,12 +21,20 @@ export const canonicalJson = value => JSON.stringify(value, (_key, item) => (
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item
 ));
-export const wireDigest = value => uuidv5(canonicalJson(value ?? null), INCIDENT_KEY_NAMESPACE);
+// The digest names the content the EA made. The claim stamps a fresh row_version on every send of
+// a versioned row (rowVersion.isStampedOperation), so that send-time stamp is left out.
+const withoutSendStamp = value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('row_version' in value)) return value;
+  const { row_version: _sendStamp, ...content } = value;
+  return content;
+};
+export const wireDigest = value => uuidv5(canonicalJson(withoutSendStamp(value ?? null)), INCIDENT_KEY_NAMESPACE);
 
 // Lifecycle safety O1 item 2: markSent records what the office accepted for an upload_terminal
 // receipt, from the bounded snapshot it actually sent. A refused row may leave the phone only
-// while this proof matches its current revision and nothing was cut (services/deliveredReceipt.js).
-// It lives in local_state, so the OTA needs no SQLite migration.
+// while this proof names it, matches its current content and nothing was cut
+// (services/deliveredReceipt.js). outboxUpdatedAt is kept for diagnostics only. It lives in
+// local_state, so the OTA needs no SQLite migration.
 export const DELIVERED_RECEIPT_PREFIX = 'delivered_receipt:';
 export const deliveredReceiptKey = incidentId => `${DELIVERED_RECEIPT_PREFIX}${incidentId}`;
 const hasCutMarker = value => Boolean(value) && typeof value === 'object' && (Array.isArray(value)

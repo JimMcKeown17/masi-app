@@ -2011,13 +2011,20 @@ row. Residual: a crash mid-pass leaves claimed refused rows `in_flight`, and the
 **The exact-revision delivered-receipt rule.** A terminal row R may leave the phone only when its
 `upload_terminal` receipt (looked up by `uploadTerminalParts(R)`) is `sent`, is schema 2, and has a
 delivery proof in `local_state` under `delivered_receipt:<incident id>` for its current
-`report_generation`, and that proof names R's id and R's current `updated_at`, has a `wireDigest`
-equal to the digest of `buildSyncPayload` of R as it is now, and `cut = false`. `markSent` writes
-the proof `{ report_generation, outboxId, outboxUpdatedAt, wireDigest, cut }` from the bounded
+`report_generation`, and that proof names R's id, has a `wireDigest` equal to the digest of
+`buildSyncPayload` of R as it is now, and `cut = false`. `markSent` writes the proof
+`{ report_generation, outboxId, outboxUpdatedAt, wireDigest, cut }` from the bounded
 `report_snapshot` that was accepted, in the same transaction and before clearing it; `cut` is true
 when any `*Truncated` marker or `wirePayloadError` was in the accepted copy, so a later, smaller
 delivery block cannot re-bound it uncut. The check and the delete share one SQLite transaction
 (`services/deliveredReceipt.js`, `readDeliveredReceipt`).
+- **The match is on content, not timestamps (2026-11-05).** A forced pass re-sends refused
+  history, and each refusal gives R a new `updated_at` with unchanged content; matching
+  `updated_at` would close the exit on every pull to refresh. `wireDigest` leaves out the
+  top-level `row_version`, the send-time stamp the claim writes on every send of a versioned row
+  (including resendable inserts such as children and memberships). `outboxUpdatedAt` stays in the
+  proof for diagnostics only. A cut proof for R stays "contact support" until a later send replaces
+  it, even if R's content changed since.
 - **Deviation from the plan's condition (a):** `has_unsent_changes = 0` is not required. The
   observer re-records every live receipt on its 15-minute `last_seen_at` refresh, which sets
   `has_unsent_changes = 1` without any change to the work, so the exit would close 15 minutes after
@@ -2042,9 +2049,9 @@ upload; the local record stays. A `FOREIGN_OWNER` quarantine never leaves.
 `support`), `clearsItself`, `canRemove` and `canRetry`; Sync status words them and Home's card can
 be dismissed once every item is `delivered`.
 
-**Known limits.** A refused history row that a forced pass re-sends and the server refuses again
-gets a new `updated_at`, so its exit waits for the next receipt send (the observer's daily
-re-send of a changed receipt, or an update's release change). Tests: `refusedRowExit.test.js`,
+**Known limits.** A refused row whose content changes after its receipt was sent (a new local
+edit queued into the same slot) waits for the next receipt send (the observer's daily re-send of a
+changed receipt, or an update's release change). Tests: `refusedRowExit.test.js`,
 `forcedRefusalHardening.test.js`, `offlineSyncOutbox.test.js`, `rowVersionSend.test.js`.
 
 ## Field diagnostics: immutable receipts and observed incidents
