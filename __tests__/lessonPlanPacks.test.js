@@ -20,11 +20,14 @@ const RELEASE_PACK_SHA256 = {
   'isixhosa-interim-letters-v2': '45e0d71f045124572058e24d6d065e26754cacd6baa370220f9d6851fd4980c7',
   'english-interim-letters-v2': '54a73d3ccc783136565db39eb6baae4274db991debf694b907faa35eaaf3ae49',
   'afrikaans-interim-letters-v2': '92d837fde5fd89c7703fb65980fe05aab2af8dbbda23b47938200779213b3b16',
-  // Draft words, blends and books (books commit 5d3b486, npm run app-pack -- --version 1).
-  'isixhosa-draft-content-v1': '42b31ef00e7a49b777e993584f7f98bb2c8a1b2fd9866ebecbe54ca4f9c6fc2c',
+  // Draft words, blends and books (books commits 5d3b486 (en, af v1) and 6f4009d (xh v2), npm run app-pack).
+  'isixhosa-draft-content-v2': 'ad7bf6099af65e4f3c71aa20bc1e4d41dada3d03d58fbb3fc295d0242434a48e',
   'english-draft-content-v1': '08ddd11b882e918e0ddef5f451118f21209937d8c9a38ad5e40e75ef3abf6a25',
   'afrikaans-draft-content-v1': 'eae31b4f51ccef1449ddc4d6306468b3448472a9dd3aa1b394734088d2757d32',
 };
+
+// The current draft content release per language; only isiXhosa gained books, so only it is v2.
+const DRAFT_CONTENT = { isixhosa: 'isixhosa-draft-content-v2', english: 'english-draft-content-v1', afrikaans: 'afrikaans-draft-content-v1' };
 
 const PREVIEW_PACK_SHA256 = {
   'isixhosa-candidates-preview-v2': '7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366',
@@ -35,7 +38,7 @@ const PREVIEW_PACK_SHA256 = {
 test('current packs are selected by letter order', () => {
   expect(CURRENT_PACK_IDS).toEqual({
     release: {
-      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v1',
+      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v2',
       'english-order-2026-10-23': 'english-draft-content-v1',
       'afrikaans-order-2026-10-23': 'afrikaans-draft-content-v1',
     },
@@ -47,7 +50,7 @@ test.each([['xh', 'isixhosa'], ['en', 'english'], ['af', 'afrikaans']])(
   'a pilot build teaches %s from the draft content release pack, with words and blends', (code, name) => {
     const teachingOrder = resolveTeachingOrder('2026-10-23', code);
     const pack = getPackForOrder(teachingOrder.id);
-    expect(pack).toMatchObject({ id: `${name}-draft-content-v1`, language: name, channel: 'release',
+    expect(pack).toMatchObject({ id: DRAFT_CONTENT[name], language: name, channel: 'release',
       letter_order: teachingOrder.id });
     expect(order(pack)).toBe(teachingOrder.letters.join(' '));
     expect(pack.word_bank.length).toBeGreaterThan(2000);
@@ -60,11 +63,14 @@ test.each([['xh', 'isixhosa'], ['en', 'english'], ['af', 'afrikaans']])(
   }
 );
 
-test('a pilot build suggests Molo, Lolo! at isiXhosa step 1', () => {
+test('a pilot build has two isiXhosa books at each of steps 1 to 3', () => {
   const pack = getPackForOrder('isixhosa-order-2026-10-23');
-  expect(pack.letter_steps[0].readers).toEqual(['xh-int-v1-r01']);
+  expect(pack.letter_steps.slice(0, 3).map(step => step.readers)).toEqual([
+    ['xh-int-v1-r01', 'xh-int-v1-r02'], ['xh-int-v1-r03', 'xh-int-v1-r04'], ['xh-int-v1-r05', 'xh-int-v1-r06'],
+  ]);
+  expect(pack.letter_steps.slice(3).every(step => step.readers.length === 0)).toBe(true);
   expect(pack.readers['xh-int-v1-r01']).toMatchObject({ title: 'Molo, Lolo!', step: 1 });
-  expect(pack.reader_details['xh-int-v1-r01'].retired).toBe(false);
+  for (const id of Object.keys(pack.readers)) expect(pack.reader_details[id].retired).toBe(false);
 });
 
 test.each([['xh', 'isixhosa'], ['en', 'english'], ['af', 'afrikaans']])(
@@ -113,7 +119,7 @@ test.each([['isixhosa', 2], ['english', 1], ['afrikaans', 1]])(
   '%s previews resolve by id only with explicit permission; every build teaches the release', (name, version) => {
     const orderId = `${name}-order-2026-10-23`;
     const previewId = `${name}-candidates-preview-v${version}`;
-    const release = getPackById(`${name}-draft-content-v1`);
+    const release = getPackById(DRAFT_CONTENT[name]);
     for (const options of [undefined, null, { allowPreview: false }, { allowPreview: 'yes' }, { allowPreview: 1 }]) {
       expect(getPackForOrder(orderId, options)).toBe(release);
       expect(getPackById(previewId, options)).toBeNull();
@@ -125,7 +131,7 @@ test.each([['isixhosa', 2], ['english', 1], ['afrikaans', 1]])(
 
 test('a mapped preview is chosen only with explicit permission (registry fixture)', () => {
   // No order has a preview mapping today; keep the selection rule tested for the next one.
-  const release = getPackById('isixhosa-draft-content-v1');
+  const release = getPackById('isixhosa-draft-content-v2');
   const preview = getPackById('isixhosa-candidates-preview-v2', { allowPreview: true });
   const registry = createPackRegistry([release, preview], {
     release: { 'isixhosa-order-2026-10-23': release.id },

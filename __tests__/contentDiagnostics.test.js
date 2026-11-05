@@ -6,7 +6,7 @@ import { getContentDiagnostics } from '../src/lessonPlan/packs/contentDiagnostic
 test('reports the draft content release packs and a clean self-check in a normal build', () => {
   expect(getContentDiagnostics()).toEqual({
     previewContentAllowed: false,
-    currentPacks: { xh: 'isixhosa-draft-content-v1', en: 'english-draft-content-v1', af: 'afrikaans-draft-content-v1' },
+    currentPacks: { xh: 'isixhosa-draft-content-v2', en: 'english-draft-content-v1', af: 'afrikaans-draft-content-v1' },
     bundledPackIds: expect.arrayContaining(['isixhosa-candidates-preview-v1', 'english-interim-letters-v1']),
     decodabilitySelfCheck: { vectorVersion: 1, passed: 72, failed: [] },
   });
@@ -14,7 +14,7 @@ test('reports the draft content release packs and a clean self-check in a normal
 
 test('a developer build reports the same draft content packs (no preview mapping for the new edition)', () => {
   expect(getContentDiagnostics({ allowPreview: true }).currentPacks).toEqual({
-    xh: 'isixhosa-draft-content-v1',
+    xh: 'isixhosa-draft-content-v2',
     en: 'english-draft-content-v1',
     af: 'afrikaans-draft-content-v1',
   });

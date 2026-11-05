@@ -8784,3 +8784,9 @@ builds (iOS 26 / Android 55 from `f002e08`; iOS 28 / Android 58 from `8b79eae5`)
 lockfile and native config are unchanged (Codex review), so this ships by OTA on channel `preview`.
 Codex review of `03f47ec1`: no correctness findings; three P3s (a preview-mapping registry test,
 three stale doc lines, this baseline) fixed in the follow-up commit.
+
+**Same day, isiXhosa v2 (before merge).** The books repo produced five more books (stories engine
+with a new print-fit gate), so the PR bundles `isixhosa-draft-content-v2` (books `6f4009d`,
+SHA-256 `ad7bf609…a48e`) instead of v1, which no build ever shipped. Two books per step for steps
+1-3. The LessonScreen book test now expects the engine's real pick for a group that knows letters
+through step 6: the first step-3 book, Ekunene, Malo!.

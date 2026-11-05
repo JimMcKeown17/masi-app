@@ -1,11 +1,11 @@
 {
- "id": "isixhosa-draft-content-v1",
+ "id": "isixhosa-draft-content-v2",
  "language": "isixhosa",
  "channel": "release",
  "letter_order": "isixhosa-order-2026-10-23",
  "generated_from": {
   "repo": "early-reader-books",
-  "commit": "5b3c1097a8a1c6207b2a1c1bd7692149950a7454",
+  "commit": "a2b3abfae7142f4e715f769b5c99fc18362a0673",
   "note": "DRAFT for team testing (Jim, 2026-11-05): candidate words and books, not yet signed off by native speakers",
   "from_preview": {
    "file": "isixhosa-candidates-preview-v2.json",
@@ -80,7 +80,8 @@
     "o-lo"
    ],
    "readers": [
-    "xh-int-v1-r01"
+    "xh-int-v1-r01",
+    "xh-int-v1-r02"
    ]
   },
   {
@@ -110,7 +111,10 @@
     "ku-la",
     "ku-lu-la"
    ],
-   "readers": []
+   "readers": [
+    "xh-int-v1-r03",
+    "xh-int-v1-r04"
+   ]
   },
   {
    "step": 3,
@@ -141,7 +145,10 @@
     "ko-nke",
     "u-ma-lu-me"
    ],
-   "readers": []
+   "readers": [
+    "xh-int-v1-r05",
+    "xh-int-v1-r06"
+   ]
   },
   {
    "step": 4,
@@ -626,6 +633,66 @@
     "Lolo! Molo!",
     "Mmm… lala.",
     "Molo, Malo!"
+   ]
+  },
+  "xh-int-v1-r02": {
+   "title": "Laa…",
+   "step": 1,
+   "tricky_words": [],
+   "pages": [
+    "Molo, Lolo!",
+    "Lolo! Laa…",
+    "Mmm.",
+    "Mama…",
+    "Molo."
+   ]
+  },
+  "xh-int-v1-r03": {
+   "title": "Ukulala",
+   "step": 2,
+   "tricky_words": [],
+   "pages": [
+    "Kulula!",
+    "Mmm.",
+    "Kulula…",
+    "Lolo, ulala?",
+    "Molo, Malo!"
+   ]
+  },
+  "xh-int-v1-r04": {
+   "title": "Kulula, Malo?",
+   "step": 2,
+   "tricky_words": [],
+   "pages": [
+    "Kulula!",
+    "Mmm.",
+    "Kulula…",
+    "Mmm!",
+    "Kulula, Malo."
+   ]
+  },
+  "xh-int-v1-r05": {
+   "title": "Ekunene, Malo!",
+   "step": 3,
+   "tricky_words": [],
+   "pages": [
+    "Kulula!",
+    "Ekunene!",
+    "Kulula!",
+    "Kulula…",
+    "Ekunene."
+   ]
+  },
+  "xh-int-v1-r06": {
+   "title": "Mna!",
+   "step": 3,
+   "tricky_words": [],
+   "pages": [
+    "Mna!",
+    "Malo?",
+    "Mama!",
+    "Mmm!",
+    "Nam?"
    ]
   }
  },
@@ -17313,6 +17380,231 @@
      {
       "speaker": "lolo",
       "text": "Molo, Malo!"
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r02": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Molo, Lolo!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Lolo! Laa…"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Mama…"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Molo."
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r03": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula…"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Lolo, ulala?"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Molo, Malo!"
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r04": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula…"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Mmm!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Kulula, Malo."
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r05": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Ekunene!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula…"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Ekunene."
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r06": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Mna!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Malo?"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Mama!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Nam?"
      }
     ]
    ]

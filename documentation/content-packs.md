@@ -47,7 +47,7 @@ The current edition is `2026-10-23`:
 
 | Code | Letter order | Current release | Current preview |
 |---|---|---|---|
-| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-draft-content-v1` | none (falls back to release) |
+| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-draft-content-v2` | none (falls back to release) |
 | `en` | `english-order-2026-10-23` | `english-draft-content-v1` | none (falls back to release) |
 | `af` | `afrikaans-order-2026-10-23` | `afrikaans-draft-content-v1` | none (falls back to release) |
 
@@ -61,11 +61,13 @@ content pack**: a release-channel pack whose words and books are not yet native-
 because the `2026-10-23` orders have no preview mapping. The preview gate (C12) is unchanged and
 remains the lane for future experimental content.
 
-The files are copied unchanged from the books repository's `exports/app-release/` at commit
-`5d3b486`, built by `npm run app-pack -- --version 1` from `5b3c109`. Their words, blends and
-steps equal the preview exports below (each records its source preview file and SHA-256);
-`isixhosa-draft-content-v1` adds one reader, **Molo, Lolo!** (`xh-int-v1-r01`), at step 1.
-English and Afrikaans have no books yet. Later versions (more books, then the signed-off lists)
+The files are copied unchanged from the books repository's `exports/app-release/`: the English
+and Afrikaans v1 at commit `5d3b486` (`npm run app-pack -- --version 1`), and
+`isixhosa-draft-content-v2` at commit `6f4009d` (`npm run app-pack -- --version 2 --language
+isixhosa`). Their words, blends and steps equal the preview exports below (each records its source
+preview file and SHA-256). isiXhosa v2 adds six readers, two per step for steps 1 to 3: **Molo,
+Lolo!** and **Laa…** (step 1), **Ukulala** and **Kulula, Malo?** (step 2), **Ekunene, Malo!** and
+**Mna!** (step 3). isiXhosa v1 was never bundled. English and Afrikaans have no books yet. Later versions (more books, then the signed-off lists)
 are new files with new ids; never edit these.
 
 The retained letters-only v2 releases (current until 2026-11-05) use the v1 JSON format and key order with `letter_order` added after `channel`.

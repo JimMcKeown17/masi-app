@@ -630,11 +630,13 @@ testLesson('an unknown class edition asks for an app update and shows no letter 
   expect(view.queryAllByRole('button', { name: /^[A-Z], (not )?selected$/ })).toHaveLength(0);
 });
 
-testLesson('a pilot-build isiXhosa lesson suggests Molo, Lolo! from the draft content pack', async () => {
+testLesson('a pilot-build isiXhosa lesson suggests a draft content book', async () => {
+  // The group knows letters through step 6, so the engine picks the highest-step readable book
+  // not read recently: the first step-3 book.
   await previewLesson();
   Constants.expoConfig.extra.previewContent = false;
   const view = mount();
-  expect(await view.findByText('Molo, Lolo!')).toBeTruthy();
-  expect(view.getByText('Step 1')).toBeTruthy();
+  expect(await view.findByText('Ekunene, Malo!')).toBeTruthy();
+  expect(view.getByText('Step 3')).toBeTruthy();
   expect(view.queryByText('No books for isiXhosa yet.')).toBeNull();
 });
