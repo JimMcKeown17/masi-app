@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 95
 confidence_basis: Real RN 0.81.5 component and keyboard emitter reproduce 72 dp padding residue and 162 dp height residue with offset 90; app wrapper restores the original layout. On the A03s, Login with RN's own component kept a 129 px lift after the keyboard closed; with the wrapper it returned pixel-identical. Sheets and Edit child (height path) not yet rechecked on the phone.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T09:57:55Z
+updated_at_utc: 2026-11-05T15:33:41Z
 first_observed_at: 2026-10-30T16:49:00Z
 last_observed_at: 2026-10-30T16:56:00Z
 
@@ -218,6 +218,7 @@ Jim approved fixing this at its root on 2026-10-30.
 | 2026-10-31T01:11:20Z | Codex | Adversarial review | Approve, no material findings; one test renamed to claim only what it checks |
 | 2026-10-31T01:17:00Z | Claude | Device repro closed on Login, A03s | Stock RN: 129 px lift; wrapper: pixel-identical over two cycles |
 | 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | Signed in; Change password (two cycles), Report a problem and Edit child (two cycles) return pixel-identical to the pre-keyboard layout apart from the focus ring; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
+| 2026-11-05T15:33:41Z | Claude | Released | In the 1.5.0 pilot builds iOS 28 / Android 58, built from `8b79eae5` on 2026-11-03 and submitted to TestFlight and Play internal testing; they contain #123 (`4bc23d1`). Android 58 installed on the A03s from Play 2026-11-05 (versionCode 58) |
 
 ## Open questions
 
