@@ -122,9 +122,9 @@ first `--apply` against `masi-app-sqlite` needs Jim's go-ahead.
      receipt on the server (`npm run bugs:incidents`);
   3. `npm run ea:suspend` (above);
   4. hand the EA's children, classes and groups over with this script.
-- **Until the server fix (plan step R1) is live and the EA's phone has the app update**, the EA's
-  phone must upload everything before any change (interim rule 1 in
-  [`lifecycle-interim-field-rules.md`](./lifecycle-interim-field-rules.md)).
+- **Until interim rule 1 lifts for that EA**, the EA's phone must upload everything before any
+  change. What lifts it, and how you know, is in
+  [`lifecycle-interim-field-rules.md`](./lifecycle-interim-field-rules.md#when-each-rule-lifts).
 - **No reopen, no restore, and no handover back to a former holder,** for an EA whose receipts show
   a refused archive or restore, until that phone has the app update (plan step O1; interim rule 2).
   Their phone would send the old archive again and end the row again.

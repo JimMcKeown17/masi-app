@@ -1,0 +1,3099 @@
+{
+  "label": "O2-delete-child-offline-chain",
+  "note": "Recorded by __tests__/deleteChildChain.integration.test.js (plan O2). Regenerate with WRITE_LIFECYCLE_OTA_WIRE=1.",
+  "actor": "11111111-1111-4111-8111-111111111111",
+  "headOffice": "99999999-9999-4999-8999-999999999999",
+  "ids": {
+    "SCHOOL": "a0000000-0000-4000-8000-000000000001",
+    "PROG": "a0000000-0000-4000-8000-000000000002",
+    "YEAR": "a0000000-0000-4000-8000-000000000003",
+    "CLASS": "a0000000-0000-4000-8000-000000000004",
+    "GROUP": "a0000000-0000-4000-8000-000000000005",
+    "SPA": "a0000000-0000-4000-8000-000000000006",
+    "C": "c0000000-0000-4000-8000-000000000001"
+  },
+  "seed": {
+    "staff_programme_assignments": [
+      {
+        "row_version": 1,
+        "id": "a0000000-0000-4000-8000-000000000006",
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "programme_id": "a0000000-0000-4000-8000-000000000002",
+        "school_id": "a0000000-0000-4000-8000-000000000001",
+        "assigned_at": "2026-01-15T00:00:00.000Z"
+      }
+    ],
+    "classes": [
+      {
+        "row_version": 1,
+        "id": "a0000000-0000-4000-8000-000000000004",
+        "school_id": "a0000000-0000-4000-8000-000000000001",
+        "name": "Grade 1A",
+        "grade": "1",
+        "academic_year_id": "a0000000-0000-4000-8000-000000000003",
+        "created_by": "99999999-9999-4999-8999-999999999999"
+      }
+    ],
+    "class_ea_assignments": [
+      {
+        "row_version": 1,
+        "id": "017ed425-8a7f-5792-9192-f11d6049b9eb",
+        "class_id": "a0000000-0000-4000-8000-000000000004",
+        "ea_user_id": "11111111-1111-4111-8111-111111111111",
+        "programme_id": "a0000000-0000-4000-8000-000000000002",
+        "assigned_at": "2026-01-15T00:00:00.000Z",
+        "created_by": "99999999-9999-4999-8999-999999999999"
+      }
+    ],
+    "groups": [
+      {
+        "row_version": 1,
+        "id": "a0000000-0000-4000-8000-000000000005",
+        "name": "Group 1",
+        "programme_id": "a0000000-0000-4000-8000-000000000002",
+        "class_id": "a0000000-0000-4000-8000-000000000004",
+        "created_by": "11111111-1111-4111-8111-111111111111"
+      }
+    ],
+    "group_ea_assignments": [
+      {
+        "row_version": 1,
+        "id": "fc01960c-cf94-5abd-9af6-9eb8cca0bee1",
+        "group_id": "a0000000-0000-4000-8000-000000000005",
+        "ea_user_id": "11111111-1111-4111-8111-111111111111",
+        "programme_id": "a0000000-0000-4000-8000-000000000002",
+        "assigned_at": "2026-01-15T00:00:00.000Z",
+        "created_by": "11111111-1111-4111-8111-111111111111"
+      }
+    ]
+  },
+  "hoActions": [],
+  "requests": [
+    {
+      "seq": 1,
+      "method": "POST",
+      "target": "children",
+      "prefer": "resolution=merge-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "c0000000-0000-4000-8000-000000000001",
+        "first_name": "Thandi",
+        "last_name": "Mokoena",
+        "class_id": "a0000000-0000-4000-8000-000000000004",
+        "created_by": "11111111-1111-4111-8111-111111111111",
+        "gender": null,
+        "created_at": "2026-10-21T09:30:00.000Z",
+        "updated_at": "2026-10-21T09:30:00.000Z",
+        "row_version": 3
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 2,
+      "method": "POST",
+      "target": "child_ea_assignments",
+      "prefer": "resolution=ignore-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "d7c9e31f-056a-522b-9f61-186f0a5a3c84",
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "assigned_at": "2026-10-21T09:30:00.000Z",
+        "created_by": "11111111-1111-4111-8111-111111111111",
+        "created_at": "2026-10-21T09:30:00.000Z",
+        "updated_at": "2026-10-21T09:30:00.000Z"
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 3,
+      "method": "POST",
+      "target": "child_programme_enrollments",
+      "prefer": "resolution=merge-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "faf573ec-b68c-5bc8-af11-899280001ce3",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "programme_id": "a0000000-0000-4000-8000-000000000002",
+        "enrolled_at": "2026-10-21T09:30:00.000Z",
+        "ended_at": null,
+        "created_by": "11111111-1111-4111-8111-111111111111",
+        "created_at": "2026-10-21T09:30:00.000Z",
+        "updated_at": "2026-10-21T09:30:00.000Z",
+        "row_version": 2
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 4,
+      "method": "GET",
+      "target": "child_class_memberships",
+      "prefer": "",
+      "onConflict": null,
+      "query": "?select=id&child_id=eq.c0000000-0000-4000-8000-000000000001&academic_year_id=eq.a0000000-0000-4000-8000-000000000003&exited_at=is.null&limit=1",
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 5,
+      "method": "POST",
+      "target": "child_class_memberships",
+      "prefer": "resolution=merge-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "d383761a-0465-47b3-978b-ac227eeb0d85",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "class_id": "a0000000-0000-4000-8000-000000000004",
+        "academic_year_id": "a0000000-0000-4000-8000-000000000003",
+        "enrolled_at": "2026-10-21T09:30:00.000Z",
+        "created_by": "11111111-1111-4111-8111-111111111111",
+        "created_at": "2026-10-21T09:30:00.000Z",
+        "updated_at": "2026-10-21T09:30:00.000Z",
+        "row_version": 2
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 6,
+      "method": "POST",
+      "target": "child_group_memberships",
+      "prefer": "resolution=merge-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "cb000000-0000-4000-8000-000000000001",
+        "joined_at": "2026-10-21T09:30:01.000Z",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "group_id": "a0000000-0000-4000-8000-000000000005",
+        "created_by": "11111111-1111-4111-8111-111111111111",
+        "grouping_version_id": null,
+        "created_at": "2026-10-21T09:30:01.000Z",
+        "updated_at": "2026-10-21T09:30:01.000Z",
+        "row_version": 2
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 7,
+      "method": "POST",
+      "target": "sessions",
+      "prefer": "resolution=ignore-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "abede5fb-4c53-480f-96da-13807da49dbf",
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "programme_id": "a0000000-0000-4000-8000-000000000002",
+        "group_id": "a0000000-0000-4000-8000-000000000005",
+        "class_id": "a0000000-0000-4000-8000-000000000004",
+        "session_date": "2026-10-19",
+        "activities": {
+          "letters_focused": [
+            "a"
+          ],
+          "session_reading_level": "2 Letter Blends",
+          "child_reading_levels": {
+            "c0000000-0000-4000-8000-000000000001": null
+          },
+          "comments": "Monday lesson",
+          "lesson": {
+            "version": 1,
+            "pack_id": "english-interim-letters-v1",
+            "language": "en",
+            "plan": {
+              "engine_version": 1,
+              "made_on": "2026-10-19",
+              "reason": "ok",
+              "history_complete": true,
+              "mastery_complete": true,
+              "present_child_ids": [
+                "c0000000-0000-4000-8000-000000000001"
+              ],
+              "known_letters": [],
+              "suggested_letters": [
+                "a",
+                "m"
+              ],
+              "review_letters": [],
+              "unlocked_letters": [
+                "a",
+                "m"
+              ],
+              "blend_tier": "2 Letter Blends",
+              "suggested_blends": [
+                "am"
+              ],
+              "suggested_book": "reader-1",
+              "up_next_group_id": "a0000000-0000-4000-8000-000000000005"
+            },
+            "blend_tier_shown": "2 Letter Blends",
+            "blends_done": [
+              "am"
+            ],
+            "books_read": [
+              {
+                "id": "reader-1",
+                "how": "printed"
+              }
+            ],
+            "tracker_check": "marked"
+          }
+        },
+        "notes": "Monday lesson",
+        "created_at": "2026-10-21T09:00:00.000Z",
+        "updated_at": "2026-10-21T09:00:00.000Z"
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 8,
+      "method": "POST",
+      "target": "session_attendees",
+      "prefer": "resolution=merge-duplicates",
+      "onConflict": "id",
+      "query": "?on_conflict=id",
+      "body": {
+        "id": "10f16595-6d2c-596a-93f1-275805ec8521",
+        "session_id": "abede5fb-4c53-480f-96da-13807da49dbf",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "group_id": "a0000000-0000-4000-8000-000000000005",
+        "attendance_status": "present",
+        "created_at": "2026-10-21T09:30:02.000Z",
+        "updated_at": "2026-10-21T09:30:02.000Z"
+      },
+      "fake": {
+        "status": 201,
+        "outcome": "ok",
+        "rowsAffected": 1
+      }
+    },
+    {
+      "seq": 9,
+      "method": "POST",
+      "target": "rpc/save_battery_run",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_run": {
+          "id": "b0000000-0000-4000-8000-000000000001",
+          "user_id": "11111111-1111-4111-8111-111111111111",
+          "child_id": "c0000000-0000-4000-8000-000000000001",
+          "programme_id": "a0000000-0000-4000-8000-000000000002",
+          "class_id": "a0000000-0000-4000-8000-000000000004",
+          "battery_code": "egra",
+          "battery_version": "dbe-egra-xh-hl-1-v1",
+          "assessment_purpose": "progress_check",
+          "assessment_window_id": null,
+          "language": "xh",
+          "started_at": "2026-10-21T09:30:03.000Z",
+          "completed_at": "2026-10-21T09:30:03.000Z",
+          "status": "completed",
+          "notes": null,
+          "created_at": "2026-10-21T09:30:03.000Z"
+        }
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 10,
+      "method": "POST",
+      "target": "rpc/submit_assessment",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_assessment": {
+          "id": "ab000000-0000-4000-8000-000000000001",
+          "user_id": "11111111-1111-4111-8111-111111111111",
+          "child_id": "c0000000-0000-4000-8000-000000000001",
+          "programme_id": "a0000000-0000-4000-8000-000000000002",
+          "assessment_window_id": null,
+          "assessment_purpose": "progress_check",
+          "assessment_type": "letter_sounds",
+          "capture_mode": null,
+          "assessment_date": "2026-10-21",
+          "score": 1,
+          "total_items": 60,
+          "question_code": "letter_sounds",
+          "question_version": "dbe-egra-xh-hl-1-v1-masi60",
+          "item_set_id": "letter_sounds@dbe-egra-xh-hl-1-v1-masi60.xh",
+          "language": "xh",
+          "stopped_reason": "completed",
+          "duration_ms": 60000,
+          "derived": {
+            "total_correct": 1,
+            "total_attempted": 60,
+            "percent": 2,
+            "last_attempted_position": 59,
+            "was_timed": true,
+            "tracks_progress": true,
+            "capture_mode": "sequential",
+            "correction_count": 0,
+            "max_consecutive_wrong": 59
+          },
+          "battery_run_id": "b0000000-0000-4000-8000-000000000001",
+          "created_at": "2026-10-21T09:30:03.000Z"
+        },
+        "p_items": [
+          {
+            "id": "8a00392f-ea70-5fd3-9eea-df69c8a99b0c",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "0",
+            "prompt": "V",
+            "is_correct": true,
+            "position": 0,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "dcfa48dd-3083-5f75-907e-9c835174fe7f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "1",
+            "prompt": "l",
+            "is_correct": false,
+            "position": 1,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "0398c50b-cdac-52bd-b69c-741ed23746a9",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "2",
+            "prompt": "h",
+            "is_correct": false,
+            "position": 2,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "877a0441-c07b-59fc-aca8-4a0961053f1d",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "3",
+            "prompt": "g",
+            "is_correct": false,
+            "position": 3,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "033cad04-0549-5393-bd19-bc17b3f8f974",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "4",
+            "prompt": "S",
+            "is_correct": false,
+            "position": 4,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "da84cf10-ff04-5694-9e9d-f49d538389ea",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "5",
+            "prompt": "y",
+            "is_correct": false,
+            "position": 5,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "03924046-a648-53df-8ad7-7b1fdc5640e7",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "6",
+            "prompt": "z",
+            "is_correct": false,
+            "position": 6,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "2c10fbef-f05d-52e3-936c-b09128a3c818",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "7",
+            "prompt": "W",
+            "is_correct": false,
+            "position": 7,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "211bb26c-e377-5ad0-9882-bb6c0762a302",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "8",
+            "prompt": "e",
+            "is_correct": false,
+            "position": 8,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "94d9bff5-c163-53c2-9069-bee158a8e166",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "9",
+            "prompt": "n",
+            "is_correct": false,
+            "position": 9,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e133f0c0-ebeb-51f9-86f6-cd8bdca47fe4",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "10",
+            "prompt": "l",
+            "is_correct": false,
+            "position": 10,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "893b483a-306e-5f63-841d-c5d5bbf50fea",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "11",
+            "prompt": "k",
+            "is_correct": false,
+            "position": 11,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c7fe0e0f-db73-543d-97d4-c36f81a51f51",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "12",
+            "prompt": "T",
+            "is_correct": false,
+            "position": 12,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e85f570c-9470-5542-b779-36b18bf73ed9",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "13",
+            "prompt": "d",
+            "is_correct": false,
+            "position": 13,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "20def923-b8f4-5506-bcad-9f5c21a1baf3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "14",
+            "prompt": "K",
+            "is_correct": false,
+            "position": 14,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "694a086a-82b3-5551-8702-2da14208136e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "15",
+            "prompt": "t",
+            "is_correct": false,
+            "position": 15,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c9804edf-eda3-5ed5-81c8-c601c65a80c1",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "16",
+            "prompt": "q",
+            "is_correct": false,
+            "position": 16,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f26aaee8-120e-56b6-b274-afa985129d2d",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "17",
+            "prompt": "d",
+            "is_correct": false,
+            "position": 17,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3e7bf6e1-2c43-5844-9a31-ce4642672e4e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "18",
+            "prompt": "z",
+            "is_correct": false,
+            "position": 18,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "b914e211-a59a-54c5-ad48-73ebeaab206e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "19",
+            "prompt": "A",
+            "is_correct": false,
+            "position": 19,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "fd9f8266-de30-5113-b0e6-255831e3416b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "20",
+            "prompt": "h",
+            "is_correct": false,
+            "position": 20,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "9dbd807c-6283-5b2f-85ad-3b2d761d3b72",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "21",
+            "prompt": "w",
+            "is_correct": false,
+            "position": 21,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "bf793038-a158-5b28-9dd5-50a7e819df65",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "22",
+            "prompt": "z",
+            "is_correct": false,
+            "position": 22,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "bff19558-f88b-585d-893f-309c4b3b1128",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "23",
+            "prompt": "m",
+            "is_correct": false,
+            "position": 23,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7a8c52b1-9919-5b72-8ece-0b851ce3f93d",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "24",
+            "prompt": "U",
+            "is_correct": false,
+            "position": 24,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f21a7bf8-41bc-5f8d-aaa2-e81863842082",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "25",
+            "prompt": "r",
+            "is_correct": false,
+            "position": 25,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "64ed776e-84d9-5bb9-a5e6-f498e910b838",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "26",
+            "prompt": "j",
+            "is_correct": false,
+            "position": 26,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "6557ea26-2779-54f1-8ce2-549bebcd1e0b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "27",
+            "prompt": "A",
+            "is_correct": false,
+            "position": 27,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f06b910b-5eef-5358-9818-37ea36651c4a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "28",
+            "prompt": "x",
+            "is_correct": false,
+            "position": 28,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "537cc8ea-8aed-5d53-bc85-0edef6d8d59f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "29",
+            "prompt": "U",
+            "is_correct": false,
+            "position": 29,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "fe7ff051-181b-5d43-b571-af5a7b28308a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "30",
+            "prompt": "g",
+            "is_correct": false,
+            "position": 30,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3d3c90f8-5629-5fcf-8acd-25af92bfe423",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "31",
+            "prompt": "r",
+            "is_correct": false,
+            "position": 31,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d8bbc0a1-0655-5407-a73a-a8a10ea5aa86",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "32",
+            "prompt": "b",
+            "is_correct": false,
+            "position": 32,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ac1df656-3839-5865-92f0-a39813300d82",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "33",
+            "prompt": "Q",
+            "is_correct": false,
+            "position": 33,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "16ec5635-07ab-53eb-9940-1fa6eb8568d0",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "34",
+            "prompt": "L",
+            "is_correct": false,
+            "position": 34,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c2897fd2-608d-555a-9185-72a89a2bc7c7",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "35",
+            "prompt": "f",
+            "is_correct": false,
+            "position": 35,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "4567a8a1-164b-5eee-881c-65df70a88298",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "36",
+            "prompt": "l",
+            "is_correct": false,
+            "position": 36,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3c9ee284-694a-51ff-b347-cf47e82a1e1a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "37",
+            "prompt": "Z",
+            "is_correct": false,
+            "position": 37,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c404425e-3530-56f8-bdf4-d7237264f258",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "38",
+            "prompt": "s",
+            "is_correct": false,
+            "position": 38,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "29f85c02-0fdc-565c-91ef-16490ae56fcf",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "39",
+            "prompt": "r",
+            "is_correct": false,
+            "position": 39,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "23f1fe88-3720-5d09-babb-447794729d4e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "40",
+            "prompt": "i",
+            "is_correct": false,
+            "position": 40,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "771e240f-bbb9-5489-83c2-fa1ff2386744",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "41",
+            "prompt": "A",
+            "is_correct": false,
+            "position": 41,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "323daf74-92e3-5e9d-beda-ba4cc60652de",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "42",
+            "prompt": "q",
+            "is_correct": false,
+            "position": 42,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3b5825b6-376f-5622-9427-88683c235438",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "43",
+            "prompt": "T",
+            "is_correct": false,
+            "position": 43,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "bbef49b3-b918-573a-bb74-74f302461427",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "44",
+            "prompt": "h",
+            "is_correct": false,
+            "position": 44,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e575eeb1-f521-54e8-8e38-e4b937c70c64",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "45",
+            "prompt": "c",
+            "is_correct": false,
+            "position": 45,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "32f5b89d-78bb-5ccf-b780-2ccef4ad0744",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "46",
+            "prompt": "F",
+            "is_correct": false,
+            "position": 46,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "60010603-0032-578b-87b6-7100fb72262e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "47",
+            "prompt": "M",
+            "is_correct": false,
+            "position": 47,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d8b26f4c-56d2-5653-aa6a-282f910a29fc",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "48",
+            "prompt": "u",
+            "is_correct": false,
+            "position": 48,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "71b25db6-d1cd-5a4a-b800-8128efa0d312",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "49",
+            "prompt": "G",
+            "is_correct": false,
+            "position": 49,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "be664e6a-60fd-54c0-9c3b-bc0f0372e7d8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "50",
+            "prompt": "Y",
+            "is_correct": false,
+            "position": 50,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ae40d27c-74af-585d-bec3-9b02052a1cb4",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "51",
+            "prompt": "o",
+            "is_correct": false,
+            "position": 51,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "df000887-fed9-5104-9896-034055dea8d1",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "52",
+            "prompt": "N",
+            "is_correct": false,
+            "position": 52,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3f801197-4ac5-5acd-87cd-ad485d1c8048",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "53",
+            "prompt": "s",
+            "is_correct": false,
+            "position": 53,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "aece0e20-9052-5610-a5f8-e1fd2cdebd44",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "54",
+            "prompt": "p",
+            "is_correct": false,
+            "position": 54,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "22f6f3bc-d70e-501d-b52d-dd3e8e58853b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "55",
+            "prompt": "E",
+            "is_correct": false,
+            "position": 55,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "6c4e6f65-9886-5430-b6fc-bb50099a797e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "56",
+            "prompt": "v",
+            "is_correct": false,
+            "position": 56,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "4fc75547-795d-5a7e-9f6b-a34fa2d6bd5f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "57",
+            "prompt": "x",
+            "is_correct": false,
+            "position": 57,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f33133a2-4af8-5e64-8cd9-93d53163bea2",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "58",
+            "prompt": "B",
+            "is_correct": false,
+            "position": 58,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "78351e95-ca9c-5ca0-b950-46fe6df3d222",
+            "assessment_id": "ab000000-0000-4000-8000-000000000001",
+            "item_key": "59",
+            "prompt": "J",
+            "is_correct": false,
+            "position": 59,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          }
+        ]
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 11,
+      "method": "POST",
+      "target": "rpc/submit_assessment",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_assessment": {
+          "id": "ab000000-0000-4000-8000-000000000002",
+          "user_id": "11111111-1111-4111-8111-111111111111",
+          "child_id": "c0000000-0000-4000-8000-000000000001",
+          "programme_id": "a0000000-0000-4000-8000-000000000002",
+          "assessment_window_id": null,
+          "assessment_purpose": "progress_check",
+          "assessment_type": "word_reading",
+          "capture_mode": null,
+          "assessment_date": "2026-10-21",
+          "score": 1,
+          "total_items": 80,
+          "question_code": "word_reading",
+          "question_version": "dbe-egra-xh-hl-1-v1",
+          "item_set_id": "word_reading@dbe-egra-xh-hl-1-v1.xh",
+          "language": "xh",
+          "stopped_reason": "completed",
+          "duration_ms": 60000,
+          "derived": {
+            "total_correct": 1,
+            "total_attempted": 80,
+            "percent": 1,
+            "last_attempted_position": 79,
+            "was_timed": true,
+            "tracks_progress": true,
+            "capture_mode": "sequential",
+            "correction_count": 0,
+            "max_consecutive_wrong": 79
+          },
+          "battery_run_id": "b0000000-0000-4000-8000-000000000001",
+          "created_at": "2026-10-21T09:30:03.000Z"
+        },
+        "p_items": [
+          {
+            "id": "9206ac52-991c-5d73-938f-96ecdf139c16",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "0",
+            "prompt": "umama",
+            "is_correct": true,
+            "position": 0,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "10d86fc8-389b-5ef2-88c1-f90c94c531aa",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "1",
+            "prompt": "utata",
+            "is_correct": false,
+            "position": 1,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c88fe3b3-c02a-5000-b4a8-af0be17a1f1a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "2",
+            "prompt": "usisi",
+            "is_correct": false,
+            "position": 2,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7090ac3a-5c9e-590f-b974-551ccf8c17d6",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "3",
+            "prompt": "usana",
+            "is_correct": false,
+            "position": 3,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "35ba0c78-3483-53f3-a40e-d7aa72591714",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "4",
+            "prompt": "kuba",
+            "is_correct": false,
+            "position": 4,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7b627941-c5ed-5af8-805c-914561f08f0f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "5",
+            "prompt": "isikolo",
+            "is_correct": false,
+            "position": 5,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "27dc0fd8-2ca1-570b-8df3-0bfc4cfe78c9",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "6",
+            "prompt": "wafika",
+            "is_correct": false,
+            "position": 6,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "89993bb8-9b27-565a-b09e-002b5ad835d1",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "7",
+            "prompt": "kudala",
+            "is_correct": false,
+            "position": 7,
+            "metadata": {
+              "row": 0,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "10bd0259-aad4-5fa2-ae3c-251cd00543a5",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "8",
+            "prompt": "ikati",
+            "is_correct": false,
+            "position": 8,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "4db5de7c-64d6-5756-92e5-fe484d7c2e92",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "9",
+            "prompt": "vuka",
+            "is_correct": false,
+            "position": 9,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "99884071-0952-57fa-a21d-1bf36141dace",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "10",
+            "prompt": "wabona",
+            "is_correct": false,
+            "position": 10,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "17e4490d-3778-57f6-846d-bfa545569cbd",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "11",
+            "prompt": "funa",
+            "is_correct": false,
+            "position": 11,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "07772d63-43ee-596a-97cb-77d11bb0f411",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "12",
+            "prompt": "lala",
+            "is_correct": false,
+            "position": 12,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "fd509815-3ebb-558a-8204-a4c07d624f74",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "13",
+            "prompt": "suka",
+            "is_correct": false,
+            "position": 13,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "61a06f94-663b-5f7d-8bb2-6e3d867bcc20",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "14",
+            "prompt": "wema",
+            "is_correct": false,
+            "position": 14,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "1b34939d-cb7e-5f92-9a23-96bdd133e95f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "15",
+            "prompt": "mna",
+            "is_correct": false,
+            "position": 15,
+            "metadata": {
+              "row": 1,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "556e986b-47a9-5d57-a678-878723465e7b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "16",
+            "prompt": "bona",
+            "is_correct": false,
+            "position": 16,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "681d2330-4528-5a3c-b367-e741c8702ab2",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "17",
+            "prompt": "cula",
+            "is_correct": false,
+            "position": 17,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "5c960ed3-7d39-5ded-8f12-95d65ba136a0",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "18",
+            "prompt": "iti",
+            "is_correct": false,
+            "position": 18,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "48ea3d97-4cdc-5fba-b85d-4c7bf5e2eb37",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "19",
+            "prompt": "Imali",
+            "is_correct": false,
+            "position": 19,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "4bf884c2-1d6d-5186-a5b2-d9c8e1d2adf0",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "20",
+            "prompt": "luma",
+            "is_correct": false,
+            "position": 20,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d6ebd0dc-13d5-525e-b7e0-929c56e863fb",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "21",
+            "prompt": "Emva",
+            "is_correct": false,
+            "position": 21,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f16afab8-a3c6-58fd-b87c-0648cb9bb42b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "22",
+            "prompt": "cela",
+            "is_correct": false,
+            "position": 22,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "65a74ddb-1d2d-5ea6-a4b4-fd9039f1dabd",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "23",
+            "prompt": "udade",
+            "is_correct": false,
+            "position": 23,
+            "metadata": {
+              "row": 2,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "21e39132-63ff-561b-809e-c6560bc917df",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "24",
+            "prompt": "imoto",
+            "is_correct": false,
+            "position": 24,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "04f209ba-4a03-51a2-aa24-3ebb001fdc30",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "25",
+            "prompt": "sela",
+            "is_correct": false,
+            "position": 25,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "24737fcb-07e7-5941-90d3-3fa03317e8df",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "26",
+            "prompt": "ubisi",
+            "is_correct": false,
+            "position": 26,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7f503659-a2b5-522c-a0bd-7b76249c1fd3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "27",
+            "prompt": "yena",
+            "is_correct": false,
+            "position": 27,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e452a059-20ec-55a3-8b0b-0b79f8b8c7b6",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "28",
+            "prompt": "usuku",
+            "is_correct": false,
+            "position": 28,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "55303912-bb2c-5b7d-b257-1a855b99771f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "29",
+            "prompt": "waya",
+            "is_correct": false,
+            "position": 29,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ff842d69-99d6-5da0-9eb9-5a14ffb3cb95",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "30",
+            "prompt": "Ihagu",
+            "is_correct": false,
+            "position": 30,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7c6e3f8c-3971-52cc-b435-99aa056b9923",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "31",
+            "prompt": "intombi",
+            "is_correct": false,
+            "position": 31,
+            "metadata": {
+              "row": 3,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "40c6d243-975d-5bfc-8f0f-a43d900a9a65",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "32",
+            "prompt": "wona",
+            "is_correct": false,
+            "position": 32,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "4c63b529-c9c6-520e-9909-c552a808bf7d",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "33",
+            "prompt": "ifama",
+            "is_correct": false,
+            "position": 33,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c1f1b61c-9e44-5f5f-8889-78e3d5a5a44f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "34",
+            "prompt": "icawa",
+            "is_correct": false,
+            "position": 34,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c391bbf9-91ea-52ae-a171-7253e464e749",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "35",
+            "prompt": "Ewe",
+            "is_correct": false,
+            "position": 35,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "54e40653-a5ac-57ad-8640-e504c646ca45",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "36",
+            "prompt": "jika",
+            "is_correct": false,
+            "position": 36,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "5199a1ff-9ce5-5363-b048-3e65596804cc",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "37",
+            "prompt": "vasa",
+            "is_correct": false,
+            "position": 37,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "6e7d19b0-7999-5242-b40d-d94360a14135",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "38",
+            "prompt": "umfo",
+            "is_correct": false,
+            "position": 38,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f0c1bf50-9349-5d75-9c06-6fb3ce3a4669",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "39",
+            "prompt": "zathi",
+            "is_correct": false,
+            "position": 39,
+            "metadata": {
+              "row": 4,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7b870e37-8585-5792-a777-45cadd71e2a1",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "40",
+            "prompt": "hayi",
+            "is_correct": false,
+            "position": 40,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "2bc4fc9f-20fd-5bfd-bb30-93affa7772cd",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "41",
+            "prompt": "zisa",
+            "is_correct": false,
+            "position": 41,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "99d40241-8a1e-544b-9265-5073429e2bbc",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "42",
+            "prompt": "nomama",
+            "is_correct": false,
+            "position": 42,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "9547dbd3-b84e-5549-ae02-5a9b9f30eae1",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "43",
+            "prompt": "lilela",
+            "is_correct": false,
+            "position": 43,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "8a941d0f-cf84-568d-b3cd-c377a423d67f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "44",
+            "prompt": "ibali",
+            "is_correct": false,
+            "position": 44,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "08703433-23d2-552d-8175-c91006b14f07",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "45",
+            "prompt": "ukuba",
+            "is_correct": false,
+            "position": 45,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "5d2ffe0a-9b6f-5cb8-b204-0e3efb2775a3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "46",
+            "prompt": "njani",
+            "is_correct": false,
+            "position": 46,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "8d97536e-34ee-597e-b0ff-bb3a5fe18c98",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "47",
+            "prompt": "phambili",
+            "is_correct": false,
+            "position": 47,
+            "metadata": {
+              "row": 5,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "9bafa691-9795-5ea6-a63d-8b46ff20a98b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "48",
+            "prompt": "wabona",
+            "is_correct": false,
+            "position": 48,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "a703de5c-5669-5dc8-b199-41b75f73fd7f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "49",
+            "prompt": "ubisi",
+            "is_correct": false,
+            "position": 49,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f78f786a-85a2-55d7-8a1b-80d45e67158f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "50",
+            "prompt": "Imini",
+            "is_correct": false,
+            "position": 50,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "71c72518-a3a9-5d45-82fe-52622cd86566",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "51",
+            "prompt": "isele",
+            "is_correct": false,
+            "position": 51,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "21f2e5e8-12e9-5833-84ca-898f03833594",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "52",
+            "prompt": "wafika",
+            "is_correct": false,
+            "position": 52,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "b9112a6d-4283-5907-a399-9deb96e1f2b3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "53",
+            "prompt": "lila",
+            "is_correct": false,
+            "position": 53,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "67a1ec5a-7e20-5d8f-ba81-7011d5610502",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "54",
+            "prompt": "phambi",
+            "is_correct": false,
+            "position": 54,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "6d406dad-4aac-5b15-a054-d03006672d86",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "55",
+            "prompt": "imini",
+            "is_correct": false,
+            "position": 55,
+            "metadata": {
+              "row": 6,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "38995906-178e-5d83-a6d1-835c59dc9774",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "56",
+            "prompt": "ubisi",
+            "is_correct": false,
+            "position": 56,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "11f69da1-b467-512c-b844-4f1e2408d5bd",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "57",
+            "prompt": "imali",
+            "is_correct": false,
+            "position": 57,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "df8f7342-e643-5fc9-b290-be94b45580ba",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "58",
+            "prompt": "kuqala",
+            "is_correct": false,
+            "position": 58,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "8b75d8ec-4b6a-5006-a776-a41f5b437e84",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "59",
+            "prompt": "ihagu",
+            "is_correct": false,
+            "position": 59,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "393dfcf9-8382-58a2-94f7-9bbccb2f0cbb",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "60",
+            "prompt": "isofa",
+            "is_correct": false,
+            "position": 60,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "442c76b0-0040-5591-93b2-98de0492f5ee",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "61",
+            "prompt": "ibali",
+            "is_correct": false,
+            "position": 61,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "69a99eab-2eb0-5133-8304-155a19c572c1",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "62",
+            "prompt": "umhlobo",
+            "is_correct": false,
+            "position": 62,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "6e47ec21-8e9d-5fa4-834d-ca4c2bf2483a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "63",
+            "prompt": "wabo",
+            "is_correct": false,
+            "position": 63,
+            "metadata": {
+              "row": 7,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "bff747ae-3e2c-5703-886b-2b9127fcb704",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "64",
+            "prompt": "umalume",
+            "is_correct": false,
+            "position": 64,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "7cc1cb49-f76d-54b8-8634-965bd605fb5b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "65",
+            "prompt": "ikofu",
+            "is_correct": false,
+            "position": 65,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d013d8a7-cd15-57b8-9ad6-26dd749e027f",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "66",
+            "prompt": "wabeleka",
+            "is_correct": false,
+            "position": 66,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "a7ac8787-601a-5976-912b-ad3f37f0cecd",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "67",
+            "prompt": "qoqa",
+            "is_correct": false,
+            "position": 67,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c5b58f75-ef08-5251-bf10-3e589e169e27",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "68",
+            "prompt": "vela",
+            "is_correct": false,
+            "position": 68,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c0d48d6a-410b-576c-94aa-25e0e952ef04",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "69",
+            "prompt": "vota",
+            "is_correct": false,
+            "position": 69,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "68ca2b48-2047-5f94-a5dd-672547d56ff9",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "70",
+            "prompt": "kusasa",
+            "is_correct": false,
+            "position": 70,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "12cd17f8-11ef-5157-8dd8-1cf64d9c9103",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "71",
+            "prompt": "umsebenzi",
+            "is_correct": false,
+            "position": 71,
+            "metadata": {
+              "row": 8,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "255d3f6f-6e93-58bd-9b4a-aa2b9878adc7",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "72",
+            "prompt": "buza",
+            "is_correct": false,
+            "position": 72,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "75203afa-3241-5041-8827-d44d942d1fff",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "73",
+            "prompt": "xoxa",
+            "is_correct": false,
+            "position": 73,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "6105279a-1073-52f3-a5bc-d072bcebf3a7",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "74",
+            "prompt": "zola",
+            "is_correct": false,
+            "position": 74,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d3495dd4-ca58-558f-b7a6-91df41e8ffb5",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "75",
+            "prompt": "bona",
+            "is_correct": false,
+            "position": 75,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e3492b83-c864-560a-9f6b-6d00798caef5",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "76",
+            "prompt": "funda",
+            "is_correct": false,
+            "position": 76,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "2440e029-8c59-5243-a948-78deef3ea3d2",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "77",
+            "prompt": "esikhulu",
+            "is_correct": false,
+            "position": 77,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ea9fd9ea-dfba-54bc-927e-c3f1a24a17f8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "78",
+            "prompt": "amehlo",
+            "is_correct": false,
+            "position": 78,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "bdfa2414-c041-5ae9-bb45-e4040581834d",
+            "assessment_id": "ab000000-0000-4000-8000-000000000002",
+            "item_key": "79",
+            "prompt": "maziye",
+            "is_correct": false,
+            "position": 79,
+            "metadata": {
+              "row": 9,
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          }
+        ]
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 12,
+      "method": "POST",
+      "target": "rpc/submit_assessment",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_assessment": {
+          "id": "ab000000-0000-4000-8000-000000000003",
+          "user_id": "11111111-1111-4111-8111-111111111111",
+          "child_id": "c0000000-0000-4000-8000-000000000001",
+          "programme_id": "a0000000-0000-4000-8000-000000000002",
+          "assessment_window_id": null,
+          "assessment_purpose": "progress_check",
+          "assessment_type": "oral_reading",
+          "capture_mode": null,
+          "assessment_date": "2026-10-21",
+          "score": 1,
+          "total_items": 53,
+          "question_code": "oral_reading",
+          "question_version": "dbe-egra-xh-hl-1-v1",
+          "item_set_id": "oral_reading@dbe-egra-xh-hl-1-v1.xh",
+          "language": "xh",
+          "stopped_reason": "completed",
+          "duration_ms": 60000,
+          "derived": {
+            "total_correct": 1,
+            "total_attempted": 53,
+            "percent": 2,
+            "last_attempted_position": 52,
+            "was_timed": true,
+            "tracks_progress": true,
+            "capture_mode": "sequential",
+            "correction_count": 0,
+            "max_consecutive_wrong": 52,
+            "correct_words_per_minute": 1
+          },
+          "battery_run_id": "b0000000-0000-4000-8000-000000000001",
+          "created_at": "2026-10-21T09:30:03.000Z"
+        },
+        "p_items": [
+          {
+            "id": "c65a7e8d-2e6a-5deb-a6b2-773e57ae6f75",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "0",
+            "prompt": "ULolo",
+            "is_correct": true,
+            "position": 0,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "74a97035-5932-5097-b97a-b175fab83ca3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "1",
+            "prompt": "wayeza",
+            "is_correct": false,
+            "position": 1,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "cd92f4c5-2890-54e9-93f5-39ab5448ec9b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "2",
+            "prompt": "kuqala",
+            "is_correct": false,
+            "position": 2,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "105881a4-9396-5888-affc-32be9f74d4d5",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "3",
+            "prompt": "ukuya",
+            "is_correct": false,
+            "position": 3,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c386f247-4e3e-5c98-a0db-556f79d29111",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "4",
+            "prompt": "kwisikolo",
+            "is_correct": false,
+            "position": 4,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "739e1d33-32c6-52e0-986e-c09883d78fab",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "5",
+            "prompt": "esikhulu.",
+            "is_correct": false,
+            "position": 5,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ab21c779-3f7c-5f82-a885-532c23a9d2f0",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "6",
+            "prompt": "Lwalungathi",
+            "is_correct": false,
+            "position": 6,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "b4278604-11af-55b7-9a22-5d989619c6ce",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "7",
+            "prompt": "alufiki",
+            "is_correct": false,
+            "position": 7,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "eaffb382-10b4-5774-b169-d77681e504ae",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "8",
+            "prompt": "olu",
+            "is_correct": false,
+            "position": 8,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "a8b0a26e-a891-5e58-9096-1b4595f6a568",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "9",
+            "prompt": "suku",
+            "is_correct": false,
+            "position": 9,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3903f97f-3ac6-5ab1-8ffc-c21d46c68300",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "10",
+            "prompt": "yimivuyo.",
+            "is_correct": false,
+            "position": 10,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "93228ebf-8329-54bc-92a7-83ed88d96bbf",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "11",
+            "prompt": "Ngomhla",
+            "is_correct": false,
+            "position": 11,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "44d148bf-a322-554b-9e66-12964cdea9d3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "12",
+            "prompt": "wokuvulwa",
+            "is_correct": false,
+            "position": 12,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "a399a02c-b51d-55ec-9c18-99782392735b",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "13",
+            "prompt": "kwezikolo",
+            "is_correct": false,
+            "position": 13,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "1d0dc567-1360-5046-909a-e8a15a1f110e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "14",
+            "prompt": "wavuka",
+            "is_correct": false,
+            "position": 14,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "68633a9d-59b1-5b4a-a4a1-d90512ea7dab",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "15",
+            "prompt": "ekuseni.",
+            "is_correct": false,
+            "position": 15,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "1bd1d59e-2182-530b-bcd1-ac6b2d2bc31e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "16",
+            "prompt": "Wahlamba",
+            "is_correct": false,
+            "position": 16,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e9c18b77-e798-5178-a937-bc0c0eb9df01",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "17",
+            "prompt": "waza",
+            "is_correct": false,
+            "position": 17,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "93c14473-71e1-5057-874b-612f34619372",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "18",
+            "prompt": "watya",
+            "is_correct": false,
+            "position": 18,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f8df0eb7-4bfb-5411-ab81-cd2f19eaa6b8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "19",
+            "prompt": "isidlo",
+            "is_correct": false,
+            "position": 19,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "75fc22fb-a3d5-519e-a74b-388a03786dcc",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "20",
+            "prompt": "sakusasa.",
+            "is_correct": false,
+            "position": 20,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "61426110-a7f0-5814-b228-537f10a67cdb",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "21",
+            "prompt": "Emva",
+            "is_correct": false,
+            "position": 21,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "3407a7f8-6272-5dbd-9a5c-0a129999a686",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "22",
+            "prompt": "koko",
+            "is_correct": false,
+            "position": 22,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d1e642d9-36c3-5dbf-9436-04caf4e3c676",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "23",
+            "prompt": "uLolo",
+            "is_correct": false,
+            "position": 23,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "0cc16b26-c774-5371-842c-a9d867fb53b3",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "24",
+            "prompt": "wabeleka",
+            "is_correct": false,
+            "position": 24,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "550008d2-c362-59a0-ab5e-6b9039ef3e38",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "25",
+            "prompt": "ubhaka",
+            "is_correct": false,
+            "position": 25,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "01ddf0f5-b561-55e9-9a63-31fc67d92a8e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "26",
+            "prompt": "wakhe",
+            "is_correct": false,
+            "position": 26,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "2b19c876-7295-53c9-98b2-9ccdd34835ac",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "27",
+            "prompt": "waya",
+            "is_correct": false,
+            "position": 27,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "e0d9dd7d-2183-5920-92d0-b5bc0992a38a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "28",
+            "prompt": "esikolweni",
+            "is_correct": false,
+            "position": 28,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "5e7fb797-cacd-5e97-ae7d-0227277caf24",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "29",
+            "prompt": "nomama",
+            "is_correct": false,
+            "position": 29,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "5c4a94b2-685a-5538-aae4-4a3366e18bb6",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "30",
+            "prompt": "wakhe.",
+            "is_correct": false,
+            "position": 30,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ddf285b9-e264-552e-8d2c-decd1c44a4d8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "31",
+            "prompt": "Esikolweni",
+            "is_correct": false,
+            "position": 31,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "09d753fc-92a8-55f7-a463-ad8d14a760f2",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "32",
+            "prompt": "waboniswa",
+            "is_correct": false,
+            "position": 32,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "33d2a8f1-2f17-5e7f-9021-34307e8a0912",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "33",
+            "prompt": "utitshalakazi",
+            "is_correct": false,
+            "position": 33,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "354a4f54-c09e-5417-8a0f-400f71770dd6",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "34",
+            "prompt": "wakhe.",
+            "is_correct": false,
+            "position": 34,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "03f85549-ff0b-5434-bd3f-f8a8d9122428",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "35",
+            "prompt": "Utitshalakazi",
+            "is_correct": false,
+            "position": 35,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "b0c770f2-ff49-504c-8446-df487c440b50",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "36",
+            "prompt": "wabalisa",
+            "is_correct": false,
+            "position": 36,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "c72f7458-f04b-548f-a4ef-11fce7843760",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "37",
+            "prompt": "ibali",
+            "is_correct": false,
+            "position": 37,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "40a2ef8f-357b-51a7-81f0-bda0749bbdb2",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "38",
+            "prompt": "likaSidumo.",
+            "is_correct": false,
+            "position": 38,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "0c450473-896a-540b-89b4-e579ef5e0dd0",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "39",
+            "prompt": "USidumo",
+            "is_correct": false,
+            "position": 39,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "425c0fbc-ac47-516f-9799-eaf36f7d5254",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "40",
+            "prompt": "libali",
+            "is_correct": false,
+            "position": 40,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "69a445e4-2168-516b-b72b-464154e15aec",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "41",
+            "prompt": "elidlala",
+            "is_correct": false,
+            "position": 41,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "10d61ab0-eb36-59f6-a72d-d3d37ca1425c",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "42",
+            "prompt": "kumabonakude.",
+            "is_correct": false,
+            "position": 42,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "19bc786d-e3cf-5bf6-9cbd-b8fb7e0c697e",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "43",
+            "prompt": "ULolo",
+            "is_correct": false,
+            "position": 43,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "25445541-b77b-5e4d-9021-992c108800f8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "44",
+            "prompt": "wahleka",
+            "is_correct": false,
+            "position": 44,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d77a1a82-edae-5e73-99ea-cf6a5e37fbb8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "45",
+            "prompt": "izinto",
+            "is_correct": false,
+            "position": 45,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "d8a76288-ba60-523c-b734-aa2b8781eeae",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "46",
+            "prompt": "ezenziwa",
+            "is_correct": false,
+            "position": 46,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "0d47bc9e-1135-5a59-bfd9-d3ff2500ff40",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "47",
+            "prompt": "nguSidumo",
+            "is_correct": false,
+            "position": 47,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "f2d551f7-d6e4-5466-a75d-48e4a31a49ab",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "48",
+            "prompt": "Wabona",
+            "is_correct": false,
+            "position": 48,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "b19db069-08aa-5990-9ae4-4a276debe484",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "49",
+            "prompt": "ukuba",
+            "is_correct": false,
+            "position": 49,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "1e8af709-71a9-53a2-92d5-b8e884135fe7",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "50",
+            "prompt": "kumnandi",
+            "is_correct": false,
+            "position": 50,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "43c43bc7-88d7-5ef7-bdde-66ea62390d26",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "51",
+            "prompt": "esikolweni",
+            "is_correct": false,
+            "position": 51,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "accf1706-1a6c-5409-ae3f-415c7b2715d8",
+            "assessment_id": "ab000000-0000-4000-8000-000000000003",
+            "item_key": "52",
+            "prompt": "esikhulu.",
+            "is_correct": false,
+            "position": 52,
+            "metadata": {
+              "reached": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          }
+        ]
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 13,
+      "method": "POST",
+      "target": "rpc/submit_assessment",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_assessment": {
+          "id": "ab000000-0000-4000-8000-000000000004",
+          "user_id": "11111111-1111-4111-8111-111111111111",
+          "child_id": "c0000000-0000-4000-8000-000000000001",
+          "programme_id": "a0000000-0000-4000-8000-000000000002",
+          "assessment_window_id": null,
+          "assessment_purpose": "progress_check",
+          "assessment_type": "reading_comprehension",
+          "capture_mode": null,
+          "assessment_date": "2026-10-21",
+          "score": 2,
+          "total_items": 5,
+          "question_code": "reading_comprehension",
+          "question_version": "dbe-egra-xh-hl-1-v1",
+          "item_set_id": "reading_comprehension@dbe-egra-xh-hl-1-v1.xh",
+          "language": "xh",
+          "stopped_reason": "completed",
+          "duration_ms": 60000,
+          "derived": {
+            "total_correct": 2,
+            "total_attempted": 3,
+            "percent": 67,
+            "last_attempted_position": 2,
+            "was_timed": false,
+            "tracks_progress": true,
+            "capture_mode": "sequential",
+            "correction_count": 0,
+            "max_consecutive_wrong": 1,
+            "questions_asked": 3
+          },
+          "battery_run_id": "b0000000-0000-4000-8000-000000000001",
+          "created_at": "2026-10-21T09:30:03.000Z"
+        },
+        "p_items": [
+          {
+            "id": "cc0a6918-4edc-59c4-a2ea-52ff23e94f61",
+            "assessment_id": "ab000000-0000-4000-8000-000000000004",
+            "item_key": "0",
+            "prompt": "Ngubani owayeza kuya esikolweni?",
+            "is_correct": true,
+            "position": 0,
+            "metadata": {
+              "reached": true,
+              "asked": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "1638f280-e13f-5081-9ba9-a8ea0dfe3b73",
+            "assessment_id": "ab000000-0000-4000-8000-000000000004",
+            "item_key": "1",
+            "prompt": "Wavuka nini ngosuku lokuvulwa kwezikolo?",
+            "is_correct": false,
+            "position": 1,
+            "metadata": {
+              "reached": true,
+              "asked": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ba99ca3f-ed29-5066-aea6-6218f28bccae",
+            "assessment_id": "ab000000-0000-4000-8000-000000000004",
+            "item_key": "2",
+            "prompt": "Waya nabani esikolweni?",
+            "is_correct": true,
+            "position": 2,
+            "metadata": {
+              "reached": true,
+              "asked": true
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "fb3b8187-5741-58af-882f-55905763ab6c",
+            "assessment_id": "ab000000-0000-4000-8000-000000000004",
+            "item_key": "3",
+            "prompt": "Wenza ntoni utitshalakazi wabo?",
+            "is_correct": false,
+            "position": 3,
+            "metadata": {
+              "reached": false,
+              "asked": false
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          },
+          {
+            "id": "ba92a7fd-2033-5ee5-b8cd-60b992be251a",
+            "assessment_id": "ab000000-0000-4000-8000-000000000004",
+            "item_key": "4",
+            "prompt": "Ingaba wabona ngathi kumnandi na esikolweni uLolo?",
+            "is_correct": false,
+            "position": 4,
+            "metadata": {
+              "reached": false,
+              "asked": false
+            },
+            "created_at": "2026-10-21T09:30:03.000Z"
+          }
+        ]
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 14,
+      "method": "POST",
+      "target": "rpc/set_letter_mastery",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_correction_id": "5de93298-8d87-4e64-a547-d41bf34f9271",
+        "p_child_id": "c0000000-0000-4000-8000-000000000001",
+        "p_letter": "a",
+        "p_language": "en",
+        "p_confirmed": true,
+        "p_changed_at": "2026-10-19T09:00:00.000Z"
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    },
+    {
+      "seq": 15,
+      "method": "POST",
+      "target": "rpc/delete_child_if_no_history",
+      "prefer": "",
+      "onConflict": null,
+      "query": "",
+      "body": {
+        "p_child_id": "c0000000-0000-4000-8000-000000000001"
+      },
+      "fake": {
+        "status": 200,
+        "outcome": "ok"
+      }
+    }
+  ],
+  "sequence": [
+    "POST children:C -> ok",
+    "POST child_ea_assignments:id1 -> ok",
+    "POST child_programme_enrollments:id2 -> ok",
+    "GET child_class_memberships -> ok",
+    "POST child_class_memberships:id3 -> ok",
+    "POST child_group_memberships:MEMBERSHIP -> ok",
+    "POST sessions:id4 -> ok",
+    "POST session_attendees:id5 -> ok",
+    "rpc/save_battery_run -> ok",
+    "rpc/submit_assessment -> ok",
+    "rpc/submit_assessment -> ok",
+    "rpc/submit_assessment -> ok",
+    "rpc/submit_assessment -> ok",
+    "rpc/set_letter_mastery:C -> ok",
+    "rpc/delete_child_if_no_history:C -> ok"
+  ]
+}

@@ -39,6 +39,7 @@ jest.mock('expo-constants', () => ({
     android: { versionCode: 42 },
     updates: { url: 'https://u.expo.dev/test-project' },
     extra: {
+      gitCommit: 'abc1234def5678',
       supabaseTarget: 'sqlite-staging',
       supabaseProjectId: 'segygjzpujphwvrubusm',
     },
@@ -73,7 +74,8 @@ jest.mock('expo-updates', () => ({
   isEmbeddedLaunch: true,
   isEmergencyLaunch: false,
   runtimeVersion: '1.2.0',
-  updateId: null,
+  updateId: '5b1f0c2e-7a1d-4c3b-9e8f-0a1b2c3d4e5f',
+  createdAt: new Date('2026-10-30T14:00:00.000Z'),
 }));
 
 jest.mock('../src/context/AuthContext', () => ({
@@ -123,12 +125,26 @@ const expectToast = (screen, message, tone) => {
 beforeEach(() => jest.clearAllMocks());
 afterEach(() => jest.restoreAllMocks());
 
-test('shows app build and backend identity for support screenshots', () => {
+test('shows an App release card for support screenshots: release, build, channel, runtime, update, launch and backend', () => {
   const screen = renderProfile();
-  for (const fact of [/Version\s1\.2\.0\s\(Build\s7\)/, /Backend\ssqlite-staging/,
-    /Project\ssegygjzpujphwvrubusm/, /Device\siPhone/, /Update\sEmbedded/]) {
-    expect(screen.getByText(fact)).toBeTruthy();
+  expect(screen.getByRole('header', { name: 'App release' })).toBeTruthy();
+  for (const label of ['Release, 1.2.0', 'Build, 1.2.0 (7)', 'Channel, preview', 'Runtime, 1.2.0', 'Update, 5b1f0c2e',
+    'Running, Built-in', 'Published, \u2014', 'Source, abc1234', 'Backend, sqlite-staging, segygjzpujphwvrubusm']) {
+    expect(screen.getByLabelText(label)).toBeTruthy();
   }
+  expect(screen.getByText('Device\u00a0iPhone · iOS\u00a018.0')).toBeTruthy();
+  // The old caption footer, with its full update UUID, is gone.
+  expect(screen.queryByText(/Version\s1\.2\.0\s\(Build/)).toBeNull();
+  expect(screen.queryByText(/5b1f0c2e-/)).toBeNull();
+});
+
+test('the App release card sits after Legal and before Sign out', () => {
+  const screen = renderProfile();
+  const order = ['Legal', 'App release'].map(name => screen.getByRole('header', { name }));
+  const all = screen.UNSAFE_root.findAll(() => true);
+  const position = node => all.indexOf(node);
+  expect(position(order[0])).toBeLessThan(position(order[1]));
+  expect(position(order[1])).toBeLessThan(position(screen.getByRole('button', { name: 'Sign out' })));
 });
 
 test('Sign out asks about the shift before reading the signed-in handle unsent count', async () => {

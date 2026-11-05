@@ -27,7 +27,7 @@ import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { isQuestionGalleryEnabled } from '../../utils/questionGallery';
 import { exportDatabase, exportLogs } from '../../utils/debugExport';
-import { getReleaseMetadata } from '../../utils/releaseMetadata';
+import { getReleaseIdentity } from '../../utils/releaseMetadata';
 import { getRuntimeDiagnostics } from '../../utils/runtimeDiagnostics';
 import { sendObservabilityTest } from '../../services/observability';
 import { isStaleActorError } from '../../session/staleActor';
@@ -43,8 +43,8 @@ export default function ProfileScreen({ navigation }) {
     signOut, countUnsent: repositories.syncOutbox.countUnsent,
     isClockedIn: isSignedIn, clockOut: handleSignOut, isOnline, syncNow,
   });
-  const releaseMetadata = getReleaseMetadata();
-  const runtimeDiagnostics = getRuntimeDiagnostics();
+  const release = getReleaseIdentity();
+  const { device } = getRuntimeDiagnostics();
   const navigationContext = useContext(NavigationContext);
 
   const galleryEnabled = isQuestionGalleryEnabled();
@@ -266,8 +266,8 @@ export default function ProfileScreen({ navigation }) {
           </ListGroup>
         </View>
 
-        <View style={styles.releaseInfo}>
-          <AppReleaseInfo releaseMetadata={releaseMetadata} runtimeDiagnostics={runtimeDiagnostics} />
+        <View style={styles.section}>
+          <AppReleaseInfo release={release} device={device} />
         </View>
         <BrandButton variant="destructiveQuiet" size="lg" icon="log-out-outline" label="Sign out"
           loading={signOutFlow.busy === 'signing_out'} onPress={signOutFlow.start} style={styles.signOut} />
@@ -293,6 +293,5 @@ const styles = StyleSheet.create({
   footnoteIcon: { marginTop: 1 },
   footnoteText: { ...typeRoles.textCaption, color: colors.textSecondary, flex: 1 },
   supportPanel: { backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border },
-  releaseInfo: { marginTop: spacing.lg },
-  signOut: { marginTop: spacing.md },
+  signOut: { marginTop: spacing.lg },
 });

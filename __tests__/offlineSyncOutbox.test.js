@@ -32,7 +32,6 @@ import { createAssessmentsRepository } from '../src/db/repositories/assessmentsR
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
 import { createMasteryRepository } from '../src/db/repositories/masteryRepository';
 import { createTimeEntriesRepository } from '../src/db/repositories/timeEntriesRepository';
-import { repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
 import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
 
 const seedReferences = async (db) => {
@@ -200,27 +199,79 @@ describe('SQLite outbox offline sync', () => {
     await db.closeAsync();
   });
 
-  test('Sync Now (force) resurrects terminal rows; auto-sync leaves them terminal', async () => {
+  // Lifecycle safety O1 / D6: a forced pass replays refused history (inserts are idempotent),
+  // never a refused archive, restore or edit, which could land on newer server state.
+  test('Sync Now (force) re-sends a refused insert but never a refused archive, restore or edit', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, sync_status)
-      values ('class-term', 'school-1', 'Grade 1A', '1', 'terminal')
+      values ('class-term', 'school-1', 'Grade 1A', '1', 'terminal'),
+             ('class-gone', 'school-1', 'Grade 1B', '1', 'terminal')
+    `);
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-edit', 'Amahle', 'Dlamini', 'user-1', 'terminal')
+    `);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-x', 'Group 1', 'programme-1', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into group_ea_assignments (id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status)
+      values ('gea-restore', 'group-x', 'user-1', 'programme-1', '2026-05-01T00:00:00.000Z', 'user-1', 'terminal')
     `);
     await enqueue(db, 'classes', 'class-term', 'insert', { id: 'class-term', school_id: 'school-1', name: 'Grade 1A', grade: '1' });
+    await enqueue(db, 'classes', 'class-gone', 'archive', { id: 'class-gone', archived_at: '2026-05-25T12:00:00.000Z' });
+    await enqueue(db, 'children', 'child-edit', 'update', { id: 'child-edit', first_name: 'Stale' });
+    await enqueue(db, 'group_ea_assignments', 'gea-restore', 'restore', { id: 'gea-restore', unassigned_at: null });
     const outbox = createSyncOutboxRepository({ database: db });
     await outbox.markTerminalFailure('classes:class-term:insert', { errorMessage: 'RLS denied' });
+    await outbox.markTerminalFailure('classes:class-gone:archive', { errorMessage: 'not applied', errorCode: 'ARCHIVE_NOT_APPLIED' });
+    await outbox.markTerminalFailure('children:child-edit:update', { errorMessage: 'stale_version', errorCode: 'MV001' });
+    await outbox.markTerminalFailure('group_ea_assignments:gea-restore:restore', { errorMessage: 'not applied', errorCode: 'RESTORE_NOT_APPLIED' });
 
-    // Auto-sync (non-force): the terminal row is NOT retried and stays terminal.
+    // Auto-sync (non-force): no terminal row is retried.
     const auto = createSupabaseMock();
     await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: auto.supabaseClient }).syncAll();
-    expect(auto.calls.filter((c) => c.tableName === 'classes')).toEqual([]);
+    expect(auto.calls).toEqual([]);
     expect((await outbox.getById('classes:class-term:insert')).status).toBe('terminal');
 
-    // Sync Now (force): the terminal row is resurrected, uploaded, and finalized synced.
+    // Sync Now (force): only the refused insert is sent again, and it lands.
     const forced = createSupabaseMock();
     await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: forced.supabaseClient }).syncAll({ force: true });
     expect(forced.calls.map((c) => `${c.type}:${c.tableName}`)).toEqual(['upsert:classes']);
     expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-term'))
       .toEqual({ sync_status: 'synced' });
+    expect(await db.getAllAsync('select id, status from sync_outbox order by id')).toEqual([
+      { id: 'children:child-edit:update', status: 'terminal' },
+      { id: 'classes:class-gone:archive', status: 'terminal' },
+      { id: 'group_ea_assignments:gea-restore:restore', status: 'terminal' },
+    ]);
+  });
+
+  test('a refused archive does not hold back the rest of its family in the same pass', async () => {
+    const graph = await seedChildArchiveGraph(db);
+    for (const table of ['child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships',
+      'group_ea_assignments', 'child_group_memberships']) {
+      await db.runAsync(`update ${table} set sync_status = 'synced'`);
+    }
+    await enqueue(db, 'children', graph.childId, 'archive', { id: graph.childId, archived_at: graph.archivedAt });
+    await enqueue(db, 'child_programme_enrollments', graph.enrollmentId, 'archive', { id: graph.enrollmentId, ended_at: graph.archivedAt });
+    await enqueue(db, 'child_ea_assignments', graph.assignmentId, 'archive', { id: graph.assignmentId, unassigned_at: graph.archivedAt });
+    // Head Office removed this EA's other paths: the child and enrolment archives match 0 rows.
+    const { supabaseClient, calls } = createSupabaseMock({ updateResults: {
+      children: { data: [], error: null },
+      child_programme_enrollments: { data: [], error: null },
+    } });
+    const result = await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient }).syncAll();
+    expect(calls.map((c) => `${c.type}:${c.tableName}`)).toEqual([
+      'update:children', 'update:child_programme_enrollments', 'update:child_ea_assignments',
+    ]);
+    expect(result.tableResults.child_ea_assignments).toMatchObject({ synced: 1 });
+    expect(result.tableResults.child_ea_assignments.skipped).toBeUndefined();
+    expect(await db.getAllAsync('select id, status, error_code from sync_outbox order by id')).toEqual([
+      { id: `child_programme_enrollments:${graph.enrollmentId}:archive`, status: 'terminal', error_code: 'ARCHIVE_NOT_APPLIED' },
+      { id: `children:${graph.childId}:archive`, status: 'terminal', error_code: 'ARCHIVE_NOT_APPLIED' },
+    ]);
   });
 
   test('processes parents before children and finalizes success locally', async () => {
@@ -550,288 +601,6 @@ describe('SQLite outbox offline sync', () => {
       operation: 'archive',
       reason: expect.stringContaining('did not acknowledge'),
     })]);
-  });
-
-  test('syncs stale group ownership payloads after the versioned startup repair', async () => {
-    await db.runAsync(`
-      insert into staff_programme_assignments (
-        id,
-        user_id,
-        programme_id,
-        school_id,
-        assigned_at,
-        sync_status
-      )
-      values (
-        'spa-user-1',
-        'user-1',
-        'programme-1',
-        'school-1',
-        '2026-05-21T08:00:00.000Z',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into children (
-        id,
-        first_name,
-        last_name,
-        created_by,
-        sync_status
-      )
-      values (
-        'child-stale-group',
-        'Amahle',
-        'Dlamini',
-        'user-1',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into child_ea_assignments (
-        id,
-        user_id,
-        child_id,
-        created_by,
-        sync_status
-      )
-      values (
-        'assignment-stale-group',
-        'user-1',
-        'child-stale-group',
-        'user-1',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into groups (
-        id,
-        name,
-        programme_id,
-        created_by,
-        created_at,
-        sync_status,
-        last_sync_error
-      )
-      values (
-        'group-stale-owner',
-        'Group 1',
-        'programme-1',
-        null,
-        '2026-05-25T18:39:00.000Z',
-        'failed',
-        'new row violates row-level security policy for table "groups"'
-      )
-    `);
-    await db.runAsync(`
-      insert into child_group_memberships (
-        id,
-        child_id,
-        group_id,
-        joined_at,
-        created_by,
-        sync_status,
-        last_sync_error
-      )
-      values (
-        'membership-stale-owner',
-        'child-stale-group',
-        'group-stale-owner',
-        '2026-05-25T18:39:00.000Z',
-        null,
-        'failed',
-        'new row violates row-level security policy for table "child_group_memberships"'
-      )
-    `);
-    await enqueue(db, 'groups', 'group-stale-owner', 'insert', {
-      id: 'group-stale-owner',
-      name: 'Group 1',
-      programme_id: 'programme-1',
-      staff_id: 'user-1',
-      created_at: '2026-05-25T18:39:00.000Z',
-    });
-    await enqueue(db, 'child_group_memberships', 'membership-stale-owner', 'insert', {
-      id: 'membership-stale-owner',
-      child_id: 'child-stale-group',
-      group_id: 'group-stale-owner',
-      joined_at: '2026-05-25T18:39:00.000Z',
-    });
-    await db.runAsync(`
-      update sync_outbox
-      set status = 'failed',
-          last_error = 'new row violates row-level security policy',
-          next_retry_at = null
-    `);
-
-    const { supabaseClient, calls } = createSupabaseMock({
-      upsertResults: {
-        groups: ({ payload }) => (
-          payload.created_by
-            ? { error: null }
-            : { error: { message: 'new row violates row-level security policy for table "groups"' } }
-        ),
-        child_group_memberships: ({ payload }) => (
-          payload.created_by
-            ? { error: null }
-            : { error: { message: 'new row violates row-level security policy for table "child_group_memberships"' } }
-        ),
-      },
-    });
-    await repairGroupOwnershipForSync({ database: db });
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
-
-    const result = await engine.syncAll();
-
-    expect(result.success).toBe(true);
-    expect(calls.map(call => call.tableName)).toEqual([
-      'groups',
-      'group_ea_assignments',
-      'child_group_memberships',
-    ]);
-    expect(calls.find(call => call.tableName === 'groups').payload)
-      .toEqual(expect.objectContaining({ created_by: 'user-1' }));
-    expect(calls.find(call => call.tableName === 'group_ea_assignments').payload)
-      .toEqual(expect.objectContaining({
-        group_id: 'group-stale-owner',
-        ea_user_id: 'user-1',
-        programme_id: 'programme-1',
-        created_by: 'user-1',
-      }));
-    expect(calls.find(call => call.tableName === 'child_group_memberships').payload)
-      .toEqual(expect.objectContaining({ created_by: 'user-1' }));
-    expect(await db.getFirstAsync('select created_by, sync_status, last_sync_error from groups where id = ?', 'group-stale-owner'))
-      .toEqual({ created_by: 'user-1', sync_status: 'synced', last_sync_error: null });
-    expect(await db.getFirstAsync('select created_by, sync_status, last_sync_error from child_group_memberships where id = ?', 'membership-stale-owner'))
-      .toEqual({ created_by: 'user-1', sync_status: 'synced', last_sync_error: null });
-    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
-  });
-
-  test('syncs a stale membership after the versioned startup repair creates its assignment', async () => {
-    await db.runAsync(`
-      insert into staff_programme_assignments (
-        id,
-        user_id,
-        programme_id,
-        school_id,
-        assigned_at,
-        sync_status
-      )
-      values (
-        'spa-user-1',
-        'user-1',
-        'programme-1',
-        'school-1',
-        '2026-05-21T08:00:00.000Z',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into children (
-        id,
-        first_name,
-        last_name,
-        created_by,
-        sync_status
-      )
-      values (
-        'child-membership-only',
-        'Amahle',
-        'Dlamini',
-        'user-1',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into child_ea_assignments (
-        id,
-        user_id,
-        child_id,
-        created_by,
-        sync_status
-      )
-      values (
-        'assignment-membership-only',
-        'user-1',
-        'child-membership-only',
-        'user-1',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into groups (
-        id,
-        name,
-        programme_id,
-        created_by,
-        created_at,
-        sync_status
-      )
-      values (
-        'group-membership-only',
-        'Group 1',
-        'programme-1',
-        'user-1',
-        '2026-05-25T18:39:00.000Z',
-        'synced'
-      )
-    `);
-    await db.runAsync(`
-      insert into child_group_memberships (
-        id,
-        child_id,
-        group_id,
-        joined_at,
-        created_by,
-        sync_status,
-        last_sync_error
-      )
-      values (
-        'membership-only-stale-owner',
-        'child-membership-only',
-        'group-membership-only',
-        '2026-05-25T18:39:00.000Z',
-        null,
-        'failed',
-        'new row violates row-level security policy for table "child_group_memberships"'
-      )
-    `);
-    await enqueue(db, 'child_group_memberships', 'membership-only-stale-owner', 'insert', {
-      id: 'membership-only-stale-owner',
-      child_id: 'child-membership-only',
-      group_id: 'group-membership-only',
-      joined_at: '2026-05-25T18:39:00.000Z',
-    });
-    await db.runAsync(`
-      update sync_outbox
-      set status = 'failed',
-          last_error = 'new row violates row-level security policy',
-          next_retry_at = null
-    `);
-
-    const { supabaseClient, calls } = createSupabaseMock();
-    await repairGroupOwnershipForSync({ database: db });
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient });
-
-    const result = await engine.syncAll();
-
-    expect(result.success).toBe(true);
-    expect(calls.map(call => call.tableName)).toEqual([
-      'group_ea_assignments',
-      'child_group_memberships',
-    ]);
-    expect(calls.find(call => call.tableName === 'group_ea_assignments').payload)
-      .toEqual(expect.objectContaining({
-        group_id: 'group-membership-only',
-        ea_user_id: 'user-1',
-        programme_id: 'programme-1',
-        created_by: 'user-1',
-      }));
-    expect(await db.getFirstAsync(`
-      select created_by, sync_status, last_sync_error
-      from child_group_memberships
-      where id = 'membership-only-stale-owner'
-    `)).toEqual({ created_by: 'user-1', sync_status: 'synced', last_sync_error: null });
-    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
   });
 
   test('assignment insert retries do not attempt identity-changing updates', async () => {

@@ -6,7 +6,8 @@ beforeEach(() => useAssessmentHistoryStatus.mockReturnValue({ running: false, pa
 jest.mock('../test-support/handleServiceMocks', () => ({
 getSessionHistoryPullState: jest.fn(),
 getAssessmentHistoryPullStates: jest.fn(),
-retryFailedItem: jest.fn()
+retryFailedItem: jest.fn(),
+removeDeliveredItem: jest.fn(),
 }));
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
 
@@ -15,7 +16,7 @@ import { AllProviders } from '../test-support/renderWithProviders';
 import { StyleSheet } from 'react-native';
 import { colors, tints } from '../src/constants/colors';
 import SyncStatusScreen from '../src/screens/main/SyncStatusScreen';
-import { retryFailedItem } from '../test-support/handleServiceMocks';
+import { removeDeliveredItem, retryFailedItem } from '../test-support/handleServiceMocks';
 import { useSessionHistoryStatus } from '../src/services/sessionHistoryStatus';
 import { getSessionHistoryPullState, getAssessmentHistoryPullStates } from '../test-support/handleServiceMocks';
 
@@ -50,14 +51,19 @@ const offline = ({ syncStatus = {}, ...overrides } = {}) => ({
 });
 
 const terminalItem = (overrides = {}) => ({
-  table: 'assessment_items',
+  outboxId: 'session_attendees:abc12345ff:insert',
+  table: 'session_attendees',
   id: 'abc12345ff',
   operation: 'insert',
-  reason: 'RLS policy',
+  reason: '42501-authenticated: new row violates row-level security policy',
   failedAt: null,
   terminal: true,
   nextRetryAt: null,
   retryCount: 3,
+  delivery: 'waiting',
+  clearsItself: false,
+  canRemove: false,
+  canRetry: true,
   ...overrides,
 });
 
@@ -104,8 +110,72 @@ test('terminal-only backlog reads needs-attention and itemizes with Retry (regre
   const { queryByText, getByText } = renderScreen();
   expect(queryByText('All saved and synced')).toBeNull();
   expect(getByText('1 item needs attention')).toBeTruthy();
-  expect(getByText('RLS policy')).toBeTruthy();
+  expect(getByText('Attendance')).toBeTruthy();
+  expect(getByText('The office could not accept this.')).toBeTruthy();
+  expect(getByText('Waiting for the office to get a copy.')).toBeTruthy();
   expect(getByText('Retry')).toBeTruthy();
+});
+
+// MA-BUG-20261104-019: no table names, ids or server errors on screen.
+test('needs-attention items show plain words, never a table name, id or server error', () => {
+  mockUseOffline.mockReturnValue(offline({
+    needsAttentionCount: 2,
+    syncStatus: { needsAttentionItems: [
+      terminalItem(),
+      terminalItem({ outboxId: 'classes:class-1:archive', table: 'classes', id: 'class-1', operation: 'archive',
+        reason: 'classes archive did not acknowledge exactly one updated row', clearsItself: true, canRetry: false }),
+    ] },
+  }));
+  const screen = renderScreen();
+  expect(screen.getByText('Attendance')).toBeTruthy();
+  expect(screen.getByText('Classes')).toBeTruthy();
+  expect(screen.queryByText(/session_attendees|classes archive|row-level|abc12345|ID:/)).toBeNull();
+  // A refused change never offers Retry: it clears by itself once the office has a copy.
+  expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+});
+
+test.each([
+  ['offline', false, 'waiting', 'Connect to the internet so the office gets a copy.'],
+  ['oversized', true, 'support', 'Send diagnostics, then contact support.'],
+])('a %s item says what to do', (_name, isOnline, delivery, hint) => {
+  mockUseOffline.mockReturnValue(offline({
+    isOnline, needsAttentionCount: 1, syncStatus: { needsAttentionItems: [terminalItem({ delivery })] },
+  }));
+  const screen = renderScreen();
+  expect(screen.getByText(hint)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'The office has a copy — remove from this phone' })).toBeNull();
+});
+
+// D8: the exit, only once the office has a copy, and only after the EA confirms.
+test('a delivered item offers "The office has a copy — remove from this phone"', async () => {
+  const state = offline({ needsAttentionCount: 1,
+    syncStatus: { needsAttentionItems: [terminalItem({ delivery: 'delivered', canRemove: true })] } });
+  mockUseOffline.mockReturnValue(state);
+  removeDeliveredItem.mockResolvedValue({ removed: true });
+  const screen = renderScreen();
+  expect(screen.getByText('The office has a copy.')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'The office has a copy — remove from this phone' }));
+  expect(removeDeliveredItem).not.toHaveBeenCalled();
+  expect(await screen.findByText('Remove from this phone?')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Remove' }));
+  await waitFor(() => expect(removeDeliveredItem).toHaveBeenCalledWith('session_attendees:abc12345ff:insert'));
+  await waitFor(() => expect(state.refreshSyncStatus).toHaveBeenCalledTimes(1));
+  expect(within(screen.getByTestId('toast-host')).getByText('Removed from this phone')).toBeTruthy();
+});
+
+test('cancelling the exit removes nothing; a refused exit says so', async () => {
+  const state = offline({ needsAttentionCount: 1,
+    syncStatus: { needsAttentionItems: [terminalItem({ delivery: 'delivered', canRemove: true })] } });
+  mockUseOffline.mockReturnValue(state);
+  removeDeliveredItem.mockResolvedValue({ removed: false, delivery: 'waiting' });
+  const screen = renderScreen();
+  fireEvent.press(screen.getByRole('button', { name: 'The office has a copy — remove from this phone' }));
+  fireEvent.press(await screen.findByRole('button', { name: 'Cancel' }));
+  expect(removeDeliveredItem).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByRole('button', { name: 'The office has a copy — remove from this phone' }));
+  fireEvent.press(await screen.findByRole('button', { name: 'Remove' }));
+  await waitFor(() => expect(within(screen.getByTestId('toast-host'))
+    .getByText('Not removed. The office does not have a copy yet.')).toBeTruthy());
 });
 
 test('waiting backlog reads calm and count-only: no itemized rows, no Retry', () => {
@@ -177,8 +247,18 @@ test('offline with terminal items shows reconnect framing and an inert Retry', (
   expect(retryFailedItem).not.toHaveBeenCalled();
 });
 
+test('offline with only self-clearing items does not promise a retry', () => {
+  mockUseOffline.mockReturnValue(offline({
+    isOnline: false, needsAttentionCount: 1,
+    syncStatus: { needsAttentionItems: [terminalItem({ table: 'classes', operation: 'archive', clearsItself: true, canRetry: false })] },
+  }));
+  const screen = renderScreen();
+  expect(screen.queryByText('Reconnect to retry these items.')).toBeNull();
+  expect(screen.getByText('Connect to the internet so the office gets a copy.')).toBeTruthy();
+});
+
 test('Retry is secondary and publishes its neutral progress message through the root host', async () => {
-  const state = offline({ needsAttentionCount: 1, syncStatus: { needsAttentionItems: [terminalItem({ table: 'SESSIONS' })] } });
+  const state = offline({ needsAttentionCount: 1, syncStatus: { needsAttentionItems: [terminalItem({ table: 'sessions' })] } });
   mockUseOffline.mockReturnValue(state);
   const screen = renderScreen();
   const retry = screen.getByRole('button', { name: 'Retry' });
@@ -187,9 +267,9 @@ test('Retry is secondary and publishes its neutral progress message through the 
   }));
   fireEvent.press(retry);
   await waitFor(() => expect(state.syncNow).toHaveBeenCalledWith({ force: true }));
-  expect(retryFailedItem).toHaveBeenCalledWith('SESSIONS', 'abc12345ff');
+  expect(retryFailedItem).toHaveBeenCalledWith('sessions', 'abc12345ff');
   expect(state.refreshSyncStatus).toHaveBeenCalledTimes(1);
-  expect(within(screen.getByTestId('toast-host')).getByText('Retrying Sessions...')).toBeTruthy();
+  expect(within(screen.getByTestId('toast-host')).getByText('Retrying Lessons...')).toBeTruthy();
   expect(screen.queryByRole('alert')).toBeNull();
   expect(screen.queryByTestId('toast-status', { includeHiddenElements: true })).toBeNull();
 });

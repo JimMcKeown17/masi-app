@@ -8,6 +8,7 @@ import { createSupabaseMock } from '../test-support/supabaseSyncMock';
 import { runMigrations } from '../src/db/migrations';
 import { createOutboxSyncEngine } from '../src/services/offlineSync';
 import {
+  enqueueDomainOutbox,
   enqueueLifecycleOutbox,
   groupEaAssignmentDomainId,
 } from '../src/db/repositories/domainRepositoryUtils';
@@ -20,6 +21,29 @@ import { createGroupsRepository } from '../src/db/repositories/groupsRepository'
 
 const liveTestSession = async () => ({ data: { session: { user: { id: 'user-1' } } } });
 const ASSIGNMENT = groupEaAssignmentDomainId({ groupId: 'group-1' });
+
+// Plan O2 item 4 / D5: EAs never reopen an ended group assignment, so the app no longer produces a
+// restore. A phone on the embedded 1.5.0 bundle may still hold one, and the engine still sends it.
+// This queues exactly what 1.5.0's reactivation queued (groupsRepository.createMissingGroupAssignment).
+const queueLegacyGroupRestore = async (db, assignmentId = ASSIGNMENT) => {
+  await db.runAsync(`
+    update group_ea_assignments
+    set unassigned_at = null, handover_reason = null, sync_status = 'pending', last_sync_error = null
+    where id = ?
+  `, assignmentId);
+  const insertStillOwed = await db.getFirstAsync(`
+    select 1 as owed from sync_outbox
+    where table_name = 'group_ea_assignments' and record_id = ? and operation = 'insert'
+      and status in ('pending', 'failed', 'in_flight')
+  `, assignmentId);
+  await enqueueLifecycleOutbox(db, 'group_ea_assignments', assignmentId, 'restore', {
+    id: assignmentId, unassigned_at: null, handover_reason: null,
+  });
+  if (insertStillOwed) {
+    const row = await db.getFirstAsync('select * from group_ea_assignments where id = ?', assignmentId);
+    await enqueueDomainOutbox(db, 'group_ea_assignments', assignmentId, 'insert', row);
+  }
+};
 
 const lifecycleRows = (db, recordId = ASSIGNMENT) => db.getAllAsync(`
   select operation, status from sync_outbox
@@ -315,16 +339,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
 
     const archivePassPromise = engine.syncAll({ tableName: 'group_ea_assignments' });
     await server.firstUpdateStarted;
-    await repository.saveGroup({
-      id: 'group-1',
-      name: 'Group 1',
-      programme_id: 'programme-1',
-      created_by: 'user-1',
-      archived_at: null,
-      archived_by_user_id: null,
-      archive_reason: null,
-      sync_status: 'pending',
-    });
+    await queueLegacyGroupRestore(db);
     expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
 
     server.releaseFirstUpdate();
@@ -444,7 +459,8 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       ]);
   });
 
-  test('saveGroup reactivating an archived assignment queues a restore, not an insert', async () => {
+  // Plan O2 item 4 (D5): an EA never reopens an ended group assignment; only Head Office does.
+  test('saving a group again never reopens its ended assignment: no restore and no insert are queued', async () => {
     const deterministicId = groupEaAssignmentDomainId({ groupId: 'group-2' });
     await db.runAsync(`
       insert into staff_programme_assignments (id, user_id, programme_id, sync_status)
@@ -463,10 +479,11 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       id: 'group-2', name: 'Group 2', programme_id: 'programme-1', created_by: 'user-1', sync_status: 'pending',
     });
 
-    const rows = await db.getAllAsync(`
-      select operation from sync_outbox where table_name = 'group_ea_assignments' and record_id = ?
-    `, deterministicId);
-    expect(rows).toEqual([{ operation: 'restore' }]);
+    expect(await db.getAllAsync(`
+      select operation from sync_outbox where table_name = 'group_ea_assignments'
+    `)).toEqual([]);
+    expect(await db.getFirstAsync('select unassigned_at, sync_status from group_ea_assignments where id = ?', deterministicId))
+      .toEqual({ unassigned_at: '2026-10-09T08:00:00.000Z', sync_status: 'synced' });
   });
 
   test('archive waits for its own pending assignment insert and lands after that insert', async () => {
@@ -522,7 +539,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     `, assignmentId)).toEqual({ count: 0 });
   });
 
-  test('reactivation queues both restore and insert while the assignment insert is still owed', async () => {
+  test('re-saving an archived group with its assignment insert still owed keeps both queued intents as they were', async () => {
     await db.runAsync(`
       insert into staff_programme_assignments (id, user_id, programme_id, sync_status)
       values ('spa-reactivate-owed', 'user-1', 'programme-1', 'synced')
@@ -541,6 +558,13 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       actorUserId: 'user-1',
       archivedAt: '2026-10-11T10:00:00.000Z',
     });
+    const queued = () => db.getAllAsync(`
+      select id, operation, status, payload from sync_outbox
+      where table_name = 'group_ea_assignments' and record_id = ?
+      order by id
+    `, assignmentId);
+    const before = await queued();
+    expect(before.map(row => row.operation)).toEqual(['insert', 'archive']);
 
     await repository.saveGroup({
       id: groupId,
@@ -553,17 +577,10 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       sync_status: 'pending',
     });
 
-    expect(await db.getAllAsync(`
-      select operation, status from sync_outbox
-      where table_name = 'group_ea_assignments' and record_id = ?
-      order by operation
-    `, assignmentId)).toEqual([
-      { operation: 'insert', status: 'pending' },
-      { operation: 'restore', status: 'pending' },
-    ]);
+    expect(await queued()).toEqual(before);
     expect(await db.getFirstAsync(`
-      select unassigned_at, sync_status from group_ea_assignments where id = ?
-    `, assignmentId)).toEqual({ unassigned_at: null, sync_status: 'pending' });
+      select unassigned_at from group_ea_assignments where id = ?
+    `, assignmentId)).toEqual({ unassigned_at: '2026-10-11T10:00:00.000Z' });
   });
 
   test('a lost insert response, archive, and reactivation converge to one active assignment', async () => {
@@ -623,16 +640,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     expect(server.assignments.get(assignmentId).unassigned_at)
       .toBe('2026-10-11T11:00:00.000Z');
 
-    await repository.saveGroup({
-      id: groupId,
-      name: 'Lost Response Group',
-      programme_id: 'programme-1',
-      created_by: 'user-1',
-      archived_at: null,
-      archived_by_user_id: null,
-      archive_reason: null,
-      sync_status: 'pending',
-    });
+    await queueLegacyGroupRestore(db, assignmentId);
     expect(await db.getAllAsync(`
       select operation from sync_outbox
       where table_name = 'group_ea_assignments' and record_id = ?
@@ -698,16 +706,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     await server.crashedArchiveStarted;
     expect(await lifecycleRows(db)).toEqual([{ operation: 'archive', status: 'in_flight' }]);
 
-    await repository.saveGroup({
-      id: 'group-1',
-      name: 'Group 1',
-      programme_id: 'programme-1',
-      created_by: 'user-1',
-      archived_at: null,
-      archived_by_user_id: null,
-      archive_reason: null,
-      sync_status: 'pending',
-    });
+    await queueLegacyGroupRestore(db);
     expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
     await outboxRepository.resetInFlight({ ownerUserId: 'user-1' });
     void abandonedPass;
@@ -787,16 +786,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       force: true,
     });
     await server.crashedArchiveStarted;
-    await repository.saveGroup({
-      id: 'group-1',
-      name: 'Group 1',
-      programme_id: 'programme-1',
-      created_by: 'user-1',
-      archived_at: null,
-      archived_by_user_id: null,
-      archive_reason: null,
-      sync_status: 'pending',
-    });
+    await queueLegacyGroupRestore(db);
 
     expect(await lifecycleRows(db)).toEqual([{ operation: 'restore', status: 'pending' }]);
     await outboxRepository.resetInFlight({ ownerUserId: 'user-1' });
@@ -863,16 +853,7 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
     });
 
     await repository.archiveGroup(groupId, { actorUserId: 'user-1', archivedAt });
-    await repository.saveGroup({
-      id: groupId,
-      name: 'Lost Insert Server Archive Group',
-      programme_id: 'programme-1',
-      created_by: 'user-1',
-      archived_at: null,
-      archived_by_user_id: null,
-      archive_reason: null,
-      sync_status: 'pending',
-    });
+    await queueLegacyGroupRestore(db, assignmentId);
 
     expect(await db.getAllAsync(`
       select id, operation, status from sync_outbox
@@ -918,47 +899,28 @@ describe('group assignment lifecycle (spec §6.5b)', () => {
       .toEqual({ count: 0 });
   });
 
-  test('R4: assignment repository reactivation queues restore in the lifecycle slot', async () => {
+  test('R4: the assignment repository refuses to reopen an ended assignment from a local write (D5)', async () => {
     const repository = createGroupEaAssignmentsRepository({ database: db });
     const archived = await db.getFirstAsync(
       'select * from group_ea_assignments where id = ?',
       ASSIGNMENT
     );
-    await repository.save({
-      ...archived,
-      unassigned_at: null,
-      handover_reason: null,
-      sync_status: 'pending',
-    });
+    let caught;
+    try {
+      await repository.save({ ...archived, unassigned_at: null, handover_reason: null, sync_status: 'pending' });
+    } catch (error) { caught = error; }
 
-    expect(await db.getAllAsync(`
-      select id, operation, status from sync_outbox
-      where table_name = 'group_ea_assignments' and record_id = ?
-    `, ASSIGNMENT)).toEqual([{
-      id: outboxRecordId('group_ea_assignments', ASSIGNMENT, 'lifecycle'),
-      operation: 'restore',
-      status: 'pending',
-    }]);
+    expect(caught?.message).toBe('An ended group assignment can only be reopened by Head Office');
+    expect(await db.getFirstAsync('select * from group_ea_assignments where id = ?', ASSIGNMENT)).toEqual(archived);
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+  });
 
-    const server = createStatefulAssignmentSupabase();
-    server.assignments.set(ASSIGNMENT, {
-      id: ASSIGNMENT,
-      unassigned_at: archived.unassigned_at,
-      handover_reason: archived.handover_reason,
-    });
-    const engine = createOutboxSyncEngine({ enqueueRequest: (task) => task(),
-      getAuthSession: liveTestSession,
-      database: db,
-      supabaseClient: server.supabaseClient,
-    });
-    const result = await engine.syncAll({ tableName: 'group_ea_assignments' });
-
-    expect(result.totalSynced).toBe(1);
-    expect(server.assignments.get(ASSIGNMENT).unassigned_at).toBeNull();
-    expect(await db.getFirstAsync(`
-      select unassigned_at, sync_status from group_ea_assignments where id = ?
-    `, ASSIGNMENT)).toEqual({ unassigned_at: null, sync_status: 'synced' });
-    expect(await db.getFirstAsync('select count(*) as count from sync_outbox'))
-      .toEqual({ count: 0 });
+  test('a pulled server row that Head Office reopened still converges locally', async () => {
+    const repository = createGroupEaAssignmentsRepository({ database: db });
+    const archived = await db.getFirstAsync('select * from group_ea_assignments where id = ?', ASSIGNMENT);
+    await repository.saveServerRows([{ ...archived, unassigned_at: null, handover_reason: null, row_version: 2 }]);
+    expect(await db.getFirstAsync('select unassigned_at, sync_status from group_ea_assignments where id = ?', ASSIGNMENT))
+      .toEqual({ unassigned_at: null, sync_status: 'synced' });
+    expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
   });
 });

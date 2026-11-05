@@ -108,9 +108,10 @@ test('file-wide sync status includes foreign and null owners even when an old ca
 
 test('countUnsent counts pending, failed, in_flight and terminal file-wide and returns zero for an empty queue', async () => {
   const outbox = await seedLegacyQueue();
-  expect(await outbox.countUnsent()).toEqual({ total: 7, byTable: { children: 6, sessions: 1 } });
+  // needsAttention is the terminal share of the same rows (MA-BUG-20261104-020).
+  expect(await outbox.countUnsent()).toEqual({ total: 7, byTable: { children: 6, sessions: 1 }, needsAttention: 1 });
   await db.runAsync('delete from sync_outbox');
-  expect(await outbox.countUnsent()).toEqual({ total: 0, byTable: {} });
+  expect(await outbox.countUnsent()).toEqual({ total: 0, byTable: {}, needsAttention: 0 });
 });
 
 test('owner-scoped ready, hard-delete and reset queries exclude legacy null owners; omitted scope is file-wide', async () => {

@@ -9336,3 +9336,784 @@ ran. Without them (42 migrations): 34/34, restore cases skipped as reported. `np
 __tests__/sqliteStagingScript.test.js`: 85/85. `npx jest __tests__/hoLifecycleScript.test.js`: 82/82.
 `npx jest`: 518/518 suites, 8,271/8,271 tests. `npx jest -c jest.integration.config.js`: 111/111
 suites, 1,530/1,530 tests. No `lint` script exists.
+
+### 2026-11-04 — Lifecycle OTA, plan O2: Delete child through the server; no orphan-making UI (`feat/lifecycle-ota-removal`)
+
+Builder slice for work order 3 of `docs/superpowers/plans/2026-11-04-lifecycle-safety.md` (step O2,
+D3/D4/D5/D10; closes the phone side of MA-BUG-20261104-012, -013, -014, -015, -016). JS only for
+the 1.5.0 OTA: no SQLite migration, no new outbox operation. Hard gate before real lessons (D10).
+
+**What shipped.**
+- **"No class" removed** from Edit child (MA-BUG-015). The picker offers only real classes; with
+  none it shows "No classes available. Create a class first."
+- **Delete child = `childrenRepository.removeChild`**, one transaction that always queues the
+  existing children `hard_delete` (RPC `delete_child_if_no_history`; the server decides, D3). No
+  local history: deleted locally as before (`deleteIfNoHistory`), incl. the no-request purge of a
+  never-sent child. Local history: the child is archived on the phone only; only this EA's own
+  acknowledged direct assignment and memberships in groups they hold end, on the phone only; no
+  per-relationship archive rows, no children archive. Shared enrollments/class memberships and
+  other EAs' rows are never touched (B2). The old `archiveChild` cascade is deleted.
+- **Engine (only the O2-owned spots).** The children `hard_delete` gate also waits for the child's
+  own relationship INSERTs (`child_ea_assignments`, `child_programme_enrollments`,
+  `child_class_memberships`, `child_group_memberships`; any status; matched by payload
+  `child_id`). A children `hard_delete` is never a parent: one exclusion in
+  `rememberBlockedRecord`, and `hasPendingRecord` counts only a parent's `insert`/`update`. A
+  genuinely unacknowledged child INSERT keeps its blocker role while it backs off (owed child
+  INSERTs the pass will not send are registered as blockers).
+- **Pull filter** for a pending child `hard_delete` now also covers group memberships
+  (ChildrenContext and `persistPreloadedChildData`).
+- **Delete class** (`archiveClass`, MA-BUG-013): never exits a child's class membership or changes
+  `class_id`; ends only this EA's own class assignment. A known leave (another creator, or another
+  EA's active class assignment held locally; `classesRepository.isLeaveOnly`) queues no class
+  archive; otherwise the class archive is queued and the server decides (S1).
+- **Restore producer deleted** (D5): `createMissingGroupAssignment` reactivation,
+  `repairGroupOwnershipForSync` and startup repair v1, and `groupEaAssignmentsRepository.save`'s
+  restore branch (a local reopen is now refused). The engine still sends a queued 1.5.0 restore.
+- **E4** (MA-BUG-016): `removeChildFromGroup` rewrites a still-queued membership INSERT to carry
+  `removed_at` instead of queuing an archive behind it (re-add and sibling-group move).
+- **Sheets.** Delete child and Delete class confirm in a `ConfirmSheet` with draft plain-words copy
+  for Jim's wording pass ("Remove Thandi? …", "Leave 1A?" / "Delete 1A?").
+
+**Decisions and deviations (see the slice report for detail).**
+- Rows whose relationship INSERT is still queued are not ended on the phone at Delete child: an
+  ended local row stops counting as grant evidence (`hasPendingActiveAssignment` needs an open
+  row), and `applyAcknowledgedPayload` would reopen a stamped membership on acknowledgement. They
+  converge through the next pull after the removal lands.
+- A known-leave Delete class sends only the EA's class-assignment archive, so the EA's own
+  children never vanish while the class is still live (offline included).
+- E4 merges rather than drops: a queued membership INSERT may already have committed and only
+  children INSERTs record dispatch evidence.
+
+**Outbox-reader audit (Codex round 5 inventory, 16 items).** Changed: 2 (backoff blocker
+seeding), 3 (gate extension), 6/7/8/11 (central blocker exclusion), 9 (`hasPendingRecord`
+operation filter), 15 (filter extended to group memberships). Verified unchanged and safe: 1, 4,
+5, 10, 12, 13, 14, 16. New producer-side readers: `removeChild` (queued-INSERT check before a local
+end) and `removeChildFromGroup` (queued-INSERT merge); neither decides ordering or retry.
+
+**Evidence.** Real-SQLite tests through the real handle and supabase-js over
+`test-support/lifecycleServer.js` (post-batch contract): all-offline chain with a failed first
+pass, repeated ordinary and forced passes, permanently refused relationship INSERT before and after
+it leaves the outbox, acknowledged child refused 42501, class-path and other-programme co-held
+children, sole-holder hiding across pulls, Delete class shared/sole cases, E4 re-add and sibling
+move. Each engine change was reverted alone and its tests failed. The chain's wire is committed at
+`scripts/fixtures/lifecycle-ota/delete-child-offline-chain.wire.json`; replayed (GET filtered) by
+`docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/pg-replay.cjs` into disposable
+PG17 with all 42 current migrations: every replayed request agreed (relationship INSERTs, session,
+attendee, tick); the Battery Run, assessment and removal RPCs are not replayed by that tool (G1,
+with the server batch).
+
+**Residual risks.** A with-history child's local row stays `pending` after the removal lands when
+its own INSERT was still queued at Delete (the engine skips domain bookkeeping for `hard_delete`),
+so a later Head Office reopen of that same child would not un-archive it on this phone. A Delete
+class by the creator and only holder still leaves that class's delivery children in a closed class
+(same outcome as before; the sheet says to move them first). An acknowledged membership whose
+archive backs off can still meet a re-add 23505 (outside E4's still-queued case).
+
+**Verification (Node 20.19.4, 2026-11-04, branch head before this note).**
+- `npx jest`: **519 suites / 8203 tests passed** (baseline before the slice: 15 failures in 5
+  suites, all environmental — missing node_modules assets, since restored).
+- `npx jest -c jest.integration.config.js`: **113 suites / 1544 tests passed** (adds
+  `deleteChildChain` and `groupMembershipReAdd`).
+- Focused slice run (13 suites): **263 passed**.
+- `pg-replay.cjs` on the recorded O2 chain into disposable `postgres:17-alpine` (42 migrations):
+  all replayed requests agree. Container removed. No `lint` script exists. No live or staging access.
+
+### 2026-11-04 — Lifecycle safety O1: refused rows resolve and get a lossless exit (`feat/lifecycle-ota-stuck-items`)
+
+Work order 4 of the approved lifecycle-safety plan (`docs/superpowers/plans/2026-11-04-lifecycle-safety.md`,
+O1, both "Corrections adopted" sections, D6, D8). Closes, pending review, merge, OTA and device checks:
+MA-BUG-20261104-011, -018, -019, -020, -021. JS only under runtimeVersion 1.5.0: no SQLite migration,
+table, column or outbox op type. The contract is in `documentation/rls-sync-contract-map.md`,
+"Refused rows: forced passes and the delivered-receipt exit".
+
+**What changed.**
+- Forced passes (Sync now, Retry, pull-to-refresh, sign-out) re-send a refused row only when it is
+  idempotent history (every insert; the battery-run, letter- and skill-mastery RPC updates) or the
+  children `hard_delete` (`isResendableRefusal`). The claim and Retry apply the same rule, so a
+  refused archive, restore or edit can never be sent again (ends the MV001 forced override, D6). A
+  refused lifecycle or edit row no longer holds back its family in the same pass.
+- The exact-revision delivered-receipt rule: `markSent` writes `delivered_receipt:<incident id>` to
+  `local_state` from the accepted bounded snapshot (generation, outbox id, the row's `updated_at`, a
+  wire digest, and whether anything was cut). A refused row leaves only while its receipt is sent and
+  the proof matches the row as it is now, uncut; check and delete share one transaction. Refused
+  archives, restores and edits then clear by themselves after each pass's receipt drain; refused
+  history waits for "The office has a copy — remove from this phone". A receipt sent without a proof
+  is sent once more through `promote`. Proof keys leave with their row or receipt.
+- Needs attention: plain names for every outbox table, no ids or server errors, a per-item "what
+  happens next" line, Retry only for resendable rows, the exit behind a confirm sheet. Home's card can
+  be dismissed once every item has its office copy. The sign-out sheet promises an upload only for
+  waiting work (`countUnsent` now also returns `needsAttention`).
+- Hardening (MA-BUG-021): the claim records each row exactly as it was; a refused row that is then
+  deferred, switched away or thrown is put back unchanged (compare-and-set, domain version reverted
+  only from this claim's stamp). `markReady`, `markReadyMany` and the stale-finalize restore never
+  demote terminal. A claim that throws hands back only rows it left in flight. A dependency check
+  that throws fails only its row.
+- `upload_backlog_stale` at 24 h (was 72 h). The newer-data screen says to contact support instead
+  of sending the EA to an app store with nothing newer after a same-version OTA rollback.
+
+**Decisions and deviations.**
+- **Condition (a) drops `has_unsent_changes = 0`.** The observer re-records every live receipt on its
+  15-minute last-seen refresh, which sets `has_unsent_changes = 1` with no change to the work, so the
+  plan's literal rule would close the exit 15 minutes after each send. The proof is compared with the
+  row itself (id, `updated_at`, wire digest, cut), which is stronger. Pinned by
+  `refusedRowExit.test.js` "a last-seen refresh after delivery keeps the exit".
+- The receipt payload gains `outboxId` (the server accepts any payload object). On the OTA, every
+  live receipt is sent once more anyway (release change), now with its outbox id.
+- After an auto-clear the domain row keeps `sync_status = 'terminal'`, so any later pull converges it
+  whatever its version (a `synced` row would refuse a lower server version).
+- The exit removes only the stuck upload; the EA's local record stays.
+- Added copy for review: "Waiting for the office to get a copy." (online, not yet delivered) and the
+  Home subtitle "The office has a copy". The plan's "Connect to the internet so the office gets a
+  copy." is used offline.
+
+**Known limits.** A refused row whose content changes after its receipt was sent waits for the
+next receipt send (up to a day). A crash mid-pass
+leaves claimed refused rows in flight and the next pass makes them pending (one extra attempt). A
+schema-1 receipt can never prove delivery ("Send diagnostics, then contact support."). After a
+reinstall a trailing `class_grouping_state` regroup is no longer forced through.
+
+**Verification (Node 20).** RED before GREEN for each slice: the forced-pass contract (the rewritten
+`offlineSyncOutbox` and `rowVersionSend` cases re-sent `update:classes`, `update:children`,
+`update:group_ea_assignments` and returned `totalSynced: 1`), hardening (deferred refused rows came
+back `pending`, thrown ones `failed`), and the exit, display-name, Home, sign-out, 24 h and copy
+tests. Final: unit 519 suites / 8,232 tests passed (`npx jest`); integration 111 suites / 1,536 tests passed
+(`npx jest -c jest.integration.config.js`). No SQL changed, so no PostgreSQL harness was run.
+
+**Follow-up after orchestrator review (2026-11-05).**
+- The proof now matches content, not `updated_at`: a forced re-send refused again keeps the exit.
+  The digest also leaves out the claim's send-time `row_version` stamp, because resendable inserts
+  on versioned tables (children, enrollments, memberships) are stamped on every send.
+- Every retry entry point keeps the no-replay rule (Codex round-5 inventory item 14): the
+  auth-restore heal (`requeueTerminalRlsFailures` and `requeueTerminalRows`) and the reference-id
+  repair (`retargetOutboxPayloadReferences`) now leave refused archives, restores and edits alone,
+  in addition to the forced pass, the claim, Retry and the `markReady` paths. An unmarked 42501 on a
+  refused archive or edit therefore clears like a marked one. A `classes` hard_delete (no producer)
+  is no longer healed.
+
+### 2026-11-05 — Combined lifecycle OTA: review fixes (`feat/lifecycle-ota`)
+
+An independent adversarial review of the merged O1 + O2 OTA found one high regression from O1 and
+medium/low items. Each fix is test-first on real SQLite; reviewer repros zzUnitX7, zzReviewX2,
+X2b and X4 are ported as regression tests.
+
+- **HIGH — an edit or archive cleared ahead of its refused insert.** A child INSERT refused 23503,
+  then a rename: the update was refused as not applied, cleared under the receipt rule, and a later
+  Sync now landed the INSERT with the old name, overwriting the local row too. An UPDATE-by-id edit
+  or lifecycle row now waits while its own insert is queued in any status; waiting behind a refused
+  insert it is neither a blocker nor FK evidence, and never leaves through the exit (`held`). The
+  insert landing releases it (sent next; the insert's acknowledgement never overwrites it), or the
+  insert leaving through its exit does (sent, refused, clears). A not-applied edit sent ahead of its
+  insert before this fix is re-queued when the insert lands. Child edit, group archive and
+  class-membership exit variants (`refusedInsertOrdering.test.js`).
+- **MEDIUM — a Delete child held forever by a refused relationship INSERT.** The deletion now
+  waits only for this EA's owed relationship INSERTs. A removed child's refused relationship INSERT
+  is never resendable (forced pass, claim, Retry, heal, `requeueTerminalRows`, reference-id
+  repair), blocks nothing, and clears under the receipt rule, or stays a support case (X4: the
+  removal now completes and nothing is left waiting).
+- **Fake server (item 3).** `lifecycleServer.js` models the corrected S3 rule: memberships end in
+  groups the caller holds, or created and nobody else holds; it also models a group INSERT. X2/X2b
+  ported; all O2 tests pass against it. X2b deviation: with a co-held child the deleting EA still
+  reaches the child through their class assignment (D3 "leave" ends only the caller's own grants),
+  so the port asserts no direct or group path rather than `writeForChild === false`.
+- **LOW.** Home's dismissal signature is outbox id + content digest, not `failedAt`. Retry of a
+  children `hard_delete` no longer marks the child pending. Receipts meet a jsonb-text bound
+  (`jsonbTextBytes` ≤64,000) as well as the compact 56,000: measured on a disposable PostgreSQL
+  17.10, the estimator matched `octet_length(...::jsonb::text)` exactly on every sample, with worst
+  structural growth 1.5x (single-digit arrays: 10,001 compact → 15,000) and far more for exponent
+  numbers (154 → 836 for a sample with `5e-324`). A refused `time_entries` update (clock-out) is
+  resendable history with the EA exit and never clears itself.
+
+**Verification (Node 20).** `npx jest`: 522 suites / 8,285 tests passed. `npx jest -c
+jest.integration.config.js`: 113 suites / 1,554 tests passed. Container `wo4-jsonb-pg` removed.
+
+**Second review fixes (2026-11-05).**
+- MEDIUM (reviewer repro zzR2R1): the removed-child mark could be wiped by a pull, because it was
+  read from the local child's `archive_reason`, which a roster pull of a co-held child rewrites.
+  The mark now lives in the outbox: the `hard_delete` row while queued, and on its acknowledgement
+  the child's refused relationship INSERTs are stamped `REMOVED_WITH_CHILD` in the same
+  transaction (never resendable; clears under the receipt rule; Sync status says "You removed this
+  child, so this is no longer needed."). The `archive_reason` check is removed.
+- LOW: an exit that removes a record's last outbox row leaves a still-pending domain row terminal
+  so the next pull converges it.
+- Verification (Node 20): `npx jest` 522 suites / 8,293 tests passed; `npx jest -c
+  jest.integration.config.js` 113 suites / 1,555 tests passed.
+
+### 2026-11-05 — App release card and numbered app updates (`feat/app-release-card`)
+
+Jim could not tell whether his phone ran the new update: Profile's footer showed a 36-character
+update UUID in a caption line. Profile now has an **App release** card, and `npm run ota:publish`
+numbers every update so the card can say `1.5.0+2`.
+
+- **Release identity.** `getReleaseIdentity()` (`src/utils/releaseMetadata.js`) is the one source
+  for the card, receipts and exports: built-in bundle `1.5.0`; numbered update `1.5.0+N`; an update
+  published without the script `1.5.0+?` (never an invented number); a Metro bundle (no update id,
+  not embedded) is `Development`. `runtimeDiagnostics.application.releaseLabel` takes the new label
+  (was `1.5.0 (55)`; the build stays in `build`), and `update` gains `launch`, `otaRelease` and
+  `createdAt`. The incident RPC fixes only top-level envelope keys and requires `observed` to be an
+  object, so the nested additions are safe; `releaseIdentity()` (receipt promotion) still compares
+  version, build and update id only, and `read-support-incidents.cjs` does not parse the label.
+- **Where the number comes from on the phone.** expo-constants 18.0.13 (`src/Constants.ts`
+  163–168): on an update launch `Constants.expoConfig` is the running update manifest's
+  `extra.expoClient`; on a built-in launch it is the config embedded in the binary. eas-cli 26.0.0
+  evaluates `expo config --type public` with the parent environment merged in
+  (`build/project/expoConfig.js:28`, `build/utils/expoCli.js:89`) and publishes that as
+  `expoClient` (`build/project/publish.js:143`). So `MASI_OTA_RELEASE` → `extra.otaRelease` reaches
+  the phone the same way `extra.gitCommit` does. `npx expo config --type public` with
+  `MASI_OTA_RELEASE=2 MASI_OTA_PUBLISHED_AT=2026-11-05T09:11:02.000Z` printed `otaRelease: 2` and
+  the time; without them the keys are absent.
+- **Surprise: `@expo/config` turns a `null` in a dynamic config into `{}`** (`Serialize.js`
+  `serializeAndEvaluate`: `typeof null === 'object'`). A first version set `otaRelease: null` for
+  builds; `expo config` printed `{}`. The keys are now left out when unset, and the identity reads
+  config strings and numbers by type, so a `{}` can neither show nor crash Profile (it would have
+  thrown on `gitCommit.slice`). The same applies to the existing `gitCommit: null` fallback (git
+  unavailable while evaluating config): `getReleaseMetadata().gitCommit` would export `{}`. Not
+  fixed here; low impact, since EAS builds set `EAS_BUILD_GIT_COMMIT_HASH` and updates run git.
+- **Card.** `SectionHeader` + `ListGroup` after Legal: Release (`displayTitle`, tabular), Build |
+  Channel, Runtime | Update (8 characters), Running | Source, Published (UTC), Backend with the
+  project id under it; values selectable; a missing value is an em dash; device and OS in one
+  caption line under the card. **Deviation from the work order's pairing** (Running | Published,
+  Source | Backend): measured with Figtree's metrics, half a row on a 360dp phone is 131dp, but the
+  UTC time is 154dp and the project id 140dp (one word, so Android would break it mid-id). Those two
+  facts take full rows.
+- **`scripts/ota-publish.cjs`** (`npm run ota:publish -- --message "…" [--channel preview]
+  [--dry-run]`): refuses a dirty tree (untracked `node_modules`/`dist` aside) or a HEAD on no
+  `origin/` branch; reads the version from `app.config.js` and refuses a runtime policy other than
+  `appVersion`; pages `npx --yes eas-cli@26.0.0 update:list --branch <channel> --limit 50 --offset k
+  --json --non-interactive` (refuses any listing error, non-JSON, a group without a runtime, a page
+  from another branch, or more than 10,000 groups); N = groups for this runtime + 1, and never a
+  number already used in an `OTA <version>+N:` message (so deleting an older group cannot repeat
+  one; deleting the newest numbered group can, see the review fixes below);
+  publishes `update --channel c --environment c --non-interactive --message "OTA 1.5.0+N: … (abc1234)"`
+  with `MASI_OTA_RELEASE`/`MASI_OTA_PUBLISHED_AT`; then `env:exec c 'npm run sentry:sourcemaps'
+  --non-interactive`. A source-map failure says the update is out and prints the command. Argument
+  arrays throughout. `--dry-run` runs the same checks and the listing, then prints the number, the
+  message and both commands. `npx --yes` keeps a non-interactive run from waiting on an install
+  prompt. Only the refusal paths were run for real (offline); EAS was not called by this branch.
+- **Not verified here:** the card on a device (no build or OTA from this branch), the live
+  `update:list` JSON (the test fixture is shaped from the eas-cli 26.0.0 renderer source, not
+  captured), and the published manifest carrying `otaRelease` (the orchestrator's first publish and
+  a phone check close these).
+- Docs: DEPLOYMENT.md "Pushing an OTA Update" and "Release numbers: what the phone shows" (and the
+  `env:exec` syntax fix), design-system Profile section, CONTEXT.md **App release**, ROADMAP note.
+
+**Verification (Node 20).**
+- TDD: the new tests (`releaseIdentity`, `otaReleaseConfig`, `otaPublishScript`, the card tests in
+  `profileComponents`) and the updated ones (`runtimeDiagnostics` `1.2.0 (47)` → `1.2.0+?`,
+  `releaseMetadata`, `debugExport`, `ProfileScreen.releaseMetadata`) failed first for the intended
+  reason (missing module or function, the old label, config ignoring the env, the old footer), then
+  passed (6 suites / 83 tests). The serializer follow-up (4 suites / 39 tests) and the full-row
+  follow-up (`profileComponents` + `ProfileScreen.releaseMetadata`, 29 tests) went RED, then GREEN.
+- `npx jest -c jest.integration.config.js` on `baf6dbdc`: 113 suites / 1,555 tests passed.
+- `npx jest` during the work (load average ~90, three other worktrees running Jest): 520 of 525
+  suites, 8,357 of 8,366 tests; the 9 failures were 5 s timeouts and their knock-on unmounts in
+  `task5AuthRaces`, `LessonScreen`, `LessonWrapUp.save`, `signedInTree` and `NumeracyWrapUpScreen`,
+  none of which touch release code. Those 5 suites rerun with `--runInBand`: 110 tests passed.
+  `npx jest` again on `baf6dbdc` (load ~60): 525 suites / 8,365 tests passed, exit 0.
+- No SQL, sync or RLS change, so no PostgreSQL harness and no contract-map change. No lint script.
+
+#### 2026-11-05 — App release: independent review fixes (`feat/app-release-card`)
+
+An independent review of the branch found one medium and five low defects. All six are fixed.
+
+- **Medium: a dry run could become a real publish.** npm 10 keeps flags written before the `--`
+  as its own settings and passes the script only what follows. Probed with npm 10.8.2 (Node 20):
+  `npm run ota:publish --dry-run -- --message x` gives the script `["--message","x"]` with
+  `npm_config_dry_run=true`, a real publish to every phone on the channel. The same mechanism made
+  `--channel=production -- …` publish to preview (`npm_config_channel=production`), and `-m x` or
+  `--message x` without the `--` reach the script as `npm_config_message`. Separately,
+  `--message --dry-run` took `--dry-run` as the message. Fix: the script refuses before any check,
+  listing or publish when `npm_config_dry_run`, `_channel` or `_message` is set (unset, empty or
+  `false` pass), naming the setting and the right form; a message cannot start with `-`. Refusing
+  rather than honouring npm's dry run keeps one rule for all three flags and never guesses what a
+  mistyped command meant. Re-run through real `npm run` with a fake `npx` first on PATH: the
+  three npm forms and `-- --message --dry-run` are refused, exit 1; `-- --message x --dry-run`
+  reaches the readiness check.
+- **Low: the counted branch could differ from the published branch.** `eas update --channel c`
+  publishes to the branch c points at (eas-cli 26.0.0
+  `getBranchFromChannelNameAndCreateAndLinkIfNotExistsAsync`: `updateBranches[0]`), but the number
+  was counted on the branch named c. The script now runs `channel:view c --json --non-interactive`
+  first (dry runs too) and refuses unless c points at exactly one branch, named c; a channel EAS
+  cannot find, or output it cannot read, is refused, never created. The JSON shape
+  (`{ currentPage: { ...channel, updateBranches: [{ id, name, updateGroups }] } }`, header on
+  stderr) is read from `build/channel/queries.js` `renderPageOfBranchesOnChannel` and
+  `build/utils/json.js`; the fixture `test-support/fixtures/eas-channel-view/preview.json` is
+  shaped from that source, not captured. If the live shape differs, the first publish refuses
+  with the parse error and publishes nothing.
+- **Low: deleting the newest numbered update group repeats its number.** EAS lists no deleted
+  groups, so after `eas update:delete` of the top `OTA 1.5.0+N:` group both the count and the
+  highest listed number fall and N is used again. Kept as a known limit rather than adding a
+  durable counter outside EAS (a pushed git tag or a committed file would add a write and new
+  failure modes for a rare operator action); the Update id on the card still tells the two
+  updates apart. The script comment, the test title, DEPLOYMENT.md and the bullet above now say
+  only older deletions are safe, and DEPLOYMENT.md says to replace a bad update, not delete it.
+- **Low: DEPLOYMENT.md said the live lifecycle update shows `1.5.0+?`.** That bundle (group
+  `8addaae6`, from `fd053cfc`) predates the card and shows the old caption footer; so does every
+  1.5.0 store build's own bundle (the footer dates from 2026-10-19, 1.5.0 from 2026-10-30).
+  DEPLOYMENT.md now says which bundles show the card, what older ones show, and that a phone
+  showing the card at all is on the first scripted update or later.
+- **Low: no test pinned that a dry run makes the readiness checks.** Two cases added (dirty tree,
+  commit not on origin, both with `--dry-run`); they fail against the reviewer's mutant (dry run
+  skips `assertReleaseReady`) and pass against the script.
+- **Low: App release rows sat top-heavy.** A fact row was min height 64 with its facts
+  top-aligned (36dp of text: 10dp above, 18dp below), unlike the centred `ListRow` rows above it.
+  The row now centres its content; two facts in one row stay top-aligned with each other.
+  design-system.md updated. Not seen on a device (no build or OTA from this branch, and no web
+  renderer installed).
+
+**Verification (Node 20).** RED first, then GREEN: the npm-flag and flag-as-message cases
+(8 failed: "Received function did not throw"), the channel cases (12 failed:
+`assertChannelBranch is not a function`, or `main` publishing to a re-pointed channel), the
+dry-run readiness cases (2 failed against the mutant), and the row-alignment test (1 failed:
+`justifyContent` missing). `__tests__/otaPublishScript.test.js` 55 tests and
+`__tests__/profileComponents.test.js` 16 tests pass; the 9 release-card suites: 137 tests passed.
+`npx jest` on `a42d8933`: 525 suites / 8,389 tests passed, exit 0. `npx jest -c
+jest.integration.config.js`: 113 suites / 1,555 tests passed, exit 0. No SQL, sync or RLS change,
+so no PostgreSQL harness and no contract-map change; no lint script.
+
+**Follow-up (orchestrator, 2026-11-05): a dry run is the default.** The fix round's verifier found
+that a misspelled flag written before the `--` (`npm run ota:publish --dryrun -- --message x`)
+still published for real: npm took it as `npm_config_dryrun`, which is not on the refused list. A
+longer refusal list can't close this class of mistake, so the default is inverted, as the Head
+Office scripts do with `--apply`. A run is a dry run unless `--publish` is given, `--publish` with
+`--dry-run` is refused, and `npm_config_publish` joins the refused npm settings. Red first in
+`__tests__/otaPublishScript.test.js` (12 failed): no-flag runs published, `--publish` was an
+unknown argument, and the `npm_config_dryrun` typo case published. Green: 58/58. DEPLOYMENT.md,
+CONTEXT.md and the `releaseMetadata.js` comment now say that only updates of this code published
+without the script show `1.5.0+?`; older bundles show the old footer.
+
+### 2026-11-05 — Lifecycle OTA: a child Head Office restores comes back on the phone (`feat/lifecycle-ota`, work order 6)
+
+Head Office is getting `restore child` (work order 5, HO branch): it reopens in place, with the same
+ids, starts and `row_version`, exactly what one Delete child ended. Before this OTA goes to every
+pilot phone we proved, through the real code paths, that the phone converges on its next normal
+pull with no help from the EA. New `__tests__/headOfficeRestore.integration.test.js`: real handle,
+real SQLite, real repositories, `lessonSave`, sync engine and the handle's pull services
+(`pullRoster`, `pullClasses`) over real supabase-js. `test-support/lifecycleServer.js` now answers
+the pull (`get_reconcile_acknowledgments` per `20261023120000`, and PostgREST GETs with embeds,
+`!inner`, eq/is/in filters, order and limit; every column returned, nulls included; an unmodelled
+query is a 500, never a plausible empty result), leaves `row_version` alone on server-side ends (as
+`20261105120300` does; it used to bump it), and has `restoreChild`, mirroring the work order 5 design.
+
+- **Passed first time:** a sole holder's child with local history (archived on the phone) and
+  without (deleted outright), and a co-held child this EA left (class-path and other-programme
+  co-holder): back in My Children with class and group, writable (an edit and a new lesson upload),
+  history still on the phone, the other EA's rows untouched. The pull reads full scope (no cursor),
+  so an in-place reopen without a version bump is seen; equal versions apply.
+- **Bug 1 (fixed): a refused relationship INSERT left a ghost row.** A membership INSERT refused
+  before the removal and stamped `REMOVED_WITH_CHILD` was never re-sent and blocked nothing, but its
+  local row stayed open (removeChild leaves rows with a queued INSERT open, and no pull or reconcile
+  ends a row that is not synced). After a restore the phone showed the child in a group the server
+  never held, even after the refused row left. RED: `expect(await groupsOf(C)).toEqual([])` received
+  `[GROUP]`. Fix: the `hard_delete` acknowledgement that stamps those rows also ends their local
+  rows (`stampRefusalsRemovedWithChild`); the outbox payload, and so the receipt digest, is unchanged.
+- **Bug 2 (fixed): a child added offline and deleted before its first upload never came back.**
+  Its INSERT was acknowledged while the removal waited, which leaves the row `pending`
+  (`hasRemainingOutbox`); the `hard_delete` acknowledgement never touched it, so the row stayed
+  `pending` with nothing queued and every pull refused the server's copy (pending-local-wins). RED:
+  after restore and pull, the local child still had `archived_at` and `archive_reason:
+  'removed_by_ea'`. Fix: `settleRemovedChildRow` sets such a row `synced` when the acknowledged
+  `hard_delete` was the child's last outbox row (same class as `beeea645`).
+- **Not supported, observed (throwaway probe, not committed):** a restore while the phone's
+  `hard_delete` is still queued. Lost response: the pull filter keeps the child hidden, and the
+  retried RPC removes it again at a new instant, undoing the restore. Never sent: the restore is
+  `already_active` and the later upload removes the child. Either way Head Office restores again
+  once the EA's receipt shows nothing waiting.
+- **1.5.0 (`f002e08`, read-only):** the pull code is the same; both Delete child paths converge
+  after an acknowledged removal, with two limits recorded in the contract map: a fast phone clock
+  splits a 1.5.0 archive chain across instants, and a 1.5.0 forced pass replays refused archives
+  (B3), so restore on a 1.5.0 phone needs the same precondition as a Head Office reopen.
+- Docs: contract map, Delete child paragraph (stamp ends local rows; settle rule) and new
+  "Head Office restore convergence" under Pull Persistence & Reconcile.
+- Verification (Node 20): `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js`
+  6/6 passed (the two bug tests RED before their fixes); `npx jest` 523 suites / 8,299 tests passed;
+  `npx jest -c jest.integration.config.js` 114 suites / 1,561 tests passed. No SQL or PostgreSQL
+  harness changed (client and fake server only); `npm run lint` does not exist.
+
+#### Review fixes (2026-11-05, same branch)
+
+An independent review of the work order 6 commits found one medium and three low defects. Each
+was reproduced in the repo's own suites first; the fixes keep to the Delete child and restore code.
+
+- **Medium (fixed, `e149a250`): a phone clock that ran ahead wedged the Delete child
+  acknowledgement and re-removed a restored child.** `stampRefusalsRemovedWithChild` ended each
+  refused relationship row at the acknowledgement time. A membership made while the clock ran ahead
+  starts after that, so the end failed the local CHECK `removed_at >= joined_at`, rolled back all of
+  `finalizeSuccess`, left the `hard_delete` `failed`, and re-sent `delete_child_if_no_history` on
+  every pass, so a child Head Office restored meanwhile was removed again. RED (new test in
+  `headOfficeRestore.integration.test.js`): three RPC calls, and the outbox showed `children
+  hard_delete failed SQLITE_CONSTRAINT_CHECK`. Fix: the end is the later of the acknowledgement time
+  and the row's start, the same as the server guard's rule 1 (`end := greatest(end, start)`). GREEN:
+  one RPC, the membership ends at its own start, and the restore sticks across later passes.
+- **Same cause, one step earlier (fixed, `9107d37c`):** `removeChild` ended this EA's assignment
+  and held-group memberships at the tap time, so the same clock skew refused the whole Delete child
+  (`CHECK constraint failed: unassigned_at is null or unassigned_at >= assigned_at`). It now uses the
+  same bound. New `deleteChildChain.integration.test.js` test: RED, then GREEN.
+- **Low (fixed, `941f53c2`):**
+  - New test for the commonest `settleRemovedChildRow` trigger: a Delete child request that fails
+    once on the network. Mutation-checked: removing the settle step, or narrowing it to `pending`
+    rows, fails this test, and no other test catches the narrowing.
+  - The fake `restoreChild` now follows RESTORE_BODY: its checks in order with their codes
+    (`removal_not_finished` while the child is archived but the EA still holds it;
+    `ea_never_held_child`), its choice of delivery row (open, then the app's deterministic id, then
+    latest ended), and `handover_reason` left alone. Each part failed against the old fake.
+  - Test claims corrected:
+    - A child added offline gets its ticks back through the mastery history walk, not the restore
+      pull. The test now asserts the server keeps the tick.
+    - The co-held test's check on the other EA is labelled as a premise check on the fake.
+    - The fake returns nulls only for the columns listed in `NULL_COLUMNS`.
+- **Noticed, not fixed (pre-existing on main, outside this slice):** the phone's other local end
+  writes are not bounded by the row's start either. These are pull reconcile at `pulledAt`
+  (`childrenRepository.js:163`, `:229`, `:284`, `classesRepository.js:270`, `groupsRepository.js:173`,
+  and others), Remove from group, and the class and group archive flows. Probe (throwaway, not
+  committed): an assignment whose start is 6h ahead and which Head Office ended. The pull logs
+  `Pulled child_ea_assignments batch transaction failed; retrying rows without reconcile: CHECK
+  constraint failed`, reports `reconcileCompleted: false`, and the assignment stays open on the
+  phone until real time passes its start. The same assignment without the skew ends normally. This
+  is the phone-side companion of MA-BUG-20261104-007, which guard rule 1 fixed on the server; it
+  needs its own record or an addendum to 007.
+- Docs: the contract map's Delete child paragraph (both start bounds; the settle trigger now
+  includes a failed request) and "Head Office restore convergence" (the fake's fidelity and what
+  it leaves out).
+- Verification (Node 20):
+  - `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js
+    __tests__/deleteChildChain.integration.test.js __tests__/groupMembershipReAdd.integration.test.js`:
+    24/24.
+  - `npx jest`: 523 suites / 8,303 tests passed.
+  - `npx jest -c jest.integration.config.js`: 114 suites / 1,565 tests passed.
+  - No SQL changed, and the wire is unchanged (the `deleteChildChain` wire fixture still matches),
+    so no PostgreSQL harness applies. `npm run lint` does not exist.
+
+### 2026-11-05 — App update `1.5.0+2` published (`feat/app-release-card` e9a4360d, PRs #163 + #167)
+
+First update published with `npm run ota:publish`, from a clean detached worktree at `e9a4360d`
+after CI passed on #167 (16m27s) and #163 (16m51s). The combined tree (`feat/lifecycle-ota`
+e74a32c4 merged into this branch) passed unit 526 suites / 8,402 tests and integration 114 suites /
+1,565 tests locally.
+
+- **Dry run against live EAS:** `channel:view preview` showed the channel on its own branch, and
+  `update:list` counted one earlier 1.5.0 group (`8addaae6`), giving `1.5.0+2`. Nothing published.
+- **Publish (`--publish`):** group `2ed208c1-1760-4c1d-b450-0844d4eeb7f0`, iOS update
+  `01a1accc-289c-7734-a8af-803a9eafc0d9`, Android `01a1accc-289c-7935-8740-2cc659d1b4be`, runtime
+  1.5.0, channel `preview`, message `OTA 1.5.0+2: App release card on Profile; Delete child and Head
+  Office restore fixes (#163, #167) (e9a4360)`. Sentry source maps were uploaded for both bundles by
+  the script's second step.
+- **Manifest check:** fetched as a 1.5.0 iPhone and a 1.5.0 Android phone would (`u.expo.dev`,
+  protocol 1). Both carry `extra.expoClient.extra.otaRelease: 2`, `otaPublishedAt
+  2026-11-05T17:39:31.658Z`, `gitCommit e9a4360d…`, and `supabaseTarget sqlite-staging`, with
+  `createdAt 2026-11-05T17:40:23.324Z`.
+- **What a phone on it shows** in Profile → App release: Release `1.5.0+2`; Build `1.5.0 (<its
+  build>)`; Channel `preview`; Runtime `1.5.0`; Update `01a1accc`; Running `Update`; Source
+  `e9a4360`; Published `2026-11-05 17:40 UTC`; Backend `sqlite-staging`.
+- **Also in this update** (from #163): Delete child no longer fails when the phone's clock was fast
+  when the child's rows were made (9107d37c), and a child Head Office restores comes back on the
+  phone's next pull.
+- **Open:** the device check of the card (Jim's iPhone) and per-phone uptake (#158).
+
+### 2026-11-05 — Update `1.5.0+4`: main's #165 update had dropped the lifecycle app update (`feat/app-release-card` b759128f)
+
+**What happened.** #165 (draft words, blends and books) merged at 17:55 UTC. Its release note said
+to ship it with a plain `eas update` from main, and update group `9542a163` was published that way at
+17:57 UTC from main `9f6b0f96`. Main did not contain the lifecycle app update (#163) or the App
+release card (#167), which are still unmerged PRs. So from 17:57 every 1.5.0 phone that restarted
+was handed main's client: the lifecycle client fixes and the card were gone, and plan D10
+(the full lifecycle app update on every pilot phone) no longer held. The served manifest showed
+`gitCommit 9f6b0f96…` and no `otaRelease`. The server batch stayed applied throughout, and it
+keeps 1.5.0 clients safe on its own (absorb, don't refuse).
+
+**Fix.** Merged `origin/main` (#164, #165) into this branch (b759128f; build-log union only), then
+ran the full suites and the content check:
+- unit 526 suites / 8,413 tests;
+- integration 114 suites / 1,568 tests;
+- `npm run test:content` 45/45.
+
+Published with `npm run ota:publish … --publish`. The script counted #165's group as the third 1.5.0
+update, so this release is **`1.5.0+4`**: group `dd1ef964-c7bd-4559-9f34-d8f542926793`, iOS
+`01a1ace8-157e-70e1-9d5b-e61d88dc87a0`, Android `01a1ace8-157e-7757-a4f1-994c707e6f59`, Sentry maps
+uploaded. Published before CI finished on the merge, to shorten the regression window: both parents
+had passed CI and the merged tree passed every local suite; CI ran in parallel. Both served
+manifests (iOS and Android, fetched as a 1.5.0 phone) now show `gitCommit b759128f`, `otaRelease 4`.
+The regression window was 17:57–18:10 UTC.
+
+**Why it could happen.** Two publish paths (a bare `eas update` and `npm run ota:publish`) and a
+`main` that lags behind the code phones run. Until the lifecycle stack merges, publish only from a
+tree that contains `feat/app-release-card`. Follow-up: `ota:publish` will refuse to publish a tree
+that does not contain the commit of the update phones are running now.
+
+### 2026-11-05 — `ota:publish` refuses to roll phones back by accident (`feat/app-release-card`, work order 9)
+
+Follow-up to the `1.5.0+4` incident above: a bare `eas update` from `main` replaced `1.5.0+2`
+(e9a4360d, from this unmerged branch) with code that lacked it, and every phone was rolled back
+for 13 minutes. `npm run ota:publish` now checks, before counting (dry runs too), that HEAD
+contains the commit of the update phones run now.
+
+- **Where the commit is (eas-cli 26.0.0 source, npx cache).** The work order expected it in the
+  `update:list` JSON the script already pages through. It is not there:
+  `getUpdateGroupDescriptionsWithBranch` (`build/update/utils.js`) builds each group from
+  `branch, message, runtimeVersion, isRollBackToEmbedded, rolloutPercentage, codeSigningKey,
+  group, platforms` and drops `gitCommitHash`, although the GraphQL `UpdateFragment` fetches it.
+  `channel:view` carries it, but only for the newest group on the branch whatever its runtime
+  (`updateGroups(offset: 0, limit: 1)`, no filter), so it is wrong when another runtime published
+  last. The script therefore makes one extra read: `npx --yes eas-cli@26.0.0 update:view <group>
+  --json`, which prints the group's updates (one per platform) through
+  `getUpdateWithFileUrlsJsonInfosForUpdates`: `id, createdAt, group, branch, message,
+  runtimeVersion, platform, manifestPermalink, isRollBackToEmbedded, gitCommitHash`, with null
+  fields dropped by `build/utils/json.js`. `update:view` takes `--json` only (`EasJsonOnlyFlag`;
+  it always runs non-interactive), so the script does not pass `--non-interactive`, which oclif
+  would reject.
+- **Which group phones run.** The newest group for this runtime in the `update:list` pages.
+  eas-cli itself reads offset 0 / limit 1 as the latest group (`channel:view`'s "most recent
+  update group"; `selectRuntimeAndGetLatestUpdateGroupForEachPublishPlatformOnBranchAsync`), so
+  the listing is newest first.
+- **Roll back to embedded.** `publishRollbacksAsync` (`build/update/roll-back-to-embedded.js`)
+  publishes no `gitCommitHash`, and the listing marks the group `isRollBackToEmbedded: true`.
+  Such a group is not read with `update:view`. A republish copies the source update's commit
+  (`build/update/republish.js`), so republishing an older update is checked against that commit.
+- **Rules.** A commit C: refused unless `git rev-parse --verify --quiet C^{commit}` and
+  `git merge-base --is-ancestor C HEAD` both succeed (C equal to HEAD counts). git exit 1 is "no";
+  any other failure is an error, never a pass. C not in this clone: refused with "Run git fetch
+  origin". Otherwise the refusal names C, the group and its release (from `OTA <v>+N:` in its
+  message, or "not numbered"), says publishing would roll phones back to code without it, and
+  suggests merging the branch that contains C (`git branch -r --contains C`). A roll back to
+  embedded, a group with no commit, or no update yet for the runtime: no constraint and a note.
+  A dry run and a publish both print what phones run (group, release, commit) and the check
+  result. Output EAS returns that the script cannot read (not JSON, no updates, another group's
+  updates, two commits in one group, a commit that is not a 40- or 64-hex hash, a group id that
+  is not an id) is refused, and nothing is published.
+- **`--allow-rollback "<reason>"`.** Lets a refused publish through, prints the reason, and puts
+  `(rollback: <reason>)` in the update message (`OTA 1.5.0+3: Back to main (rollback: …) (9f6b0f9)`).
+  The reason must be non-empty, one line, and not start with `-` (so `--allow-rollback
+  --publish` is refused). npm swallowing it before the `--` is refused like the other flags:
+  probed with npm 10.8.2, `npm run ota:publish --allow-rollback why -- --message x` gives the
+  script `["why","--message","x"]` with `npm_config_allow_rollback=true`, and `=why` gives
+  `npm_config_allow_rollback=why`. Two choices the work order left open: (1) `--allow-rollback`
+  also lets through a commit this clone does not have, so a commit that is gone from origin for
+  good cannot block every publish; (2) `--allow-rollback` on a publish that rolls nothing back is
+  refused, so the EAS history never labels a normal update a rollback.
+- Docs: DEPLOYMENT.md "Pushing an OTA Update" (new step 3, the flag, the npm list, the bare
+  `eas update` warning).
+
+**Open risks (not fixed; outside this work order).** The check reads one group: the newest for
+the runtime. A group published for one platform only (`eas update --platform ios`) leaves the
+other platform's phones on an older group that is not checked; and a group in a partial rollout
+(`rolloutPercentage`) leaves the rest of the phones on its control update. Neither is used at
+Masi today (the script always publishes both platforms, with no rollout). The fixtures are shaped
+from the eas-cli 26.0.0 source, not captured; if the live `update:view` JSON differs, the script
+refuses with the parse error and publishes nothing. The orchestrator's dry run closes this.
+
+**Verification (Node 20).**
+- RED first: with the tests written and the script unchanged, `npx jest
+  __tests__/otaPublishScript.test.js` failed 30 of 87 (re-run against the HEAD script to record
+  the messages). The #165 case, dry run and publish, failed with `main did not refuse`: the old
+  script counted and published over 1.5.0+2. The `--allow-rollback` parse cases failed with
+  `Unknown argument: --allow-rollback`; the two npm cases with no error at all (`Received has
+  value: undefined`); the unreadable-group and bad-group-id cases with `Received function did not
+  throw`; the output cases with the old dry-run text (`Next release: 1.5.0+3 on preview` and no
+  "Phones on preview … run" line); the dry-run call-order test without `update:view`. GREEN:
+  87/87.
+- Offline with the real git and no EAS (a scratch script calling `checkPhonesKeepTheirCode`):
+  phones on e9a4360 with HEAD b759128 passes; HEAD equal to e9a4360 passes; HEAD 9f6b0f9 is
+  refused with the merge suggestion; an unknown commit is refused with "git fetch origin";
+  9f6b0f9 with `--allow-rollback` passes and prints the reason.
+- Real `npm run ota:publish --allow-rollback why -- --message x` and `--allow-rollback=why`:
+  refused, exit 1. `-- --message x --allow-rollback --publish`: refused, exit 1. EAS was not
+  called by this work.
+- `npx jest`: 526 suites / 8,442 tests passed, exit 0. `npx jest -c jest.integration.config.js`:
+  114 suites / 1,568 tests passed, exit 0. No SQL, sync or RLS change, so no PostgreSQL harness
+  and no contract-map change; no lint script.
+
+### 2026-11-05 — `ota:publish` rollback guard: review fixes (`feat/app-release-card`, work order 9)
+
+The review of the guard above found two medium and two low problems. All four are fixed here, test first.
+
+- **Squash merges (medium).** Masi squash-merges PRs, so a merged branch tip is never in main's
+  history. Once #167 is squash-merged while phones run `b759128f`, the first `ota:publish` from
+  main would have been refused, and the only way out stamped a false `(rollback: …)` label. Now,
+  when C is not in HEAD's history, the script checks content: `git merge-tree --write-tree
+  --name-only --no-messages HEAD C`, then `git diff-tree` of HEAD against the merged tree. It
+  passes when the merge would change nothing but documentation (`documentation/`, `docs/`,
+  top-level `*.md`). Tests and scripts still count, which keeps the check on the safe side. Two
+  cases the review's suggested fix (merge into HEAD only) would refuse:
+  (1) a build-log union conflicts in merge-tree even right after the squash merge, so conflicted
+  paths are filtered like any other change, not treated as a refusal;
+  (2) later work on main on lines the branch changed makes the merge into HEAD conflict in `src/`.
+  For (2) the script walks back along HEAD's first-parent line (`git rev-list --first-parent
+  --max-count=200 HEAD ^C`) and passes at the first commit that already had C's changes.
+  merge-tree writes the merged trees' objects into the repository. Nothing references them, and
+  git gc removes them. Real history, checked in a `--shared` bare clone so no objects were written
+  to the shared repository:
+  - #145 squash `a4d990bf` against `feat/numeracy-screens` tip `65ee53d1`: passes ("would change nothing").
+  - `origin/main` against `65ee53d1`: passes ("only documentation").
+  - The #165 incident (`9f6b0f96` against `e9a4360d`): refused, 87 files.
+  - `b759128f` against `e9a4360d`: passes on history.
+  - Today's `origin/main` against `b759128f` (phones now): refused, so a bare publish from main is still blocked.
+- **One-platform groups (medium).** EAS serves each platform the newest group for its runtime
+  that includes that platform; eas-cli reads it with limit 1 and a platform filter. The script
+  now takes the newest group per platform (android, ios) from the same `update:list` pages
+  (`platforms`, built by `formatPlatformForUpdateGroup` as `"android, ios"` or `"android"`), reads
+  each distinct group once with `update:view`, and checks each. When the two platforms run
+  different groups, the output prints one line per platform ("Android phones … / iOS phones …").
+  A refusal names the platform. A group whose `platforms` it cannot read is refused. The review's
+  three cases are now refused: an Android-only update from main, an Android-only roll back to
+  embedded, and an Android-only group with no commit, each newer than the both-platform group iOS
+  still runs. Its `platform-probe.cjs`, re-run against the fixed script, prints REFUSED for all
+  four scenarios.
+- **History, not content (low).** The pass line now says only what git checked: "this commit
+  (X) has commit C in its history", or "is the commit phones run". It no longer says "keeps the
+  code phones run now". The review expected the content check to catch a revert of C. It cannot:
+  when C is in HEAD's history, the merge base is C itself, so merge-tree returns HEAD unchanged.
+  Decided: a revert in HEAD's history passes, because a revert is a deliberate change. A test pins
+  this behaviour and DEPLOYMENT.md says it. A bare `eas update` from a dirty tree records HEAD while
+  publishing other code. `eas.json` sets no `cli.requireCommit`, and eas-cli 26 defaults it to
+  false (`resolveVcsClient(requireCommit = false)`), so `ensureRepoIsCleanAsync` returns early.
+  `update:view` does not show `isGitWorkingTreeDirty`, so the script cannot see this. DEPLOYMENT.md
+  now warns about it. `ota:publish` itself refuses a dirty tree.
+- **Shallow clones (low).** When the answer would be "no", the script asks `git rev-parse
+  --is-shallow-repository`. In a shallow clone it refuses with "Run git fetch --unshallow", even
+  with `--allow-rollback`, because it cannot tell whether the publish is a rollback. A "yes" from
+  `merge-base --is-ancestor` holds in a shallow clone too, so a pass there needs no unshallowing.
+
+**Verification (Node 20).**
+- RED: the new and changed tests against the HEAD script (a0bf5639): `npx jest
+  __tests__/otaPublishScript.test.js` failed 23 of 105. One-platform cases: `main did not refuse`.
+  Squash (real git): `Refusing to publish: … does not contain it`. Shallow: `Run git fetch origin`
+  where `git fetch --unshallow` was expected. Wording cases: the old `contains e9a4360, so this
+  update keeps the code phones run now`. GREEN: 106/106 (the 106th, added after the RED run,
+  covers `--allow-rollback` when only one platform rolls back).
+- The real-git tests build a bare origin and clones in a temp directory, with a squash merge plus
+  build-log union, later work on the same line, the incident shape, a merge-then-revert, and a
+  `--depth 1` clone that is refused, refused again after a shallow fetch of C, and passes after
+  `git fetch --unshallow`. They run through `main()` with EAS faked.
+- `npx jest`: 526 suites / 8,461 tests passed, exit 0. The first full run had one failure,
+  `AddChildScreen › stays on the form when local child save fails` ("Unable to find an element
+  with role: alert"). That test does not touch this change, passed 10/10 alone, and passed in the
+  rerun, so it looks like a timing flake under full parallel load. Recorded here, not fixed.
+  `npx jest -c jest.integration.config.js`: 114 suites / 1,568 tests passed, exit 0. No SQL, sync
+  or RLS change, so no PostgreSQL harness and no contract-map change; no lint script. EAS was not
+  called.
+
+**Still open.** A group in a partial rollout (`rolloutPercentage`) leaves the other phones on its
+control update, which is not checked; Masi does not use rollouts. A squash merge more than 200
+first-parent commits back, with later conflicting work on top, is refused. The refusal is safe,
+and the rollback label stays available.
+
+### 2026-11-05 — `ota:publish` guard: the squash of a branch phones run mid-way (`feat/app-release-card`, work order 10)
+
+Phones run `1.5.0+4` from `b759128f`, which sits mid-way along this branch. Later branch commits
+(`a0bf5639`, `880287dc`) change `scripts/ota-publish.cjs` and its test, two files that `b759128f`
+also changed. A squash merge of the branch holds all of those changes. So
+`git merge-tree <squash> b759128f` conflicts (add/add) on those two files, and no commit on main's
+first-parent line has `b759128f`'s exact content. The orchestrator reproduced this with real git on
+a simulated squash (`e796a55e`, in a scratch bare clone). After #167 merged, the first normal
+`ota:publish` from main would have been refused, and the only way out was a false
+`--allow-rollback` label. Two fixes, both test first:
+
+- **A branch tip with C in its history counts.** C's own checks are: in history, merge into HEAD,
+  and the first-parent walk. When they fail, the script lists the local and remote-tracking branch
+  tips that contain C (`git for-each-ref --contains C --sort=-committerdate refs/heads
+  refs/remotes`), newest first and at most 20. Each tip appears once, under its first branch name.
+  Symbolic refs such as `origin/HEAD` are skipped, and so is C itself. Each tip gets the same
+  content check, starting with one `merge-tree` into HEAD per tip. The first-parent walk runs only
+  if no tip passes at HEAD. The pass line names the tip: "this commit already has the changes of
+  branch feat (abc1234), which has commit c0ffee1 in its history". The refusal lists the tips it
+  checked, and says how many it skipped when more than 20 contain C. The #165 shape (a branch
+  contains C, main does not) is still refused.
+- **Files that never reach phones do not count.** `OUTSIDE_THE_APP` already held
+  `documentation/`, `docs/` and top-level `*.md`. It now also holds `__tests__/` at any depth,
+  `test-support/`, `scripts/`, `supabase/`, `supabase-migrations/`, `.github/`, `.agents/` and
+  `.claude/`. Checked with grep: nothing in `src/`, `config/`, `plugins/`, `content/`, `App.js`,
+  `index.js`, `app.config.js` or `metro.config.js` imports from them. The `supabase` hits are the
+  `@supabase/supabase-js` package, and `tokens.ts` mentions `__tests__` only in a comment.
+  Everything else still counts, including the same folder names inside `src/` (`src/scripts/`).
+  The output now says "files that reach phones" / "only files that never reach phones" instead of
+  "documentation".
+
+Why both fixes: on today's simulated squash, the second fix alone passes, because the conflicts
+are only the script and its test. It would not pass a later branch whose later commits rework
+`src/` lines changed by the commit phones run. The first fix covers that case while a ref to the
+branch tip exists. With the branch deleted, the script refuses (fails safe).
+
+Real history (scratch bare clone; merge-tree objects are written only there):
+- `sim.cjs`: the simulated squash `e796a55e` PASSED ("merging it would change only files that never
+  reach phones"). The branch tip `880287dc` PASSED on history.
+- `git merge-tree e796a55e 880287dc` changes 25 paths, all under `docs/` and `documentation/`. So
+  the first fix alone also passes once `origin/feat/app-release-card` points at `880287dc`.
+- Against `b759128f`, main before the squash (`f0a34da3`) and #165's main (`9f6b0f96`) were both
+  REFUSED: 32 files reach phones, after checking 2 branch tips
+  (`feat/app-release-card`, `origin/feat/app-release-card`). The check took 453 ms and 148 ms.
+
+**Verification (Node 20).**
+- RED: with the tests written and the script unchanged, `npx jest __tests__/otaPublishScript.test.js`
+  failed 26 of 127. The new real-git cases failed as follows:
+  - the mid-branch squash with later `src/` work: `Refusing to publish … would change more than
+    documentation (3 files: src/app.js, src/screens/__tests__/app.test.js, scripts/publish.cjs)`;
+  - the branch-deleted, tests-and-scripts-only case: refused on 2 files;
+  - the fail-safe case, the #165 shape and the cap case: the old text without the "files that
+    reach phones" wording or the branch tips checked;
+  - the path cases (fake git): refused on scripts and tests, or the old wording.
+
+  A 128th case (a tip passing on the first-parent walk: the squash, then later work on main on the
+  same `src/` line) was added after that run. Against the old script it also failed (`Refusing to
+  publish … more than documentation`). GREEN: 128/128.
+- `npx jest`: 526 suites / 8,483 tests passed, exit 0. `npx jest -c jest.integration.config.js`:
+  114 suites / 1,568 tests passed, exit 0. No SQL, sync or
+  RLS change, so no PostgreSQL harness and no contract-map change. There is no lint script, and EAS
+  was not called.
+
+**Still open.** The tip check needs a ref to the branch tip. If the branch is deleted on GitHub
+and pruned locally, only the files rule helps. A publish from main is then refused if later branch
+commits reworked `src/` lines changed by the commit phones run (safe; `git branch <name> <tip>`
+restores the ref while the commit is still in the clone). On a refusal, the check runs up to 20
+`merge-tree`s at HEAD plus a first-parent walk per tip. Each walk is short when the tip has merged
+main recently (148–453 ms on the real history).
+
+### 2026-11-05 — Lifecycle stack merged to main; post-merge audit; Jim's offline lesson + Delete child check (`feat/app-release-card`, work order 11)
+
+**Merges (squash).** #160 `3458adc9` (bug records and the plan), #161 `f0a34da3` (server batch),
+#162 `58414b60` (Head Office lifecycle script with `restore child`, daily invariant check), #163
+`ccd064a1` (lifecycle app update). #167 (App release card, `ota:publish` with the rollback guard)
+and #168 (bug records) merge next. Trees compared with `git rev-parse <sha>^{tree}` against each
+PR's head (`gh pr view N --json headRefOid,mergeCommit`): the #161, #162 and #163 squashes equal the
+PR heads CI passed on. #160's does not: its CI ran 15:44–16:01 UTC, before #165 merged (17:55),
+and the squash landed on main `9f6b0f96`. Its tree equals `git merge-tree --write-tree 9f6b0f96
+<head>` (no conflict), and #160 changed only `docs/` and `documentation/`.
+
+**Post-merge audit** (read-only, 7 agents). No file that reaches the app bundle differs between
+`b759128f` (what `1.5.0+4` runs) and the merged tree: only `package.json` scripts entries, docs,
+tests, `scripts/` and `supabase/` differ. So the merge needs no new update. The doc drifts it found
+are fixed in this commit: contract map (R1 applied), interim rules (a concrete app-update test and a
+dated status line), runbook (rule 1's lift now links to the interim rules), DEPLOYMENT (bundles
+without the card; JS-only changes ship with `ota:publish`), CONTEXT (App release footer wording;
+`ho:restore`), ADR-0014 (`restore child` row), documentation README (interim rules row), ROADMAP
+(lifecycle gate item; the OTA wrapper item narrowed to what `ota:publish` does not do yet), and a
+status note at the top of the plan. Left alone (optional): escaping `|` inside register table rows.
+
+**The app-update test.** A phone has the lifecycle app update when Profile → App release shows
+Release `1.5.0+4` or later and its Send diagnostics receipt has `observed.update.otaRelease` ≥ 4.
+That field is set in `src/utils/runtimeDiagnostics.js` from `buildReleaseIdentity`
+(`src/utils/releaseMetadata.js`), and the receipt's `observed` column stores that snapshot. Group
+`9542a163` (a bare `eas update`, counted as 3) and `1.5.0+1` (`8addaae6`) carry none:
+`git show <commit>:src/utils/runtimeDiagnostics.js` has no `otaRelease` at `fd053cfc`, `9f6b0f96`
+or `8b79eae5`. Live since about 19:55 UTC: `1.5.0+5`, group `3ec327af` from `1bddda8e` (this
+branch at `513dd664` plus the Wrap up child-cards redesign, #169, not yet on main), published by
+another session with `ota:publish`; the guard passed against `1.5.0+4`.
+
+**Jim's device check** (iPhone, build 28 on `1.5.0+4`, staging). An offline lesson with a child in
+a class two test EA accounts both hold, then Delete child. On the server: the lesson, its
+attendance and 2 letter ticks were written 18:44:00–01 UTC; at 18:44:19.719975 UTC the server ended
+only that EA's direct assignment and group membership, in one transaction. The child stayed live
+(the other EA holds it through the class), its class membership and enrollment stayed open, and no
+incident receipts arrived after. Not covered: removing a group or class after an offline lesson;
+the second EA's phone was not opened.
+
+**Open.**
+- #157: the two-phone check on installed 1.5.0.
+- #158: the app update device gate and per-phone uptake. Plan step G1.1 (re-freeze the T1
+  disposition fixture for the update commit; replay the all-offline Delete child chain's wire
+  requests into Postgres with the server batch) was not done before the update went live.
+- #159: field verification during the retest.
+- The fix decision for MA-BUG-20261105-003, and the first live `--apply` of the Head Office
+  script (Jim).
+- #167 and #168 merge. Main must take #169 before the next publish from main, or the guard will
+  refuse it. That is the guard working as intended, not a bug.
+
+Docs only: no source, script, test or SQL change, so no suites were run.

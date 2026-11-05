@@ -52,8 +52,8 @@ fetch a version published minutes ago. The 2026-10-28 pilot used 26.0.0.
   switches backends when it installs the SQLite app; there is no legacy-data
   migration, so anything it had not synced stays behind. Nobody uses the legacy
   app today.
-- OTA: store builds are on update channel `preview`
-  (`eas update --channel preview --environment preview`). SQLite runtimes
+- OTA: store builds are on update channel `preview`; publish with
+  `npm run ota:publish -- --message "…"` (see "Pushing an OTA Update"). SQLite runtimes
   (`1.3.0` and later) cannot land on legacy binaries, which use channel
   `production` at runtime 1.1.x/1.2.x.
 - Preview content: never set `MASI_PREVIEW_CONTENT` in an EAS environment.
@@ -70,7 +70,7 @@ fetch a version published minutes ago. The 2026-10-28 pilot used 26.0.0.
 
 | What changed? | What to do |
 |---|---|
-| JavaScript only (screens, logic, styles) | `eas update` — instant OTA, no build needed |
+| JavaScript only (screens, logic, styles) | `npm run ota:publish -- --message "…"` — OTA update, no build needed |
 | Added/removed/upgraded a native package (`expo-location`, etc.) | Full `eas build` + `eas submit` |
 | Changed `app.json` native config (permissions, bundle ID, plugins) | Full `eas build` + `eas submit` |
 | Changed `eas.json` build profiles | Full `eas build` + `eas submit` |
@@ -93,17 +93,131 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 
 ### Pushing an OTA Update
 
+Publish every update with the script, from a clean commit that is pushed to origin:
+
 ```bash
-npx eas-cli@26.0.0 update --channel preview --environment preview --message "describe what changed"
-npx eas-cli@26.0.0 env:exec --environment preview 'npm run sentry:sourcemaps'
+npm run ota:publish -- --message "describe what changed"             # dry run: prints the number and both commands
+npm run ota:publish -- --message "describe what changed" --publish   # publish on channel preview
 ```
 
-After the field launch, use `production` for both the channel and the environment.
-The first command leaves the exported bundle in `dist/`. The second uploads the
-matching source maps to Sentry using the sensitive `SENTRY_AUTH_TOKEN` stored in
-the same EAS environment. Do not consider the OTA release complete if the
-source-map upload fails: events would arrive, but production stack traces could
-remain minified and much less actionable.
+A dry run is the default; only `--publish` reaches phones (`--publish` with `--dry-run` is refused).
+
+After the field launch, add `--channel production` (the EAS environment has the channel's name).
+Write every flag after the `--`. npm keeps a flag written before it for itself and hides it from
+the script, so the script refuses whenever npm has taken `--dry-run`, `--publish`, `--channel`,
+`--message` or `--allow-rollback`. Because publishing needs `--publish`, any other flag npm swallows
+(a typo such as `--dryrun` included) leaves the run a dry run. A message cannot start with `-`, so
+`--message --publish` is refused rather than taken as the message; the same goes for the
+`--allow-rollback` reason.
+
+The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
+
+1. Refuses unless the working tree is clean (untracked `node_modules`/`dist` aside) and HEAD is on
+   an origin branch, so every update's Source commit can be found later. A dry run makes the
+   same checks as a publish, through step 4.
+2. Checks the channel. `npx eas-cli@26.0.0 channel:view <channel> --json --non-interactive` must
+   show the channel pointing at exactly one branch, named after the channel. `eas update
+   --channel` publishes to whatever branch the channel points at, but the number is counted on the
+   branch with the channel's name, so a re-pointed channel (`eas channel:edit … --branch …`) or one
+   in a branch rollout is refused. So is a channel EAS cannot find; the script never creates one.
+3. Checks that the update keeps the code phones run now, so it cannot roll them back by accident.
+   It lists the update groups on the channel's EAS branch
+   (`npx eas-cli@26.0.0 update:list --branch <channel> --json --non-interactive`, page by page,
+   newest first). EAS gives each platform the newest group for its runtime that includes that
+   platform, so the script finds that group for Android and for iOS. They differ only after a
+   one-platform publish (`eas update --platform android`, or a one-platform republish or roll back
+   to embedded); then each is checked, because this publish replaces both. `update:list` does not
+   carry commits, so the script reads each group's commit with `npx eas-cli@26.0.0 update:view
+   <group> --json` (`gitCommitHash`), then:
+   - **The group has a commit C:** publishing passes when C is in HEAD's history
+     (`git merge-base --is-ancestor C HEAD`; C equal to HEAD counts), or when HEAD already has C's
+     changes under another commit, as after a squash merge: `git merge-tree --write-tree HEAD C`
+     would change only files that never reach phones (`documentation/`, `docs/`, top-level `*.md`,
+     `__tests__/` at any depth, `test-support/`, `scripts/`, `supabase/`, `supabase-migrations/`,
+     `.github/`, `.agents/`, `.claude/`; everything else counts). If later work on the same lines
+     makes that merge conflict, the check walks back along HEAD's first-parent line (up to 200
+     commits) and passes at the first commit that already had C's changes. If C still fails, the
+     same check runs for each branch tip that has C in its history (`git for-each-ref --contains C
+     refs/heads refs/remotes`, the newest 20): phones can run a commit mid-way along a branch
+     (`1.5.0+4` ran `b759128f`), and that branch's squash merge has the tip's changes, which
+     conflict with C's own on the lines later commits changed. Otherwise publishing is refused. The
+     refusal names C, the group and its release (from its `OTA <version>+N:` message), the files the
+     merge would change and the branch tips checked, and says to merge the branch that contains C
+     first (`git branch -r --contains C` lists it). If this clone does not have C, it says to
+     `git fetch origin` first. In a shallow clone (a CI checkout, say) the script
+     cannot tell, so it refuses with `git fetch --unshallow`, even with `--allow-rollback`.
+   - **The group rolls phones back to their built-in bundle, records no commit (published before
+     commits were recorded), or there is no update for this runtime yet:** there is no commit to
+     contain, and the script prints a note saying so.
+
+   Both a dry run and a publish print what phones run now (group, release, commit; per platform
+   when they differ) and the result of the check. "In its history" is all a pass claims: a HEAD
+   that has C in its history but later reverted it passes, because a revert is a deliberate change.
+   To roll phones back on purpose (the newest update is broken and you publish older code over it),
+   add `--allow-rollback "why"`: the script prints the reason and adds `(rollback: <why>)` to the
+   update message, so the EAS history shows it. It also lets through a commit this clone does not
+   have (fetch first if you can). `--allow-rollback` on a publish that rolls nothing back is
+   refused, so no update is labelled a rollback by mistake.
+
+   Why: on 2026-11-05 phones ran `1.5.0+2` from an unmerged branch, and a bare `eas update` from
+   `main`, which lacked it, rolled every phone back for 13 minutes until `1.5.0+4` replaced it.
+4. Numbers the update. Of the groups listed in step 3, it counts those for this runtime: release
+   N = count + 1, raised past any number an `OTA <version>+N:` message on the branch already uses,
+   so deleting an older group cannot make a number repeat. Deleting the newest numbered group (`eas update:delete`) does free its number:
+   EAS no longer lists it, so the next publish reuses it, and a phone that had downloaded the
+   deleted update shows the same Release (only the Update id differs). Replace a bad update by
+   publishing a fixed one; do not delete its group. If a listing or a group read fails, the script
+   stops and publishes nothing; it never guesses.
+5. Publishes: `npx eas-cli@26.0.0 update --channel <channel> --environment <channel>
+   --non-interactive --message "OTA 1.5.0+2: <message> (<short commit>)"`, with
+   `MASI_OTA_RELEASE=<N>` and `MASI_OTA_PUBLISHED_AT=<now, ISO UTC>` set. `app.config.js` copies
+   them into `extra.otaRelease` and `extra.otaPublishedAt`, which EAS publishes in the update's
+   manifest. This leaves the exported bundle in `dist/`.
+6. Uploads the matching source maps to Sentry with the sensitive `SENTRY_AUTH_TOKEN` stored in the
+   same EAS environment: `npx eas-cli@26.0.0 env:exec <channel> 'npm run sentry:sourcemaps'
+   --non-interactive`. eas-cli 26 takes the environment as an argument; the older
+   `env:exec --environment preview` form fails. If this step fails, the update is already out: the
+   script says so and prints the command to re-run. Do not consider the OTA release complete
+   until it succeeds: events would arrive, but stack traces could remain minified and much less
+   actionable.
+
+Child processes get argument arrays, so a message with quotes or `$( )` is never run by a shell.
+Do not publish with a bare `eas update`: the phone would show the update as `<version>+?`, and
+nothing would check that the update keeps the code phones run now (step 3). A bare `eas update`
+also publishes from a tree with uncommitted changes and records HEAD as its commit (`eas.json`
+does not set `cli.requireCommit`), so that update's code may not match its recorded commit; the
+script refuses a dirty tree, so its own updates always match.
+
+### Release numbers: what the phone shows
+
+A bundle built from the App release change (2026-11-05) or later shows the card:
+
+| Phone is running | Release | Running |
+|---|---|---|
+| The store build's own bundle | `1.5.0` (the app version) | `Built-in` |
+| The 2nd update published for runtime 1.5.0 | `1.5.0+2` | `Update` |
+| An update of this code published without the script (a bare `eas update`) | `1.5.0+?` | `Update` |
+
+An older bundle has no card: it still shows the old caption footer at the bottom of Profile
+(`Version 1.5.0 (Build N) · Backend …`, then the project, then the device and `Update <full update
+id>`). Today that is the 1.5.0 store builds' own bundle, the lifecycle update on `preview`
+(group `8addaae6`, from `fd053cfc`), and group `9542a163` (a bare `eas update` from `main` at
+`9f6b0f96`, counted as update 3), which also lacks the lifecycle app update. So once the first scripted update is out, a phone that shows
+the App release card at all is running it or a later one.
+
+Numbers count per runtime, so a new app version starts again: the first update for 1.6.0 is
+`1.6.0+1`. Updates published before the script still count towards the number: the lifecycle update
+is 1.5.0's update 1, so the first update published with the script is `1.5.0+2`.
+
+**Profile → App release** shows Release (large); Build (version and native build) and Channel;
+Runtime and Update (the first 8 characters of the update id); Running (`Update`, `Built-in`, or
+`Development` for a Metro bundle) and Source (commit); Published (UTC, updates only); Backend, with
+the project id under it. Device and OS sit in a caption under the
+card. Incident receipts and support exports carry the same label in
+`application.releaseLabel`, plus `update.launch`, `update.otaRelease` and `update.createdAt`.
+
+A phone fetches a new update while it runs and starts it on the next cold start, so after a publish
+open the app, close it fully, and open it again; Release should then read the new number.
 
 ### How Runtime Versions Work
 
@@ -120,7 +234,7 @@ For reference, here's what was configured:
 3. Added `channel: "production"` to the production profile in `eas.json`
 4. **Still needed:** One full native build per platform to bake in the update client (see next section)
 
-> **Important:** The first build after this setup MUST be a full native build (`eas build`). After that, JS-only changes can use `eas update`.
+> **Important:** The first build after this setup MUST be a full native build (`eas build`). After that, JS-only changes ship with `npm run ota:publish` (never a bare `eas update`; see "Pushing an OTA Update").
 
 ---
 
@@ -181,7 +295,8 @@ be shipped safely as an OTA update to binaries which do not contain the SDK.
 
 1. Confirm the build logs show successful Sentry source-map upload.
 2. Install the preview or production binary on a physical device.
-3. Open Profile, then choose **Test Crash Reporting** under Debug & Support.
+3. Open Profile, check **App release** shows the expected Release, then choose
+   **Support tools → Test crash reporting**.
 4. Confirm a handled `Masi observability test error` arrives in Sentry with
    `observability_test=true`.
 5. Confirm the stack is symbolicated and the event contains app build, device,
@@ -192,8 +307,8 @@ be shipped safely as an OTA update to binaries which do not contain the SDK.
    identity appears in the local support package.
 
 For EAS Build, source-map upload is automatic when the token and plugin values
-are present. For every EAS Update, run the separate `sentry:sourcemaps` command
-shown above against the generated `dist/` directory.
+are present. For every EAS Update, `npm run ota:publish` runs the separate
+`sentry:sourcemaps` upload against the generated `dist/` directory.
 
 ---
 

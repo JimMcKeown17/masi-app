@@ -1,0 +1,316 @@
+import { bindTestActor } from '../test-support/actorTestUtils';
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'), supabase: {} }));
+
+import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { createSupabaseMock } from '../test-support/supabaseSyncMock';
+import { runMigrations } from '../src/db/migrations';
+import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createReferenceDataRepository } from '../src/db/repositories/referenceDataRepository';
+import { createOutboxSyncEngine, refusalExit, SYNC_BATCH_LIMITS } from '../src/services/offlineSync';
+
+// Lifecycle safety O1 item 5 (MA-BUG-20261104-021): a refused row forced into a pass and then
+// not attempted (deferred, user switch, thrown claim or request) stays refused. It never becomes
+// "waiting" (pending/failed), and its domain row keeps a consistent status and version.
+const USER = 'user-1';
+const liveSession = async () => ({ data: { session: { user: { id: USER } } } });
+const childId = (n) => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+describe('refused rows in a forced pass', () => {
+  let db;
+  let outbox;
+
+  beforeEach(async () => {
+    db = bindTestActor(createBetterSqliteTestDatabase(), USER);
+    await runMigrations(db);
+    outbox = createSyncOutboxRepository({ database: db });
+  });
+  afterEach(async () => { await db.closeAsync(); });
+
+  // Refused child inserts: batchable, and stamped, so the claim bumps their domain row too.
+  const seedRefusedInserts = async (count) => {
+    const ids = Array.from({ length: count }, (_, index) => childId(index + 1));
+    for (const id of ids) {
+      await db.runAsync(`insert into children (id, first_name, last_name, created_by, row_version, sync_status)
+        values (?, 'Amahle', 'Dlamini', ?, 1, 'terminal')`, id, USER);
+      await outbox.enqueue({ tableName: 'children', recordId: id, operation: 'insert',
+        payload: { id, first_name: 'Amahle', last_name: 'Dlamini', created_by: USER } });
+      await outbox.markTerminalFailure(`children:${id}:insert`, { errorMessage: '42501-authenticated: denied', errorCode: '42501' });
+    }
+    return ids;
+  };
+  const statuses = async () => (await db.getAllAsync('select status from sync_outbox order by id')).map(row => row.status);
+  const expectDomainConsistent = async () => {
+    const rows = await db.getAllAsync(`select c.id, c.sync_status, c.row_version, json_extract(o.payload, '$.row_version') as sent
+      from children c join sync_outbox o on o.record_id = c.id order by c.id`);
+    for (const row of rows) {
+      expect(row.sync_status).toBe('terminal');
+      if (row.sent != null) expect(row.sent).toBe(row.row_version);
+    }
+  };
+  const engine = (supabaseClient, overrides = {}) => createOutboxSyncEngine({
+    database: db, supabaseClient, outboxRepository: overrides.outboxRepository || outbox,
+    enqueueRequest: overrides.enqueueRequest || (task => task()), getAuthSession: overrides.getAuthSession || liveSession,
+  });
+
+  test('rows deferred past the fallback budget stay refused, with consistent domain rows', async () => {
+    const count = SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass + 5;
+    await seedRefusedInserts(count);
+    const snapshot = () => db.getAllAsync(`select o.id, o.status, o.updated_at, o.payload, c.sync_status, c.row_version
+      from sync_outbox o join children c on c.id = o.record_id order by o.created_at, o.id`);
+    const before = await snapshot();
+    const denied = { error: { code: '42501', message: 'row-level security' } };
+    const { supabaseClient, calls } = createSupabaseMock({ upsertResults: { children: denied } });
+    const result = await engine(supabaseClient).syncAll({ force: true });
+    expect(calls.filter(call => Array.isArray(call.payload))).toHaveLength(1);
+    expect(result.totalDeferred).toBe(5);
+    expect(await statuses()).toEqual(Array(count).fill('terminal'));
+    await expectDomainConsistent();
+    // The rows never sent are exactly as before the pass, so their delivered receipts still match.
+    const after = await snapshot();
+    const sent = new Set(calls.filter(call => !Array.isArray(call.payload)).map(call => `children:${call.payload.id}:insert`));
+    expect(sent.size).toBe(SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass);
+    expect(after.filter(row => !sent.has(row.id))).toEqual(before.filter(row => !sent.has(row.id)));
+  });
+
+  test('a request that throws after the claim returns the rows to refused, not failed', async () => {
+    await seedRefusedInserts(3);
+    const { supabaseClient } = createSupabaseMock();
+    const enqueueRequest = async () => { throw new Error('socket hang up'); };
+    await engine(supabaseClient, { enqueueRequest }).syncAll({ force: true });
+    expect(await statuses()).toEqual(['terminal', 'terminal', 'terminal']);
+    expect((await db.getAllAsync('select retry_count, next_retry_at from sync_outbox'))
+      .every(row => row.retry_count === 0 && row.next_retry_at === null)).toBe(true);
+    await expectDomainConsistent();
+  });
+
+  test.each(['batch', 'single'])('a user switch after the claim returns %s rows to refused', async mode => {
+    if (mode === 'batch') await seedRefusedInserts(2);
+    else {
+      await outbox.enqueue({ tableName: 'battery_runs', recordId: 'run-1', operation: 'update', payload: { id: 'run-1' } });
+      await outbox.markTerminalFailure('battery_runs:run-1:update', { errorMessage: 'refused', errorCode: '22023' });
+    }
+    let calls = 0;
+    const getAuthSession = async () => {
+      calls += 1;
+      return { data: { session: { user: { id: calls === 1 ? USER : 'someone-else' } } } };
+    };
+    const { supabaseClient, calls: requests } = createSupabaseMock();
+    const before = await db.getAllAsync('select id, status, updated_at, payload from sync_outbox order by id');
+    await engine(supabaseClient, { getAuthSession }).syncAll({ force: true });
+    expect(requests).toEqual([]);
+    expect(await statuses()).toEqual(Array(mode === 'batch' ? 2 : 1).fill('terminal'));
+    await expectDomainConsistent();
+    expect(await db.getAllAsync('select id, status, updated_at, payload from sync_outbox order by id')).toEqual(before);
+  });
+
+  test.each(['single', 'batch'])('a claim that throws changes nothing (%s)', async mode => {
+    await seedRefusedInserts(mode === 'batch' ? 2 : 1);
+    await db.runAsync(`insert into time_entries (id, user_id, sign_in_time, sync_status)
+      values ('time-1', ?, '2026-05-25T08:00:00.000Z', 'failed')`, USER);
+    await outbox.enqueue({ tableName: 'time_entries', recordId: 'time-1', operation: 'insert',
+      payload: { id: 'time-1', user_id: USER, sign_in_time: '2026-05-25T08:00:00.000Z' } });
+    await outbox.markRetriableFailure('time_entries:time-1:insert', {
+      errorMessage: 'network', nextRetryAt: '2099-01-01T00:00:00.000Z' });
+    const before = await db.getAllAsync('select * from sync_outbox order by id');
+    const throwingOutbox = { ...outbox, markInFlightAndGet: async () => { throw new Error('disk I/O error'); } };
+    const { supabaseClient, calls } = createSupabaseMock();
+    const result = await engine(supabaseClient, { outboxRepository: throwingOutbox }).syncAll({ force: true });
+    expect(calls).toEqual([]);
+    expect(result.preflightErrors).toEqual([]);
+    expect(await db.getAllAsync('select * from sync_outbox order by id')).toEqual(before);
+    await expectDomainConsistent();
+  });
+
+  test.each([1, 2])('a claim that commits and then throws hands %i refused rows back as refused', async count => {
+    await seedRefusedInserts(count);
+    const committedThenThrows = {
+      ...outbox,
+      markInFlightAndGet: async (ids) => {
+        await outbox.markInFlightAndGet(ids);
+        throw new Error('claim snapshot failed after commit');
+      },
+    };
+    const { supabaseClient, calls } = createSupabaseMock();
+    await engine(supabaseClient, { outboxRepository: committedThenThrows }).syncAll({ force: true });
+    expect(calls).toEqual([]);
+    expect(await statuses()).toEqual(Array(count).fill('terminal'));
+    await expectDomainConsistent();
+  });
+
+  test('a dependency check that throws fails only its own row', async () => {
+    for (const id of ['time-a', 'time-b']) {
+      await db.runAsync(`insert into time_entries (id, user_id, sign_in_time, sync_status)
+        values (?, ?, '2026-05-25T08:00:00.000Z', 'pending')`, id, USER);
+      await outbox.enqueue({ tableName: 'time_entries', recordId: id, operation: 'update',
+        payload: { id, user_id: USER, sign_out_time: '2026-05-25T15:00:00.000Z' } });
+    }
+    const checking = {
+      ...outbox,
+      getQueuedOperationStatus: async (args, options) => {
+        if (args.recordId === 'time-a') throw new Error('dependency read failed');
+        return outbox.getQueuedOperationStatus(args, options);
+      },
+    };
+    const { supabaseClient, calls } = createSupabaseMock();
+    const result = await engine(supabaseClient, { outboxRepository: checking }).syncAll();
+    expect(calls.map(call => `${call.type}:${call.value}`)).toEqual(['update:time-b']);
+    expect(result).toMatchObject({ totalSynced: 1, totalRetriable: 1, preflightErrors: [] });
+    expect(await db.getAllAsync('select id, status from sync_outbox')).toEqual([
+      { id: 'time_entries:time-a:update', status: 'pending' },
+    ]);
+  });
+
+  test('markReady and markReadyMany never demote a refused row', async () => {
+    await seedRefusedInserts(2);
+    const [first, second] = (await db.getAllAsync('select id from sync_outbox order by id')).map(row => row.id);
+    await outbox.markReady(first);
+    await outbox.markReadyMany([first, second]);
+    expect(await statuses()).toEqual(['terminal', 'terminal']);
+  });
+
+  // Lifecycle safety O1: every retry entry point keeps the no-replay rule, not just the forced pass.
+  test('requeueTerminalRows never requeues a refused archive, restore or edit', async () => {
+    await seedRefusedInserts(1);
+    for (const operation of ['archive', 'restore', 'update']) {
+      await outbox.enqueue({ tableName: 'children', recordId: childId(1), operation, payload: { id: childId(1) } });
+      await outbox.markTerminalFailure(`children:${childId(1)}:${operation}`, { errorMessage: 'denied', errorCode: '42501' });
+    }
+    const ids = (await db.getAllAsync('select id from sync_outbox order by id')).map(row => row.id);
+    expect(await outbox.requeueTerminalRows(ids)).toBe(1);
+    expect(await db.getAllAsync('select operation, status from sync_outbox order by operation')).toEqual([
+      { operation: 'archive', status: 'terminal' },
+      { operation: 'insert', status: 'pending' },
+      { operation: 'restore', status: 'terminal' },
+      { operation: 'update', status: 'terminal' },
+    ]);
+  });
+
+  test('a reference-id repair never requeues a refused archive or edit; refused history is still retargeted', async () => {
+    await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-local', 'literacy', 'Literacy', 'synced')");
+    await outbox.enqueue({ tableName: 'child_programme_enrollments', recordId: 'enr-1', operation: 'archive',
+      payload: { id: 'enr-1', child_id: childId(1), programme_id: 'programme-local', ended_at: '2026-11-04T08:00:00.000Z' } });
+    await outbox.markTerminalFailure('child_programme_enrollments:enr-1:archive', { errorMessage: 'not applied', errorCode: 'ARCHIVE_NOT_APPLIED' });
+    await outbox.enqueue({ tableName: 'sessions', recordId: 'session-1', operation: 'insert',
+      payload: { id: 'session-1', user_id: USER, programme_id: 'programme-local', session_date: '2026-11-04' } });
+    await outbox.markTerminalFailure('sessions:session-1:insert', { errorMessage: '42501-authenticated: denied', errorCode: '42501' });
+    const refusedArchive = await outbox.getById('child_programme_enrollments:enr-1:archive');
+    await createReferenceDataRepository({ database: db, tableName: 'programmes' })
+      .replaceFromServer([{ id: 'programme-canonical', code: 'literacy', name: 'Literacy' }]);
+    expect(await outbox.getById('child_programme_enrollments:enr-1:archive')).toEqual(refusedArchive);
+    expect(await outbox.getById('sessions:session-1:insert')).toMatchObject({
+      status: 'pending', payload: expect.objectContaining({ programme_id: 'programme-canonical' }),
+    });
+  });
+
+  test('with no retry entry point left for it, an unmarked 42501 archive clears itself like a marked one', () => {
+    const unmarked = { status: 'terminal', error_code: '42501', last_error: 'new row violates row-level security policy' };
+    expect(refusalExit({ ...unmarked, table_name: 'children', operation: 'archive' })).toBe('clears_itself');
+    expect(refusalExit({ ...unmarked, table_name: 'time_entries', operation: 'insert' })).toBe('ea_removes');
+  });
+
+  // Combined-OTA review: a removed child's refused relationship INSERT could otherwise land after
+  // the removal and re-create a grant.
+  const seedRemovedChildRefusals = async () => {
+    for (const id of ['child-gone', 'child-kept']) {
+      await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
+        values (?, 'Amahle', 'Dlamini', ?, 'synced')`, id, USER);
+      await outbox.enqueue({ tableName: 'child_ea_assignments', recordId: `cea-${id}`, operation: 'insert',
+        payload: { id: `cea-${id}`, user_id: USER, child_id: id, created_by: USER } });
+      await outbox.markTerminalFailure(`child_ea_assignments:cea-${id}:insert`, {
+        errorMessage: 'new row violates row-level security policy', errorCode: '42501' });
+    }
+    await outbox.enqueue({ tableName: 'children', recordId: 'child-gone', operation: 'hard_delete', payload: { id: 'child-gone' } });
+  };
+  const acknowledgeRemoval = async () => {
+    const { supabaseClient } = createSupabaseMock({ rpcResults: { delete_child_if_no_history: { data: true, error: null } } });
+    await engine(supabaseClient).syncAll();
+    expect(await outbox.getById('children:child-gone:hard_delete')).toBeNull();
+  };
+
+  test.each([
+    ['removal queued', async () => {}],
+    ['removal acknowledged', acknowledgeRemoval],
+  ])('no retry path re-sends a refused relationship INSERT of a removed child (%s)', async (_name, settle) => {
+    await seedRemovedChildRefusals();
+    await settle();
+    const refusedIds = (await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true }))
+      .filter(row => row.table_name === 'child_ea_assignments').map(row => row.id);
+    expect(refusedIds).toEqual(['child_ea_assignments:cea-child-kept:insert']);
+    expect(await outbox.markInFlightAndGet(['child_ea_assignments:cea-child-gone:insert'])).toEqual([]);
+    expect(await outbox.requeueTerminalRows(['child_ea_assignments:cea-child-gone:insert'])).toBe(0);
+    const { supabaseClient } = createSupabaseMock();
+    const heal = engine(supabaseClient);
+    await heal.retryFailedItem('child_ea_assignments', 'cea-child-gone');
+    expect(await heal.requeueTerminalRlsFailures(USER)).toBe(1);
+    expect(await db.getAllAsync("select id, status from sync_outbox where table_name = 'child_ea_assignments' order by id")).toEqual([
+      { id: 'child_ea_assignments:cea-child-gone:insert', status: 'terminal' },
+      { id: 'child_ea_assignments:cea-child-kept:insert', status: 'pending' },
+    ]);
+    const queuedRemovals = new Set((await db.getAllAsync("select record_id from sync_outbox where operation = 'hard_delete'")).map(row => row.record_id));
+    expect(refusalExit(await outbox.getById('child_ea_assignments:cea-child-gone:insert'), queuedRemovals)).toBe('clears_itself');
+  });
+
+  // Second review: the mark is stamped with the acknowledgement, so a pull cannot wipe it, and it
+  // is all or nothing with the acknowledgement.
+  test('acknowledging a Delete child stamps its refused relationship INSERTs in the same transaction', async () => {
+    await seedRemovedChildRefusals();
+    await acknowledgeRemoval();
+    expect(await outbox.getById('child_ea_assignments:cea-child-gone:insert')).toMatchObject({ status: 'terminal', error_code: 'REMOVED_WITH_CHILD' });
+    expect(await outbox.getById('child_ea_assignments:cea-child-kept:insert')).toMatchObject({ error_code: '42501' });
+    // A pull that rewrites the child cannot make the row sendable.
+    await db.runAsync("update children set archived_at = null, archive_reason = null, sync_status = 'synced' where id = 'child-gone'");
+    expect((await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true })).map(row => row.id))
+      .not.toContain('child_ea_assignments:cea-child-gone:insert');
+  });
+
+  test('if the stamp cannot be written, the Delete child acknowledgement is not kept either', async () => {
+    await seedRemovedChildRefusals();
+    await db.execAsync(`create trigger forbid_removed_stamp before update on sync_outbox
+      when new.error_code = 'REMOVED_WITH_CHILD' begin select raise(abort, 'stamp refused'); end;`);
+    const { supabaseClient } = createSupabaseMock({ rpcResults: { delete_child_if_no_history: { data: true, error: null } } });
+    await engine(supabaseClient).syncAll();
+    expect(await outbox.getById('children:child-gone:hard_delete')).toMatchObject({ status: 'failed' });
+    expect(await outbox.getById('child_ea_assignments:cea-child-gone:insert')).toMatchObject({ error_code: '42501' });
+  });
+
+  // Without the outbox mark, the child's own record says nothing: Head Office may un-archive a
+  // child and leave archive_reason set, and the child's later refusals must stay resendable.
+  test('a child Head Office un-archived keeps its later refused relationship INSERTs resendable', async () => {
+    await db.runAsync(`insert into children (id, first_name, last_name, created_by, archived_at, archive_reason, sync_status)
+      values ('child-back', 'Amahle', 'Dlamini', ?, null, 'removed_by_ea', 'synced')`, USER);
+    await outbox.enqueue({ tableName: 'child_ea_assignments', recordId: 'cea-back', operation: 'insert',
+      payload: { id: 'cea-back', user_id: USER, child_id: 'child-back', created_by: USER } });
+    await outbox.markTerminalFailure('child_ea_assignments:cea-back:insert', { errorMessage: 'denied', errorCode: '42501' });
+    expect((await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true })).map(row => row.id))
+      .toEqual(['child_ea_assignments:cea-back:insert']);
+    expect(refusalExit(await outbox.getById('child_ea_assignments:cea-back:insert'), new Set())).toBe('ea_removes');
+  });
+
+  // Combined-OTA review item 4b: like the auth-restore heal, Retry leaves the removed child's
+  // domain row alone when it re-queues the deletion.
+  test('Retry on a refused Delete child re-queues it without marking the removed child pending', async () => {
+    await db.runAsync(`insert into children (id, first_name, last_name, created_by, archived_at, archive_reason, sync_status)
+      values ('child-gone', 'Amahle', 'Dlamini', ?, '2026-11-04T08:00:00.000Z', 'removed_by_ea', 'synced')`, USER);
+    await outbox.enqueue({ tableName: 'children', recordId: 'child-gone', operation: 'hard_delete', payload: { id: 'child-gone' } });
+    await outbox.markTerminalFailure('children:child-gone:hard_delete', { errorMessage: 'Child not in your delivery scope', errorCode: '42501' });
+    const { supabaseClient } = createSupabaseMock();
+    await engine(supabaseClient).retryFailedItem('children', 'child-gone');
+    expect(await outbox.getById('children:child-gone:hard_delete')).toMatchObject({ status: 'pending' });
+    expect(await db.getFirstAsync("select sync_status, archived_at from children where id = 'child-gone'"))
+      .toEqual({ sync_status: 'synced', archived_at: '2026-11-04T08:00:00.000Z' });
+  });
+
+  test('a refused archive, restore or edit is never claimed, even when asked directly', async () => {
+    await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-a', 'Amahle', 'Dlamini', ?, 'terminal')`, USER);
+    await outbox.enqueue({ tableName: 'children', recordId: 'child-a', operation: 'archive',
+      payload: { id: 'child-a', archived_at: '2026-05-25T12:00:00.000Z' } });
+    await outbox.markTerminalFailure('children:child-a:archive', { errorMessage: 'not applied', errorCode: 'ARCHIVE_NOT_APPLIED' });
+    expect(await outbox.markInFlightAndGet(['children:child-a:archive'])).toEqual([]);
+    expect(await statuses()).toEqual(['terminal']);
+    expect(await db.getFirstAsync("select sync_status, row_version from children where id = 'child-a'"))
+      .toEqual({ sync_status: 'terminal', row_version: 1 });
+  });
+});

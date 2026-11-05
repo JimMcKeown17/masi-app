@@ -44,6 +44,6 @@ test('a read-only connection summarizes the whole file and breaks oldest timesta
     total: 2, byTable: { children: 1, sessions: 1 }, oldestId: 'o1', oldestCreatedAt: at,
   });
   expect(await createSyncOutboxRepository({ database: db }).countUnsent()).toEqual({
-    total: 2, byTable: { children: 1, sessions: 1 },
+    total: 2, byTable: { children: 1, sessions: 1 }, needsAttention: 1,
   });
 });

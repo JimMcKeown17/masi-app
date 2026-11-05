@@ -33,7 +33,7 @@ module.exports.servicesForTest = (handle) => {
   const mocks = require('./handleServiceMocks');
   const source = require('../src/services/offlineSync');
   const services = serviceCache.get(handle) || { ...handle.services, syncEngine: { ...handle.services.syncEngine }, sessionHistory: { ...handle.services.sessionHistory, store: { ...handle.services.sessionHistory.store } }, assessmentHistory: { ...handle.services.assessmentHistory, store: { ...handle.services.assessmentHistory.store } } };
-  for (const name of ['syncAll','syncTableByName','getSyncStatus','requeueTerminalRlsFailures','retryFailedItem']) {
+  for (const name of ['syncAll','syncTableByName','getSyncStatus','requeueTerminalRlsFailures','retryFailedItem','removeDeliveredItem']) {
     if (mocks[name]) services.syncEngine[name] = mocks[name];
   }
   if (mocks.pullLookups) services.pullLookups = mocks.pullLookups;

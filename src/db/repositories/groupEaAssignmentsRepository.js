@@ -101,6 +101,11 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
         'select * from group_ea_assignments where id = ?',
         record.id
       );
+      // D5 (plan O2 item 4): an EA never reopens an ended assignment; only Head Office does, and a
+      // reopened server row still converges through the synced pull path above.
+      if (shouldEnqueueOutbox(record) && record.unassigned_at == null && existing?.unassigned_at != null) {
+        throw new Error('An ended group assignment can only be reopened by Head Office');
+      }
       const supersede = await supersedeStaleActivePairRow(txn, {
         tableName: 'group_ea_assignments',
         pairColumns: ['group_id'],
@@ -127,35 +132,6 @@ export const createGroupEaAssignmentsRepository = ({ database } = {}) => {
               handover_reason: record.handover_reason ?? null,
             }
           );
-        } else if (existing?.unassigned_at != null) {
-          await enqueueLifecycleOutbox(
-            txn,
-            'group_ea_assignments',
-            record.id,
-            'restore',
-            {
-              id: record.id,
-              unassigned_at: null,
-              handover_reason: null,
-            }
-          );
-          const insertStillOwed = await txn.getFirstAsync(`
-            select 1 as owed from sync_outbox
-            where table_name = 'group_ea_assignments'
-              and record_id = ?
-              and operation = 'insert'
-              and status in ('pending', 'failed', 'in_flight')
-            limit 1
-          `, record.id);
-          if (insertStillOwed) {
-            await enqueueDomainOutbox(
-              txn,
-              'group_ea_assignments',
-              record.id,
-              'insert',
-              record
-            );
-          }
         } else {
           await enqueueDomainOutbox(
             txn,

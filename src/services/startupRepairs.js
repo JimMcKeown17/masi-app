@@ -1,17 +1,16 @@
 import { createLocalStateRepository } from '../db/repositories/localStateRepository';
-import { repairGroupOwnershipForSync } from '../db/repositories/groupsRepository';
 
 export const STARTUP_REPAIR_MARKER_KEY = 'startup_repair_version';
 
-const defaultRepairs = [
-  {
-    version: 1,
-    name: 'group_ownership_cutover',
-    run: ({ database }) => repairGroupOwnershipForSync({ database }),
-  },
-];
+// Version 1 (group_ownership_cutover) is retired (plan O2 item 4): it could reopen an ended group
+// assignment through the deleted restore producer, and every installed phone has already run it
+// (its marker is 1). A new recipe must use version 2 or later so it still runs on those phones.
+const RETIRED_REPAIR_VERSION = 1;
+const defaultRepairs = [];
 
-export const STARTUP_REPAIR_VERSION = defaultRepairs[defaultRepairs.length - 1].version;
+export const STARTUP_REPAIR_VERSION = defaultRepairs.length
+  ? defaultRepairs[defaultRepairs.length - 1].version
+  : RETIRED_REPAIR_VERSION;
 
 const validateRepairs = (repairs) => {
   let previousVersion = 0;

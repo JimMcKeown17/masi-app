@@ -435,54 +435,141 @@ describe('childrenRepository', () => {
     }
   });
 
-  test('archive ends active EA, programme, class, and group relationships in the same transaction', async () => {
-    const db = await createMigratedDatabase(runMigrations);
+  // Delete child (plan O2 item 2; MA-BUG-20261104-012, -014). The phone states intent with the
+  // existing children hard_delete; the server ends only this EA's grants and archives the child
+  // only when nobody else holds it. Shared rows (programme enrollments, class memberships) and
+  // other EAs' rows never end on the phone, and no per-relationship archive row is queued.
+  describe('removeChild (Delete child)', () => {
+    const REMOVED_AT = '2026-05-23T00:00:00.000Z';
+    const outboxRows = db => db.getAllAsync(
+      'select id, table_name, record_id, operation, status, payload from sync_outbox order by id'
+    );
+    const seedAssessment = db => db.runAsync(`
+      insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
+      values ('assessment-1', 'user-1', 'child-1', 'programme-a', 'letter_egra', '2026-05-21')
+    `);
 
-    try {
-      await seedCoreData(db);
-      const repository = createChildrenRepository({ database: db });
-      await repository.save(makeChild(), { actorUserId: 'user-1' });
-      await createGroupsRepository({ database: db }).saveGroup({
-        id: 'group-1',
-        name: 'Group 1',
-        programme_id: 'programme-a',
-        class_id: 'class-1',
-        created_by: 'user-1',
-        synced: false,
-      });
-      await createGroupsRepository({ database: db }).addChildToGroup({
-        id: 'membership-1',
-        child_id: 'child-1',
-        group_id: 'group-1',
-        synced: false,
-      });
+    test('with local history, archives the child locally and queues only the hard_delete; owed INSERTs stay as they are', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createChildrenRepository({ database: db });
+        const groups = createGroupsRepository({ database: db });
+        await repository.save(makeChild(), { actorUserId: 'user-1' });
+        await groups.saveGroup({ id: 'group-1', name: 'Group 1', programme_id: 'programme-a', class_id: 'class-1', created_by: 'user-1', synced: false });
+        await groups.addChildToGroup({ id: 'membership-1', child_id: 'child-1', group_id: 'group-1', synced: false });
+        await seedAssessment(db);
+        const before = await outboxRows(db);
 
-      await repository.archiveChild('child-1', { actorUserId: 'user-1', archivedAt: '2026-05-23T00:00:00.000Z' });
+        expect(await repository.removeChild('child-1', { actorUserId: 'user-1', removedAt: REMOVED_AT })).toBe(true);
 
-      expect(await db.getFirstAsync('select archived_at from children where id = ?', 'child-1'))
-        .toEqual({ archived_at: '2026-05-23T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select unassigned_at from child_ea_assignments where child_id = ?', 'child-1'))
-        .toEqual({ unassigned_at: '2026-05-23T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select ended_at from child_programme_enrollments where child_id = ?', 'child-1'))
-        .toEqual({ ended_at: '2026-05-23T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select exited_at from child_class_memberships where child_id = ?', 'child-1'))
-        .toEqual({ exited_at: '2026-05-23T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select removed_at from child_group_memberships where child_id = ?', 'child-1'))
-        .toEqual({ removed_at: '2026-05-23T00:00:00.000Z' });
-      expect(await db.getFirstAsync(`
-        select table_name, record_id, operation
-        from sync_outbox
-        where table_name = 'child_group_memberships'
-          and record_id = 'membership-1'
-          and operation = 'archive'
-      `)).toEqual({
-        table_name: 'child_group_memberships',
-        record_id: 'membership-1',
-        operation: 'archive',
-      });
-    } finally {
-      await db.closeAsync();
-    }
+        expect(await db.getFirstAsync('select archived_at, archived_by_user_id, archive_reason from children where id = ?', 'child-1'))
+          .toEqual({ archived_at: REMOVED_AT, archived_by_user_id: 'user-1', archive_reason: 'removed_by_ea' });
+        // The relationship INSERTs upload open: they carry the authority the rest of the family and
+        // the queued history need, and the server's actor-scoped removal ends them afterwards.
+        expect(await outboxRows(db)).toEqual([
+          ...before,
+          {
+            id: 'children:child-1:hard_delete', table_name: 'children', record_id: 'child-1',
+            operation: 'hard_delete', status: 'pending', payload: JSON.stringify({ id: 'child-1' }),
+          },
+        ].sort((left, right) => left.id.localeCompare(right.id)));
+        for (const [table, column] of [
+          ['child_ea_assignments', 'unassigned_at'], ['child_programme_enrollments', 'ended_at'],
+          ['child_class_memberships', 'exited_at'], ['child_group_memberships', 'removed_at'],
+        ]) {
+          expect(await db.getFirstAsync(`select ${column} as ended from ${table} where child_id = 'child-1'`))
+            .toEqual({ ended: null });
+        }
+        expect(await repository.getMyChildren('user-1')).toEqual([]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test('with local history, ends only this EA\'s own acknowledged assignment and its held-group memberships, on the phone only', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createChildrenRepository({ database: db });
+        await db.runAsync(`insert into children (id, first_name, last_name, class_id, created_by, sync_status)
+          values ('child-1', 'Thandi', 'Mokoena', 'class-1', 'head-office', 'synced')`);
+        await db.runAsync(`insert into child_ea_assignments (id, user_id, child_id, assigned_at, created_by, sync_status) values
+          ('own-assignment', 'user-1', 'child-1', '2026-01-15', 'head-office', 'synced'),
+          ('other-assignment', 'other-ea', 'child-1', '2026-01-15', 'head-office', 'synced')`);
+        await db.runAsync(`insert into child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by, sync_status)
+          values ('enrollment-1', 'child-1', 'programme-a', '2026-01-15', 'head-office', 'synced')`);
+        await db.runAsync(`insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by, sync_status)
+          values ('class-membership-1', 'child-1', 'class-1', 'year-2026', '2026-01-15', 'head-office', 'synced')`);
+        await db.runAsync(`insert into groups (id, name, programme_id, class_id, created_by, sync_status) values
+          ('own-group', 'Group 1', 'programme-a', 'class-1', 'user-1', 'synced'),
+          ('other-group', 'Group 2', 'programme-a', 'class-1', 'other-ea', 'synced')`);
+        await db.runAsync(`insert into group_ea_assignments (id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status) values
+          ('own-group-grant', 'own-group', 'user-1', 'programme-a', '2026-01-15', 'user-1', 'synced'),
+          ('other-group-grant', 'other-group', 'other-ea', 'programme-a', '2026-01-15', 'other-ea', 'synced')`);
+        await db.runAsync(`insert into child_group_memberships (id, child_id, group_id, joined_at, created_by, sync_status) values
+          ('own-group-membership', 'child-1', 'own-group', '2026-01-15', 'user-1', 'synced'),
+          ('other-group-membership', 'child-1', 'other-group', '2026-01-15', 'other-ea', 'synced')`);
+        await seedAssessment(db);
+
+        expect(await repository.removeChild('child-1', { actorUserId: 'user-1', removedAt: REMOVED_AT })).toBe(true);
+
+        const ends = await db.getAllAsync(`
+          select id, unassigned_at as ended, sync_status from child_ea_assignments
+          union all select id, ended_at, sync_status from child_programme_enrollments
+          union all select id, exited_at, sync_status from child_class_memberships
+          union all select id, removed_at, sync_status from child_group_memberships
+          order by id
+        `);
+        expect(ends).toEqual([
+          { id: 'class-membership-1', ended: null, sync_status: 'synced' },
+          { id: 'enrollment-1', ended: null, sync_status: 'synced' },
+          { id: 'other-assignment', ended: null, sync_status: 'synced' },
+          { id: 'other-group-membership', ended: null, sync_status: 'synced' },
+          { id: 'own-assignment', ended: REMOVED_AT, sync_status: 'synced' },
+          { id: 'own-group-membership', ended: REMOVED_AT, sync_status: 'synced' },
+        ]);
+        expect(await db.getAllAsync('select table_name, record_id, operation, status from sync_outbox')).toEqual([
+          { table_name: 'children', record_id: 'child-1', operation: 'hard_delete', status: 'pending' },
+        ]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test('without local history, deletes the child locally and still asks the server to remove it', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createChildrenRepository({ database: db });
+        await repository.saveChildRecord(makeChild({ synced: true }));
+
+        expect(await repository.removeChild('child-1', { actorUserId: 'user-1' })).toBe(true);
+
+        expect(await db.getFirstAsync("select id from children where id = 'child-1'")).toBeNull();
+        expect(await db.getAllAsync('select table_name, record_id, operation, status from sync_outbox')).toEqual([
+          { table_name: 'children', record_id: 'child-1', operation: 'hard_delete', status: 'pending' },
+        ]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
+
+    test('a child that never reached the server and has no history is purged with no request', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        const repository = createChildrenRepository({ database: db });
+        await repository.save(makeChild(), { actorUserId: 'user-1' });
+
+        expect(await repository.removeChild('child-1', { actorUserId: 'user-1' })).toBe(true);
+
+        expect(await db.getAllAsync('select * from sync_outbox')).toEqual([]);
+        expect(await db.getAllAsync('select id from children')).toEqual([]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
   });
 
   test.each(['pending', 'failed', 'terminal'])('deleting a server child after a %s edit supersedes the edit with hard_delete', async (status) => {
