@@ -416,6 +416,16 @@ test('an acknowledged child whose relationship INSERT is permanently refused: th
   await sync({ force: true });
   expect(server.summary().filter(line => line.startsWith(`POST child_group_memberships:${MEMBERSHIP}`))).toHaveLength(1);
   expect(server.all('child_group_memberships').filter(row => row.child_id === C)).toEqual([]);
+
+  // Reviewer repro zzReviewX1, through the real receipt path: the refused INSERT clears by itself
+  // once its receipt is delivered (the EA is not asked).
+  expect((await statusItems()).find(item => item.table === 'child_group_memberships'))
+    .toMatchObject({ clearsItself: true, canRemove: false, canRetry: false });
+  await sync();
+  await statusItems();
+  await sync();
+  expect(await outbox()).toEqual([]);
+  expect(server.all('mobile_support_incidents').length).toBeGreaterThan(0);
 });
 
 // Reviewer repro zzReviewX4: the receipt can never prove delivery (rejected as too large).
