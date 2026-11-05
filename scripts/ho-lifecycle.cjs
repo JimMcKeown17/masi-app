@@ -577,12 +577,15 @@ const RESTORE_LOCKS = `
   END IF;
 `;
 
-// A reopened row must not break an active-row unique index: one open delivery row per (EA,
-// child) (always true here: there is none), one open enrolment per (child, programme), one open
-// class membership per (child, academic year), one open group membership per (child, grouping
-// version). v_planned catches two rows of the plan with the same key.
-const restoreConflict = (table, keyExpr, otherSql, indexName) => `
-      v_key := '${table}:' || (${keyExpr});
+// A reopened row must not make two open rows where only one may be: the active-row unique
+// indexes (one open delivery row per (EA, child), always true here because there is none; one open
+// enrolment per (child, programme); one open class membership per (child, academic year); one open
+// group membership per (child, grouping version)), and one open membership per (child, group),
+// which no index enforces (groups made in the app have no grouping version) but the daily check
+// reports as duplicate_active_group_membership. v_planned catches two rows of the plan with the
+// same key.
+const restoreConflict = (table, keyName, keyExpr, otherSql, rule) => `
+      v_key := '${table}:${keyName}:' || (${keyExpr});
       v_conflict := NULL;
       IF (${keyExpr}) IS NOT NULL THEN
         SELECT o.id INTO v_conflict FROM public.${table} o WHERE ${otherSql} ORDER BY o.id LIMIT 1;
@@ -590,7 +593,7 @@ const restoreConflict = (table, keyExpr, otherSql, indexName) => `
       END IF;
       IF v_conflict IS NOT NULL THEN
         v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'active_row_conflict', 'child_id', v_child,
-          'table', '${table}', 'id', v_row -> 'id', 'conflicting_id', v_conflict, 'unique_index', '${indexName}'));
+          'table', '${table}', 'id', v_row -> 'id', 'conflicting_id', v_conflict, 'rule', '${rule}'));
         CONTINUE;
       END IF;
       IF v_key IS NOT NULL THEN
@@ -675,9 +678,9 @@ const RESTORE_BODY = `
         'started_at', e.enrolled_at, 'ended_at', e.ended_at, 'row_version', e.row_version)
       FROM public.child_programme_enrollments e JOIN public.programmes p ON p.id = e.programme_id
       WHERE e.child_id = v_child AND e.ended_at = v_t ORDER BY e.id
-    LOOP${restoreConflict('child_programme_enrollments', "v_row ->> 'programme_id'",
+    LOOP${restoreConflict('child_programme_enrollments', 'programme', "v_row ->> 'programme_id'",
     "o.child_id = v_child AND o.programme_id = (v_row ->> 'programme_id')::uuid AND o.ended_at IS NULL",
-    'idx_child_programme_enrollments_active_unique')}
+    'unique index idx_child_programme_enrollments_active_unique')}
       v_actions := v_actions || jsonb_build_array(v_row);
     END LOOP;
     FOR v_row IN
@@ -693,9 +696,9 @@ const RESTORE_BODY = `
           'table', 'child_class_memberships', 'id', v_row -> 'id', 'class_id', v_row -> 'class_id',
           'class_name', v_row -> 'class_name'));
         CONTINUE;
-      END IF;${restoreConflict('child_class_memberships', "v_row ->> 'academic_year_id'",
+      END IF;${restoreConflict('child_class_memberships', 'year', "v_row ->> 'academic_year_id'",
     "o.child_id = v_child AND o.academic_year_id = (v_row ->> 'academic_year_id')::uuid AND o.exited_at IS NULL",
-    'idx_child_class_memberships_active_unique')}
+    'unique index idx_child_class_memberships_active_unique')}
       v_actions := v_actions || jsonb_build_array(v_row - 'archived');
     END LOOP;
     FOR v_row IN
@@ -711,9 +714,11 @@ const RESTORE_BODY = `
           'table', 'child_group_memberships', 'id', v_row -> 'id', 'group_id', v_row -> 'group_id',
           'group_name', v_row -> 'group_name'));
         CONTINUE;
-      END IF;${restoreConflict('child_group_memberships', "v_row ->> 'grouping_version_id'",
+      END IF;${restoreConflict('child_group_memberships', 'version', "v_row ->> 'grouping_version_id'",
     "o.child_id = v_child AND o.grouping_version_id = (v_row ->> 'grouping_version_id')::uuid AND o.removed_at IS NULL",
-    'idx_child_group_memberships_active_by_version')}
+    'unique index idx_child_group_memberships_active_by_version')}${restoreConflict('child_group_memberships', 'group',
+    "v_row ->> 'group_id'", "o.child_id = v_child AND o.group_id = (v_row ->> 'group_id')::uuid AND o.removed_at IS NULL",
+    'one open membership per child and group (daily check duplicate_active_group_membership)')}
       v_actions := v_actions || jsonb_build_array(v_row - 'archived');
     END LOOP;
 

@@ -505,10 +505,16 @@ const R_YEAR_2028 = rid('3d', 1);
 const RK = rid('4d', 1); const RKB = rid('4d', 2); const RK5 = rid('4d', 5);
 const R1 = rid('5d', 1); const R2 = rid('5d', 2); const R3 = rid('5d', 3); const R4 = rid('5d', 4);
 const R5 = rid('5d', 5); const R7 = rid('5d', 7); const R_MISSING = rid('5d', 99);
+// Review cases (2026-11-05): creator removals after a Head Office change, wrong phone clocks, and a
+// second open membership of one group.
+const R8 = rid('5d', 8); const R9 = rid('5d', 9); const R10 = rid('5d', 10); const R11 = rid('5d', 11);
+const R12 = rid('5d', 12); const R13 = rid('5d', 13);
 const V7 = rid('6d', 7);
 const G1 = rid('7d', 1); const G2 = rid('7d', 2); const GB = rid('7d', 3); const GY = rid('7d', 4);
 const G5E = rid('7d', 5); const G5A = rid('7d', 6); const G5N = rid('7d', 7); const G7A = rid('7d', 8);
 const G7B = rid('7d', 9); const G3F = rid('7d', 10);
+const G8 = rid('7d', 11); const G9 = rid('7d', 12); const G10 = rid('7d', 13); const G11 = rid('7d', 14);
+const G12 = rid('7d', 15); const G13 = rid('7d', 16);
 const enrolment = n => rid('ad', n);
 const classMembership = (n, k = 0) => rid('bd', n * 10 + k);
 const groupMembership = (n, k) => rid('cd', n * 10 + k);
@@ -549,17 +555,30 @@ INSERT INTO public.groups (id, name, programme_id, class_id, grouping_version_id
   ('${G5N}', 'Restore group 5N (unheld)', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
   ('${G7A}', 'Restore group 7A', ${programme('literacy')}, '${RK}', '${V7}', '${RHO}'),
   ('${G7B}', 'Restore group 7B', ${programme('literacy')}, '${RK}', '${V7}', '${RHO}'),
-  ('${G3F}', 'Restore group 3F (fast clock)', ${programme('literacy')}, '${RK}', NULL, '${RHO}');
+  ('${G3F}', 'Restore group 3F (fast clock)', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G8}', 'Restore group 8', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G9}', 'Restore group 9', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G10}', 'Restore group 10', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G11}', 'Restore group 11', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G12}', 'Restore group 12', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G13}', 'Restore group 13 (no grouping version)', ${programme('literacy')}, '${RK}', NULL, '${RHO}');
 INSERT INTO public.group_ea_assignments (group_id, ea_user_id, programme_id, assigned_at, created_by)
 SELECT g, '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
-FROM unnest(ARRAY['${G1}', '${GB}', '${G3F}', '${G5E}', '${G5A}', '${G7A}']::uuid[]) g;
+FROM unnest(ARRAY['${G1}', '${GB}', '${G3F}', '${G5E}', '${G5A}', '${G7A}', '${G8}', '${G9}', '${G10}', '${G11}',
+  '${G12}', '${G13}']::uuid[]) g;
 INSERT INTO public.group_ea_assignments (group_id, ea_user_id, programme_id, assigned_at, created_by)
 SELECT g, '${RY}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
 FROM unnest(ARRAY['${GY}', '${G7B}']::uuid[]) g;
 INSERT INTO public.children (id, first_name, last_name, class_id, created_by) VALUES
   ('${R1}', 'Restore', 'One', '${RK}', '${RHO}'), ('${R2}', 'Restore', 'Two', '${RK}', '${RHO}'),
   ('${R3}', 'Restore', 'Three', '${RK}', '${RHO}'), ('${R4}', 'Restore', 'Four', '${RK}', '${RHO}'),
-  ('${R5}', 'Restore', 'Five', '${RK}', '${RHO}'), ('${R7}', 'Restore', 'Seven', '${RK}', '${RHO}');
+  ('${R5}', 'Restore', 'Five', '${RK}', '${RHO}'), ('${R7}', 'Restore', 'Seven', '${RK}', '${RHO}'),
+  ('${R10}', 'Restore', 'Ten', '${RK}', '${RHO}'), ('${R11}', 'Restore', 'Eleven', '${RK}', '${RHO}'),
+  ('${R12}', 'Restore', 'Twelve', '${RK}', '${RHO}'), ('${R13}', 'Restore', 'Thirteen', '${RK}', '${RHO}');
+-- X added R8 and R9 in the app, so X may Delete child them (the app allows the creator) even
+-- after Head Office has moved or ended X's delivery.
+INSERT INTO public.children (id, first_name, last_name, class_id, created_by) VALUES
+  ('${R8}', 'Restore', 'Eight', '${RK}', '${RX}'), ('${R9}', 'Restore', 'Nine', '${RK}', '${RX}');
 -- Seeded row_versions above 1 make "restore never writes row_version" observable.
 INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by, row_version)
 SELECT d.id, d.ea, d.child, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}', 3
@@ -567,15 +586,18 @@ FROM (VALUES ('${restoreDet(RX, R1)}'::uuid, '${RX}'::uuid, '${R1}'::uuid), ('${
   ('${restoreDet(RY, R2)}', '${RY}', '${R2}'), ('${restoreDet(RX, R3)}', '${RX}', '${R3}'),
   ('${restoreDet(RX, R4)}', '${RX}', '${R4}'), ('${restoreDet(RY, R4)}', '${RY}', '${R4}'),
   ('${restoreDet(RX, R5)}', '${RX}', '${R5}'), ('${restoreDet(RX, R7)}', '${RX}', '${R7}'),
-  ('${restoreDet(RY, R7)}', '${RY}', '${R7}')) d(id, ea, child);
+  ('${restoreDet(RY, R7)}', '${RY}', '${R7}'), ('${restoreDet(RX, R8)}', '${RX}', '${R8}'), ('${restoreDet(RX, R9)}', '${RX}', '${R9}'),
+  ('${restoreDet(RX, R10)}', '${RX}', '${R10}'), ('${restoreDet(RX, R11)}', '${RX}', '${R11}'),
+  ('${restoreDet(RX, R12)}', '${RX}', '${R12}'), ('${restoreDet(RY, R12)}', '${RY}', '${R12}'),
+  ('${restoreDet(RX, R13)}', '${RX}', '${R13}'), ('${restoreDet(RY, R13)}', '${RY}', '${R13}')) d(id, ea, child);
 INSERT INTO public.child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by, row_version)
 SELECT ('ad000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid, ('5d000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
   ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}', 2
-FROM unnest(ARRAY[1, 2, 3, 4, 5, 7]) n;
+FROM unnest(ARRAY[1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13]) n;
 INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by)
 SELECT ('bd000000-0000-0000-0000-' || lpad((n * 10)::text, 12, '0'))::uuid, ('5d000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
   '${RK}', ${activeYear}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
-FROM unnest(ARRAY[1, 2, 3, 5, 7]) n;
+FROM unnest(ARRAY[1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13]) n;
 -- R4's class is taught by Y, so after X leaves, Y is R4's last holder and Y's Delete child archives it.
 INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by) VALUES
   ('${classMembership(4)}', '${R4}', '${RKB}', ${activeYear}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
@@ -593,7 +615,13 @@ INSERT INTO public.child_group_memberships (id, child_id, group_id, grouping_ver
   ('${groupMembership(5, 2)}', '${R5}', '${G5E}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
   ('${groupMembership(5, 3)}', '${R5}', '${G5A}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
   ('${groupMembership(5, 4)}', '${R5}', '${G5N}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
-  ('${groupMembership(7, 1)}', '${R7}', '${G7A}', '${V7}', TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
+  ('${groupMembership(7, 1)}', '${R7}', '${G7A}', '${V7}', TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(8, 1)}', '${R8}', '${G8}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RX}'),
+  ('${groupMembership(9, 1)}', '${R9}', '${G9}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RX}'),
+  ('${groupMembership(10, 1)}', '${R10}', '${G10}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(11, 1)}', '${R11}', '${G11}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(12, 1)}', '${R12}', '${G12}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(13, 1)}', '${R13}', '${G13}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
 `;
 
 // Extra migrations (the server lifecycle batch, before it is merged) come from a directory
@@ -912,6 +940,29 @@ COMMIT;`, label);
     assert.ok(conflict.calls.every(input => !/\bCOMMIT\b/.test(input)));
     assert.equal(digest(), beforeConflict);
     pass('restore-refuses-a-unique-index-conflict-and-changes-nothing');
+
+    // ---- Case 9: the child is back in the same group through a new row, in a group with no
+    // grouping version (every group made in the app) -> refused, because reopening the old row
+    // would leave the child in that group twice (daily check duplicate_active_group_membership).
+    const hoApply = (argv, label) => ok(cli([...argv, '--reason', REASON, '--operator', OPERATOR, '--apply']), label);
+    serverDeleteChild(RX, R13); // leave: Y still holds; X's delivery row and group 13 membership end
+    hoApply(['handover', 'group', '--from', R_EMAIL.X, '--to', R_EMAIL.Y, '--group', G13], 'r13-handover-group');
+    assert.equal(asEa(RY, `WITH r AS (INSERT INTO public.child_group_memberships (id, child_id, group_id, joined_at, created_by)
+      VALUES ('${groupMembership(13, 2)}', '${R13}', '${G13}', now(), '${RY}') RETURNING 1) SELECT count(*) FROM r;`,
+    'r13-y-readds'), '1', 'Y put the child back into group 13');
+    const r13Hits = () => invariantRows(databaseUrl, '', 'invariants-r13').filter(hit => hit.entity_id === R13);
+    assert.deepEqual(r13Hits(), []);
+    const beforeDuplicate = digest();
+    for (const argv of [restore(R_EMAIL.X, R13), [...restore(R_EMAIL.X, R13), '--apply']]) {
+      const duplicate = cli(argv);
+      assert.match(duplicate.error?.message ?? '', /refused: active_row_conflict/);
+      assert.deepEqual(duplicate.plan.refusals.map(entry => [entry.code, entry.table, entry.id, entry.conflicting_id]),
+        [['active_row_conflict', 'child_group_memberships', groupMembership(13, 1), groupMembership(13, 2)]]);
+      assert.ok(duplicate.calls.every(input => !/\bCOMMIT\b/.test(input)));
+    }
+    assert.equal(digest(), beforeDuplicate);
+    assert.deepEqual(r13Hits(), [], 'restore left the child in group 13 once');
+    pass('restore-refuses-a-second-open-membership-of-the-same-group');
 
     // ---- Other refusals change nothing and never reach a COMMIT.
     const beforeOther = digest();
