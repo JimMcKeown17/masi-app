@@ -136,6 +136,17 @@ identity-preserving successor reopen.
    **Adopted:** D10 now requires O1 and O2 on every pilot phone before real lessons. The interim sheet
    lifts the per-phone rules on that phone's `updateId`.
 
+## Correction adopted from the Codex adversarial review, round 3 (gpt-6-astra, 2026-11-05)
+
+Verdict: needs-attention (1 high). It found no remaining problem in the O1 delivery proof, in D10 or in
+the interim sheet.
+
+**[high] The waiting `hard_delete` was registered as a blocked FK parent**, so the relationship INSERTs
+it waits for, and the child's history, were skipped forever while staying `pending`. The reviewer
+reproduced this on real SQLite: 9 pending rows across 3 passes. Excluding the waiting deletion from
+blockers drained the chain in 2 passes.
+**Adopted:** O2 item 2, "A waiting deletion is not a blocked parent", plus a repeated-pass regression.
+
 ## Live staging preflight (P0, done 2026-11-05 ~01:10Z, read-only)
 
 `masi-app-sqlite` (`segygjzpujphwvrubusm`): migrations identical to `supabase/migrations/` through
@@ -536,6 +547,17 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
      land open, with the authority the rest of the family and the queued history need. The RPC then
      ends them server-side (actor-scoped). This answers review round 1 finding 5 (no open grant
      after an acknowledged removal) without stranding anything. History is never gated.
+   - **A waiting deletion is not a blocked parent** (review round 3). A children `hard_delete`
+     deferred by the retained-insert or relationship-family gate must **not** be registered through
+     `rememberBlockedRecord` (`offlineSync.js` ~1506-1511, ~1719-1723). It is a waiting destructive
+     operation, not a missing or failed FK parent. Otherwise every relationship INSERT and history row
+     for the child skips it as a blocked parent (~1593-1605), on every pass, while staying `pending`,
+     which is a permanent hold that O1 cannot release. Blockers for a genuinely unacknowledged child
+     INSERT stay as they are.
+   - Regression: repeated ordinary and forced passes, including a failed first upload. The
+     relationship INSERTs and history make progress while the deletion waits. The deletion completes
+     once those INSERTs are acknowledged, or once a terminal relationship INSERT leaves through O1's
+     exit.
    - Test: an all-offline chain (create child → record a lesson, a tick, a class-scoped Battery Run
      and an assessment → Delete child → sync, including a failed first pass). Assert that all
      history and relationship evidence are delivered with no terminal rows, that the `hard_delete`
