@@ -47,11 +47,34 @@ The current edition is `2026-10-23`:
 
 | Code | Letter order | Current release | Current preview |
 |---|---|---|---|
-| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-interim-letters-v2` | `isixhosa-candidates-preview-v2` |
-| `en` | `english-order-2026-10-23` | `english-interim-letters-v2` | `english-candidates-preview-v1` |
-| `af` | `afrikaans-order-2026-10-23` | `afrikaans-interim-letters-v2` | `afrikaans-candidates-preview-v1` |
+| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-draft-content-v3` | none (falls back to release) |
+| `en` | `english-order-2026-10-23` | `english-draft-content-v2` | none (falls back to release) |
+| `af` | `afrikaans-order-2026-10-23` | `afrikaans-draft-content-v2` | none (falls back to release) |
 
-Each v2 release uses the v1 JSON format and key order with `letter_order` added after `channel`.
+### Draft content packs (2026-11-05)
+
+**Jim's decision, 2026-11-05:** Masi's team is testing the app now and needs every candidate word
+and blend, plus the books, on pilot builds. The language team reviews the lists over the next two
+months, ahead of January 2027. So the current release for each `2026-10-23` order is a **draft
+content pack**: a release-channel pack whose words and books are not yet native-speaker approved
+(its `generated_from.note` says so). Every build teaches from it, with or without preview content,
+because the `2026-10-23` orders have no preview mapping. The preview gate (C12) is unchanged and
+remains the lane for future experimental content.
+
+The files are copied unchanged from the books repository's `exports/app-release/` at commit
+`fbe909f` (`npm run app-pack -- --version <n> --language <name>`). **Each keeps only the 25
+best words per step** (Jim, 2026-11-05: isiXhosa 352, English 682, Afrikaans 534, from about
+9,000 candidates): the best-ranked words that no AI reviewer flagged as junk or another language,
+plus every word the books use. The app suggests six words by rotation and lists every decodable
+word under "+ more", so a short list of common words is what EAs should see, and it is short
+enough for the language team to review before January 2027. Outcome-test words stay in (Jim).
+`generated_from.curation` records the rule and counts. Blends and steps equal the preview exports
+below. isiXhosa v3 has six readers, two per step for steps 1 to 3: **Molo, Lolo!** and **Laa…**
+(step 1), **Ukulala** and **Kulula, Malo?** (step 2), **Ekunene, Malo!** and **Mna!** (step 3).
+Earlier draft versions (isiXhosa v1 and v2, English and Afrikaans v1) were never bundled. English and Afrikaans have no books yet. Later versions (more books, then the signed-off lists)
+are new files with new ids; never edit these.
+
+The retained letters-only v2 releases (current until 2026-11-05) use the v1 JSON format and key order with `letter_order` added after `channel`.
 It has the alphabetical 26-letter sound inventory and 12 letter steps from the named order:
 four letters in step 1, then pairs. Every step has empty blends, words and readers, with no
 `size_exception`. Sound steps, word bank, readers and reader details are empty.
@@ -111,9 +134,9 @@ The three current previews are copied unchanged from the books repository's
 `__tests__/lessonPlanPacks.test.js`; `generated_from` describes the export's source inputs, while
 this commit and the SHA-256 pins identify the adopted export files. Do not edit them in Masi.
 
-These exports contain candidate word banks and sound steps for the `2026-10-23` orders. They
-have no readers, so developer builds show no book (**Molo, Lolo!** is gone) until books adds
-readers. The retained isiXhosa preview v1 still holds that reader for saved drafts and sessions.
+These exports contain candidate word banks and sound steps for the `2026-10-23` orders, with no
+readers. Since 2026-11-05 no order maps to them; they stay bundled for saved drafts and as the
+source the draft content packs were built from. The retained isiXhosa preview v1 still holds that reader for saved drafts and sessions.
 
 To adopt another export, add a new version, copy it unchanged, verify its hash, bundle it, and
 update the appropriate order mapping and provenance pin. Retain versions referenced by saved
@@ -141,7 +164,7 @@ The script records the books HEAD in `generated_from` and refuses uncommitted ch
 
 The CLI writes deterministic two-space JSON with a final newline only after the entire pack passes `lintMasiPack`. Source or validation failures leave an existing output unchanged.
 
-The preview JSON is statically bundled in every binary, but lookup resolves it only with `{ allowPreview: true }` (decision 8). Normal lookup still returns the interim release pack; callers must use the C12 developer-build gate described above to opt in. Bundling is not permission to display candidate content to field users.
+The preview JSON is statically bundled in every binary, but lookup resolves it only with `{ allowPreview: true }` (decision 8). Since 2026-11-05 no order maps to a preview pack, so order lookup returns the draft content release pack in every build; a preview pack is reached only by id with the C12 developer-build gate described above. Bundling is not permission to display candidate content to field users.
 
 The generator does not produce the current books exports. Keep the retained preview v1 bytes and id so saved drafts continue to resolve; the legacy order table lets that unchanged output pass the order lint.
 

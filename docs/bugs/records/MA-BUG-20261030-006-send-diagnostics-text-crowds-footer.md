@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 90
 confidence_basis: BottomSheet's body content has horizontal padding only, so a body whose last element has no bottom margin meets the footer divider directly. An audit of all 12 footer sheets found 0 dp gaps in 9 and per-sheet compensation in the rest; the A03s check on 2026-10-31 measured ≈18 dp above the divider (was ≈4 dp).
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T09:57:55Z
+updated_at_utc: 2026-11-05T15:33:41Z
 first_observed_at: 2026-10-30T16:45:00Z
 last_observed_at: 2026-10-30T16:45:00Z
 
@@ -147,6 +147,8 @@ Shared spacing.md body bottom padding when footer exists; caller bodyContentStyl
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #125; RED → GREEN evidence in build log; device checks pending |
 | 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | Send diagnostics: text descender to divider 32 px (≈18 dp; was ≈4 dp), divider to Send 15 px; Report a problem and Change password balanced; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
+| 2026-11-05T15:33:41Z | Claude | Released | In the 1.5.0 pilot builds iOS 28 / Android 58, built from `8b79eae5` on 2026-11-03 and submitted to TestFlight and Play internal testing; they contain #128 (`a9458ac`). Android 58 installed on the A03s from Play 2026-11-05 (versionCode 58) |
+| 2026-11-05T15:33:41Z | Claude | Checked on release builds | Jim checked Send diagnostics on iPhone build 28: spacing fine. A03s build 58 sheet shows clear space above the divider |
 
 ## Open questions
 

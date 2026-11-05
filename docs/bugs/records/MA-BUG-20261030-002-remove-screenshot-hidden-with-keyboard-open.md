@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: HYPOTHESIS
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 30
 confidence_basis: Plausible code path only; the sheet's scroll area is its only shrinkable region and the keyboard takes most of the screen.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T09:57:55Z
+updated_at_utc: 2026-11-05T15:33:41Z
 first_observed_at: 2026-10-30T16:47:00Z
 last_observed_at: 2026-10-30T16:47:00Z
 
@@ -154,6 +154,8 @@ Implemented one flex row with matched tertiary Replace/Remove buttons, icons and
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #124; RED → GREEN evidence in build log; device checks pending |
 | 2026-10-31T09:57:55Z | Claude | Device-verified on the A03s | With a screenshot attached and the keyboard open, Replace and Remove stay visible above the footer; Remove clears the attachment. The original mechanism was never reproduced, so diagnosis stays HYPOTHESIS; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
+| 2026-11-05T15:33:41Z | Claude | Released | In the 1.5.0 pilot builds iOS 28 / Android 58, built from `8b79eae5` on 2026-11-03 and submitted to TestFlight and Play internal testing; they contain #128 (`a9458ac`). Android 58 installed on the A03s from Play 2026-11-05 (versionCode 58) |
+| 2026-11-05T15:33:41Z | Claude | Checked on release builds | iPhone build 28: Jim sent a report with a screenshot attached (receipt `c06d09b7`, screenshot stored); no layout problem raised |
 
 ## Open questions
 

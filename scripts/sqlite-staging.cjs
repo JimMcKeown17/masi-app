@@ -220,9 +220,13 @@ const buildCommandPlan = (action, env, options = {}) => {
       if (!options.sql) {
         throw new Error('sqlite staging "query" requires a SQL string, e.g. `node scripts/sqlite-staging.cjs query "select 1"`');
       }
+      // The SQL never travels as a positional argument: the CLI parses one that starts with "-"
+      // (SQL opening with a comment) as a flag and prints its help instead of running it.
+      // runAction writes it to a file and appends --file <path>.
       return {
         command: 'supabase',
-        args: ['db', 'query', '--linked', options.sql],
+        args: ['db', 'query', '--linked'],
+        sqlFile: options.sql,
         env: commandEnv,
         safeSummary,
       };
@@ -292,6 +296,8 @@ const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
   }
 
   let cliCwd;
+  let sqlDir;
+  let args = plan.args;
   let result;
   try {
     if (isSupabase) {
@@ -300,7 +306,14 @@ const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
       cliCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-sqlite-staging-'));
       fs.symlinkSync(path.resolve(cwd, 'supabase'), path.join(cliCwd, 'supabase'), 'dir');
     }
-    result = spawnSync(plan.command, plan.args, {
+    if (plan.sqlFile !== undefined) {
+      // A separate owner-only temporary directory, so the CLI cwd keeps its single entry.
+      sqlDir = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-sqlite-staging-sql-'));
+      const sqlPath = path.join(sqlDir, 'query.sql');
+      fs.writeFileSync(sqlPath, plan.sqlFile, { mode: 0o600, flag: 'wx' });
+      args = [...plan.args, '--file', sqlPath];
+    }
+    result = spawnSync(plan.command, args, {
       cwd: cliCwd || cwd,
       env: childEnv,
       // Inspect CLI diagnostics before displaying them. Expo keeps its interactive streams.
@@ -309,7 +322,9 @@ const runAction = (action, { cwd = process.cwd(), sql } = {}) => {
     });
   } finally {
     // rmSync removes the symlink itself; it does not traverse its checkout target.
-    if (cliCwd) fs.rmSync(cliCwd, { recursive: true, force: true });
+    for (const directory of [cliCwd, sqlDir]) {
+      if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    }
   }
 
   const redact = (text) => [accessToken, env.SUPABASE_DB_PASSWORD_SQLITE, env.SUPABASE_PUBLISHABLE_KEY_SQLITE]

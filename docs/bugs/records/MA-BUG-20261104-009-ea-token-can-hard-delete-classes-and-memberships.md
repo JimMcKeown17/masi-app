@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: an EA token deleted its own class (cascading the class assignment and nulling the class on children, groups and sessions), deleted a Head Office class that had no memberships, and deleted membership and enrolment rows, all with one row returned; the live DELETE grants and policies were listed from the same database. The app has no producer for these deletes (searched, not exhaustively fuzzed)."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -51,7 +51,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/results.json
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/
   - docs/bugs/evidence/MA-BUG-20261104-001/SHA256SUMS.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "Destructive capability, not behaviour: any holder of an EA's access token can delete that EA's classes, class memberships, group memberships and enrolments directly through the data API. The app never does this. Never seen in the field."
 workaround_status: "None needed for the app, because it has no such write. The capability closes only by revoking the grants and dropping the policies."
@@ -168,6 +169,9 @@ cannot break a pilot phone; the children `hard_delete` RPC path is unchanged.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L6.EA_hard_delete_*, `docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | Server batch applied to staging `segygjzpujphwvrubusm` at 15:39 UTC from `feat/lifecycle-safety-server` 09fb332a (PR #161; before/after checks in its build log, b15fb722). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 

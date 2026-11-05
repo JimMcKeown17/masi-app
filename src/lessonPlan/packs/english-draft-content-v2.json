@@ -1,0 +1,4224 @@
+{
+ "id": "english-draft-content-v2",
+ "language": "english",
+ "channel": "release",
+ "letter_order": "english-order-2026-10-23",
+ "generated_from": {
+  "repo": "early-reader-books",
+  "commit": "76e58461ca035efddb1c9b1f6fb6f00bd663cf49",
+  "note": "DRAFT for team testing (Jim, 2026-11-05): candidate words and books, not yet signed off by native speakers",
+  "from_preview": {
+   "file": "english-candidates-preview-v1.json",
+   "sha256": "e430d4887104a04db6295bfd407891c3b0a4911c6ba99ab1d243684613364abd"
+  },
+  "curation": {
+   "words_per_step": 25,
+   "rule": "per step, the best-ranked words no reviewer flagged as junk or another language, plus every word the books use",
+   "kept": 682,
+   "dropped_flagged": 2,
+   "dropped_beyond_cap": 1959
+  }
+ },
+ "sound_inventory": [
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "ng",
+  "er",
+  "ee",
+  "oo",
+  "ar",
+  "th",
+  "sh",
+  "ai",
+  "or",
+  "ow",
+  "ch",
+  "igh",
+  "oa",
+  "ear",
+  "ur",
+  "oi",
+  "air"
+ ],
+ "letter_steps": [
+  {
+   "step": 1,
+   "new_letters": [
+    "s",
+    "a",
+    "n",
+    "d"
+   ],
+   "size_exception": "step 1 teaches four letters so children can read words from the first session",
+   "blends": [
+    "ad",
+    "an",
+    "as"
+   ],
+   "words": [
+    "sad",
+    "dad",
+    "sand",
+    "add",
+    "dads",
+    "adds",
+    "ads",
+    "sands"
+   ],
+   "readers": []
+  },
+  {
+   "step": 2,
+   "new_letters": [
+    "i",
+    "t"
+   ],
+   "blends": [
+    "at",
+    "in",
+    "it",
+    "id",
+    "is"
+   ],
+   "words": [
+    "sat",
+    "sit",
+    "stand",
+    "ant",
+    "ants",
+    "sits",
+    "tins",
+    "stands",
+    "din",
+    "dis-tant",
+    "tin",
+    "inn"
+   ],
+   "readers": []
+  },
+  {
+   "step": 3,
+   "new_letters": [
+    "p",
+    "e"
+   ],
+   "blends": [
+    "ap",
+    "ed",
+    "en",
+    "ep",
+    "es",
+    "et",
+    "ip"
+   ],
+   "words": [
+    "sent",
+    "set",
+    "nets",
+    "send",
+    "pet",
+    "ten",
+    "spent",
+    "test",
+    "net",
+    "ad-ded",
+    "ended",
+    "spend"
+   ],
+   "readers": []
+  },
+  {
+   "step": 4,
+   "new_letters": [
+    "l",
+    "o"
+   ],
+   "blends": [
+    "on",
+    "al",
+    "el",
+    "il",
+    "od",
+    "ol",
+    "op",
+    "os",
+    "ot"
+   ],
+   "words": [
+    "still",
+    "pot",
+    "stop",
+    "tell",
+    "land",
+    "lot",
+    "lost",
+    "top",
+    "plan",
+    "lots",
+    "sell",
+    "pots"
+   ],
+   "readers": []
+  },
+  {
+   "step": 5,
+   "new_letters": [
+    "c",
+    "k"
+   ],
+   "blends": [
+    "ca",
+    "ce",
+    "ci",
+    "co",
+    "ka",
+    "ke",
+    "ki",
+    "ko"
+   ],
+   "words": [
+    "cat",
+    "stick",
+    "sticks",
+    "skin",
+    "kept",
+    "sick",
+    "kill",
+    "can-not",
+    "neck",
+    "col-lect",
+    "cap",
+    "pick"
+   ],
+   "readers": []
+  },
+  {
+   "step": 6,
+   "new_letters": [
+    "m",
+    "u"
+   ],
+   "blends": [
+    "am",
+    "up",
+    "us",
+    "cu",
+    "em",
+    "im",
+    "ku",
+    "om",
+    "ud",
+    "ul",
+    "um",
+    "un"
+   ],
+   "words": [
+    "man",
+    "an-im-als",
+    "sun",
+    "must",
+    "un-til",
+    "men",
+    "met",
+    "mom",
+    "an-im-al",
+    "milk",
+    "pump-kin",
+    "cut"
+   ],
+   "readers": []
+  },
+  {
+   "step": 7,
+   "new_letters": [
+    "r",
+    "h"
+   ],
+   "blends": [
+    "ha",
+    "he",
+    "hi",
+    "ho",
+    "hu",
+    "ir"
+   ],
+   "words": [
+    "ran",
+    "run",
+    "hot",
+    "hut",
+    "red",
+    "across",
+    "rock",
+    "rats",
+    "held",
+    "drink",
+    "hill",
+    "rat"
+   ],
+   "readers": []
+  },
+  {
+   "step": 8,
+   "new_letters": [
+    "b",
+    "f"
+   ],
+   "blends": [
+    "if",
+    "ab",
+    "af",
+    "eb",
+    "ef",
+    "ib",
+    "ob",
+    "of",
+    "ub",
+    "uf"
+   ],
+   "words": [
+    "back",
+    "rab-bit",
+    "off",
+    "left",
+    "fell",
+    "bus",
+    "bed",
+    "felt",
+    "him-self",
+    "best",
+    "black",
+    "hus-band"
+   ],
+   "readers": []
+  },
+  {
+   "step": 9,
+   "new_letters": [
+    "g",
+    "j"
+   ],
+   "blends": [
+    "ag",
+    "eg",
+    "ig",
+    "ja",
+    "je",
+    "ji",
+    "jo",
+    "ju",
+    "og",
+    "ug"
+   ],
+   "words": [
+    "dog",
+    "began",
+    "legs",
+    "bag",
+    "frog",
+    "gift",
+    "egg",
+    "eggs",
+    "jump",
+    "leg",
+    "biggest",
+    "job"
+   ],
+   "readers": []
+  },
+  {
+   "step": 10,
+   "new_letters": [
+    "v",
+    "w"
+   ],
+   "blends": [
+    "va",
+    "ve",
+    "vi",
+    "vo",
+    "vu",
+    "wa",
+    "we",
+    "wi",
+    "wo",
+    "wu"
+   ],
+   "words": [
+    "will",
+    "went",
+    "well",
+    "giv-en",
+    "vis-it",
+    "swim",
+    "wet",
+    "sev-en",
+    "web",
+    "vis-ited",
+    "travel",
+    "swam"
+   ],
+   "readers": []
+  },
+  {
+   "step": 11,
+   "new_letters": [
+    "x",
+    "y"
+   ],
+   "blends": [
+    "ax",
+    "ex",
+    "ix",
+    "ox",
+    "ux",
+    "ya",
+    "ye",
+    "yi",
+    "yo",
+    "yu"
+   ],
+   "words": [
+    "next",
+    "yes",
+    "six",
+    "yet",
+    "fox",
+    "box",
+    "ex-tra",
+    "fix",
+    "boxes",
+    "foxes",
+    "wax",
+    "ex-press"
+   ],
+   "readers": []
+  },
+  {
+   "step": 12,
+   "new_letters": [
+    "z",
+    "q"
+   ],
+   "blends": [
+    "az",
+    "ez",
+    "iz",
+    "oz",
+    "uz"
+   ],
+   "words": [
+    "quick",
+    "buzz",
+    "re-ques-ted",
+    "zinc",
+    "zip",
+    "jazz",
+    "quit",
+    "quiz",
+    "quest",
+    "li-quid",
+    "re-quest",
+    "re-quests"
+   ],
+   "readers": []
+  }
+ ],
+ "sound_steps": [
+  {
+   "step": 13,
+   "new_sounds": [
+    "ng"
+   ],
+   "words": [
+    "king",
+    "sang",
+    "song",
+    "singing",
+    "bring",
+    "strong",
+    "sing",
+    "run-ning",
+    "wings",
+    "wed-ding",
+    "get-ting",
+    "swing"
+   ],
+   "readers": []
+  },
+  {
+   "step": 14,
+   "new_sounds": [
+    "er"
+   ],
+   "words": [
+    "river",
+    "nev-er",
+    "un-der",
+    "sis-ter",
+    "dif-fer-ent",
+    "her-self",
+    "sis-ters",
+    "let-ter",
+    "ever",
+    "clev-er",
+    "bet-ter",
+    "din-ner"
+   ],
+   "readers": []
+  },
+  {
+   "step": 15,
+   "new_sounds": [
+    "ee"
+   ],
+   "words": [
+    "tree",
+    "sleep",
+    "trees",
+    "agreed",
+    "seen",
+    "green",
+    "keep",
+    "need",
+    "sweet",
+    "asleep",
+    "free",
+    "deep"
+   ],
+   "readers": []
+  },
+  {
+   "step": 16,
+   "new_sounds": [
+    "oo"
+   ],
+   "words": [
+    "food",
+    "took",
+    "look",
+    "good",
+    "soon",
+    "look-ing",
+    "roost-er",
+    "moon",
+    "cook",
+    "looks",
+    "ba-boon",
+    "foot"
+   ],
+   "readers": []
+  },
+  {
+   "step": 17,
+   "new_sounds": [
+    "ar"
+   ],
+   "words": [
+    "star-ted",
+    "hard",
+    "garden",
+    "dark",
+    "farm",
+    "mar-ket",
+    "start",
+    "farm-er",
+    "arms",
+    "car",
+    "part",
+    "stars"
+   ],
+   "readers": []
+  },
+  {
+   "step": 18,
+   "new_sounds": [
+    "th"
+   ],
+   "words": [
+    "that",
+    "with",
+    "this",
+    "then",
+    "them",
+    "to-geth-er",
+    "things",
+    "think",
+    "than",
+    "three",
+    "teeth",
+    "thank"
+   ],
+   "readers": []
+  },
+  {
+   "step": 19,
+   "new_sounds": [
+    "sh"
+   ],
+   "words": [
+    "fish",
+    "shop",
+    "sheep",
+    "sharp",
+    "wish",
+    "fresh",
+    "shark",
+    "brush",
+    "shell",
+    "shook",
+    "fin-ish",
+    "shut"
+   ],
+   "readers": []
+  },
+  {
+   "step": 20,
+   "new_sounds": [
+    "ai"
+   ],
+   "words": [
+    "tail",
+    "afraid",
+    "snail",
+    "rain",
+    "waited",
+    "wait",
+    "wait-ing",
+    "pain",
+    "train",
+    "rain-ing",
+    "paid",
+    "tails"
+   ],
+   "readers": []
+  },
+  {
+   "step": 21,
+   "new_sounds": [
+    "or"
+   ],
+   "words": [
+    "for",
+    "morn-ing",
+    "forest",
+    "or",
+    "im-port-ant",
+    "born",
+    "short",
+    "horns",
+    "horn",
+    "or-der",
+    "corner",
+    "storm"
+   ],
+   "readers": []
+  },
+  {
+   "step": 22,
+   "new_sounds": [
+    "ow"
+   ],
+   "words": [
+    "down",
+    "cow",
+    "owl",
+    "cows",
+    "flowers",
+    "town",
+    "brown",
+    "bow",
+    "owls",
+    "flower",
+    "al-low",
+    "crowd"
+   ],
+   "readers": []
+  },
+  {
+   "step": 23,
+   "new_sounds": [
+    "ch"
+   ],
+   "words": [
+    "chil-dren",
+    "much",
+    "chick-ens",
+    "chick-en",
+    "rich",
+    "such",
+    "punch",
+    "os-trich",
+    "lunch",
+    "chest",
+    "bunch",
+    "check"
+   ],
+   "readers": []
+  },
+  {
+   "step": 24,
+   "new_sounds": [
+    "igh"
+   ],
+   "words": [
+    "night",
+    "high",
+    "right",
+    "light",
+    "bright",
+    "might",
+    "highest",
+    "high-er",
+    "fight",
+    "fight-ing",
+    "to-night",
+    "fright-en"
+   ],
+   "readers": []
+  },
+  {
+   "step": 25,
+   "new_sounds": [
+    "oa"
+   ],
+   "words": [
+    "goat",
+    "goats",
+    "road",
+    "boat",
+    "coat",
+    "soap",
+    "goal",
+    "loaf",
+    "coach",
+    "goals",
+    "float-ing",
+    "boats"
+   ],
+   "readers": []
+  },
+  {
+   "step": 26,
+   "new_sounds": [
+    "ear"
+   ],
+   "words": [
+    "near",
+    "hear",
+    "years",
+    "dear",
+    "ears",
+    "year",
+    "fear",
+    "spear",
+    "spears",
+    "hear-ing",
+    "beard",
+    "clear"
+   ],
+   "readers": []
+  },
+  {
+   "step": 27,
+   "new_sounds": [
+    "ur"
+   ],
+   "words": [
+    "burn",
+    "burn-ing",
+    "turn",
+    "burst",
+    "fur",
+    "church",
+    "hurt",
+    "burnt",
+    "burns",
+    "turns",
+    "nurses",
+    "turn-ing"
+   ],
+   "readers": []
+  },
+  {
+   "step": 28,
+   "new_sounds": [
+    "oi"
+   ],
+   "words": [
+    "join",
+    "oil",
+    "poin-ted",
+    "dis-ap-poin-ted",
+    "noises",
+    "point-ing",
+    "point",
+    "toi-let",
+    "boil-ing",
+    "soil",
+    "pois-on",
+    "boil"
+   ],
+   "readers": []
+  },
+  {
+   "step": 29,
+   "new_sounds": [
+    "air"
+   ],
+   "words": [
+    "hair",
+    "air",
+    "pair",
+    "chair",
+    "fair",
+    "un-fair",
+    "pairs",
+    "airs",
+    "hairs",
+    "chairs",
+    "chair-man",
+    "fair-ness"
+   ],
+   "readers": []
+  }
+ ],
+ "readers": {},
+ "word_bank": [
+  {
+   "text": "a",
+   "syllables": "a",
+   "step": 1
+  },
+  {
+   "text": "ad",
+   "syllables": "ad",
+   "step": 1
+  },
+  {
+   "text": "add",
+   "syllables": "add",
+   "step": 1
+  },
+  {
+   "text": "adds",
+   "syllables": "adds",
+   "step": 1
+  },
+  {
+   "text": "ads",
+   "syllables": "ads",
+   "step": 1
+  },
+  {
+   "text": "an",
+   "syllables": "an",
+   "step": 1
+  },
+  {
+   "text": "and",
+   "syllables": "and",
+   "step": 1
+  },
+  {
+   "text": "dad",
+   "syllables": "dad",
+   "step": 1
+  },
+  {
+   "text": "dads",
+   "syllables": "dads",
+   "step": 1
+  },
+  {
+   "text": "sad",
+   "syllables": "sad",
+   "step": 1
+  },
+  {
+   "text": "sand",
+   "syllables": "sand",
+   "step": 1
+  },
+  {
+   "text": "sands",
+   "syllables": "sands",
+   "step": 1
+  },
+  {
+   "text": "ant",
+   "syllables": "ant",
+   "step": 2
+  },
+  {
+   "text": "ants",
+   "syllables": "ants",
+   "step": 2
+  },
+  {
+   "text": "assist",
+   "syllables": "as-sist",
+   "step": 2
+  },
+  {
+   "text": "assists",
+   "syllables": "as-sists",
+   "step": 2
+  },
+  {
+   "text": "at",
+   "syllables": "at",
+   "step": 2
+  },
+  {
+   "text": "did",
+   "syllables": "did",
+   "step": 2
+  },
+  {
+   "text": "din",
+   "syllables": "din",
+   "step": 2
+  },
+  {
+   "text": "distant",
+   "syllables": "dis-tant",
+   "step": 2
+  },
+  {
+   "text": "in",
+   "syllables": "in",
+   "step": 2
+  },
+  {
+   "text": "inn",
+   "syllables": "inn",
+   "step": 2
+  },
+  {
+   "text": "insist",
+   "syllables": "in-sist",
+   "step": 2
+  },
+  {
+   "text": "insists",
+   "syllables": "in-sists",
+   "step": 2
+  },
+  {
+   "text": "it",
+   "syllables": "it",
+   "step": 2
+  },
+  {
+   "text": "its",
+   "syllables": "its",
+   "step": 2
+  },
+  {
+   "text": "sat",
+   "syllables": "sat",
+   "step": 2
+  },
+  {
+   "text": "sin",
+   "syllables": "sin",
+   "step": 2
+  },
+  {
+   "text": "sins",
+   "syllables": "sins",
+   "step": 2
+  },
+  {
+   "text": "sis",
+   "syllables": "sis",
+   "step": 2
+  },
+  {
+   "text": "sit",
+   "syllables": "sit",
+   "step": 2
+  },
+  {
+   "text": "sits",
+   "syllables": "sits",
+   "step": 2
+  },
+  {
+   "text": "stand",
+   "syllables": "stand",
+   "step": 2
+  },
+  {
+   "text": "stands",
+   "syllables": "stands",
+   "step": 2
+  },
+  {
+   "text": "tan",
+   "syllables": "tan",
+   "step": 2
+  },
+  {
+   "text": "tin",
+   "syllables": "tin",
+   "step": 2
+  },
+  {
+   "text": "tins",
+   "syllables": "tins",
+   "step": 2
+  },
+  {
+   "text": "added",
+   "syllables": "ad-ded",
+   "step": 3
+  },
+  {
+   "text": "end",
+   "syllables": "end",
+   "step": 3
+  },
+  {
+   "text": "ended",
+   "syllables": "ended",
+   "step": 3
+  },
+  {
+   "text": "ends",
+   "syllables": "ends",
+   "step": 3
+  },
+  {
+   "text": "nap",
+   "syllables": "nap",
+   "step": 3
+  },
+  {
+   "text": "nest",
+   "syllables": "nest",
+   "step": 3
+  },
+  {
+   "text": "net",
+   "syllables": "net",
+   "step": 3
+  },
+  {
+   "text": "nets",
+   "syllables": "nets",
+   "step": 3
+  },
+  {
+   "text": "pen",
+   "syllables": "pen",
+   "step": 3
+  },
+  {
+   "text": "pet",
+   "syllables": "pet",
+   "step": 3
+  },
+  {
+   "text": "pin",
+   "syllables": "pin",
+   "step": 3
+  },
+  {
+   "text": "send",
+   "syllables": "send",
+   "step": 3
+  },
+  {
+   "text": "sent",
+   "syllables": "sent",
+   "step": 3
+  },
+  {
+   "text": "set",
+   "syllables": "set",
+   "step": 3
+  },
+  {
+   "text": "sip",
+   "syllables": "sip",
+   "step": 3
+  },
+  {
+   "text": "snap",
+   "syllables": "snap",
+   "step": 3
+  },
+  {
+   "text": "spend",
+   "syllables": "spend",
+   "step": 3
+  },
+  {
+   "text": "spent",
+   "syllables": "spent",
+   "step": 3
+  },
+  {
+   "text": "spin",
+   "syllables": "spin",
+   "step": 3
+  },
+  {
+   "text": "steps",
+   "syllables": "steps",
+   "step": 3
+  },
+  {
+   "text": "tap",
+   "syllables": "tap",
+   "step": 3
+  },
+  {
+   "text": "ten",
+   "syllables": "ten",
+   "step": 3
+  },
+  {
+   "text": "tent",
+   "syllables": "tent",
+   "step": 3
+  },
+  {
+   "text": "test",
+   "syllables": "test",
+   "step": 3
+  },
+  {
+   "text": "tip",
+   "syllables": "tip",
+   "step": 3
+  },
+  {
+   "text": "doll",
+   "syllables": "doll",
+   "step": 4
+  },
+  {
+   "text": "land",
+   "syllables": "land",
+   "step": 4
+  },
+  {
+   "text": "landed",
+   "syllables": "landed",
+   "step": 4
+  },
+  {
+   "text": "lesson",
+   "syllables": "les-son",
+   "step": 4
+  },
+  {
+   "text": "lessons",
+   "syllables": "les-sons",
+   "step": 4
+  },
+  {
+   "text": "let",
+   "syllables": "let",
+   "step": 4
+  },
+  {
+   "text": "lid",
+   "syllables": "lid",
+   "step": 4
+  },
+  {
+   "text": "lips",
+   "syllables": "lips",
+   "step": 4
+  },
+  {
+   "text": "lost",
+   "syllables": "lost",
+   "step": 4
+  },
+  {
+   "text": "lot",
+   "syllables": "lot",
+   "step": 4
+  },
+  {
+   "text": "lots",
+   "syllables": "lots",
+   "step": 4
+  },
+  {
+   "text": "not",
+   "syllables": "not",
+   "step": 4
+  },
+  {
+   "text": "on",
+   "syllables": "on",
+   "step": 4
+  },
+  {
+   "text": "plan",
+   "syllables": "plan",
+   "step": 4
+  },
+  {
+   "text": "pond",
+   "syllables": "pond",
+   "step": 4
+  },
+  {
+   "text": "pot",
+   "syllables": "pot",
+   "step": 4
+  },
+  {
+   "text": "pots",
+   "syllables": "pots",
+   "step": 4
+  },
+  {
+   "text": "sell",
+   "syllables": "sell",
+   "step": 4
+  },
+  {
+   "text": "slept",
+   "syllables": "slept",
+   "step": 4
+  },
+  {
+   "text": "still",
+   "syllables": "still",
+   "step": 4
+  },
+  {
+   "text": "stop",
+   "syllables": "stop",
+   "step": 4
+  },
+  {
+   "text": "tell",
+   "syllables": "tell",
+   "step": 4
+  },
+  {
+   "text": "tells",
+   "syllables": "tells",
+   "step": 4
+  },
+  {
+   "text": "till",
+   "syllables": "till",
+   "step": 4
+  },
+  {
+   "text": "top",
+   "syllables": "top",
+   "step": 4
+  },
+  {
+   "text": "can",
+   "syllables": "can",
+   "step": 5
+  },
+  {
+   "text": "cannot",
+   "syllables": "can-not",
+   "step": 5
+  },
+  {
+   "text": "cap",
+   "syllables": "cap",
+   "step": 5
+  },
+  {
+   "text": "cat",
+   "syllables": "cat",
+   "step": 5
+  },
+  {
+   "text": "cats",
+   "syllables": "cats",
+   "step": 5
+  },
+  {
+   "text": "click",
+   "syllables": "click",
+   "step": 5
+  },
+  {
+   "text": "collect",
+   "syllables": "col-lect",
+   "step": 5
+  },
+  {
+   "text": "kept",
+   "syllables": "kept",
+   "step": 5
+  },
+  {
+   "text": "kick",
+   "syllables": "kick",
+   "step": 5
+  },
+  {
+   "text": "kids",
+   "syllables": "kids",
+   "step": 5
+  },
+  {
+   "text": "kill",
+   "syllables": "kill",
+   "step": 5
+  },
+  {
+   "text": "kitten",
+   "syllables": "kit-ten",
+   "step": 5
+  },
+  {
+   "text": "lick",
+   "syllables": "lick",
+   "step": 5
+  },
+  {
+   "text": "neck",
+   "syllables": "neck",
+   "step": 5
+  },
+  {
+   "text": "pack",
+   "syllables": "pack",
+   "step": 5
+  },
+  {
+   "text": "pick",
+   "syllables": "pick",
+   "step": 5
+  },
+  {
+   "text": "picks",
+   "syllables": "picks",
+   "step": 5
+  },
+  {
+   "text": "pink",
+   "syllables": "pink",
+   "step": 5
+  },
+  {
+   "text": "pocket",
+   "syllables": "pock-et",
+   "step": 5
+  },
+  {
+   "text": "second",
+   "syllables": "second",
+   "step": 5
+  },
+  {
+   "text": "sick",
+   "syllables": "sick",
+   "step": 5
+  },
+  {
+   "text": "sink",
+   "syllables": "sink",
+   "step": 5
+  },
+  {
+   "text": "skin",
+   "syllables": "skin",
+   "step": 5
+  },
+  {
+   "text": "stick",
+   "syllables": "stick",
+   "step": 5
+  },
+  {
+   "text": "sticks",
+   "syllables": "sticks",
+   "step": 5
+  },
+  {
+   "text": "am",
+   "syllables": "am",
+   "step": 6
+  },
+  {
+   "text": "animal",
+   "syllables": "an-im-al",
+   "step": 6
+  },
+  {
+   "text": "animals",
+   "syllables": "an-im-als",
+   "step": 6
+  },
+  {
+   "text": "camel",
+   "syllables": "camel",
+   "step": 6
+  },
+  {
+   "text": "cut",
+   "syllables": "cut",
+   "step": 6
+  },
+  {
+   "text": "dust",
+   "syllables": "dust",
+   "step": 6
+  },
+  {
+   "text": "man",
+   "syllables": "man",
+   "step": 6
+  },
+  {
+   "text": "mat",
+   "syllables": "mat",
+   "step": 6
+  },
+  {
+   "text": "medal",
+   "syllables": "medal",
+   "step": 6
+  },
+  {
+   "text": "men",
+   "syllables": "men",
+   "step": 6
+  },
+  {
+   "text": "met",
+   "syllables": "met",
+   "step": 6
+  },
+  {
+   "text": "milk",
+   "syllables": "milk",
+   "step": 6
+  },
+  {
+   "text": "miss",
+   "syllables": "miss",
+   "step": 6
+  },
+  {
+   "text": "mom",
+   "syllables": "mom",
+   "step": 6
+  },
+  {
+   "text": "mud",
+   "syllables": "mud",
+   "step": 6
+  },
+  {
+   "text": "mum",
+   "syllables": "mum",
+   "step": 6
+  },
+  {
+   "text": "must",
+   "syllables": "must",
+   "step": 6
+  },
+  {
+   "text": "pumpkin",
+   "syllables": "pump-kin",
+   "step": 6
+  },
+  {
+   "text": "smell",
+   "syllables": "smell",
+   "step": 6
+  },
+  {
+   "text": "stuck",
+   "syllables": "stuck",
+   "step": 6
+  },
+  {
+   "text": "sun",
+   "syllables": "sun",
+   "step": 6
+  },
+  {
+   "text": "until",
+   "syllables": "un-til",
+   "step": 6
+  },
+  {
+   "text": "up",
+   "syllables": "up",
+   "step": 6
+  },
+  {
+   "text": "upset",
+   "syllables": "up-set",
+   "step": 6
+  },
+  {
+   "text": "us",
+   "syllables": "us",
+   "step": 6
+  },
+  {
+   "text": "across",
+   "syllables": "across",
+   "step": 7
+  },
+  {
+   "text": "drank",
+   "syllables": "drank",
+   "step": 7
+  },
+  {
+   "text": "dress",
+   "syllables": "dress",
+   "step": 7
+  },
+  {
+   "text": "drink",
+   "syllables": "drink",
+   "step": 7
+  },
+  {
+   "text": "had",
+   "syllables": "had",
+   "step": 7
+  },
+  {
+   "text": "hand",
+   "syllables": "hand",
+   "step": 7
+  },
+  {
+   "text": "hands",
+   "syllables": "hands",
+   "step": 7
+  },
+  {
+   "text": "held",
+   "syllables": "held",
+   "step": 7
+  },
+  {
+   "text": "help",
+   "syllables": "help",
+   "step": 7
+  },
+  {
+   "text": "hen",
+   "syllables": "hen",
+   "step": 7
+  },
+  {
+   "text": "hid",
+   "syllables": "hid",
+   "step": 7
+  },
+  {
+   "text": "hill",
+   "syllables": "hill",
+   "step": 7
+  },
+  {
+   "text": "hills",
+   "syllables": "hills",
+   "step": 7
+  },
+  {
+   "text": "him",
+   "syllables": "him",
+   "step": 7
+  },
+  {
+   "text": "hit",
+   "syllables": "hit",
+   "step": 7
+  },
+  {
+   "text": "hot",
+   "syllables": "hot",
+   "step": 7
+  },
+  {
+   "text": "hut",
+   "syllables": "hut",
+   "step": 7
+  },
+  {
+   "text": "ran",
+   "syllables": "ran",
+   "step": 7
+  },
+  {
+   "text": "rat",
+   "syllables": "rat",
+   "step": 7
+  },
+  {
+   "text": "rats",
+   "syllables": "rats",
+   "step": 7
+  },
+  {
+   "text": "red",
+   "syllables": "red",
+   "step": 7
+  },
+  {
+   "text": "rest",
+   "syllables": "rest",
+   "step": 7
+  },
+  {
+   "text": "rock",
+   "syllables": "rock",
+   "step": 7
+  },
+  {
+   "text": "rocks",
+   "syllables": "rocks",
+   "step": 7
+  },
+  {
+   "text": "run",
+   "syllables": "run",
+   "step": 7
+  },
+  {
+   "text": "back",
+   "syllables": "back",
+   "step": 8
+  },
+  {
+   "text": "bad",
+   "syllables": "bad",
+   "step": 8
+  },
+  {
+   "text": "bank",
+   "syllables": "bank",
+   "step": 8
+  },
+  {
+   "text": "bed",
+   "syllables": "bed",
+   "step": 8
+  },
+  {
+   "text": "best",
+   "syllables": "best",
+   "step": 8
+  },
+  {
+   "text": "bit",
+   "syllables": "bit",
+   "step": 8
+  },
+  {
+   "text": "black",
+   "syllables": "black",
+   "step": 8
+  },
+  {
+   "text": "blanket",
+   "syllables": "blanket",
+   "step": 8
+  },
+  {
+   "text": "bottom",
+   "syllables": "bot-tom",
+   "step": 8
+  },
+  {
+   "text": "bus",
+   "syllables": "bus",
+   "step": 8
+  },
+  {
+   "text": "but",
+   "syllables": "but",
+   "step": 8
+  },
+  {
+   "text": "difficult",
+   "syllables": "dif-fi-cult",
+   "step": 8
+  },
+  {
+   "text": "fat",
+   "syllables": "fat",
+   "step": 8
+  },
+  {
+   "text": "fed",
+   "syllables": "fed",
+   "step": 8
+  },
+  {
+   "text": "fell",
+   "syllables": "fell",
+   "step": 8
+  },
+  {
+   "text": "felt",
+   "syllables": "felt",
+   "step": 8
+  },
+  {
+   "text": "fun",
+   "syllables": "fun",
+   "step": 8
+  },
+  {
+   "text": "himself",
+   "syllables": "him-self",
+   "step": 8
+  },
+  {
+   "text": "husband",
+   "syllables": "hus-band",
+   "step": 8
+  },
+  {
+   "text": "if",
+   "syllables": "if",
+   "step": 8
+  },
+  {
+   "text": "left",
+   "syllables": "left",
+   "step": 8
+  },
+  {
+   "text": "off",
+   "syllables": "off",
+   "step": 8
+  },
+  {
+   "text": "problem",
+   "syllables": "prob-lem",
+   "step": 8
+  },
+  {
+   "text": "rabbit",
+   "syllables": "rab-bit",
+   "step": 8
+  },
+  {
+   "text": "rabbits",
+   "syllables": "rab-bits",
+   "step": 8
+  },
+  {
+   "text": "bag",
+   "syllables": "bag",
+   "step": 9
+  },
+  {
+   "text": "began",
+   "syllables": "began",
+   "step": 9
+  },
+  {
+   "text": "big",
+   "syllables": "big",
+   "step": 9
+  },
+  {
+   "text": "biggest",
+   "syllables": "biggest",
+   "step": 9
+  },
+  {
+   "text": "dog",
+   "syllables": "dog",
+   "step": 9
+  },
+  {
+   "text": "dogs",
+   "syllables": "dogs",
+   "step": 9
+  },
+  {
+   "text": "dug",
+   "syllables": "dug",
+   "step": 9
+  },
+  {
+   "text": "egg",
+   "syllables": "egg",
+   "step": 9
+  },
+  {
+   "text": "eggs",
+   "syllables": "eggs",
+   "step": 9
+  },
+  {
+   "text": "frog",
+   "syllables": "frog",
+   "step": 9
+  },
+  {
+   "text": "frogs",
+   "syllables": "frogs",
+   "step": 9
+  },
+  {
+   "text": "get",
+   "syllables": "get",
+   "step": 9
+  },
+  {
+   "text": "gets",
+   "syllables": "gets",
+   "step": 9
+  },
+  {
+   "text": "gift",
+   "syllables": "gift",
+   "step": 9
+  },
+  {
+   "text": "god",
+   "syllables": "god",
+   "step": 9
+  },
+  {
+   "text": "got",
+   "syllables": "got",
+   "step": 9
+  },
+  {
+   "text": "grab",
+   "syllables": "grab",
+   "step": 9
+  },
+  {
+   "text": "gum",
+   "syllables": "gum",
+   "step": 9
+  },
+  {
+   "text": "job",
+   "syllables": "job",
+   "step": 9
+  },
+  {
+   "text": "jump",
+   "syllables": "jump",
+   "step": 9
+  },
+  {
+   "text": "just",
+   "syllables": "just",
+   "step": 9
+  },
+  {
+   "text": "leg",
+   "syllables": "leg",
+   "step": 9
+  },
+  {
+   "text": "legs",
+   "syllables": "legs",
+   "step": 9
+  },
+  {
+   "text": "log",
+   "syllables": "log",
+   "step": 9
+  },
+  {
+   "text": "pig",
+   "syllables": "pig",
+   "step": 9
+  },
+  {
+   "text": "devil",
+   "syllables": "dev-il",
+   "step": 10
+  },
+  {
+   "text": "eleven",
+   "syllables": "el-ev-en",
+   "step": 10
+  },
+  {
+   "text": "festival",
+   "syllables": "fest-iv-al",
+   "step": 10
+  },
+  {
+   "text": "given",
+   "syllables": "giv-en",
+   "step": 10
+  },
+  {
+   "text": "seven",
+   "syllables": "sev-en",
+   "step": 10
+  },
+  {
+   "text": "swam",
+   "syllables": "swam",
+   "step": 10
+  },
+  {
+   "text": "swept",
+   "syllables": "swept",
+   "step": 10
+  },
+  {
+   "text": "swim",
+   "syllables": "swim",
+   "step": 10
+  },
+  {
+   "text": "swims",
+   "syllables": "swims",
+   "step": 10
+  },
+  {
+   "text": "travel",
+   "syllables": "travel",
+   "step": 10
+  },
+  {
+   "text": "twigs",
+   "syllables": "twigs",
+   "step": 10
+  },
+  {
+   "text": "twin",
+   "syllables": "twin",
+   "step": 10
+  },
+  {
+   "text": "twins",
+   "syllables": "twins",
+   "step": 10
+  },
+  {
+   "text": "van",
+   "syllables": "van",
+   "step": 10
+  },
+  {
+   "text": "visit",
+   "syllables": "vis-it",
+   "step": 10
+  },
+  {
+   "text": "visited",
+   "syllables": "vis-ited",
+   "step": 10
+  },
+  {
+   "text": "visits",
+   "syllables": "vis-its",
+   "step": 10
+  },
+  {
+   "text": "web",
+   "syllables": "web",
+   "step": 10
+  },
+  {
+   "text": "well",
+   "syllables": "well",
+   "step": 10
+  },
+  {
+   "text": "went",
+   "syllables": "went",
+   "step": 10
+  },
+  {
+   "text": "west",
+   "syllables": "west",
+   "step": 10
+  },
+  {
+   "text": "wet",
+   "syllables": "wet",
+   "step": 10
+  },
+  {
+   "text": "will",
+   "syllables": "will",
+   "step": 10
+  },
+  {
+   "text": "win",
+   "syllables": "win",
+   "step": 10
+  },
+  {
+   "text": "winds",
+   "syllables": "winds",
+   "step": 10
+  },
+  {
+   "text": "box",
+   "syllables": "box",
+   "step": 11
+  },
+  {
+   "text": "boxes",
+   "syllables": "boxes",
+   "step": 11
+  },
+  {
+   "text": "expect",
+   "syllables": "ex-pect",
+   "step": 11
+  },
+  {
+   "text": "expected",
+   "syllables": "ex-pec-ted",
+   "step": 11
+  },
+  {
+   "text": "expects",
+   "syllables": "ex-pects",
+   "step": 11
+  },
+  {
+   "text": "express",
+   "syllables": "ex-press",
+   "step": 11
+  },
+  {
+   "text": "extra",
+   "syllables": "ex-tra",
+   "step": 11
+  },
+  {
+   "text": "extras",
+   "syllables": "ex-tras",
+   "step": 11
+  },
+  {
+   "text": "fix",
+   "syllables": "fix",
+   "step": 11
+  },
+  {
+   "text": "fixes",
+   "syllables": "fixes",
+   "step": 11
+  },
+  {
+   "text": "fox",
+   "syllables": "fox",
+   "step": 11
+  },
+  {
+   "text": "foxes",
+   "syllables": "foxes",
+   "step": 11
+  },
+  {
+   "text": "mix",
+   "syllables": "mix",
+   "step": 11
+  },
+  {
+   "text": "mixes",
+   "syllables": "mixes",
+   "step": 11
+  },
+  {
+   "text": "next",
+   "syllables": "next",
+   "step": 11
+  },
+  {
+   "text": "relax",
+   "syllables": "re-lax",
+   "step": 11
+  },
+  {
+   "text": "six",
+   "syllables": "six",
+   "step": 11
+  },
+  {
+   "text": "text",
+   "syllables": "text",
+   "step": 11
+  },
+  {
+   "text": "texts",
+   "syllables": "texts",
+   "step": 11
+  },
+  {
+   "text": "wax",
+   "syllables": "wax",
+   "step": 11
+  },
+  {
+   "text": "yam",
+   "syllables": "yam",
+   "step": 11
+  },
+  {
+   "text": "yams",
+   "syllables": "yams",
+   "step": 11
+  },
+  {
+   "text": "yell",
+   "syllables": "yell",
+   "step": 11
+  },
+  {
+   "text": "yes",
+   "syllables": "yes",
+   "step": 11
+  },
+  {
+   "text": "yet",
+   "syllables": "yet",
+   "step": 11
+  },
+  {
+   "text": "buzz",
+   "syllables": "buzz",
+   "step": 12
+  },
+  {
+   "text": "equipment",
+   "syllables": "equip-ment",
+   "step": 12
+  },
+  {
+   "text": "jazz",
+   "syllables": "jazz",
+   "step": 12
+  },
+  {
+   "text": "liquid",
+   "syllables": "li-quid",
+   "step": 12
+  },
+  {
+   "text": "quest",
+   "syllables": "quest",
+   "step": 12
+  },
+  {
+   "text": "quick",
+   "syllables": "quick",
+   "step": 12
+  },
+  {
+   "text": "quit",
+   "syllables": "quit",
+   "step": 12
+  },
+  {
+   "text": "quiz",
+   "syllables": "quiz",
+   "step": 12
+  },
+  {
+   "text": "request",
+   "syllables": "re-quest",
+   "step": 12
+  },
+  {
+   "text": "requested",
+   "syllables": "re-ques-ted",
+   "step": 12
+  },
+  {
+   "text": "requests",
+   "syllables": "re-quests",
+   "step": 12
+  },
+  {
+   "text": "zinc",
+   "syllables": "zinc",
+   "step": 12
+  },
+  {
+   "text": "zip",
+   "syllables": "zip",
+   "step": 12
+  },
+  {
+   "text": "along",
+   "syllables": "along",
+   "step": 13
+  },
+  {
+   "text": "bring",
+   "syllables": "bring",
+   "step": 13
+  },
+  {
+   "text": "drinking",
+   "syllables": "drink-ing",
+   "step": 13
+  },
+  {
+   "text": "getting",
+   "syllables": "get-ting",
+   "step": 13
+  },
+  {
+   "text": "giving",
+   "syllables": "giv-ing",
+   "step": 13
+  },
+  {
+   "text": "having",
+   "syllables": "hav-ing",
+   "step": 13
+  },
+  {
+   "text": "king",
+   "syllables": "king",
+   "step": 13
+  },
+  {
+   "text": "living",
+   "syllables": "liv-ing",
+   "step": 13
+  },
+  {
+   "text": "long",
+   "syllables": "long",
+   "step": 13
+  },
+  {
+   "text": "running",
+   "syllables": "run-ning",
+   "step": 13
+  },
+  {
+   "text": "sang",
+   "syllables": "sang",
+   "step": 13
+  },
+  {
+   "text": "selling",
+   "syllables": "selling",
+   "step": 13
+  },
+  {
+   "text": "sing",
+   "syllables": "sing",
+   "step": 13
+  },
+  {
+   "text": "singing",
+   "syllables": "singing",
+   "step": 13
+  },
+  {
+   "text": "sings",
+   "syllables": "sings",
+   "step": 13
+  },
+  {
+   "text": "sitting",
+   "syllables": "sit-ting",
+   "step": 13
+  },
+  {
+   "text": "smelling",
+   "syllables": "smelling",
+   "step": 13
+  },
+  {
+   "text": "song",
+   "syllables": "song",
+   "step": 13
+  },
+  {
+   "text": "songs",
+   "syllables": "songs",
+   "step": 13
+  },
+  {
+   "text": "standing",
+   "syllables": "stand-ing",
+   "step": 13
+  },
+  {
+   "text": "strong",
+   "syllables": "strong",
+   "step": 13
+  },
+  {
+   "text": "swimming",
+   "syllables": "swim-ming",
+   "step": 13
+  },
+  {
+   "text": "swing",
+   "syllables": "swing",
+   "step": 13
+  },
+  {
+   "text": "wedding",
+   "syllables": "wed-ding",
+   "step": 13
+  },
+  {
+   "text": "wings",
+   "syllables": "wings",
+   "step": 13
+  },
+  {
+   "text": "better",
+   "syllables": "bet-ter",
+   "step": 14
+  },
+  {
+   "text": "bigger",
+   "syllables": "big-ger",
+   "step": 14
+  },
+  {
+   "text": "clever",
+   "syllables": "clev-er",
+   "step": 14
+  },
+  {
+   "text": "different",
+   "syllables": "dif-fer-ent",
+   "step": 14
+  },
+  {
+   "text": "dinner",
+   "syllables": "din-ner",
+   "step": 14
+  },
+  {
+   "text": "enter",
+   "syllables": "enter",
+   "step": 14
+  },
+  {
+   "text": "ever",
+   "syllables": "ever",
+   "step": 14
+  },
+  {
+   "text": "her",
+   "syllables": "her",
+   "step": 14
+  },
+  {
+   "text": "herself",
+   "syllables": "her-self",
+   "step": 14
+  },
+  {
+   "text": "letter",
+   "syllables": "let-ter",
+   "step": 14
+  },
+  {
+   "text": "matter",
+   "syllables": "mat-ter",
+   "step": 14
+  },
+  {
+   "text": "mister",
+   "syllables": "mis-ter",
+   "step": 14
+  },
+  {
+   "text": "never",
+   "syllables": "nev-er",
+   "step": 14
+  },
+  {
+   "text": "perfect",
+   "syllables": "per-fect",
+   "step": 14
+  },
+  {
+   "text": "person",
+   "syllables": "per-son",
+   "step": 14
+  },
+  {
+   "text": "river",
+   "syllables": "river",
+   "step": 14
+  },
+  {
+   "text": "rivers",
+   "syllables": "rivers",
+   "step": 14
+  },
+  {
+   "text": "sister",
+   "syllables": "sis-ter",
+   "step": 14
+  },
+  {
+   "text": "sisters",
+   "syllables": "sis-ters",
+   "step": 14
+  },
+  {
+   "text": "soccer",
+   "syllables": "soc-cer",
+   "step": 14
+  },
+  {
+   "text": "stronger",
+   "syllables": "stronger",
+   "step": 14
+  },
+  {
+   "text": "supper",
+   "syllables": "sup-per",
+   "step": 14
+  },
+  {
+   "text": "under",
+   "syllables": "un-der",
+   "step": 14
+  },
+  {
+   "text": "understand",
+   "syllables": "un-der-stand",
+   "step": 14
+  },
+  {
+   "text": "winter",
+   "syllables": "winter",
+   "step": 14
+  },
+  {
+   "text": "agreed",
+   "syllables": "agreed",
+   "step": 15
+  },
+  {
+   "text": "asleep",
+   "syllables": "asleep",
+   "step": 15
+  },
+  {
+   "text": "bees",
+   "syllables": "bees",
+   "step": 15
+  },
+  {
+   "text": "between",
+   "syllables": "between",
+   "step": 15
+  },
+  {
+   "text": "deep",
+   "syllables": "deep",
+   "step": 15
+  },
+  {
+   "text": "feed",
+   "syllables": "feed",
+   "step": 15
+  },
+  {
+   "text": "feel",
+   "syllables": "feel",
+   "step": 15
+  },
+  {
+   "text": "feet",
+   "syllables": "feet",
+   "step": 15
+  },
+  {
+   "text": "free",
+   "syllables": "free",
+   "step": 15
+  },
+  {
+   "text": "green",
+   "syllables": "green",
+   "step": 15
+  },
+  {
+   "text": "keep",
+   "syllables": "keep",
+   "step": 15
+  },
+  {
+   "text": "meet",
+   "syllables": "meet",
+   "step": 15
+  },
+  {
+   "text": "meeting",
+   "syllables": "meet-ing",
+   "step": 15
+  },
+  {
+   "text": "need",
+   "syllables": "need",
+   "step": 15
+  },
+  {
+   "text": "needed",
+   "syllables": "needed",
+   "step": 15
+  },
+  {
+   "text": "see",
+   "syllables": "see",
+   "step": 15
+  },
+  {
+   "text": "seeds",
+   "syllables": "seeds",
+   "step": 15
+  },
+  {
+   "text": "seen",
+   "syllables": "seen",
+   "step": 15
+  },
+  {
+   "text": "sleep",
+   "syllables": "sleep",
+   "step": 15
+  },
+  {
+   "text": "sleeping",
+   "syllables": "sleep-ing",
+   "step": 15
+  },
+  {
+   "text": "sleeps",
+   "syllables": "sleeps",
+   "step": 15
+  },
+  {
+   "text": "sweet",
+   "syllables": "sweet",
+   "step": 15
+  },
+  {
+   "text": "tree",
+   "syllables": "tree",
+   "step": 15
+  },
+  {
+   "text": "trees",
+   "syllables": "trees",
+   "step": 15
+  },
+  {
+   "text": "week",
+   "syllables": "week",
+   "step": 15
+  },
+  {
+   "text": "baboon",
+   "syllables": "ba-boon",
+   "step": 16
+  },
+  {
+   "text": "baboons",
+   "syllables": "ba-boons",
+   "step": 16
+  },
+  {
+   "text": "book",
+   "syllables": "book",
+   "step": 16
+  },
+  {
+   "text": "books",
+   "syllables": "books",
+   "step": 16
+  },
+  {
+   "text": "boom",
+   "syllables": "boom",
+   "step": 16
+  },
+  {
+   "text": "cook",
+   "syllables": "cook",
+   "step": 16
+  },
+  {
+   "text": "cooking",
+   "syllables": "cook-ing",
+   "step": 16
+  },
+  {
+   "text": "cool",
+   "syllables": "cool",
+   "step": 16
+  },
+  {
+   "text": "food",
+   "syllables": "food",
+   "step": 16
+  },
+  {
+   "text": "foot",
+   "syllables": "foot",
+   "step": 16
+  },
+  {
+   "text": "good",
+   "syllables": "good",
+   "step": 16
+  },
+  {
+   "text": "look",
+   "syllables": "look",
+   "step": 16
+  },
+  {
+   "text": "looking",
+   "syllables": "look-ing",
+   "step": 16
+  },
+  {
+   "text": "looks",
+   "syllables": "looks",
+   "step": 16
+  },
+  {
+   "text": "moon",
+   "syllables": "moon",
+   "step": 16
+  },
+  {
+   "text": "pool",
+   "syllables": "pool",
+   "step": 16
+  },
+  {
+   "text": "poor",
+   "syllables": "poor",
+   "step": 16
+  },
+  {
+   "text": "roof",
+   "syllables": "roof",
+   "step": 16
+  },
+  {
+   "text": "room",
+   "syllables": "room",
+   "step": 16
+  },
+  {
+   "text": "rooster",
+   "syllables": "roost-er",
+   "step": 16
+  },
+  {
+   "text": "soon",
+   "syllables": "soon",
+   "step": 16
+  },
+  {
+   "text": "stood",
+   "syllables": "stood",
+   "step": 16
+  },
+  {
+   "text": "too",
+   "syllables": "too",
+   "step": 16
+  },
+  {
+   "text": "took",
+   "syllables": "took",
+   "step": 16
+  },
+  {
+   "text": "wood",
+   "syllables": "wood",
+   "step": 16
+  },
+  {
+   "text": "arm",
+   "syllables": "arm",
+   "step": 17
+  },
+  {
+   "text": "arms",
+   "syllables": "arms",
+   "step": 17
+  },
+  {
+   "text": "barking",
+   "syllables": "bark-ing",
+   "step": 17
+  },
+  {
+   "text": "car",
+   "syllables": "car",
+   "step": 17
+  },
+  {
+   "text": "dark",
+   "syllables": "dark",
+   "step": 17
+  },
+  {
+   "text": "darkness",
+   "syllables": "dark-ness",
+   "step": 17
+  },
+  {
+   "text": "far",
+   "syllables": "far",
+   "step": 17
+  },
+  {
+   "text": "farm",
+   "syllables": "farm",
+   "step": 17
+  },
+  {
+   "text": "farmer",
+   "syllables": "farm-er",
+   "step": 17
+  },
+  {
+   "text": "farmers",
+   "syllables": "farm-ers",
+   "step": 17
+  },
+  {
+   "text": "farms",
+   "syllables": "farms",
+   "step": 17
+  },
+  {
+   "text": "garden",
+   "syllables": "garden",
+   "step": 17
+  },
+  {
+   "text": "hard",
+   "syllables": "hard",
+   "step": 17
+  },
+  {
+   "text": "harder",
+   "syllables": "harder",
+   "step": 17
+  },
+  {
+   "text": "market",
+   "syllables": "mar-ket",
+   "step": 17
+  },
+  {
+   "text": "park",
+   "syllables": "park",
+   "step": 17
+  },
+  {
+   "text": "part",
+   "syllables": "part",
+   "step": 17
+  },
+  {
+   "text": "parts",
+   "syllables": "parts",
+   "step": 17
+  },
+  {
+   "text": "scarf",
+   "syllables": "scarf",
+   "step": 17
+  },
+  {
+   "text": "smart",
+   "syllables": "smart",
+   "step": 17
+  },
+  {
+   "text": "stars",
+   "syllables": "stars",
+   "step": 17
+  },
+  {
+   "text": "start",
+   "syllables": "start",
+   "step": 17
+  },
+  {
+   "text": "started",
+   "syllables": "star-ted",
+   "step": 17
+  },
+  {
+   "text": "starts",
+   "syllables": "starts",
+   "step": 17
+  },
+  {
+   "text": "yard",
+   "syllables": "yard",
+   "step": 17
+  },
+  {
+   "text": "bathtub",
+   "syllables": "bathtub",
+   "step": 18
+  },
+  {
+   "text": "bother",
+   "syllables": "both-er",
+   "step": 18
+  },
+  {
+   "text": "cloth",
+   "syllables": "cloth",
+   "step": 18
+  },
+  {
+   "text": "smooth",
+   "syllables": "smooth",
+   "step": 18
+  },
+  {
+   "text": "teeth",
+   "syllables": "teeth",
+   "step": 18
+  },
+  {
+   "text": "than",
+   "syllables": "than",
+   "step": 18
+  },
+  {
+   "text": "thank",
+   "syllables": "thank",
+   "step": 18
+  },
+  {
+   "text": "thanks",
+   "syllables": "thanks",
+   "step": 18
+  },
+  {
+   "text": "that",
+   "syllables": "that",
+   "step": 18
+  },
+  {
+   "text": "them",
+   "syllables": "them",
+   "step": 18
+  },
+  {
+   "text": "then",
+   "syllables": "then",
+   "step": 18
+  },
+  {
+   "text": "thick",
+   "syllables": "thick",
+   "step": 18
+  },
+  {
+   "text": "thin",
+   "syllables": "thin",
+   "step": 18
+  },
+  {
+   "text": "thing",
+   "syllables": "thing",
+   "step": 18
+  },
+  {
+   "text": "things",
+   "syllables": "things",
+   "step": 18
+  },
+  {
+   "text": "think",
+   "syllables": "think",
+   "step": 18
+  },
+  {
+   "text": "thinking",
+   "syllables": "think-ing",
+   "step": 18
+  },
+  {
+   "text": "thinks",
+   "syllables": "thinks",
+   "step": 18
+  },
+  {
+   "text": "thinner",
+   "syllables": "thin-ner",
+   "step": 18
+  },
+  {
+   "text": "this",
+   "syllables": "this",
+   "step": 18
+  },
+  {
+   "text": "three",
+   "syllables": "three",
+   "step": 18
+  },
+  {
+   "text": "thunder",
+   "syllables": "thun-der",
+   "step": 18
+  },
+  {
+   "text": "together",
+   "syllables": "to-geth-er",
+   "step": 18
+  },
+  {
+   "text": "tooth",
+   "syllables": "tooth",
+   "step": 18
+  },
+  {
+   "text": "with",
+   "syllables": "with",
+   "step": 18
+  },
+  {
+   "text": "brush",
+   "syllables": "brush",
+   "step": 19
+  },
+  {
+   "text": "brushes",
+   "syllables": "brushes",
+   "step": 19
+  },
+  {
+   "text": "crash",
+   "syllables": "crash",
+   "step": 19
+  },
+  {
+   "text": "dish",
+   "syllables": "dish",
+   "step": 19
+  },
+  {
+   "text": "dishes",
+   "syllables": "dishes",
+   "step": 19
+  },
+  {
+   "text": "finish",
+   "syllables": "fin-ish",
+   "step": 19
+  },
+  {
+   "text": "finishing",
+   "syllables": "fin-ish-ing",
+   "step": 19
+  },
+  {
+   "text": "fish",
+   "syllables": "fish",
+   "step": 19
+  },
+  {
+   "text": "fishing",
+   "syllables": "fish-ing",
+   "step": 19
+  },
+  {
+   "text": "fresh",
+   "syllables": "fresh",
+   "step": 19
+  },
+  {
+   "text": "rushing",
+   "syllables": "rush-ing",
+   "step": 19
+  },
+  {
+   "text": "selfish",
+   "syllables": "selfish",
+   "step": 19
+  },
+  {
+   "text": "shark",
+   "syllables": "shark",
+   "step": 19
+  },
+  {
+   "text": "sharp",
+   "syllables": "sharp",
+   "step": 19
+  },
+  {
+   "text": "sheep",
+   "syllables": "sheep",
+   "step": 19
+  },
+  {
+   "text": "sheets",
+   "syllables": "sheets",
+   "step": 19
+  },
+  {
+   "text": "shell",
+   "syllables": "shell",
+   "step": 19
+  },
+  {
+   "text": "ship",
+   "syllables": "ship",
+   "step": 19
+  },
+  {
+   "text": "ships",
+   "syllables": "ships",
+   "step": 19
+  },
+  {
+   "text": "shook",
+   "syllables": "shook",
+   "step": 19
+  },
+  {
+   "text": "shop",
+   "syllables": "shop",
+   "step": 19
+  },
+  {
+   "text": "shopping",
+   "syllables": "shop-ping",
+   "step": 19
+  },
+  {
+   "text": "shops",
+   "syllables": "shops",
+   "step": 19
+  },
+  {
+   "text": "shut",
+   "syllables": "shut",
+   "step": 19
+  },
+  {
+   "text": "wish",
+   "syllables": "wish",
+   "step": 19
+  },
+  {
+   "text": "afraid",
+   "syllables": "afraid",
+   "step": 20
+  },
+  {
+   "text": "complain",
+   "syllables": "com-plain",
+   "step": 20
+  },
+  {
+   "text": "explain",
+   "syllables": "ex-plain",
+   "step": 20
+  },
+  {
+   "text": "explaining",
+   "syllables": "ex-plain-ing",
+   "step": 20
+  },
+  {
+   "text": "explains",
+   "syllables": "ex-plains",
+   "step": 20
+  },
+  {
+   "text": "nail",
+   "syllables": "nail",
+   "step": 20
+  },
+  {
+   "text": "nails",
+   "syllables": "nails",
+   "step": 20
+  },
+  {
+   "text": "paid",
+   "syllables": "paid",
+   "step": 20
+  },
+  {
+   "text": "pain",
+   "syllables": "pain",
+   "step": 20
+  },
+  {
+   "text": "painful",
+   "syllables": "pain-ful",
+   "step": 20
+  },
+  {
+   "text": "paint",
+   "syllables": "paint",
+   "step": 20
+  },
+  {
+   "text": "painted",
+   "syllables": "painted",
+   "step": 20
+  },
+  {
+   "text": "painting",
+   "syllables": "paint-ing",
+   "step": 20
+  },
+  {
+   "text": "rain",
+   "syllables": "rain",
+   "step": 20
+  },
+  {
+   "text": "raining",
+   "syllables": "rain-ing",
+   "step": 20
+  },
+  {
+   "text": "rains",
+   "syllables": "rains",
+   "step": 20
+  },
+  {
+   "text": "snail",
+   "syllables": "snail",
+   "step": 20
+  },
+  {
+   "text": "snails",
+   "syllables": "snails",
+   "step": 20
+  },
+  {
+   "text": "tail",
+   "syllables": "tail",
+   "step": 20
+  },
+  {
+   "text": "tails",
+   "syllables": "tails",
+   "step": 20
+  },
+  {
+   "text": "train",
+   "syllables": "train",
+   "step": 20
+  },
+  {
+   "text": "wait",
+   "syllables": "wait",
+   "step": 20
+  },
+  {
+   "text": "waited",
+   "syllables": "waited",
+   "step": 20
+  },
+  {
+   "text": "waiting",
+   "syllables": "wait-ing",
+   "step": 20
+  },
+  {
+   "text": "waits",
+   "syllables": "waits",
+   "step": 20
+  },
+  {
+   "text": "boring",
+   "syllables": "bor-ing",
+   "step": 21
+  },
+  {
+   "text": "born",
+   "syllables": "born",
+   "step": 21
+  },
+  {
+   "text": "corn",
+   "syllables": "corn",
+   "step": 21
+  },
+  {
+   "text": "corner",
+   "syllables": "corner",
+   "step": 21
+  },
+  {
+   "text": "for",
+   "syllables": "for",
+   "step": 21
+  },
+  {
+   "text": "forest",
+   "syllables": "forest",
+   "step": 21
+  },
+  {
+   "text": "forests",
+   "syllables": "forests",
+   "step": 21
+  },
+  {
+   "text": "fork",
+   "syllables": "fork",
+   "step": 21
+  },
+  {
+   "text": "horn",
+   "syllables": "horn",
+   "step": 21
+  },
+  {
+   "text": "horns",
+   "syllables": "horns",
+   "step": 21
+  },
+  {
+   "text": "horses",
+   "syllables": "horses",
+   "step": 21
+  },
+  {
+   "text": "important",
+   "syllables": "im-port-ant",
+   "step": 21
+  },
+  {
+   "text": "morning",
+   "syllables": "morn-ing",
+   "step": 21
+  },
+  {
+   "text": "mornings",
+   "syllables": "morn-ings",
+   "step": 21
+  },
+  {
+   "text": "normal",
+   "syllables": "nor-mal",
+   "step": 21
+  },
+  {
+   "text": "or",
+   "syllables": "or",
+   "step": 21
+  },
+  {
+   "text": "order",
+   "syllables": "or-der",
+   "step": 21
+  },
+  {
+   "text": "short",
+   "syllables": "short",
+   "step": 21
+  },
+  {
+   "text": "snoring",
+   "syllables": "snor-ing",
+   "step": 21
+  },
+  {
+   "text": "sport",
+   "syllables": "sport",
+   "step": 21
+  },
+  {
+   "text": "sports",
+   "syllables": "sports",
+   "step": 21
+  },
+  {
+   "text": "storm",
+   "syllables": "storm",
+   "step": 21
+  },
+  {
+   "text": "thorn",
+   "syllables": "thorn",
+   "step": 21
+  },
+  {
+   "text": "thorns",
+   "syllables": "thorns",
+   "step": 21
+  },
+  {
+   "text": "torn",
+   "syllables": "torn",
+   "step": 21
+  },
+  {
+   "text": "allow",
+   "syllables": "al-low",
+   "step": 22
+  },
+  {
+   "text": "bow",
+   "syllables": "bow",
+   "step": 22
+  },
+  {
+   "text": "bows",
+   "syllables": "bows",
+   "step": 22
+  },
+  {
+   "text": "brown",
+   "syllables": "brown",
+   "step": 22
+  },
+  {
+   "text": "clown",
+   "syllables": "clown",
+   "step": 22
+  },
+  {
+   "text": "cow",
+   "syllables": "cow",
+   "step": 22
+  },
+  {
+   "text": "cows",
+   "syllables": "cows",
+   "step": 22
+  },
+  {
+   "text": "crowd",
+   "syllables": "crowd",
+   "step": 22
+  },
+  {
+   "text": "crowded",
+   "syllables": "crowded",
+   "step": 22
+  },
+  {
+   "text": "crown",
+   "syllables": "crown",
+   "step": 22
+  },
+  {
+   "text": "down",
+   "syllables": "down",
+   "step": 22
+  },
+  {
+   "text": "downhill",
+   "syllables": "down-hill",
+   "step": 22
+  },
+  {
+   "text": "flower",
+   "syllables": "flower",
+   "step": 22
+  },
+  {
+   "text": "flowers",
+   "syllables": "flowers",
+   "step": 22
+  },
+  {
+   "text": "growl",
+   "syllables": "growl",
+   "step": 22
+  },
+  {
+   "text": "how",
+   "syllables": "how",
+   "step": 22
+  },
+  {
+   "text": "now",
+   "syllables": "now",
+   "step": 22
+  },
+  {
+   "text": "owl",
+   "syllables": "owl",
+   "step": 22
+  },
+  {
+   "text": "owls",
+   "syllables": "owls",
+   "step": 22
+  },
+  {
+   "text": "shower",
+   "syllables": "shower",
+   "step": 22
+  },
+  {
+   "text": "showers",
+   "syllables": "showers",
+   "step": 22
+  },
+  {
+   "text": "towels",
+   "syllables": "tow-els",
+   "step": 22
+  },
+  {
+   "text": "town",
+   "syllables": "town",
+   "step": 22
+  },
+  {
+   "text": "towns",
+   "syllables": "towns",
+   "step": 22
+  },
+  {
+   "text": "township",
+   "syllables": "town-ship",
+   "step": 22
+  },
+  {
+   "text": "bunch",
+   "syllables": "bunch",
+   "step": 23
+  },
+  {
+   "text": "chains",
+   "syllables": "chains",
+   "step": 23
+  },
+  {
+   "text": "chat",
+   "syllables": "chat",
+   "step": 23
+  },
+  {
+   "text": "chatted",
+   "syllables": "chat-ted",
+   "step": 23
+  },
+  {
+   "text": "chatting",
+   "syllables": "chat-ting",
+   "step": 23
+  },
+  {
+   "text": "check",
+   "syllables": "check",
+   "step": 23
+  },
+  {
+   "text": "checking",
+   "syllables": "check-ing",
+   "step": 23
+  },
+  {
+   "text": "cheeks",
+   "syllables": "cheeks",
+   "step": 23
+  },
+  {
+   "text": "chest",
+   "syllables": "chest",
+   "step": 23
+  },
+  {
+   "text": "chicken",
+   "syllables": "chick-en",
+   "step": 23
+  },
+  {
+   "text": "chickens",
+   "syllables": "chick-ens",
+   "step": 23
+  },
+  {
+   "text": "chicks",
+   "syllables": "chicks",
+   "step": 23
+  },
+  {
+   "text": "children",
+   "syllables": "chil-dren",
+   "step": 23
+  },
+  {
+   "text": "chin",
+   "syllables": "chin",
+   "step": 23
+  },
+  {
+   "text": "chips",
+   "syllables": "chips",
+   "step": 23
+  },
+  {
+   "text": "chop",
+   "syllables": "chop",
+   "step": 23
+  },
+  {
+   "text": "chopping",
+   "syllables": "chop-ping",
+   "step": 23
+  },
+  {
+   "text": "lunch",
+   "syllables": "lunch",
+   "step": 23
+  },
+  {
+   "text": "march",
+   "syllables": "march",
+   "step": 23
+  },
+  {
+   "text": "much",
+   "syllables": "much",
+   "step": 23
+  },
+  {
+   "text": "ostrich",
+   "syllables": "os-trich",
+   "step": 23
+  },
+  {
+   "text": "punch",
+   "syllables": "punch",
+   "step": 23
+  },
+  {
+   "text": "rich",
+   "syllables": "rich",
+   "step": 23
+  },
+  {
+   "text": "spinach",
+   "syllables": "spin-ach",
+   "step": 23
+  },
+  {
+   "text": "such",
+   "syllables": "such",
+   "step": 23
+  },
+  {
+   "text": "bright",
+   "syllables": "bright",
+   "step": 24
+  },
+  {
+   "text": "brighter",
+   "syllables": "bright-er",
+   "step": 24
+  },
+  {
+   "text": "brightest",
+   "syllables": "bright-est",
+   "step": 24
+  },
+  {
+   "text": "fight",
+   "syllables": "fight",
+   "step": 24
+  },
+  {
+   "text": "fighting",
+   "syllables": "fight-ing",
+   "step": 24
+  },
+  {
+   "text": "fights",
+   "syllables": "fights",
+   "step": 24
+  },
+  {
+   "text": "fright",
+   "syllables": "fright",
+   "step": 24
+  },
+  {
+   "text": "frighten",
+   "syllables": "fright-en",
+   "step": 24
+  },
+  {
+   "text": "high",
+   "syllables": "high",
+   "step": 24
+  },
+  {
+   "text": "higher",
+   "syllables": "high-er",
+   "step": 24
+  },
+  {
+   "text": "highest",
+   "syllables": "highest",
+   "step": 24
+  },
+  {
+   "text": "light",
+   "syllables": "light",
+   "step": 24
+  },
+  {
+   "text": "lightning",
+   "syllables": "light-ning",
+   "step": 24
+  },
+  {
+   "text": "might",
+   "syllables": "might",
+   "step": 24
+  },
+  {
+   "text": "moonlight",
+   "syllables": "moon-light",
+   "step": 24
+  },
+  {
+   "text": "night",
+   "syllables": "night",
+   "step": 24
+  },
+  {
+   "text": "nights",
+   "syllables": "nights",
+   "step": 24
+  },
+  {
+   "text": "right",
+   "syllables": "right",
+   "step": 24
+  },
+  {
+   "text": "sighs",
+   "syllables": "sighs",
+   "step": 24
+  },
+  {
+   "text": "sight",
+   "syllables": "sight",
+   "step": 24
+  },
+  {
+   "text": "sunlight",
+   "syllables": "sun-light",
+   "step": 24
+  },
+  {
+   "text": "thigh",
+   "syllables": "thigh",
+   "step": 24
+  },
+  {
+   "text": "tight",
+   "syllables": "tight",
+   "step": 24
+  },
+  {
+   "text": "tighter",
+   "syllables": "tight-er",
+   "step": 24
+  },
+  {
+   "text": "tonight",
+   "syllables": "to-night",
+   "step": 24
+  },
+  {
+   "text": "boast",
+   "syllables": "boast",
+   "step": 25
+  },
+  {
+   "text": "boastful",
+   "syllables": "boast-ful",
+   "step": 25
+  },
+  {
+   "text": "boat",
+   "syllables": "boat",
+   "step": 25
+  },
+  {
+   "text": "boats",
+   "syllables": "boats",
+   "step": 25
+  },
+  {
+   "text": "coach",
+   "syllables": "coach",
+   "step": 25
+  },
+  {
+   "text": "coal",
+   "syllables": "coal",
+   "step": 25
+  },
+  {
+   "text": "coat",
+   "syllables": "coat",
+   "step": 25
+  },
+  {
+   "text": "floated",
+   "syllables": "floated",
+   "step": 25
+  },
+  {
+   "text": "floating",
+   "syllables": "float-ing",
+   "step": 25
+  },
+  {
+   "text": "goal",
+   "syllables": "goal",
+   "step": 25
+  },
+  {
+   "text": "goals",
+   "syllables": "goals",
+   "step": 25
+  },
+  {
+   "text": "goat",
+   "syllables": "goat",
+   "step": 25
+  },
+  {
+   "text": "goats",
+   "syllables": "goats",
+   "step": 25
+  },
+  {
+   "text": "load",
+   "syllables": "load",
+   "step": 25
+  },
+  {
+   "text": "loaded",
+   "syllables": "loaded",
+   "step": 25
+  },
+  {
+   "text": "loaf",
+   "syllables": "loaf",
+   "step": 25
+  },
+  {
+   "text": "raincoat",
+   "syllables": "rain-coat",
+   "step": 25
+  },
+  {
+   "text": "road",
+   "syllables": "road",
+   "step": 25
+  },
+  {
+   "text": "roast",
+   "syllables": "roast",
+   "step": 25
+  },
+  {
+   "text": "roasted",
+   "syllables": "roas-ted",
+   "step": 25
+  },
+  {
+   "text": "soak",
+   "syllables": "soak",
+   "step": 25
+  },
+  {
+   "text": "soap",
+   "syllables": "soap",
+   "step": 25
+  },
+  {
+   "text": "throat",
+   "syllables": "throat",
+   "step": 25
+  },
+  {
+   "text": "toad",
+   "syllables": "toad",
+   "step": 25
+  },
+  {
+   "text": "toads",
+   "syllables": "toads",
+   "step": 25
+  },
+  {
+   "text": "appear",
+   "syllables": "ap-pear",
+   "step": 26
+  },
+  {
+   "text": "appears",
+   "syllables": "ap-pears",
+   "step": 26
+  },
+  {
+   "text": "beard",
+   "syllables": "beard",
+   "step": 26
+  },
+  {
+   "text": "clear",
+   "syllables": "clear",
+   "step": 26
+  },
+  {
+   "text": "clears",
+   "syllables": "clears",
+   "step": 26
+  },
+  {
+   "text": "dear",
+   "syllables": "dear",
+   "step": 26
+  },
+  {
+   "text": "ear",
+   "syllables": "ear",
+   "step": 26
+  },
+  {
+   "text": "ears",
+   "syllables": "ears",
+   "step": 26
+  },
+  {
+   "text": "fear",
+   "syllables": "fear",
+   "step": 26
+  },
+  {
+   "text": "fearful",
+   "syllables": "fear-ful",
+   "step": 26
+  },
+  {
+   "text": "fears",
+   "syllables": "fears",
+   "step": 26
+  },
+  {
+   "text": "hear",
+   "syllables": "hear",
+   "step": 26
+  },
+  {
+   "text": "hearing",
+   "syllables": "hear-ing",
+   "step": 26
+  },
+  {
+   "text": "near",
+   "syllables": "near",
+   "step": 26
+  },
+  {
+   "text": "nearer",
+   "syllables": "near-er",
+   "step": 26
+  },
+  {
+   "text": "nearest",
+   "syllables": "nearest",
+   "step": 26
+  },
+  {
+   "text": "spear",
+   "syllables": "spear",
+   "step": 26
+  },
+  {
+   "text": "spears",
+   "syllables": "spears",
+   "step": 26
+  },
+  {
+   "text": "year",
+   "syllables": "year",
+   "step": 26
+  },
+  {
+   "text": "years",
+   "syllables": "years",
+   "step": 26
+  },
+  {
+   "text": "burger",
+   "syllables": "bur-ger",
+   "step": 27
+  },
+  {
+   "text": "burgers",
+   "syllables": "bur-gers",
+   "step": 27
+  },
+  {
+   "text": "burn",
+   "syllables": "burn",
+   "step": 27
+  },
+  {
+   "text": "burning",
+   "syllables": "burn-ing",
+   "step": 27
+  },
+  {
+   "text": "burns",
+   "syllables": "burns",
+   "step": 27
+  },
+  {
+   "text": "burnt",
+   "syllables": "burnt",
+   "step": 27
+  },
+  {
+   "text": "burst",
+   "syllables": "burst",
+   "step": 27
+  },
+  {
+   "text": "bursting",
+   "syllables": "burst-ing",
+   "step": 27
+  },
+  {
+   "text": "church",
+   "syllables": "church",
+   "step": 27
+  },
+  {
+   "text": "churches",
+   "syllables": "churches",
+   "step": 27
+  },
+  {
+   "text": "curling",
+   "syllables": "curl-ing",
+   "step": 27
+  },
+  {
+   "text": "disturb",
+   "syllables": "dis-turb",
+   "step": 27
+  },
+  {
+   "text": "fur",
+   "syllables": "fur",
+   "step": 27
+  },
+  {
+   "text": "further",
+   "syllables": "fur-ther",
+   "step": 27
+  },
+  {
+   "text": "hurt",
+   "syllables": "hurt",
+   "step": 27
+  },
+  {
+   "text": "hurts",
+   "syllables": "hurts",
+   "step": 27
+  },
+  {
+   "text": "lurking",
+   "syllables": "lurk-ing",
+   "step": 27
+  },
+  {
+   "text": "nurses",
+   "syllables": "nurses",
+   "step": 27
+  },
+  {
+   "text": "return",
+   "syllables": "re-turn",
+   "step": 27
+  },
+  {
+   "text": "returning",
+   "syllables": "re-turn-ing",
+   "step": 27
+  },
+  {
+   "text": "returns",
+   "syllables": "re-turns",
+   "step": 27
+  },
+  {
+   "text": "surfers",
+   "syllables": "surfers",
+   "step": 27
+  },
+  {
+   "text": "turn",
+   "syllables": "turn",
+   "step": 27
+  },
+  {
+   "text": "turning",
+   "syllables": "turn-ing",
+   "step": 27
+  },
+  {
+   "text": "turns",
+   "syllables": "turns",
+   "step": 27
+  },
+  {
+   "text": "appointed",
+   "syllables": "ap-poin-ted",
+   "step": 28
+  },
+  {
+   "text": "avoid",
+   "syllables": "avoid",
+   "step": 28
+  },
+  {
+   "text": "boil",
+   "syllables": "boil",
+   "step": 28
+  },
+  {
+   "text": "boiling",
+   "syllables": "boil-ing",
+   "step": 28
+  },
+  {
+   "text": "coil",
+   "syllables": "coil",
+   "step": 28
+  },
+  {
+   "text": "coils",
+   "syllables": "coils",
+   "step": 28
+  },
+  {
+   "text": "coin",
+   "syllables": "coin",
+   "step": 28
+  },
+  {
+   "text": "coins",
+   "syllables": "coins",
+   "step": 28
+  },
+  {
+   "text": "disappointed",
+   "syllables": "dis-ap-poin-ted",
+   "step": 28
+  },
+  {
+   "text": "disappointing",
+   "syllables": "dis-ap-point-ing",
+   "step": 28
+  },
+  {
+   "text": "disappointment",
+   "syllables": "dis-ap-point-ment",
+   "step": 28
+  },
+  {
+   "text": "hoisted",
+   "syllables": "hois-ted",
+   "step": 28
+  },
+  {
+   "text": "join",
+   "syllables": "join",
+   "step": 28
+  },
+  {
+   "text": "joint",
+   "syllables": "joint",
+   "step": 28
+  },
+  {
+   "text": "moist",
+   "syllables": "moist",
+   "step": 28
+  },
+  {
+   "text": "noises",
+   "syllables": "noises",
+   "step": 28
+  },
+  {
+   "text": "oil",
+   "syllables": "oil",
+   "step": 28
+  },
+  {
+   "text": "ointment",
+   "syllables": "oint-ment",
+   "step": 28
+  },
+  {
+   "text": "point",
+   "syllables": "point",
+   "step": 28
+  },
+  {
+   "text": "pointed",
+   "syllables": "poin-ted",
+   "step": 28
+  },
+  {
+   "text": "pointing",
+   "syllables": "point-ing",
+   "step": 28
+  },
+  {
+   "text": "poison",
+   "syllables": "pois-on",
+   "step": 28
+  },
+  {
+   "text": "soil",
+   "syllables": "soil",
+   "step": 28
+  },
+  {
+   "text": "toilet",
+   "syllables": "toi-let",
+   "step": 28
+  },
+  {
+   "text": "toils",
+   "syllables": "toils",
+   "step": 28
+  },
+  {
+   "text": "air",
+   "syllables": "air",
+   "step": 29
+  },
+  {
+   "text": "airs",
+   "syllables": "airs",
+   "step": 29
+  },
+  {
+   "text": "chair",
+   "syllables": "chair",
+   "step": 29
+  },
+  {
+   "text": "chairman",
+   "syllables": "chair-man",
+   "step": 29
+  },
+  {
+   "text": "chairs",
+   "syllables": "chairs",
+   "step": 29
+  },
+  {
+   "text": "fair",
+   "syllables": "fair",
+   "step": 29
+  },
+  {
+   "text": "fairness",
+   "syllables": "fair-ness",
+   "step": 29
+  },
+  {
+   "text": "hair",
+   "syllables": "hair",
+   "step": 29
+  },
+  {
+   "text": "hairs",
+   "syllables": "hairs",
+   "step": 29
+  },
+  {
+   "text": "pair",
+   "syllables": "pair",
+   "step": 29
+  },
+  {
+   "text": "pairs",
+   "syllables": "pairs",
+   "step": 29
+  },
+  {
+   "text": "unfair",
+   "syllables": "un-fair",
+   "step": 29
+  }
+ ],
+ "reader_details": {}
+}

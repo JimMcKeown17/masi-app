@@ -3,20 +3,20 @@ global.__MASI_NO_DEFAULT_HANDLE__ = true;
 jest.mock('expo-updates', () => ({ channel: null }));
 import { getContentDiagnostics } from '../src/lessonPlan/packs/contentDiagnostics';
 
-test('reports the release packs and a clean self-check in a normal build', () => {
+test('reports the draft content release packs and a clean self-check in a normal build', () => {
   expect(getContentDiagnostics()).toEqual({
     previewContentAllowed: false,
-    currentPacks: { xh: 'isixhosa-interim-letters-v2', en: 'english-interim-letters-v2', af: 'afrikaans-interim-letters-v2' },
+    currentPacks: { xh: 'isixhosa-draft-content-v3', en: 'english-draft-content-v2', af: 'afrikaans-draft-content-v2' },
     bundledPackIds: expect.arrayContaining(['isixhosa-candidates-preview-v1', 'english-interim-letters-v1']),
     decodabilitySelfCheck: { vectorVersion: 1, passed: 72, failed: [] },
   });
 });
 
-test('a developer build reports the preview packs for the new class edition', () => {
+test('a developer build reports the same draft content packs (no preview mapping for the new edition)', () => {
   expect(getContentDiagnostics({ allowPreview: true }).currentPacks).toEqual({
-    xh: 'isixhosa-candidates-preview-v2',
-    en: 'english-candidates-preview-v1',
-    af: 'afrikaans-candidates-preview-v1',
+    xh: 'isixhosa-draft-content-v3',
+    en: 'english-draft-content-v2',
+    af: 'afrikaans-draft-content-v2',
   });
 });
 

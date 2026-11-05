@@ -240,27 +240,48 @@ const cleanupNamespace = async (admin, namespace) => {
   ]);
   // Gate operators may record a lesson/run or correct mastery on the disposable account.
   const sessionIds = idsOf(await scopedRows(admin, 'sessions', 'user_id', userIds));
-  const groupIds = idsOf(await scopedRows(admin, 'groups', 'created_by', userIds));
+  const groupIds = idsOf([
+    ...await scopedRows(admin, 'groups', 'created_by', userIds),
+    ...await scopedRows(admin, 'groups', 'class_id', classIds),
+  ]);
+  // History and authority rows reference people, children, classes and groups with ON DELETE
+  // RESTRICT (20261105120000), so every referencing row is deleted explicitly, children first;
+  // nothing relies on a cascade.
   await removeAndVerify(admin, 'assessment_items', 'assessment_id', assessmentIds);
   await removeAndVerify(admin, 'assessments', 'id', assessmentIds);
   await removeAndVerify(admin, 'battery_runs', 'child_id', childIds);
   await removeAndVerify(admin, 'letter_mastery_corrections', 'child_id', childIds);
   await removeAndVerify(admin, 'letter_mastery', 'child_id', childIds);
+  await removeAndVerify(admin, 'skill_mastery_corrections', 'child_id', childIds);
+  await removeAndVerify(admin, 'skill_mastery', 'child_id', childIds);
   await removeAndVerify(admin, 'session_attendees', 'session_id', sessionIds);
+  await removeAndVerify(admin, 'session_attendees', 'child_id', childIds);
   await removeAndVerify(admin, 'sessions', 'id', sessionIds);
   await removeAndVerify(admin, 'child_group_memberships', 'child_id', childIds);
+  await removeAndVerify(admin, 'child_group_memberships', 'group_id', groupIds);
   await removeAndVerify(admin, 'group_ea_assignments', 'group_id', groupIds);
+  await removeAndVerify(admin, 'group_ea_assignments', 'ea_user_id', userIds);
   await removeAndVerify(admin, 'groups', 'id', groupIds);
   for (const table of ['child_ea_assignments', 'child_class_memberships', 'child_programme_enrollments']) {
     await removeAndVerify(admin, table, 'child_id', childIds);
   }
+  await removeAndVerify(admin, 'child_ea_assignments', 'user_id', userIds);
+  await removeAndVerify(admin, 'child_class_memberships', 'class_id', classIds);
   await removeAndVerify(admin, 'class_ea_assignments', 'class_id', classIds);
+  await removeAndVerify(admin, 'class_ea_assignments', 'ea_user_id', userIds);
+  await removeAndVerify(admin, 'class_grouping_state', 'class_id', classIds);
+  await removeAndVerify(admin, 'grouping_versions', 'class_id', classIds);
   await removeAndVerify(admin, 'children', 'id', childIds);
   await removeAndVerify(admin, 'classes', 'id', classIds);
   await removeAndVerify(admin, 'time_entries', 'user_id', userIds);
   await removeAndVerify(admin, 'staff_programme_assignments', 'user_id', userIds);
   await removeAndVerify(admin, 'users', 'id', userIds);
   await removeAndVerify(admin, 'schools', 'id', schoolIds);
+  // Support receipts are evidence the service role may read but not delete, and they reference
+  // the auth user with ON DELETE RESTRICT: an operator removes them before the account can go.
+  if ((await scopedRows(admin, 'mobile_support_incidents', 'reporter_id', userIds)).length) {
+    throw new ProbeFailure('fixture users have support receipts; an operator must remove them first');
+  }
   for (const userId of userIds) await checked('delete fixture auth user', admin.auth.admin.deleteUser(userId));
   if ((await namespaceUsers(admin, namespace)).length) throw new ProbeFailure('verify auth cleanup');
   if ((await scopedRows(admin, 'schools', 'school_uid', [schoolUid])).length) throw new ProbeFailure('verify school cleanup');

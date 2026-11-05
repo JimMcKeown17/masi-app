@@ -23,7 +23,7 @@ root_cause_confidence_pct: 80
 confidence_basis: "Executed once in disposable Postgres 17: with grouping_version_id NULL the active-membership unique index does not apply and a second active row for the same child and group was accepted (rows affected 1, both removed_at null); how a phone produces the second insert was not driven."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T09:00:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -51,7 +51,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/results.json
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L5.unversioned_group_duplicate_active.sql
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/raw-output.log
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/154
 
 data_safety_status: "no data lost; the shape is a duplicate active row, which makes the child appear twice in the group and may double-count attendance; nothing in 1.5.0 detects or repairs it"
 workaround_status: "Head Office can end the extra membership by hand (the lifecycle script, fix step 6); nothing prevents it recurring"
@@ -136,7 +137,7 @@ The server enforces one active membership per child and grouping version only. G
 
 ## Suggested fix
 
-No constraint is proposed, deliberately. A new unique index on `(child_id, group_id)` would turn the 1.5.0 phone's re-sends of the same shape into terminal `23505` refusals (the classifier treats them as terminal) and strand work on phones that cannot be updated at once. Instead the plan detects the shape: the daily read-only check (fix step 6, in `/bug-sync`) lists duplicate active `(child_id, group_id)` memberships, and Head Office repairs them with the lifecycle script. Revisit a constraint only after no 1.5.0 phone can produce the shape.
+No constraint is proposed, deliberately. A new unique index on `(child_id, group_id)` would turn the 1.5.0 phone's re-sends of the same shape into terminal `23505` refusals (the classifier treats them as terminal) and strand work on phones that cannot be updated at once. Instead the plan detects the shape: the daily read-only check (fix step 6, in `/bug-sync`) lists duplicate active `(child_id, group_id)` memberships. The November Head Office script (`scripts/ho-lifecycle.cjs`: handover, end-delivery, reopen) does **not** end memberships, so a repair is a separate, Jim-approved action (a vetted one-off statement, or a future `end-membership` command). Revisit a constraint only after no 1.5.0 phone can produce the shape.
 
 ## Verification plan
 
@@ -152,6 +153,9 @@ No constraint is proposed, deliberately. A new unique index on `(child_id, group
 | Time UTC | Actor | Event | Evidence or decision |
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L5.unversioned_group_duplicate_active; docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/ |
+| 2026-11-05T02:30:00Z | Claude | Detection issue linked | Issues #154; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ho-tools |
+| 2026-11-05T03:40:00Z | Claude | Repair path corrected | The H1 script built on feat/lifecycle-ho-tools has no membership command; detection only for November, repair needs Jim's approval |
+| 2026-11-05T09:00:00Z | Claude | Detection built (daily invariant check lists duplicates); no repair command | feat/lifecycle-ho-tools: ho-lifecycle harness 34/34 on all 46 migrations incl. the guard, 107 unit tests. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
 
 ## Open questions
 

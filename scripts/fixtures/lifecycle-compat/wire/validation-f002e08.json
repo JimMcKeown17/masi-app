@@ -1,0 +1,70 @@
+{
+  "description": "One-time validation of the frozen 1.5.0 wire corpus (recorded at 8b79eae5 by docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain) against the installed client f002e08. Run on 2026-11-05 by re-running the same chain test in a throwaway f002e08 worktree (Node 20, real better-sqlite3). Timestamps and run-random UUIDs are masked; batch bodies compared as sets.",
+  "producer": "f002e085d093e15bd04ae4672d5c6f64fa91a0bd",
+  "recordedAt": "8b79eae58699b4d591043368eb4e537868a6e048",
+  "result": "Every scenario sends the same multiset of requests with the same per-request outcomes. Where the order differs it differs only between requests whose order is decided by run-random ids (child C vs child D attendee and tick requests); two f002e08 runs differ from each other in the same way. No skill_mastery request occurs in these chains, so the expected f002e08 difference (no skill_mastery) does not arise.",
+  "corpusVsF002e08": {
+    "wire-C1.json": {
+      "requests": 13,
+      "sameSequence": true,
+      "sameMultiset": true,
+      "sameMethodTargetOutcomeSequence": true
+    },
+    "wire-C2.json": {
+      "requests": 11,
+      "sameSequence": false,
+      "sameMultiset": true,
+      "sameMethodTargetOutcomeSequence": false
+    },
+    "wire-C3a.json": {
+      "requests": 5,
+      "sameSequence": false,
+      "sameMultiset": true,
+      "sameMethodTargetOutcomeSequence": false
+    },
+    "wire-C3b.json": {
+      "requests": 8,
+      "sameSequence": false,
+      "sameMultiset": true,
+      "sameMethodTargetOutcomeSequence": false
+    },
+    "wire-C3c.json": {
+      "requests": 8,
+      "sameSequence": false,
+      "sameMultiset": true,
+      "sameMethodTargetOutcomeSequence": false
+    },
+    "wire-C5b.json": {
+      "requests": 9,
+      "sameSequence": false,
+      "sameMultiset": true,
+      "sameMethodTargetOutcomeSequence": true
+    }
+  },
+  "f002e08RunVsRun": {
+    "wire-C1.json": {
+      "sameSequence": true,
+      "sameMultiset": true
+    },
+    "wire-C2.json": {
+      "sameSequence": false,
+      "sameMultiset": true
+    },
+    "wire-C3a.json": {
+      "sameSequence": false,
+      "sameMultiset": true
+    },
+    "wire-C3b.json": {
+      "sameSequence": false,
+      "sameMultiset": true
+    },
+    "wire-C3c.json": {
+      "sameSequence": false,
+      "sameMultiset": true
+    },
+    "wire-C5b.json": {
+      "sameSequence": false,
+      "sameMultiset": true
+    }
+  }
+}

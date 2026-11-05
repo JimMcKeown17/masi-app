@@ -23,8 +23,9 @@ test.each([
 test('current packs are keyed only by registered letter order ids', () => {
   const orderIds = new Set(LETTER_ORDER_REGISTRY.orders.map(order => order.id));
   expect(Object.keys(CURRENT_PACK_IDS).sort()).toEqual(['preview', 'release']);
+  // Since 2026-11-05 no order has a preview mapping; the release mapping must never be empty.
+  expect(Object.keys(CURRENT_PACK_IDS.release).length).toBeGreaterThan(0);
   for (const ids of Object.values(CURRENT_PACK_IDS)) {
-    expect(Object.keys(ids).length).toBeGreaterThan(0);
     expect(Object.keys(ids).filter(id => !orderIds.has(id))).toEqual([]);
   }
 });

@@ -28,8 +28,11 @@ Until your coordinator tells you your app has the update:
       in that EA's receipts on the server (`npm run bugs:incidents`). A "needs attention" banner on
       the phone is fine when this holds. Do **not** wait for "All saved and synced": a refused item
       keeps the banner until the app update, and waiting for it would block you for weeks;
-   4. then make the change: end the old row before adding the new one, never set an end before its
-      start, and never bump `row_version` on an end.
+   4. then make the change with the Head Office lifecycle script (`npm run ho:handover`,
+      `ho:end-delivery`, `ho:reopen`; see the
+      [runbook](./ea-access-runbook.md#head-office-lifecycle-changes-handover-end-delivery-reopen)).
+      It ends the old row before opening the new one, never sets an end before its start, and never
+      bumps `row_version`. Its first use on the live database needs Jim's go-ahead.
 
    *Lifted for an EA once the "held on the day" server rule is live and verified (plan step R1) **and**
    that EA's phone has the app update (its Send diagnostics receipt shows the new `updateId`).* After
@@ -51,6 +54,7 @@ Until your coordinator tells you your app has the update:
 
 - Run the `/bug-sync` sweep. Look for `upload_terminal` receipts on `session_attendees`,
   `letter_mastery`, `skill_mastery`, `sessions` and the lifecycle tables, and for `upload_backlog_stale`.
+  The sweep also runs the daily lifecycle check (`scripts/lifecycle-invariants.sql`).
 - Before telling any EA to tap Sync now or pull to refresh after a Head Office change, check their
   receipts for refused archive or restore rows (rule 2).
 - Each new pattern becomes an MA-BUG record.
