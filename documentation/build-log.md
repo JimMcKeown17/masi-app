@@ -8954,3 +8954,51 @@ jest.integration.config.js`: 113 suites / 1,554 tests passed. Container `wo4-jso
   so the next pull converges it.
 - Verification (Node 20): `npx jest` 522 suites / 8,293 tests passed; `npx jest -c
   jest.integration.config.js` 113 suites / 1,555 tests passed.
+
+### 2026-11-05 — Lifecycle OTA: a child Head Office restores comes back on the phone (`feat/lifecycle-ota`, work order 6)
+
+Head Office is getting `restore child` (work order 5, HO branch): it reopens in place, with the same
+ids, starts and `row_version`, exactly what one Delete child ended. Before this OTA goes to every
+pilot phone we proved, through the real code paths, that the phone converges on its next normal
+pull with no help from the EA. New `__tests__/headOfficeRestore.integration.test.js`: real handle,
+real SQLite, real repositories, `lessonSave`, sync engine and the handle's pull services
+(`pullRoster`, `pullClasses`) over real supabase-js. `test-support/lifecycleServer.js` now answers
+the pull (`get_reconcile_acknowledgments` per `20261023120000`, and PostgREST GETs with embeds,
+`!inner`, eq/is/in filters, order and limit; every column returned, nulls included; an unmodelled
+query is a 500, never a plausible empty result), leaves `row_version` alone on server-side ends (as
+`20261105120300` does; it used to bump it), and has `restoreChild`, mirroring the work order 5 design.
+
+- **Passed first time:** a sole holder's child with local history (archived on the phone) and
+  without (deleted outright), and a co-held child this EA left (class-path and other-programme
+  co-holder): back in My Children with class and group, writable (an edit and a new lesson upload),
+  history still on the phone, the other EA's rows untouched. The pull reads full scope (no cursor),
+  so an in-place reopen without a version bump is seen; equal versions apply.
+- **Bug 1 (fixed): a refused relationship INSERT left a ghost row.** A membership INSERT refused
+  before the removal and stamped `REMOVED_WITH_CHILD` was never re-sent and blocked nothing, but its
+  local row stayed open (removeChild leaves rows with a queued INSERT open, and no pull or reconcile
+  ends a row that is not synced). After a restore the phone showed the child in a group the server
+  never held, even after the refused row left. RED: `expect(await groupsOf(C)).toEqual([])` received
+  `[GROUP]`. Fix: the `hard_delete` acknowledgement that stamps those rows also ends their local
+  rows (`stampRefusalsRemovedWithChild`); the outbox payload, and so the receipt digest, is unchanged.
+- **Bug 2 (fixed): a child added offline and deleted before its first upload never came back.**
+  Its INSERT was acknowledged while the removal waited, which leaves the row `pending`
+  (`hasRemainingOutbox`); the `hard_delete` acknowledgement never touched it, so the row stayed
+  `pending` with nothing queued and every pull refused the server's copy (pending-local-wins). RED:
+  after restore and pull, the local child still had `archived_at` and `archive_reason:
+  'removed_by_ea'`. Fix: `settleRemovedChildRow` sets such a row `synced` when the acknowledged
+  `hard_delete` was the child's last outbox row (same class as `beeea645`).
+- **Not supported, observed (throwaway probe, not committed):** a restore while the phone's
+  `hard_delete` is still queued. Lost response: the pull filter keeps the child hidden, and the
+  retried RPC removes it again at a new instant, undoing the restore. Never sent: the restore is
+  `already_active` and the later upload removes the child. Either way Head Office restores again
+  once the EA's receipt shows nothing waiting.
+- **1.5.0 (`f002e08`, read-only):** the pull code is the same; both Delete child paths converge
+  after an acknowledged removal, with two limits recorded in the contract map: a fast phone clock
+  splits a 1.5.0 archive chain across instants, and a 1.5.0 forced pass replays refused archives
+  (B3), so restore on a 1.5.0 phone needs the same precondition as a Head Office reopen.
+- Docs: contract map, Delete child paragraph (stamp ends local rows; settle rule) and new
+  "Head Office restore convergence" under Pull Persistence & Reconcile.
+- Verification (Node 20): `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js`
+  6/6 passed (the two bug tests RED before their fixes); `npx jest` 523 suites / 8,299 tests passed;
+  `npx jest -c jest.integration.config.js` 114 suites / 1,561 tests passed. No SQL or PostgreSQL
+  harness changed (client and fake server only); `npm run lint` does not exist.
