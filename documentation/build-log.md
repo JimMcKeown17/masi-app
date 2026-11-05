@@ -9325,3 +9325,85 @@ The regression window was 17:57–18:10 UTC.
 `main` that lags behind the code phones run. Until the lifecycle stack merges, publish only from a
 tree that contains `feat/app-release-card`. Follow-up: `ota:publish` will refuse to publish a tree
 that does not contain the commit of the update phones are running now.
+
+### 2026-11-05 — `ota:publish` refuses to roll phones back by accident (`feat/app-release-card`, work order 9)
+
+Follow-up to the `1.5.0+4` incident above: a bare `eas update` from `main` replaced `1.5.0+2`
+(e9a4360d, from this unmerged branch) with code that lacked it, and every phone was rolled back
+for 13 minutes. `npm run ota:publish` now checks, before counting (dry runs too), that HEAD
+contains the commit of the update phones run now.
+
+- **Where the commit is (eas-cli 26.0.0 source, npx cache).** The work order expected it in the
+  `update:list` JSON the script already pages through. It is not there:
+  `getUpdateGroupDescriptionsWithBranch` (`build/update/utils.js`) builds each group from
+  `branch, message, runtimeVersion, isRollBackToEmbedded, rolloutPercentage, codeSigningKey,
+  group, platforms` and drops `gitCommitHash`, although the GraphQL `UpdateFragment` fetches it.
+  `channel:view` carries it, but only for the newest group on the branch whatever its runtime
+  (`updateGroups(offset: 0, limit: 1)`, no filter), so it is wrong when another runtime published
+  last. The script therefore makes one extra read: `npx --yes eas-cli@26.0.0 update:view <group>
+  --json`, which prints the group's updates (one per platform) through
+  `getUpdateWithFileUrlsJsonInfosForUpdates`: `id, createdAt, group, branch, message,
+  runtimeVersion, platform, manifestPermalink, isRollBackToEmbedded, gitCommitHash`, with null
+  fields dropped by `build/utils/json.js`. `update:view` takes `--json` only (`EasJsonOnlyFlag`;
+  it always runs non-interactive), so the script does not pass `--non-interactive`, which oclif
+  would reject.
+- **Which group phones run.** The newest group for this runtime in the `update:list` pages.
+  eas-cli itself reads offset 0 / limit 1 as the latest group (`channel:view`'s "most recent
+  update group"; `selectRuntimeAndGetLatestUpdateGroupForEachPublishPlatformOnBranchAsync`), so
+  the listing is newest first.
+- **Roll back to embedded.** `publishRollbacksAsync` (`build/update/roll-back-to-embedded.js`)
+  publishes no `gitCommitHash`, and the listing marks the group `isRollBackToEmbedded: true`.
+  Such a group is not read with `update:view`. A republish copies the source update's commit
+  (`build/update/republish.js`), so republishing an older update is checked against that commit.
+- **Rules.** A commit C: refused unless `git rev-parse --verify --quiet C^{commit}` and
+  `git merge-base --is-ancestor C HEAD` both succeed (C equal to HEAD counts). git exit 1 is "no";
+  any other failure is an error, never a pass. C not in this clone: refused with "Run git fetch
+  origin". Otherwise the refusal names C, the group and its release (from `OTA <v>+N:` in its
+  message, or "not numbered"), says publishing would roll phones back to code without it, and
+  suggests merging the branch that contains C (`git branch -r --contains C`). A roll back to
+  embedded, a group with no commit, or no update yet for the runtime: no constraint and a note.
+  A dry run and a publish both print what phones run (group, release, commit) and the check
+  result. Output EAS returns that the script cannot read (not JSON, no updates, another group's
+  updates, two commits in one group, a commit that is not a 40- or 64-hex hash, a group id that
+  is not an id) is refused, and nothing is published.
+- **`--allow-rollback "<reason>"`.** Lets a refused publish through, prints the reason, and puts
+  `(rollback: <reason>)` in the update message (`OTA 1.5.0+3: Back to main (rollback: …) (9f6b0f9)`).
+  The reason must be non-empty, one line, and not start with `-` (so `--allow-rollback
+  --publish` is refused). npm swallowing it before the `--` is refused like the other flags:
+  probed with npm 10.8.2, `npm run ota:publish --allow-rollback why -- --message x` gives the
+  script `["why","--message","x"]` with `npm_config_allow_rollback=true`, and `=why` gives
+  `npm_config_allow_rollback=why`. Two choices the work order left open: (1) `--allow-rollback`
+  also lets through a commit this clone does not have, so a commit that is gone from origin for
+  good cannot block every publish; (2) `--allow-rollback` on a publish that rolls nothing back is
+  refused, so the EAS history never labels a normal update a rollback.
+- Docs: DEPLOYMENT.md "Pushing an OTA Update" (new step 3, the flag, the npm list, the bare
+  `eas update` warning).
+
+**Open risks (not fixed; outside this work order).** The check reads one group: the newest for
+the runtime. A group published for one platform only (`eas update --platform ios`) leaves the
+other platform's phones on an older group that is not checked; and a group in a partial rollout
+(`rolloutPercentage`) leaves the rest of the phones on its control update. Neither is used at
+Masi today (the script always publishes both platforms, with no rollout). The fixtures are shaped
+from the eas-cli 26.0.0 source, not captured; if the live `update:view` JSON differs, the script
+refuses with the parse error and publishes nothing. The orchestrator's dry run closes this.
+
+**Verification (Node 20).**
+- RED first: with the tests written and the script unchanged, `npx jest
+  __tests__/otaPublishScript.test.js` failed 30 of 87 (re-run against the HEAD script to record
+  the messages). The #165 case, dry run and publish, failed with `main did not refuse`: the old
+  script counted and published over 1.5.0+2. The `--allow-rollback` parse cases failed with
+  `Unknown argument: --allow-rollback`; the two npm cases with no error at all (`Received has
+  value: undefined`); the unreadable-group and bad-group-id cases with `Received function did not
+  throw`; the output cases with the old dry-run text (`Next release: 1.5.0+3 on preview` and no
+  "Phones on preview … run" line); the dry-run call-order test without `update:view`. GREEN:
+  87/87.
+- Offline with the real git and no EAS (a scratch script calling `checkPhonesKeepTheirCode`):
+  phones on e9a4360 with HEAD b759128 passes; HEAD equal to e9a4360 passes; HEAD 9f6b0f9 is
+  refused with the merge suggestion; an unknown commit is refused with "git fetch origin";
+  9f6b0f9 with `--allow-rollback` passes and prints the reason.
+- Real `npm run ota:publish --allow-rollback why -- --message x` and `--allow-rollback=why`:
+  refused, exit 1. `-- --message x --allow-rollback --publish`: refused, exit 1. EAS was not
+  called by this work.
+- `npx jest`: 526 suites / 8,442 tests passed, exit 0. `npx jest -c jest.integration.config.js`:
+  114 suites / 1,568 tests passed, exit 0. No SQL, sync or RLS change, so no PostgreSQL harness
+  and no contract-map change; no lint script.

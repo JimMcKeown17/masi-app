@@ -9,6 +9,19 @@ const previewPage = require('../test-support/fixtures/eas-update-list/preview-pa
 // ViewUpdateChannelOnApp, the branches from ViewBranchesOnUpdateChannel; nulls and __typename
 // removed by build/utils/json.js). Also shaped from that source, not captured.
 const previewChannel = require('../test-support/fixtures/eas-channel-view/preview.json');
+// The branch as it stood when #165 was published (2026-11-05): 1.5.0+2 (group 2ed208c1, from
+// e9a4360d on feat/app-release-card) is the newest 1.5.0 update. Same renderer as previewPage.
+const pageAtRelease2 = require('../test-support/fixtures/eas-update-list/preview-page-at-1.5.0+2.json');
+// The commit is not in the update:list JSON: getUpdateGroupDescriptionsWithBranch
+// (build/update/utils.js) leaves gitCommitHash out. `update:view <group> --json` prints the group's
+// updates, one per platform, as getUpdateWithFileUrlsJsonInfosForUpdates builds them (same file;
+// command in build/commands/update/view.js), with null fields dropped by build/utils/json.js, so an
+// update published without a commit has no gitCommitHash key. Shaped from that source, not captured;
+// the 1.5.0+2 ids, message, time and commit are the published ones (build log, 2026-11-05).
+const viewFixtures = {
+  '8addaae6-4f1c-4b0e-9d3a-2c7e5f6a1b90': require('../test-support/fixtures/eas-update-view/lifecycle-8addaae6.json'),
+  '2ed208c1-1760-4c1d-b450-0844d4eeb7f0': require('../test-support/fixtures/eas-update-view/release-1.5.0+2.json'),
+};
 const {
   EAS_CLI,
   assertChannelBranch,
@@ -36,22 +49,49 @@ const channelView = (branchNames, name = 'preview') => JSON.stringify({ currentP
   ...previewChannel.currentPage, name, updateBranches: branchNames.map(branch => ({ id: `${branch}-id`, name: branch, updateGroups: [] })),
 } });
 const isChannelView = (args) => args.includes('channel:view');
+const isUpdateView = (args) => args.includes('update:view');
+// Fake EAS: channel:view, update:list (one page) and update:view <group>, from the fixtures.
+const fakeEas = ({ list = previewPage, views = viewFixtures } = {}) => jest.fn((command, args) => {
+  if (isChannelView(args)) return JSON.stringify(previewChannel);
+  if (isUpdateView(args)) {
+    const groupId = args[args.indexOf('update:view') + 1];
+    if (!views[groupId]) throw new Error(`Could not find any updates with group ID: "${groupId}"`);
+    return JSON.stringify(views[groupId]);
+  }
+  return JSON.stringify(list);
+});
 
-const fakeGit = ({ status = '', remoteBranches = '  origin/feat/app-release-card\n  origin/HEAD -> origin/main\n' } = {}) => {
+// git exits 1 for "no" (`merge-base --is-ancestor`, `rev-parse --verify --quiet`) and 128 for an
+// error such as an unknown commit; execFileSync puts the exit code on error.status.
+const gitExit = (key, status) => Object.assign(new Error(`Command failed: git ${key}`), { status });
+const fakeGit = ({
+  status = '', remoteBranches = '  origin/feat/app-release-card\n  origin/HEAD -> origin/main\n',
+  head = HEAD, ancestors = [head], unrelated = [],
+} = {}) => {
   const calls = [];
   const git = (args) => {
     calls.push(args);
     const key = args.join(' ');
     if (key === 'status --porcelain') return status;
-    if (key === 'rev-parse HEAD') return HEAD;
+    if (key === 'rev-parse HEAD') return head;
     if (key === 'branch -r --contains HEAD') return remoteBranches;
+    const known = (commit) => ancestors.includes(commit) || unrelated.includes(commit);
+    if (args.length === 4 && args.slice(0, 3).join(' ') === 'rev-parse --verify --quiet' && args[3].endsWith('^{commit}')) {
+      const commit = args[3].slice(0, -'^{commit}'.length);
+      if (known(commit)) return `${commit}\n`;
+      throw gitExit(key, 1);
+    }
+    if (args.length === 4 && args[0] === 'merge-base' && args[1] === '--is-ancestor' && args[3] === head) {
+      if (ancestors.includes(args[2])) return '';
+      throw gitExit(key, known(args[2]) ? 1 : 128);
+    }
     throw new Error(`unexpected git ${key}`);
   };
   return { git, calls };
 };
 const deps = (overrides = {}) => {
   const run = jest.fn();
-  const runForOutput = jest.fn((command, args) => JSON.stringify(isChannelView(args) ? previewChannel : previewPage));
+  const runForOutput = fakeEas();
   const lines = [];
   return {
     run, runForOutput, lines, env: {},
@@ -87,8 +127,22 @@ describe('arguments', () => {
     [['-m', '--dry-run', '--channel', 'preview'], /--message needs a description, not "--dry-run"/],
     [['--message=--dry-run'], /--message needs a description, not "--dry-run"/],
     [['--message', 'ok', '--channel', '--dry-run'], /--channel needs a channel name/],
+    // --allow-rollback takes a reason, which goes into the update message.
+    [['--message', 'ok', '--allow-rollback'], /--allow-rollback needs a reason/],
+    [['--message', 'ok', '--allow-rollback', '   '], /--allow-rollback needs a reason/],
+    [['--message', 'ok', '--allow-rollback='], /--allow-rollback needs a reason/],
+    [['--message', 'ok', '--allow-rollback', '--publish'], /--allow-rollback needs a reason, not "--publish"/],
+    [['--message', 'ok', '--allow-rollback', 'two\nlines'], /--allow-rollback reason must be one line/],
   ])('refuses %p', (argv, error) => {
     expect(() => parseArgs(argv)).toThrow(error);
+  });
+
+  test('--allow-rollback takes a reason, trimmed; without it there is none', () => {
+    expect(parseArgs(['--message', 'x', '--allow-rollback', '  lifecycle crash on launch  ']))
+      .toEqual({ message: 'x', channel: 'preview', dryRun: true, allowRollback: 'lifecycle crash on launch' });
+    expect(parseArgs(['--message', 'x', '--allow-rollback=back to main', '--publish']))
+      .toEqual({ message: 'x', channel: 'preview', dryRun: false, allowRollback: 'back to main' });
+    expect(parseArgs(['--message', 'x']).allowRollback).toBeUndefined();
   });
 });
 
@@ -104,6 +158,9 @@ describe('flags npm takes for itself', () => {
     ['npm run ota:publish --message x', { npm_config_message: 'x' }, '--message'],
     ['npm run ota:publish -m x', { npm_config_message: 'x' }, '--message'],
     ['npm run ota:publish --publish -- --message x', { npm_config_publish: 'true' }, '--publish'],
+    // Probed with npm 10.8.2: the script got ["why", "--message", "x"] and npm_config_allow_rollback=true.
+    ['npm run ota:publish --allow-rollback why -- --message x', { npm_config_allow_rollback: 'true' }, '--allow-rollback'],
+    ['npm run ota:publish --allow-rollback=why -- --message x', { npm_config_allow_rollback: 'why' }, '--allow-rollback'],
   ])('%s is refused before anything is checked, listed or published', (_typed, env, flag) => {
     const d = deps({ env });
     let error;
@@ -242,6 +299,11 @@ describe('commands', () => {
       .toBe('OTA 1.5.0+2: Release card (fd053cf)');
   });
 
+  test('a deliberate rollback carries its reason in the update message', () => {
+    expect(formatUpdateMessage({ version: '1.5.0', release: 3, message: 'Back to main', commit: HEAD, rollbackReason: 'card crashes' }))
+      .toBe('OTA 1.5.0+3: Back to main (rollback: card crashes) (fd053cf)');
+  });
+
   test('the update and source-map commands are argument arrays on the pinned eas-cli', () => {
     expect(buildUpdateCommand({ channel: 'preview', message: 'OTA 1.5.0+2: "quoted" $(x) (fd053cf)' })).toEqual({
       command: 'npx',
@@ -291,7 +353,7 @@ describe('main', () => {
     const result = main(['--message', "Jim's card"], d);
     expect(result).toMatchObject({ release: 2, releaseLabel: '1.5.0+2', dryRun: true });
     expect(d.run).not.toHaveBeenCalled();
-    expect(d.runForOutput.mock.calls.map(([, args]) => args[2])).toEqual(['channel:view', 'update:list']);
+    expect(d.runForOutput.mock.calls.map(([, args]) => args[2])).toEqual(['channel:view', 'update:list', 'update:view']);
     const output = d.lines.join('\n');
     expect(output).toContain('Next release: 1.5.0+2');
     expect(output).toContain('Nothing was published. Add --publish to publish.');
@@ -345,5 +407,173 @@ describe('main', () => {
     d.run.mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new Error('sentry 401'); });
     expect(() => main(['--message', 'x', '--channel', 'preview', '--publish'], d))
       .toThrow(/1\.5\.0\+2 is published[\s\S]*source maps[\s\S]*npx --yes eas-cli@26\.0\.0 env:exec preview 'npm run sentry:sourcemaps' --non-interactive/);
+  });
+});
+
+describe('the update phones run now', () => {
+  // 2026-11-05: phones ran 1.5.0+2 (group 2ed208c1, from e9a4360d on feat/app-release-card). A bare
+  // `eas update` from main (9f6b0f96), which did not contain e9a4360d, rolled every phone back for
+  // 13 minutes. These are the real commits; the fake git knows which contains which.
+  const MAIN_AT_165 = '9f6b0f961da83b642e65b5ee2efebf6f0fcbc630';
+  const RELEASE_2 = 'e9a4360d47ce9d9b1c1c40ed3ffb8f0dfa2277db';
+  const MERGE = 'b759128f71c3a174ccbf57376c8a1988f57934b7'; // main + feat/app-release-card (1.5.0+4)
+  const GROUP_2 = '2ed208c1-1760-4c1d-b450-0844d4eeb7f0';
+  const LIFECYCLE = '8addaae6-4f1c-4b0e-9d3a-2c7e5f6a1b90';
+  const incident = (overrides = {}) => deps({
+    git: fakeGit({ head: MAIN_AT_165, unrelated: [RELEASE_2] }).git,
+    runForOutput: fakeEas({ list: pageAtRelease2 }),
+    ...overrides,
+  });
+  const attempt = (argv, d) => {
+    try { main(argv, d); } catch (error) { return error; }
+    throw new Error('main did not refuse');
+  };
+  const viewCalls = d => d.runForOutput.mock.calls.filter(([, args]) => isUpdateView(args));
+
+  test.each([false, true])('the #165 publish (main, without the code phones run) is refused before counting (dry run: %p)', (dryRun) => {
+    const d = incident();
+    const error = attempt(['--message', 'Draft content packs', ...(dryRun ? [] : ['--publish'])], d);
+    expect(error.message).toContain(`phones on preview run update group ${GROUP_2} (release 1.5.0+2) from commit ${RELEASE_2}`);
+    expect(error.message).toContain('this commit (9f6b0f9) does not contain it');
+    expect(error.message).toContain('Publishing would roll phones back to code without it.');
+    expect(error.message).toContain(`Merge the branch that contains e9a4360 into this one (git branch -r --contains ${RELEASE_2} lists it)`);
+    expect(error.message).toContain('To roll phones back on purpose, add --allow-rollback "why".');
+    expect(error.message).toContain('Nothing was published.');
+    expect(d.run).not.toHaveBeenCalled();
+    expect(d.lines.join('\n')).not.toContain('Next release');
+  });
+
+  test('the update phones run is the newest group for this runtime, read with update:view on the pinned eas-cli', () => {
+    const d = incident();
+    attempt(['--message', 'x'], d);
+    expect(viewCalls(d)).toEqual([['npx', ['--yes', EAS_CLI, 'update:view', GROUP_2, '--json']]]);
+  });
+
+  test('a commit that contains the code phones run is counted and published; the dry run says what phones run and that the check passed', () => {
+    const git = fakeGit({ head: MERGE, ancestors: [MERGE, RELEASE_2, MAIN_AT_165] });
+    const d = incident({ git: git.git });
+    expect(main(['--message', 'Restore the lifecycle update'], d)).toMatchObject({ releaseLabel: '1.5.0+3', dryRun: true });
+    const output = d.lines.join('\n');
+    expect(output).toContain(`Phones on preview (runtime 1.5.0) run update group ${GROUP_2} (release 1.5.0+2), commit ${RELEASE_2}.`);
+    expect(output).toContain('Check passed: this commit (b759128) contains e9a4360, so this update keeps the code phones run now.');
+    expect(output.indexOf('Check passed')).toBeLessThan(output.indexOf('Next release: 1.5.0+3'));
+    expect(git.calls).toEqual(expect.arrayContaining([
+      ['rev-parse', '--verify', '--quiet', `${RELEASE_2}^{commit}`],
+      ['merge-base', '--is-ancestor', RELEASE_2, MERGE],
+    ]));
+
+    const published = incident({ git: git.git });
+    expect(main(['--message', 'Restore the lifecycle update', '--publish'], published))
+      .toMatchObject({ releaseLabel: '1.5.0+3', message: 'OTA 1.5.0+3: Restore the lifecycle update (b759128)' });
+    expect(published.run).toHaveBeenCalledTimes(2);
+    expect(published.lines.join('\n')).toContain('Check passed: this commit (b759128) contains e9a4360');
+  });
+
+  test('republishing the commit phones already run counts as containing it', () => {
+    const d = deps();
+    expect(main(['--message', 'Same code again'], d)).toMatchObject({ releaseLabel: '1.5.0+2' });
+    const output = d.lines.join('\n');
+    expect(output).toContain(`Phones on preview (runtime 1.5.0) run update group ${LIFECYCLE} (not numbered), commit ${HEAD}.`);
+    expect(output).toContain('Check passed: this commit (fd053cf) contains fd053cf');
+  });
+
+  test('the newest group for this runtime is the one phones run, even when a newer group serves another runtime', () => {
+    const list = { ...pageAtRelease2, currentPage: [group('1.4.0', '"OTA 1.4.0+3: Old phones (abc1234)" (1 minute ago by jimmckeown)'), ...pageAtRelease2.currentPage] };
+    const d = incident({ runForOutput: fakeEas({ list }) });
+    expect(attempt(['--message', 'x'], d).message).toContain(`update group ${GROUP_2} (release 1.5.0+2)`);
+    expect(viewCalls(d).map(([, args]) => args[3])).toEqual([GROUP_2]);
+  });
+
+  test('a commit this repository does not have is refused: fetch first', () => {
+    const d = incident({ git: fakeGit({ head: MAIN_AT_165 }).git });
+    const error = attempt(['--message', 'x', '--publish'], d);
+    expect(error.message).toContain(`from commit ${RELEASE_2}, which this repository does not have`);
+    expect(error.message).toContain('Run git fetch origin, then publish again.');
+    expect(error.message).toContain('Nothing was published.');
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  test('--allow-rollback publishes a deliberate rollback, prints the reason and records it in the update message', () => {
+    const d = incident();
+    const result = main(['--message', 'Back to main', '--allow-rollback', 'the card crashes on launch', '--publish'], d);
+    expect(result).toMatchObject({ releaseLabel: '1.5.0+3', message: 'OTA 1.5.0+3: Back to main (rollback: the card crashes on launch) (9f6b0f9)' });
+    expect(d.run.mock.calls[0][1]).toEqual(buildUpdateCommand({ channel: 'preview', message: result.message }).args);
+    expect(d.lines.join('\n')).toContain('Rollback allowed (--allow-rollback): the card crashes on launch. '
+      + 'This commit (9f6b0f9) does not contain e9a4360, so phones go back to code without it.');
+  });
+
+  test('--allow-rollback also lets through a commit this repository does not have, saying so', () => {
+    const d = incident({ git: fakeGit({ head: MAIN_AT_165 }).git });
+    expect(main(['--message', 'Back', '--allow-rollback', 'gone from origin'], d)).toMatchObject({
+      message: 'OTA 1.5.0+3: Back (rollback: gone from origin) (9f6b0f9)', dryRun: true,
+    });
+    expect(d.lines.join('\n')).toContain('Rollback allowed (--allow-rollback): gone from origin. '
+      + 'This repository does not have e9a4360, so phones may go back to code without it.');
+  });
+
+  test('--allow-rollback on a publish that does not roll phones back is refused, so no update is labelled a rollback by mistake', () => {
+    const d = deps();
+    const error = attempt(['--message', 'x', '--allow-rollback', 'just in case', '--publish'], d);
+    expect(error.message).toContain('--allow-rollback is only for a publish that rolls phones back, and this one does not: '
+      + 'this commit (fd053cf) contains fd053cf.');
+    expect(error.message).toContain('Nothing was published.');
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  test('phones rolled back to their built-in bundle: no commit to contain, a note says so, and no group is read', () => {
+    const rolledBack = {
+      ...pageAtRelease2.currentPage[0], group: '5b1f0c2e-7a3d-4e6f-9b8a-1c2d3e4f5a6b', isRollBackToEmbedded: true,
+      message: '"Back to the built-in bundle" (2 minutes ago by jimmckeown)',
+    };
+    const d = incident({ runForOutput: fakeEas({ list: { ...pageAtRelease2, currentPage: [rolledBack, ...pageAtRelease2.currentPage] } }) });
+    expect(main(['--message', 'x', '--publish'], d)).toMatchObject({ releaseLabel: '1.5.0+4' });
+    const output = d.lines.join('\n');
+    expect(output).toContain('Phones on preview (runtime 1.5.0) run their built-in bundle: update group 5b1f0c2e-7a3d-4e6f-9b8a-1c2d3e4f5a6b (not numbered) rolled them back to it.');
+    expect(output).toContain('Note: phones run their built-in bundle, so there is no update commit this publish must contain.');
+    expect(viewCalls(d)).toEqual([]);
+    expect(d.run).toHaveBeenCalledTimes(2);
+  });
+
+  test('phones on an update that records no commit (published before commits were recorded): a note says so', () => {
+    const views = { [GROUP_2]: viewFixtures[GROUP_2].map(({ gitCommitHash, ...update }) => update) };
+    const d = incident({ runForOutput: fakeEas({ list: pageAtRelease2, views }) });
+    expect(main(['--message', 'x', '--publish'], d)).toMatchObject({ releaseLabel: '1.5.0+3' });
+    const output = d.lines.join('\n');
+    expect(output).toContain(`Phones on preview (runtime 1.5.0) run update group ${GROUP_2} (release 1.5.0+2), no commit recorded.`);
+    expect(output).toContain(`Note: update group ${GROUP_2} records no commit (published before commits were recorded), `
+      + 'so there is no commit this publish must contain.');
+  });
+
+  test('no update for this runtime yet (a new app version): phones run their built-in bundle; a note says so', () => {
+    const d = deps({ loadConfig: () => ({ ...config, version: '1.6.0' }) });
+    expect(main(['--message', 'x'], d)).toMatchObject({ releaseLabel: '1.6.0+1' });
+    const output = d.lines.join('\n');
+    expect(output).toContain('Phones on preview (runtime 1.6.0) run their built-in bundle: branch preview has no update for this runtime yet.');
+    expect(output).toContain('Note: phones run their built-in bundle, so there is no update commit this publish must contain.');
+    expect(viewCalls(d)).toEqual([]);
+  });
+
+  const view = viewFixtures[GROUP_2];
+  test.each([
+    ['EAS fails', () => { throw new Error('network down'); }, /network down/],
+    ['not JSON', () => 'nope', /update:view did not return JSON/],
+    ['no updates', () => '[]', /update:view returned no updates/],
+    ['another group', () => JSON.stringify(view.map(update => ({ ...update, group: LIFECYCLE }))), /update:view returned updates from another group/],
+    ['two commits', () => JSON.stringify([view[0], { ...view[1], gitCommitHash: MAIN_AT_165 }]), /different commits/],
+    ['a commit that is not a hash', () => JSON.stringify(view.map(update => ({ ...update, gitCommitHash: '--output=x' }))), /not a git commit hash/],
+  ])('an update group it cannot read is refused: %s', (_case, viewOutput, error) => {
+    const eas = fakeEas({ list: pageAtRelease2 });
+    const runForOutput = jest.fn((command, args) => (isUpdateView(args) ? viewOutput() : eas(command, args)));
+    const d = incident({ git: fakeGit({ head: MERGE, ancestors: [MERGE, RELEASE_2] }).git, runForOutput });
+    expect(() => main(['--message', 'x', '--publish'], d))
+      .toThrow(new RegExp(`Could not read update group ${GROUP_2}, so the code phones run is unknown\\. Nothing was published\\.[\\s\\S]*${error.source}`));
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  test('a newest group without a usable id is refused, never passed to update:view', () => {
+    const list = { ...pageAtRelease2, currentPage: [{ ...pageAtRelease2.currentPage[0], group: '--json' }] };
+    const d = incident({ runForOutput: fakeEas({ list }) });
+    expect(() => main(['--message', 'x'], d)).toThrow(/update group without a usable id[\s\S]*Nothing was published/);
+    expect(viewCalls(d)).toEqual([]);
   });
 });

@@ -104,36 +104,59 @@ A dry run is the default; only `--publish` reaches phones (`--publish` with `--d
 
 After the field launch, add `--channel production` (the EAS environment has the channel's name).
 Write every flag after the `--`. npm keeps a flag written before it for itself and hides it from
-the script, so the script refuses whenever npm has taken `--dry-run`, `--publish`, `--channel` or
-`--message`. Because publishing needs `--publish`, any other flag npm swallows (a typo such as
-`--dryrun` included) leaves the run a dry run. A message cannot start with `-`, so
-`--message --publish` is refused rather than taken as the message.
+the script, so the script refuses whenever npm has taken `--dry-run`, `--publish`, `--channel`,
+`--message` or `--allow-rollback`. Because publishing needs `--publish`, any other flag npm swallows
+(a typo such as `--dryrun` included) leaves the run a dry run. A message cannot start with `-`, so
+`--message --publish` is refused rather than taken as the message; the same goes for the
+`--allow-rollback` reason.
 
 The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
 
 1. Refuses unless the working tree is clean (untracked `node_modules`/`dist` aside) and HEAD is on
    an origin branch, so every update's Source commit can be found later. A dry run makes the
-   same checks as a publish, through step 3.
+   same checks as a publish, through step 4.
 2. Checks the channel. `npx eas-cli@26.0.0 channel:view <channel> --json --non-interactive` must
    show the channel pointing at exactly one branch, named after the channel. `eas update
    --channel` publishes to whatever branch the channel points at, but the number is counted on the
    branch with the channel's name, so a re-pointed channel (`eas channel:edit … --branch …`) or one
    in a branch rollout is refused. So is a channel EAS cannot find; the script never creates one.
-3. Numbers the update. It lists the update groups on the channel's EAS branch
-   (`npx eas-cli@26.0.0 update:list --branch <channel> --json --non-interactive`, page by page) and
-   counts those for this runtime: release N = count + 1, raised past any number an
-   `OTA <version>+N:` message on the branch already uses, so deleting an older group cannot make a
-   number repeat. Deleting the newest numbered group (`eas update:delete`) does free its number:
+3. Checks that the update keeps the code phones run now, so it cannot roll them back by accident.
+   It lists the update groups on the channel's EAS branch
+   (`npx eas-cli@26.0.0 update:list --branch <channel> --json --non-interactive`, page by page,
+   newest first). The newest group for this runtime is the one phones run. `update:list` does not
+   carry commits, so the script reads that group's commit with `npx eas-cli@26.0.0 update:view
+   <group> --json` (`gitCommitHash`), then:
+   - **The group has a commit C:** publishing is refused unless C is in HEAD
+     (`git merge-base --is-ancestor C HEAD`; C equal to HEAD counts). The refusal names C, the
+     group and its release (from its `OTA <version>+N:` message), and says to merge the branch that
+     contains C first (`git branch -r --contains C` lists it). If this clone does not have C, it
+     says to `git fetch origin` first.
+   - **The group rolls phones back to their built-in bundle, records no commit (published before
+     commits were recorded), or there is no update for this runtime yet:** there is no commit to
+     contain, and the script prints a note saying so.
+
+   Both a dry run and a publish print what phones run now (group, release, commit) and the result
+   of the check. To roll phones back on purpose (the newest update is broken and you publish older
+   code over it), add `--allow-rollback "why"`: the script prints the reason and adds
+   `(rollback: <why>)` to the update message, so the EAS history shows it. It also lets through a
+   commit this clone does not have (fetch first if you can). `--allow-rollback` on a publish that
+   rolls nothing back is refused, so no update is labelled a rollback by mistake.
+
+   Why: on 2026-11-05 phones ran `1.5.0+2` from an unmerged branch, and a bare `eas update` from
+   `main`, which lacked it, rolled every phone back for 13 minutes until `1.5.0+4` replaced it.
+4. Numbers the update. Of the groups listed in step 3, it counts those for this runtime: release
+   N = count + 1, raised past any number an `OTA <version>+N:` message on the branch already uses,
+   so deleting an older group cannot make a number repeat. Deleting the newest numbered group (`eas update:delete`) does free its number:
    EAS no longer lists it, so the next publish reuses it, and a phone that had downloaded the
    deleted update shows the same Release (only the Update id differs). Replace a bad update by
-   publishing a fixed one; do not delete its group. If a listing fails the script stops and
-   publishes nothing; it never guesses.
-4. Publishes: `npx eas-cli@26.0.0 update --channel <channel> --environment <channel>
+   publishing a fixed one; do not delete its group. If a listing or a group read fails, the script
+   stops and publishes nothing; it never guesses.
+5. Publishes: `npx eas-cli@26.0.0 update --channel <channel> --environment <channel>
    --non-interactive --message "OTA 1.5.0+2: <message> (<short commit>)"`, with
    `MASI_OTA_RELEASE=<N>` and `MASI_OTA_PUBLISHED_AT=<now, ISO UTC>` set. `app.config.js` copies
    them into `extra.otaRelease` and `extra.otaPublishedAt`, which EAS publishes in the update's
    manifest. This leaves the exported bundle in `dist/`.
-5. Uploads the matching source maps to Sentry with the sensitive `SENTRY_AUTH_TOKEN` stored in the
+6. Uploads the matching source maps to Sentry with the sensitive `SENTRY_AUTH_TOKEN` stored in the
    same EAS environment: `npx eas-cli@26.0.0 env:exec <channel> 'npm run sentry:sourcemaps'
    --non-interactive`. eas-cli 26 takes the environment as an argument; the older
    `env:exec --environment preview` form fails. If this step fails, the update is already out: the
@@ -142,7 +165,8 @@ The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
    actionable.
 
 Child processes get argument arrays, so a message with quotes or `$( )` is never run by a shell.
-Do not publish with a bare `eas update`: the phone would show the update as `<version>+?`.
+Do not publish with a bare `eas update`: the phone would show the update as `<version>+?`, and
+nothing would check that the update keeps the code phones run now (step 3).
 
 ### Release numbers: what the phone shows
 
