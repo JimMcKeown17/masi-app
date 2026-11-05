@@ -531,7 +531,8 @@ async function waitCommand(context) {
 
 async function typeCommand(context) {
   const { options, args } = context;
-  const text = options.stdin ? fs.readFileSync(0, 'utf8') : args[0];
+  // A piped secret usually ends in one newline (echo, a file line); drop just that one.
+  const text = options.stdin ? fs.readFileSync(0, 'utf8').replace(/\r?\n$/, '') : args[0];
   if (/[\r\n\0]/.test(text)) {
     throw ui.fail('USAGE input text needs a single line without NUL', 1);
   }

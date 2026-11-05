@@ -11,29 +11,29 @@ of improvements. Each one must be grounded in a screenshot and a measurement or 
 already be tracked. The value is in what only a hands-on pass reveals: friction, confusion,
 inconsistency and missing capability. Generic UI advice adds nothing.
 
-Read `docs/agents/phone-walkthrough.md` first (claiming the phone, driving rules, routes W1–W8).
-Before you start, read the "Building a screen" section and the sections on the components you will
-meet in `documentation/design-system.md`, and the glossary terms for the screens you visit in
-`CONTEXT.md`.
+Read `docs/agents/phone-walkthrough.md` first (claiming the phone, driving rules, routes W1–W8 and
+"Other screens"). From `documentation/design-system.md`, read "Building a screen", "Typography",
+"Actions and fields", "Surfaces, rows and supporting text", "Sheets" and "Forms". Look up other
+sections and `CONTEXT.md` glossary terms by name when a screen raises a question about them.
 
 ## The EA lens
 
 Judge every screen as this person: a Masi Education Assistant teaching small groups of Grade 1–3
 children in an Eastern Cape school. They hold a low-end Android phone (about 411 dp wide, 3 GB RAM),
 often in one hand, often in sunlight, while managing children. English is often their second
-language. They are interrupted mid-task, and the signal comes and goes. Questions to ask on every
-screen:
+language. They are interrupted mid-task, and the signal comes and goes.
 
-- **Speed.** How many taps from intent to done? What waits?
-- **Clarity.** Would an EA know what this screen wants and what just happened? Is the wording plain,
-  with no internal jargon?
-- **Consistency.** Does the same action have the same name and look everywhere? Does the screen
-  follow `design-system.md`?
-- **Reach and size.** Measure tap targets from the dump bounds: dp = px × 160 / density (280 on the
-  A03). Under 48 dp is a finding when the target is used often.
-- **Safety.** Can a slip lose work or record the wrong child? Is undo or a confirmation where it
-  matters, and absent where it only slows the EA down?
-- **Truth.** Does the screen match the data (counts, names, dates, sync state)?
+- **Clarity.** Would an EA know what this screen wants and what just happened? Plain words: short
+  sentences, one idea each, everyday verbs, no internal terms ("row", "sync outbox", "tier").
+- **Consistency.** Does the same thing have the same name, format and look everywhere: the same
+  action, the same concept (for example "known" vs "taught" vs "mastered"), times and dates?
+- **Truth.** Does every number, name, date and status match the data and agree with the other
+  screens that show it?
+- **Reach and size.** Measure tap targets (`dump --json` bounds; dp = px × 160 / 280 on the A03).
+  A target under 48 dp that the EA uses often is a finding.
+- **Speed.** Count the taps from intent to done for each W1–W8 workflow and put them in one table.
+  Call out only the outliers.
+- **Safety.** Can a slip lose work or record the wrong child, and is there a way back?
 - **Gaps.** What did you need that the app does not offer?
 
 ## Steps
@@ -41,36 +41,41 @@ screen:
 1. **Claim the phone** and start a run labelled `design`, as in the reference. The account is the
    test EA.
 
-2. **Tour.** Walk W1–W8. Also open the screens around them: Home, Children list and Class detail,
-   Child results, Letter tracker, the Insights cards, Sync status, the lesson picker's group rows,
-   and the other sheets and empty states you pass. Screenshot every screen and every state you meet
-   (sheet, empty, loading, error, keyboard open). For each screen, write raw observations into
-   `device-runs/CURRENT/observations.md`: screenshot path, what you did, what you noticed against the
-   lens, and the measurements. Done when every W1–W8 screen and every screen listed above has an
-   entry, even if the entry is "nothing notable".
+2. **Tour.** Walk W1–W8 (teach one small group, preferably a one-child group; run one quick test),
+   then every screen in the reference's "Other screens" table, and Word Reading's intro. Take a
+   screenshot of every screen and every state you meet (sheet, empty, loading, error, keyboard
+   open). For each screen, write raw observations into `device-runs/CURRENT/observations.md`:
+   screenshot path, what you did, what you noticed against the lens, and measurements. Done when
+   every W1–W8 screen and every "Other screens" row has an entry, even if the entry is "nothing
+   notable", and the tap-count table is filled.
 
-3. **De-duplicate.** For each observation, search what is already known: `docs/bugs/`,
-   `documentation/ROADMAP.md`, `documentation/open-decisions-backlog.md`, and
-   `gh issue list --repo JimMcKeown17/masi-app --state open --search "<keywords>"`. Drop what is
-   tracked, keeping its reference for the report. Behaviour that is wrong, not just improvable, is a
-   bug: record it through `bug-user` and keep it out of the suggestions.
+3. **Sort and de-duplicate.** Sort each observation:
+   - The screen contradicts the data, loses work, or breaks layout: a **bug**.
+   - The screen is correct but confusing, slow, inconsistent or missing something: a **suggestion**.
 
-4. **Rank.** Turn the rest into suggestions. Rank by EA impact: frequency of the workflow × how much
-   it hurts (lost work > wrong data > confusion > slowness > polish), then by cost. Keep the top 10.
-   The others go in a short "Also noticed" list.
+   Then check what is already known, using the reference's "Finding existing bug records" (bugs, and
+   the ROADMAP and open-decisions documents for planned UX work) and
+   `gh issue list --repo JimMcKeown17/masi-app --state open --search "<keywords>"`. Move tracked items
+   to "Already tracked" with their reference. Done when every observation is a bug, a suggestion, or
+   already tracked.
+
+4. **Rank** the suggestions by EA impact: how often the workflow runs × how much it hurts (lost work
+   > wrong data > confusion > slowness > polish), then by size. Keep the top 10; the rest go to "Also
+   noticed".
 
 5. **Report.** Write `device-runs/CURRENT/design-review.md` and give Jim the summary. Each suggestion:
    - **Title**, as the change you propose;
    - **Kind**: design or functionality;
    - **Where**: the screen, and the screenshot path;
    - **What the EA experiences**: one or two sentences, in plain words;
-   - **Evidence**: a measurement, a tap count, a quote of the screen copy, or a server/data fact;
-   - **Suggestion**: concrete enough to mock up, using the design-system names for components and
-     tokens;
-   - **Size**: S (copy or token), M (one screen), L (a flow or data change); and your confidence.
+   - **Evidence**: your measurement or tap count, or a quote of the screen, marked as which it is;
+   - **Suggestion**: concrete enough to mock up. Name components as `src/components/common/` names
+     them (check there);
+   - **Size**: S (copy or token), M (one screen), L (a flow or data change), and your confidence.
 
-   End with "Already tracked" (the matches from step 3) and "Also noticed". Offer to publish the
-   report as an artifact with the screenshots, and to file the suggestions Jim picks as GitHub
-   issues. File only the ones he picks.
+   Then the sections **Possible bugs** (each with its evidence), **Already tracked** and **Also
+   noticed**, and the tap-count table. Each possible bug gets an MA-BUG record through the
+   `bug-user` skill (recording only). Offer to publish the report as an artifact with the
+   screenshots, and to file the suggestions Jim picks as GitHub issues. File only the ones he picks.
 
 6. **Leave the phone tidy** and release it, as in the reference.

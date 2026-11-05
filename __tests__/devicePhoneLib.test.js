@@ -139,3 +139,25 @@ if (args[0] === 'version') {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }, 15000);
+
+test('type --stdin accepts one trailing newline, as from echo or a file, and still rejects multi-line text', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-device-type-'));
+  const fake = path.join(dir, 'adb');
+  fs.writeFileSync(fake, `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args[0] === 'version') console.log('Android Debug Bridge');
+else if (args[0] === 'devices') console.log('List of devices attached\\nfixture\\tdevice');
+else if (args.at(-1) === 'dumpsys window') console.log('mCurrentFocus=Window{abc u0 org.masinyusane.masi/.Main}');
+`, { mode: 0o700 });
+  const env = { ...process.env, ADB: fake, ANDROID_SERIAL: 'fixture', DEVICE_PACKAGE: 'org.masinyusane.masi' };
+  const script = path.resolve(__dirname, '../scripts/device/phone.cjs');
+  try {
+    const single = spawnSync(process.execPath, [script, 'type', '--stdin'], { env, input: 'pass word\n', encoding: 'utf8' });
+    expect(single.status).toBe(0);
+    expect(single.stdout).toBe('OK Typed 9 characters\n');
+    const multi = spawnSync(process.execPath, [script, 'type', '--stdin'], { env, input: 'a\nb\n', encoding: 'utf8' });
+    expect(multi.status).toBe(1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 15000);

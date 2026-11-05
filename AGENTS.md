@@ -188,6 +188,7 @@ Two Supabase projects exist:
 - **Profile → Support tools → Report a problem / Send diagnostics**: sends a diagnostic bundle (support export, log tail, device and EA identity, optional screenshot) to the private `support-bundles` bucket with a receipt; read with `npm run bugs:incidents -- --fetch <handle>`.
 - **Profile → Share logs**: captures all `console.log/error/warn` output to a shareable text file.
 - **Profile → Share database**: exports a SQLite-aware support package with schema version, table counts, sync status, failed outbox rows, release/backend identity, and support metadata.
+- **Phone walkthroughs** (`/phone-health-check`, `/phone-design-review`): an agent drives the USB-connected Android phone through the main workflows with `npm run -s device:phone --` and checks staging read-only with `scripts/device/server-check.cjs`. Shared rules and routes: `docs/agents/phone-walkthrough.md`.
 
 ---
 

@@ -60,6 +60,12 @@ nothing needs exporting between shell calls. The rules below are the ones the to
   `Record` or `Send` also matches hidden tab text or longer rows. Use the full label below, or
   `--exact`.
 - **Tab bar:** `Home tab`, `Children tab`, `Record a session`, `Insights tab`, `Assess tab`.
+- **Same name twice** (test data has two "Amanda Manqina"): `tap` warns and takes the last; pick
+  another with `--nth N` (0-based, top of the screen first).
+- **Measuring:** `dump --json` gives each node's `bounds` in pixels. dp = px × 160 / density
+  (÷ 1.75 on the A03).
+- **State changes take a moment.** After `Clock out` / `Clock in`, `wait 'Not clocked in'` or
+  `wait 'On the clock'` before the screenshot; the first frame can still say "Getting location…".
 - Bottom sheets often repeat the label of the page button underneath ("Discard lesson", "Keep
   teaching"). `tap` picks the last match, which is the sheet's.
 - `OFFSCREEN` means the node exists below the fold. `NOT_FOUND` can also mean it is below the fold
@@ -79,12 +85,25 @@ Labels are exact on-screen text or accessibility labels (`tap` matches either).
 | --- | --- | --- | --- | --- |
 | W1 | Release and identity | Home greeting `Molo, <name>.` → `Open profile`: the email is at the top → `scroll-to 'APP RELEASE'` + `scroll down --small` | Email of a test EA; Release, Build, Channel, Update, Source, Backend `sqlite-staging` / `segygjzpujphwvrubusm` | `ea` (no `WARNING`) |
 | W2 | Sync status | Home → `Sync status` (header cloud) | `All saved and synced`, Network `Online` | bundle `sync_outbox: 0` (W8) |
-| W3 | Clock out / in | Home → `Clock out` (no confirm) → `Clock in` → `Getting location…` → `On the clock since HH:MM`. If you found it clocked out, clock in, then out | Home clock row | `time_entries`: the closed and the new row, location status `fix` or a no-location status |
+| W3 | Clock out / in | Home → `Clock out` (no confirm) → `wait 'Not clocked in'` → `Clock in` → `Getting location…` → `wait 'On the clock'`. If you found it clocked out, clock in, then out | Home clock row | `time_entries`: the closed and the new row, location status `fix` or a no-location status |
 | W4 | Add, edit, remove a child | `Children tab` → `tap 'Mr Zulu'` (class 1A, Aaron Gqadu) → `Add child` → `fields`, then First/Last Name, Age, `Female` → `Add child`; then `Edit Smoke Run<HHMM>` → change Age → `Save changes`; then `Edit Smoke …` → `scroll-to 'Delete child'` → sheet `Remove Smoke?` → `Remove child` | `CHILDREN (n)` goes up, `Age N` updates, the child is gone | `children`: the child with the edited age, `archived_at` set, 0/0/0 active links. The server keeps only the final state; the screen proves the add and edit |
 | W5 | Literacy lesson | `Record a session` → `Who are you teaching?` → `Start lesson` → maybe `Which class is this lesson for?` (pick one) → tap a letter (`tap 'o, not selected'`) and a blend (`tap 'mo, not ticked'`) → `Wrap up →` → mark one child's letter (`tap '<letter>, not mastered' --nth 0`) → `Save session` | `Session captured.` with children, letters and a reading level → `Done` | `sessions`: state `completed`, attendees = children; `letter_mastery`: the marked letter, `confirmed` true |
 | W6 | Letter Sounds | `Assess tab` → `Letter Sounds, 60-second` → `Select <full child name>` → `tap 'Start' --exact --no-settle`, then mark with `tapxy --no-settle` and take the screenshot afterwards (the clock is running). On the A03: Correct `188 1248`, Incorrect `531 1248`, End test `360 1459`, the sheet's End test `360 1340` | `Assessment Complete`: score, Attempted / Correct / Incorrect match your marks | `assessments`: `letter_sounds`, score = correct, `stopped_reason` `ea_ended`, `item_count` = `total_items`, `correct_count` = score |
 | W7 | History | `Assess tab` → `View history`; `Insights tab` → `Open Session history` | The W5 session and W6 assessment are listed, `Synced` | none |
 | W8 | Send diagnostics | `Open profile` → `Support tools` → `scroll-to 'Send diagnostics'` → `tap 'Send diagnostics' --exact` → `tap 'Send' --exact` | Sheet closes (the toast may be gone by the screenshot) | `support incidents`: a `diagnostics_sent` receipt within seconds; then the bundle checks below |
+
+### Other screens
+
+| Screen | Route |
+| --- | --- |
+| Child results | Children → class → `View results for <full name>` |
+| Letter tracker | Children → class → `Letter tracker for <full name>` (the "Aa" icon) |
+| Assign group | Children → class → `Assign group to <full name>` |
+| Edit class | Children → class → `Edit class` |
+| Insights cards | `Insights tab` → `Open Letter mastery`, `Open Assessment scores`, `Open Session count`, `Open Session history` |
+| Work history | Home → `View work history` (the clock row) |
+| Sync status | Header cloud on any tab (`Open sync status, …`) or Home's `Sync status` |
+| WelaPLUS / Full EGRA | `Assess tab` → `Start an assessment` / `Start a Full EGRA` → child picker. Stop there: starting a child leaves an Open battery run in history |
 
 The Record button resumes an unfinished lesson directly. If Home shows `Lesson in progress` that is not
 yours, it is someone's test state (see "The phone is shared").
@@ -96,8 +115,8 @@ node scripts/device/server-check.cjs --ea test@masinyusane.org --since "$(node -
 ```
 
 Run it from the main checkout, which has `.env.local`. Known flags on the Test EA, recorded and not
-caused by a run: `empty_active_groups` for groups `bf42db50…` and `f1c57ce4…` (see
-`docs/bugs/` for the record). Any other FLAG is new.
+caused by a run: `empty_active_groups` for groups `bf42db50…` and `f1c57ce4…`
+(MA-BUG-20261105-010). Any other FLAG is new.
 
 ## Diagnostics bundle checks (W8)
 
@@ -122,5 +141,7 @@ node -e 'const b=require(process.argv[1]); const since=process.argv[2]; for (con
 
 ## Finding existing bug records
 
-`git grep -il '<keyword>' origin/main -- docs/bugs/records` (fetch first). Search for the screen and
-the symptom, for example `git grep -il 'back stack\|Assessment Complete' origin/main -- docs/bugs`.
+`git fetch origin` first. The registry's titles are the quickest index:
+`git show origin/main:docs/bugs/README.md | grep -i '<keyword>'`. Then, for detail,
+`git grep -il '<screen or symptom>' origin/main -- docs/bugs/records`. UX ideas already planned live
+in `documentation/ROADMAP.md` (its design section) and `documentation/open-decisions-backlog.md`.
