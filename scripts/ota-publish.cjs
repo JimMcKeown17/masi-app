@@ -100,6 +100,37 @@ const listUpdateGroups = ({ branch, runForOutput, maxPages = MAX_PAGES }) => {
   throw new Error(`EAS branch ${branch} lists more than ${maxPages * PAGE_SIZE} update groups; refusing to guess a release number.`);
 };
 
+const parseChannelBranches = (raw, channel) => {
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { throw new Error('eas channel:view did not return JSON.'); }
+  const view = parsed?.currentPage;
+  if (view?.name !== channel) throw new Error(`eas channel:view returned channel ${view?.name}, not ${channel}.`);
+  if (!Array.isArray(view.updateBranches)) throw new Error('eas channel:view returned no branches list (updateBranches).');
+  return view.updateBranches.map((branch) => {
+    if (typeof branch?.name !== 'string' || !branch.name) throw new Error('eas channel:view returned a branch without a name.');
+    return branch.name;
+  });
+};
+
+// `eas update --channel c` publishes to the branch channel c points at, but the release number is
+// counted on the branch named c. Refuse unless those are the same single branch (a channel that
+// was re-pointed, or is mid-rollout across two branches, would get a wrong or repeated number).
+const assertChannelBranch = ({ channel, runForOutput }) => {
+  let branches;
+  try {
+    branches = parseChannelBranches(runForOutput('npx', [
+      '--yes', EAS_CLI, 'channel:view', channel, '--json', '--non-interactive',
+    ]), channel);
+  } catch (error) {
+    throw new Error(`Could not read channel ${channel}, so the branch its updates go to is unknown. Nothing was published.\n${error.message}`);
+  }
+  if (branches.length !== 1 || branches[0] !== channel) {
+    const target = branches.length === 0 ? 'no branch' : `${branches.length === 1 ? 'branch' : 'branches'} ${branches.join(', ')}`;
+    throw new Error(`Channel ${channel} sends its updates to ${target}, not to branch ${channel}, where its release numbers `
+      + 'are counted, so the number would be wrong. Nothing was published.');
+  }
+};
+
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // N = (update groups already published for this runtime) + 1. A number already used in an
@@ -149,6 +180,7 @@ const main = (argv, { git, runForOutput, run, loadConfig, env = process.env, now
   const { message, channel, dryRun } = parseArgs(argv);
   const version = readAppVersion(loadConfig);
   const head = assertReleaseReady({ git });
+  assertChannelBranch({ channel, runForOutput });
   const release = nextReleaseNumber({ groups: listUpdateGroups({ branch: channel, runForOutput }), version });
   const releaseLabel = `${version}+${release}`;
   const updateMessage = formatUpdateMessage({ version, release, message, commit: head });
@@ -202,6 +234,7 @@ if (require.main === module) {
 
 module.exports = {
   EAS_CLI,
+  assertChannelBranch,
   assertReleaseReady,
   buildSourcemapCommand,
   buildUpdateCommand,

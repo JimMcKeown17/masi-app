@@ -4,8 +4,14 @@ global.__MASI_NO_DEFAULT_HANDLE__ = true;
 // renderUpdateGroupsOnBranch / getUpdateGroupDescriptionsWithBranch (build/update/queries.js,
 // build/update/utils.js). It is shaped from that source, not captured from live EAS.
 const previewPage = require('../test-support/fixtures/eas-update-list/preview-page-1.json');
+// `channel:view <c> --json --non-interactive` prints `{ currentPage: { ...channel, updateBranches } }`
+// (renderPageOfBranchesOnChannel in build/channel/queries.js; the channel fields from
+// ViewUpdateChannelOnApp, the branches from ViewBranchesOnUpdateChannel; nulls and __typename
+// removed by build/utils/json.js). Also shaped from that source, not captured.
+const previewChannel = require('../test-support/fixtures/eas-channel-view/preview.json');
 const {
   EAS_CLI,
+  assertChannelBranch,
   assertReleaseReady,
   buildSourcemapCommand,
   buildUpdateCommand,
@@ -26,6 +32,10 @@ const group = (runtimeVersion, message = '"Some update" (1 day ago by jimmckeown
   group: `${runtimeVersion}-${Math.random().toString(16).slice(2)}`, platforms: 'android, ios', ...extra,
 });
 const page = (groups, name = 'preview') => JSON.stringify({ name, id: 'branch-id', currentPage: groups });
+const channelView = (branchNames, name = 'preview') => JSON.stringify({ currentPage: {
+  ...previewChannel.currentPage, name, updateBranches: branchNames.map(branch => ({ id: `${branch}-id`, name: branch, updateGroups: [] })),
+} });
+const isChannelView = (args) => args.includes('channel:view');
 
 const fakeGit = ({ status = '', remoteBranches = '  origin/feat/app-release-card\n  origin/HEAD -> origin/main\n' } = {}) => {
   const calls = [];
@@ -41,7 +51,7 @@ const fakeGit = ({ status = '', remoteBranches = '  origin/feat/app-release-card
 };
 const deps = (overrides = {}) => {
   const run = jest.fn();
-  const runForOutput = jest.fn(() => JSON.stringify(previewPage));
+  const runForOutput = jest.fn((command, args) => JSON.stringify(isChannelView(args) ? previewChannel : previewPage));
   const lines = [];
   return {
     run, runForOutput, lines, env: {},
@@ -179,6 +189,40 @@ describe('release number', () => {
   });
 });
 
+describe('channel branch', () => {
+  // `eas update --channel c` publishes to the branch channel c points at (eas-cli 26.0.0
+  // getBranchFromChannelNameAndCreateAndLinkIfNotExistsAsync), but the number is counted on the
+  // branch named c. They must be the same branch, or the number would be wrong or repeat.
+  test('a channel that sends its updates to the branch of the same name is ready', () => {
+    const runForOutput = jest.fn(() => JSON.stringify(previewChannel));
+    expect(() => assertChannelBranch({ channel: 'preview', runForOutput })).not.toThrow();
+    expect(runForOutput.mock.calls).toEqual([['npx', ['--yes', EAS_CLI, 'channel:view', 'preview', '--json', '--non-interactive']]]);
+  });
+
+  test.each([
+    [['wave2-canary'], /Channel preview sends its updates to branch wave2-canary, not to branch preview/],
+    [['preview', 'wave2-canary'], /Channel preview sends its updates to branches preview, wave2-canary, not to branch preview/],
+    [[], /Channel preview sends its updates to no branch, not to branch preview/],
+  ])('a channel pointed at %p is refused, since its number is counted on branch preview', (branches, error) => {
+    expect(() => assertChannelBranch({ channel: 'preview', runForOutput: () => channelView(branches) })).toThrow(error);
+  });
+
+  test.each([
+    ['not json', /did not return JSON/],
+    [JSON.stringify({ currentPage: { name: 'preview' } }), /no branches list/],
+    [JSON.stringify({ currentPage: { name: 'preview', updateBranches: [{ id: 'b' }] } }), /branch without a name/],
+    [channelView(['production'], 'production'), /returned channel production/],
+  ])('a channel listing it cannot read is refused: %p', (raw, error) => {
+    expect(() => assertChannelBranch({ channel: 'preview', runForOutput: () => raw }))
+      .toThrow(new RegExp(`Could not read channel preview[\\s\\S]*Nothing was published[\\s\\S]*${error.source}`));
+  });
+
+  test('a channel that EAS cannot find is refused, never created', () => {
+    const runForOutput = () => { throw new Error('Could not find channel with the name preview'); };
+    expect(() => assertChannelBranch({ channel: 'preview', runForOutput })).toThrow(/Could not read channel preview[\s\S]*Could not find channel/);
+  });
+});
+
 describe('commands', () => {
   test('the update message names the release, what changed and the short commit', () => {
     expect(formatUpdateMessage({ version: '1.5.0', release: 2, message: 'Release card', commit: HEAD }))
@@ -234,7 +278,7 @@ describe('main', () => {
     const result = main(['--message', "Jim's card", '--dry-run'], d);
     expect(result).toMatchObject({ release: 2, releaseLabel: '1.5.0+2', dryRun: true });
     expect(d.run).not.toHaveBeenCalled();
-    expect(d.runForOutput).toHaveBeenCalledTimes(1);
+    expect(d.runForOutput.mock.calls.map(([, args]) => args[2])).toEqual(['channel:view', 'update:list']);
     const output = d.lines.join('\n');
     expect(output).toContain('Next release: 1.5.0+2');
     expect(output).toContain("OTA 1.5.0+2: Jim's card (fd053cf)");
@@ -260,8 +304,18 @@ describe('main', () => {
   });
 
   test('a listing failure publishes nothing', () => {
-    const d = deps({ runForOutput: jest.fn(() => { throw new Error('network down'); }) });
+    const d = deps({ runForOutput: jest.fn((command, args) => {
+      if (isChannelView(args)) return JSON.stringify(previewChannel);
+      throw new Error('network down');
+    }) });
     expect(() => main(['--message', 'x'], d)).toThrow(/Could not list the updates/);
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  test.each([false, true])('a channel pointed at another branch publishes nothing and counts nothing (dry run: %p)', (dryRun) => {
+    const d = deps({ runForOutput: jest.fn((command, args) => (isChannelView(args) ? channelView(['wave2-canary']) : JSON.stringify(previewPage))) });
+    expect(() => main(['--message', 'x', ...(dryRun ? ['--dry-run'] : [])], d)).toThrow(/sends its updates to branch wave2-canary/);
+    expect(d.runForOutput).toHaveBeenCalledTimes(1);
     expect(d.run).not.toHaveBeenCalled();
   });
 
