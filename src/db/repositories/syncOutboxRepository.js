@@ -185,12 +185,13 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
-  // Claims the rows for upload. A refused archive, restore or edit is never claimed (O1). The
-  // claim remembers each row's status, and the domain status it flips, so a refused row that is
-  // then not attempted goes back to terminal (restoreRefusedClaims, MA-BUG-20261104-021).
+  // Claims the rows for upload. A refused archive, restore or edit is never claimed (O1). Each
+  // claim records the row exactly as it was (status, updated_at, payload, last_error, and the
+  // domain status and version the stamp changes), so a refused row that is then not attempted is
+  // put back unchanged (restoreRefusedClaims, MA-BUG-20261104-021).
   const updateInFlight = async (txn, ids, now) => {
     const before = await txn.getAllAsync(`
-      select id, table_name, record_id, operation, status
+      select id, table_name, record_id, operation, status, updated_at, payload, last_error
       from sync_outbox
       where id in (${sqlPlaceholders(ids.length)})
         and (status <> 'terminal' or ${RESENDABLE_REFUSAL_SQL})
@@ -208,12 +209,21 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       where id in (${sqlPlaceholders(claimedIds.length)})
     `, now, ...claimedIds);
     for (const row of before) {
-      const claim = { claimedFromStatus: row.status, claimedDomainStatus: null };
+      const claim = {
+        claimedFromStatus: row.status,
+        claimedFromUpdatedAt: row.updated_at,
+        claimedFromPayload: row.payload,
+        claimedFromLastError: row.last_error,
+        claimedDomainStatus: null,
+        claimedDomainVersion: null,
+        claimedVersion: null,
+      };
       claims.set(row.id, claim);
       if (!isStampedOperation(row.table_name, row.operation)) continue;
       const table = quoteIdentifier(row.table_name);
-      const domain = await txn.getFirstAsync(`select sync_status from ${table} where id = ?`, row.record_id);
+      const domain = await txn.getFirstAsync(`select sync_status, row_version from ${table} where id = ?`, row.record_id);
       claim.claimedDomainStatus = domain?.sync_status ?? null;
+      claim.claimedDomainVersion = domain?.row_version ?? null;
       // A forced terminal retry must be protected from overlapping pulls until it settles.
       await txn.runAsync(`
         update ${table}
@@ -223,6 +233,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       `, row.record_id);
       const local = await txn.getFirstAsync(`select row_version from ${table} where id = ?`, row.record_id);
       if (local) {
+        claim.claimedVersion = local.row_version;
         await txn.runAsync(`
           update sync_outbox set payload = json_set(payload, '$.row_version', ?) where id = ?
         `, local.row_version, row.id);
@@ -256,27 +267,40 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
   };
 
   // MA-BUG-20261104-021: a refused row forced into a pass and then not attempted (deferred, a
-  // user switch, a throw) goes back to terminal, never pending or failed. The compare-and-set on
-  // the claim's updated_at leaves a newer local revision alone. The domain row gets back the
-  // status the claim flipped; its version stays equal to the payload's.
+  // user switch, a throw) goes back to terminal, never pending or failed. With the claim's record
+  // it goes back exactly as it was, so its delivered receipt still matches; without one (a claim
+  // that committed and then threw) only its status is restored. The compare-and-set on the
+  // claim's updated_at leaves a newer local revision alone, and the domain version is reverted
+  // only from the version this claim stamped, so domain and payload versions stay equal.
   const restoreRefusedClaims = async (claimedRecords, { transaction } = {}) => {
     const records = (claimedRecords || []).filter(Boolean);
     if (records.length === 0) return 0;
     return runWrite(transaction, async (txn) => {
       let restored = 0;
       for (const record of records) {
-        const result = await txn.runAsync(`
-          update sync_outbox
-          set status = 'terminal', next_retry_at = null, updated_at = ?
-          where id = ? and status = 'in_flight' and updated_at = ?
-        `, timestamp(), record.id, record.updated_at);
+        const exact = record.claimedFromPayload !== undefined;
+        const result = exact
+          ? await txn.runAsync(`
+            update sync_outbox
+            set status = 'terminal', next_retry_at = null, updated_at = ?, payload = ?, last_error = ?
+            where id = ? and status = 'in_flight' and updated_at = ?
+          `, record.claimedFromUpdatedAt ?? timestamp(), record.claimedFromPayload, record.claimedFromLastError ?? null,
+          record.id, record.updated_at)
+          : await txn.runAsync(`
+            update sync_outbox
+            set status = 'terminal', next_retry_at = null, updated_at = ?
+            where id = ? and status = 'in_flight' and updated_at = ?
+          `, record.claimedFromUpdatedAt ?? timestamp(), record.id, record.updated_at);
         if ((result?.changes || 0) === 0) continue;
         restored += 1;
+        const table = quoteIdentifier(record.table_name);
+        if (exact && record.claimedDomainVersion != null && record.claimedVersion != null) {
+          await txn.runAsync(`update ${table} set row_version = ? where id = ? and row_version = ?`,
+            record.claimedDomainVersion, record.record_id, record.claimedVersion);
+        }
         if (record.claimedDomainStatus === 'terminal') {
-          await txn.runAsync(`
-            update ${quoteIdentifier(record.table_name)} set sync_status = 'terminal'
-            where id = ? and sync_status = 'pending'
-          `, record.record_id);
+          await txn.runAsync(`update ${table} set sync_status = 'terminal' where id = ? and sync_status = 'pending'`,
+            record.record_id);
         }
       }
       return restored;

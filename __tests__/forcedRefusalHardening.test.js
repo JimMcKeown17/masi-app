@@ -56,6 +56,9 @@ describe('refused rows in a forced pass', () => {
   test('rows deferred past the fallback budget stay refused, with consistent domain rows', async () => {
     const count = SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass + 5;
     await seedRefusedInserts(count);
+    const snapshot = () => db.getAllAsync(`select o.id, o.status, o.updated_at, o.payload, c.sync_status, c.row_version
+      from sync_outbox o join children c on c.id = o.record_id order by o.created_at, o.id`);
+    const before = await snapshot();
     const denied = { error: { code: '42501', message: 'row-level security' } };
     const { supabaseClient, calls } = createSupabaseMock({ upsertResults: { children: denied } });
     const result = await engine(supabaseClient).syncAll({ force: true });
@@ -63,6 +66,11 @@ describe('refused rows in a forced pass', () => {
     expect(result.totalDeferred).toBe(5);
     expect(await statuses()).toEqual(Array(count).fill('terminal'));
     await expectDomainConsistent();
+    // The rows never sent are exactly as before the pass, so their delivered receipts still match.
+    const after = await snapshot();
+    const sent = new Set(calls.filter(call => !Array.isArray(call.payload)).map(call => `children:${call.payload.id}:insert`));
+    expect(sent.size).toBe(SYNC_BATCH_LIMITS.maxFallbackRecordsPerPass);
+    expect(after.filter(row => !sent.has(row.id))).toEqual(before.filter(row => !sent.has(row.id)));
   });
 
   test('a request that throws after the claim returns the rows to refused, not failed', async () => {
@@ -88,10 +96,12 @@ describe('refused rows in a forced pass', () => {
       return { data: { session: { user: { id: calls === 1 ? USER : 'someone-else' } } } };
     };
     const { supabaseClient, calls: requests } = createSupabaseMock();
+    const before = await db.getAllAsync('select id, status, updated_at, payload from sync_outbox order by id');
     await engine(supabaseClient, { getAuthSession }).syncAll({ force: true });
     expect(requests).toEqual([]);
     expect(await statuses()).toEqual(Array(mode === 'batch' ? 2 : 1).fill('terminal'));
     await expectDomainConsistent();
+    expect(await db.getAllAsync('select id, status, updated_at, payload from sync_outbox order by id')).toEqual(before);
   });
 
   test.each(['single', 'batch'])('a claim that throws changes nothing (%s)', async mode => {

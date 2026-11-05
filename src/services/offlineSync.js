@@ -1191,6 +1191,8 @@ export const createOutboxSyncEngine = ({
   // A claim that throws may have rolled back (nothing changed: a refused row is still terminal, a
   // backed-off row keeps its backoff) or committed before failing. Hand back only the rows it
   // left in_flight, as their status before the pass, so it neither changes nor strands anything.
+  // Its own stamp is unknown, so a refused row gets its status back but keeps the stamped payload
+  // and domain version, which stay equal.
   const settleThrownClaims = async (outboxRecords, batchClaims = new Map()) => {
     const leftInFlight = [];
     for (const record of outboxRecords) {
@@ -1201,6 +1203,7 @@ export const createOutboxSyncEngine = ({
       leftInFlight.push({
         ...current,
         claimedFromStatus: priorStatus,
+        claimedFromUpdatedAt: prior?.claimedFromUpdatedAt ?? record.updated_at,
         claimedDomainStatus: prior?.claimedDomainStatus ?? (priorStatus === 'terminal' ? 'terminal' : null),
       });
     }
@@ -1241,8 +1244,11 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: refused, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
     if (inFlightRecord && batchClaim) {
-      inFlightRecord.claimedFromStatus = batchClaim.claimedFromStatus;
-      inFlightRecord.claimedDomainStatus = batchClaim.claimedDomainStatus;
+      // The row as it was before the pass; the version to revert from is this re-claim's stamp.
+      for (const key of ['claimedFromStatus', 'claimedFromUpdatedAt', 'claimedFromPayload', 'claimedFromLastError',
+        'claimedDomainStatus', 'claimedDomainVersion']) {
+        inFlightRecord[key] = batchClaim[key];
+      }
     }
     try {
       if (!inFlightRecord) {
