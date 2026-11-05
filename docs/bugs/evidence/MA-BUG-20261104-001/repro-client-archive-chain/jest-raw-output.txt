@@ -1,0 +1,22 @@
+PASS __tests__/reproClientArchiveChain.test.js
+  ✓ C1 offline lesson + letter tick for C, then Delete child, then ONE sync pass (143 ms)
+  ✓ C2 group lesson with C and healthy D, then Delete C, ONE sync pass (54 ms)
+  C3 Head Office ends C while the lesson is queued
+    ✓ C3a HO ends direct only; phone reconcile; then sync (43 ms)
+    ✓ C3b HO ends all; phone no-pull; then sync (47 ms)
+    ✓ C3c HO ends all; phone reconcile; then sync (41 ms)
+  C4 forced-pass batch poisoning
+    ✓ C4c control: same as C4a but an ordinary (non-forced) pass (56 ms)
+    ✓ C4a one terminal attendee + 5 healthy pending attendees, forced pass (54 ms)
+    ✓ C4b one terminal attendee + 30 healthy pending attendees, forced pass (78 ms)
+  C5 ordering-control feasibility probes
+    ✓ C5a add history tables to ARCHIVE_TABLE_DEPENDENCIES only (exported map, mutated in-process) (42 ms)
+    ✓ C5b patched engine copy: ARCHIVE_PUSH_ORDER.child_ea_assignments = 18 (+ history deps) (50 ms)
+    ✓ C5d patched engine copy, but the attendee upload fails transiently in pass 1 (cross-pass gap) (47 ms)
+    ✓ C5c history-first via the public tableName filter, then the full pass (production engine) (40 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        1.75 s, estimated 2 s
+Ran all test suites.

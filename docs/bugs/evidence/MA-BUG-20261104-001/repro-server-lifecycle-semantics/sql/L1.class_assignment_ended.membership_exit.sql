@@ -1,0 +1,13 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends class K assignment', $dml$UPDATE public.class_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02', handover_reason = 'HO handover' WHERE id = 'b593ffec-8582-5ad8-bec1-d586fdbe10a0' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A queued exit C_DIRECT from K', $dml$UPDATE public.child_class_memberships SET exited_at = TIMESTAMPTZ '2026-11-02 10:00:00+02', row_version = '2' WHERE id = '9a000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+SELECT harness.try_dml('EA_A queued exit C_CLASSONLY from K', $dml$UPDATE public.child_class_memberships SET exited_at = TIMESTAMPTZ '2026-11-02 10:00:00+02', row_version = '2' WHERE id = '9a000000-0000-0000-0000-000000000002' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('C_DIRECT membership', 'public.child_class_memberships', '9a000000-0000-0000-0000-000000000001', ARRAY['exited_at', 'row_version']);
+SELECT harness.peek('C_CLASSONLY membership', 'public.child_class_memberships', '9a000000-0000-0000-0000-000000000002', ARRAY['exited_at', 'row_version']);
+ROLLBACK;

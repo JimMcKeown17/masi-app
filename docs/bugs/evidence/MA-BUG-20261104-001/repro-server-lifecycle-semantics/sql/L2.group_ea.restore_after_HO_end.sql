@@ -1,0 +1,13 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends group assignment', $dml$UPDATE public.group_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02', handover_reason = 'HO handover' WHERE id = 'c189a976-3679-542d-966d-c9e28c04112e' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A write_for_child(C_GROUPONLY) before restore', $dml$SELECT private.current_user_can_write_for_child('5a000000-0000-0000-0000-000000000003') AS can_write$dml$);
+SELECT harness.try_dml('EA_A restore', $dml$UPDATE public.group_ea_assignments SET unassigned_at = NULL, handover_reason = NULL, row_version = '2' WHERE id = 'c189a976-3679-542d-966d-c9e28c04112e' RETURNING id$dml$);
+SELECT harness.try_dml('EA_A write_for_child(C_GROUPONLY) after restore', $dml$SELECT private.current_user_can_write_for_child('5a000000-0000-0000-0000-000000000003') AS can_write$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('final', 'public.group_ea_assignments', 'c189a976-3679-542d-966d-c9e28c04112e', ARRAY['unassigned_at', 'handover_reason', 'row_version']);
+ROLLBACK;

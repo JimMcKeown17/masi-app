@@ -1,0 +1,91 @@
+  console.error
+    Error in pullFromServer: TypeError: Cannot read properties of undefined (reading 'catch')
+        at Object.<anonymous> (/Users/jimmckeown/Development/masi-app/.claude/worktrees/wf_dcd8023d-0b6-4/src/context/ChildrenContext.js:375:43)
+        at Generator.next (<anonymous>)
+        at asyncGeneratorStep (/Users/jimmckeown/Development/masi-app/node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+        at _next (/Users/jimmckeown/Development/masi-app/node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+      380 |     } catch (error) {
+      381 |       if (isStaleActorError(error)) return;
+    > 382 |       console.error('Error in pullFromServer:', error);
+          |               ^
+      383 |       captureOperationalError(error, {
+      384 |         category: 'child_data_pull_failed',
+      385 |         context: { phase: 'persist_or_publish' },
+
+      at Object.error (src/context/ChildrenContext.js:382:15)
+      at asyncGeneratorStep (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+  console.log
+    OBS {"scenario":"E2-ctx","step":"hard_delete-pending","contextChildren":[],"localChild":null,"localRelationships":[],"outbox":[{"id":"children:child-9:hard_delete","status":"pending","error_code":null}]}
+
+      at log (__tests__/reproLifecycleEdgesE2Context.integration.test.js:98:11)
+
+  console.error
+    [SignedInHandle] handle_last_active_failed The database connection is not open
+
+      42 | const report = (error, category) => {
+      43 |   // Observability must never interrupt revocation, disposal, or transaction recovery.
+    > 44 |   try { console.error(`[SignedInHandle] ${category}`, error?.message || 'Unknown error'); } catch (_) { /* best effort */ }
+         |                 ^
+      45 |   try { captureOperationalError(error, { category }); } catch (_) { /* best effort */ }
+      46 | };
+      47 | const notify = (listeners, value) => {
+
+      at error (src/session/signedInHandle.js:44:17)
+      at report (src/session/signedInHandle.js:239:25)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+  console.error
+    Error in pullFromServer: TypeError: Cannot read properties of undefined (reading 'catch')
+        at Object.<anonymous> (/Users/jimmckeown/Development/masi-app/.claude/worktrees/wf_dcd8023d-0b6-4/src/context/ChildrenContext.js:375:43)
+        at Generator.next (<anonymous>)
+        at asyncGeneratorStep (/Users/jimmckeown/Development/masi-app/node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+        at _next (/Users/jimmckeown/Development/masi-app/node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+      380 |     } catch (error) {
+      381 |       if (isStaleActorError(error)) return;
+    > 382 |       console.error('Error in pullFromServer:', error);
+          |               ^
+      383 |       captureOperationalError(error, {
+      384 |         category: 'child_data_pull_failed',
+      385 |         context: { phase: 'persist_or_publish' },
+
+      at Object.error (src/context/ChildrenContext.js:382:15)
+      at asyncGeneratorStep (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+  console.log
+    OBS {"scenario":"E2-ctx","step":"hard_delete-terminal","contextChildren":["child-9"],"localChild":{"id":"child-9","archived_at":null,"sync_status":"synced"},"localRelationships":[{"t":"child_ea_assignments","id":"cea-9","ended":null},{"t":"child_programme_enrollments","id":"cpe-9","ended":null},{"t":"child_class_memberships","id":"ccm-9","ended":null}],"outbox":[{"id":"children:child-9:hard_delete","status":"terminal","error_code":"ARCHIVE_REQUIRED"}]}
+
+      at log (__tests__/reproLifecycleEdgesE2Context.integration.test.js:98:11)
+
+  console.error
+    [SignedInHandle] handle_last_active_failed The database connection is not open
+
+      42 | const report = (error, category) => {
+      43 |   // Observability must never interrupt revocation, disposal, or transaction recovery.
+    > 44 |   try { console.error(`[SignedInHandle] ${category}`, error?.message || 'Unknown error'); } catch (_) { /* best effort */ }
+         |                 ^
+      45 |   try { captureOperationalError(error, { category }); } catch (_) { /* best effort */ }
+      46 | };
+      47 | const notify = (listeners, value) => {
+
+      at error (src/session/signedInHandle.js:44:17)
+      at report (src/session/signedInHandle.js:239:25)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+PASS __tests__/reproLifecycleEdgesE2Context.integration.test.js
+  ✓ E2-ctx: ChildrenContext pull with a pending hard_delete outbox row (440 ms)
+  ✓ E2-ctx: ChildrenContext pull with a terminal hard_delete outbox row (112 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        1.117 s, estimated 7 s
+Ran all test suites.

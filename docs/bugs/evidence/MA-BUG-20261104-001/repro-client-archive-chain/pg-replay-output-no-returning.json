@@ -1,0 +1,495 @@
+{
+  "migrations": [
+    "20260521115412_masi_clean_base_schema.sql",
+    "20260521115416_masi_clean_rls_policies.sql",
+    "20260521115421_masi_seed_reference_data.sql",
+    "20260521120147_masi_rls_advisor_cleanup.sql",
+    "20260521135520_masi_staff_programme_assignment_uniqueness.sql",
+    "20260521140331_masi_rls_review_fixes.sql",
+    "20260521142324_masi_assignment_attendee_fixes.sql",
+    "20260521143346_masi_assignment_insert_recursion_fix.sql",
+    "20260521144901_masi_zazi_alignment_schema.sql",
+    "20260521153217_masi_child_delete_guard.sql",
+    "20260522103000_masi_session_upsert_visibility.sql",
+    "20260525231506_masi_rls_contract_cleanup.sql",
+    "20260525232108_masi_rls_grant_cleanup.sql",
+    "20260526151352_creator_select_upsert_visibility.sql",
+    "20260529212523_masi_programmes_daily_session_target.sql",
+    "20260529214500_masi_sessions_forward_prep_columns.sql",
+    "20260618120000_masi_assessments_capture_mode.sql",
+    "20260712202409_masi_idempotent_child_delete.sql",
+    "20260714120000_children_current_reading_level.sql",
+    "20260714220000_server_authoritative_reconcile_acknowledgments.sql",
+    "20260714233000_sync_relationship_indexes.sql",
+    "20260828004500_history_session_authorization_scope.sql",
+    "20260828010000_delivery_history_session_page.sql",
+    "20260925120000_session_history_family_delta.sql",
+    "20261014120000_organisation_label_v1.sql",
+    "20261015120000_time_entry_location_optional.sql",
+    "20261017120000_mobile_support_incidents.sql",
+    "20261018120000_ea_access_suspension.sql",
+    "20261018180000_upload_contract_row_version.sql",
+    "20261021120000_assessment_results_contract.sql",
+    "20261021140000_session_group_authorization.sql",
+    "20261021160000_letter_mastery_current_state.sql",
+    "20261022120000_assessment_history_pull.sql",
+    "20261023120000_whole_class_assessment_access.sql",
+    "20261026120000_welaplus_2026_1_default.sql",
+    "20261027120000_class_letter_order_edition.sql",
+    "20261030120000_incident_receipts.sql",
+    "20261030120100_support_bundles_storage.sql",
+    "20261031120000_numeracy_maths_draft_default.sql",
+    "20261031180000_masi_reporting_v1.sql",
+    "20261101120000_skill_mastery_current_state.sql"
+  ],
+  "scenarios": {
+    "C1": {
+      "requests": [
+        {
+          "seq": 1,
+          "request": "PATCH children",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 2,
+          "request": "PATCH child_programme_enrollments",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 3,
+          "request": "PATCH child_class_memberships",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 4,
+          "request": "PATCH child_group_memberships",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 5,
+          "request": "PATCH child_ea_assignments",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 6,
+          "request": "POST sessions",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 7,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 8,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        },
+        {
+          "seq": 9,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 10,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        },
+        {
+          "seq": 11,
+          "request": "rpc/report_mobile_support_incident_v2 child=",
+          "fake": "ok",
+          "postgres": "skipped|rpc report_mobile_support_incident_v2 not replayed",
+          "agree": true
+        },
+        {
+          "seq": 12,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 13,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        }
+      ],
+      "allAgree": true,
+      "final": [
+        "FINAL|attendees|",
+        "FINAL|sessions|1",
+        "FINAL|letter_mastery|",
+        "FINAL|child_ea_assignments|c0000000-0000-4000-8000-000000000001=2026-11-04 19:50:51.825+00,c0000000-0000-4000-8000-000000000002=active"
+      ]
+    },
+    "C2": {
+      "requests": [
+        {
+          "seq": 1,
+          "request": "PATCH children",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 2,
+          "request": "PATCH child_programme_enrollments",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 3,
+          "request": "PATCH child_class_memberships",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 4,
+          "request": "PATCH child_group_memberships",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 5,
+          "request": "PATCH child_ea_assignments",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 6,
+          "request": "POST sessions",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 7,
+          "request": "POST session_attendees[batch:2]",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 8,
+          "request": "POST session_attendees",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 9,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 10,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000002",
+          "fake": "ok",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 11,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        }
+      ],
+      "allAgree": true,
+      "final": [
+        "FINAL|attendees|c0000000-0000-4000-8000-000000000002",
+        "FINAL|sessions|1",
+        "FINAL|letter_mastery|c0000000-0000-4000-8000-000000000002",
+        "FINAL|child_ea_assignments|c0000000-0000-4000-8000-000000000001=2026-11-04 19:50:51.913+00,c0000000-0000-4000-8000-000000000002=active"
+      ]
+    },
+    "C3a": {
+      "requests": [
+        {
+          "seq": 1,
+          "request": "POST sessions",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 2,
+          "request": "POST session_attendees[batch:2]",
+          "fake": "ok rows=2",
+          "postgres": "ok rows=2",
+          "agree": true
+        },
+        {
+          "seq": 3,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000002",
+          "fake": "ok",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 4,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        },
+        {
+          "seq": 5,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        }
+      ],
+      "allAgree": true,
+      "final": [
+        "FINAL|attendees|c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002",
+        "FINAL|sessions|1",
+        "FINAL|letter_mastery|c0000000-0000-4000-8000-000000000002",
+        "FINAL|child_ea_assignments|c0000000-0000-4000-8000-000000000001=2026-10-20 10:00:00+00,c0000000-0000-4000-8000-000000000002=active"
+      ]
+    },
+    "C3b": {
+      "requests": [
+        {
+          "seq": 1,
+          "request": "POST sessions",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 2,
+          "request": "POST session_attendees[batch:2]",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 3,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 4,
+          "request": "POST session_attendees",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 5,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        },
+        {
+          "seq": 6,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000002",
+          "fake": "ok",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 7,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 8,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        }
+      ],
+      "allAgree": true,
+      "final": [
+        "FINAL|attendees|c0000000-0000-4000-8000-000000000002",
+        "FINAL|sessions|1",
+        "FINAL|letter_mastery|c0000000-0000-4000-8000-000000000002",
+        "FINAL|child_ea_assignments|c0000000-0000-4000-8000-000000000001=2026-10-20 10:00:00+00,c0000000-0000-4000-8000-000000000002=active"
+      ]
+    },
+    "C3c": {
+      "requests": [
+        {
+          "seq": 1,
+          "request": "POST sessions",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 2,
+          "request": "POST session_attendees[batch:2]",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 3,
+          "request": "POST session_attendees",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 4,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 5,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000002",
+          "fake": "ok",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 6,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        },
+        {
+          "seq": 7,
+          "request": "POST session_attendees",
+          "fake": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "postgres": "42501 \"new row violates row-level security policy for table \"session_attendees\"\"",
+          "agree": true
+        },
+        {
+          "seq": 8,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "42501 \"Active child delivery assignment required\"",
+          "postgres": "42501 \"Active child delivery assignment required\"",
+          "agree": true
+        }
+      ],
+      "allAgree": true,
+      "final": [
+        "FINAL|attendees|c0000000-0000-4000-8000-000000000002",
+        "FINAL|sessions|1",
+        "FINAL|letter_mastery|c0000000-0000-4000-8000-000000000002",
+        "FINAL|child_ea_assignments|c0000000-0000-4000-8000-000000000001=2026-10-20 10:00:00+00,c0000000-0000-4000-8000-000000000002=active"
+      ]
+    },
+    "C5b": {
+      "requests": [
+        {
+          "seq": 1,
+          "request": "PATCH children",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 2,
+          "request": "PATCH child_programme_enrollments",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 3,
+          "request": "PATCH child_class_memberships",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 4,
+          "request": "PATCH child_group_memberships",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 5,
+          "request": "POST sessions",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 6,
+          "request": "POST session_attendees[batch:2]",
+          "fake": "ok rows=2",
+          "postgres": "ok rows=2",
+          "agree": true
+        },
+        {
+          "seq": 7,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000002",
+          "fake": "ok",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 8,
+          "request": "rpc/set_letter_mastery child=c0000000-0000-4000-8000-000000000001",
+          "fake": "ok",
+          "postgres": "ok rows=1",
+          "agree": true
+        },
+        {
+          "seq": 9,
+          "request": "PATCH child_ea_assignments",
+          "fake": "ok rows=1",
+          "postgres": "ok rows=1",
+          "agree": true
+        }
+      ],
+      "allAgree": true,
+      "final": [
+        "FINAL|attendees|c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002",
+        "FINAL|sessions|1",
+        "FINAL|letter_mastery|c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002",
+        "FINAL|child_ea_assignments|c0000000-0000-4000-8000-000000000001=2026-11-04 19:50:52.332+00,c0000000-0000-4000-8000-000000000002=active"
+      ]
+    }
+  },
+  "mapping": {
+    "literacy": "f869cb6b-48d2-487c-802e-182ad26c334b",
+    "activeYear": "6e51e80d-092d-4e83-b9f6-9005f9365d3a"
+  }
+}

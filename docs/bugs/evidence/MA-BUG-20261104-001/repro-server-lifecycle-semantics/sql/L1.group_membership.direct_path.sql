@@ -1,0 +1,11 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO removes membership', $dml$UPDATE public.child_group_memberships SET removed_at = TIMESTAMPTZ '2026-11-03 09:00:00+02' WHERE id = '9b000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A queued archive removal', $dml$UPDATE public.child_group_memberships SET removed_at = TIMESTAMPTZ '2026-11-02 10:00:00+02', row_version = '2' WHERE id = '9b000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('final row', 'public.child_group_memberships', '9b000000-0000-0000-0000-000000000001', ARRAY['removed_at', 'row_version']);
+ROLLBACK;

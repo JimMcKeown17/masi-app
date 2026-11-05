@@ -1,0 +1,215 @@
+[
+  {
+    "label": "E1a-class-archive-zero-rows-then-children-edit-and-own-assignment",
+    "ok": true,
+    "observed": [
+      "classes:rows=0",
+      "class-visible:true",
+      "pull-join:86000000-0000-0000-0000-000000000001|true",
+      "children:rows=1",
+      "child_class_memberships:rows=1",
+      "class_ea_assignments:rows=1"
+    ],
+    "expected": [
+      "classes:rows=0",
+      "class-visible:true",
+      "pull-join:86000000-0000-0000-0000-000000000001|true",
+      "children:rows=1",
+      "child_class_memberships:rows=1",
+      "class_ea_assignments:rows=1"
+    ]
+  },
+  {
+    "label": "E1c-child-archive-cascade-after-ho-end",
+    "ok": true,
+    "observed": [
+      "children:rows=0",
+      "child_programme_enrollments:rows=0",
+      "child_class_memberships:rows=0",
+      "child_ea_assignments:rows=1",
+      "active-direct-for-pull:0",
+      "child-visible:true"
+    ],
+    "expected": [
+      "children:rows=0",
+      "child_programme_enrollments:rows=0",
+      "child_class_memberships:rows=0",
+      "child_ea_assignments:rows=1",
+      "active-direct-for-pull:0",
+      "child-visible:true"
+    ]
+  },
+  {
+    "label": "E1a-replay-class-archive-after-reassign",
+    "ok": true,
+    "observed": [
+      "classes:rows=1",
+      "ea-b-still-assigned:true"
+    ],
+    "expected": [
+      "classes:rows=1",
+      "ea-b-still-assigned:true"
+    ]
+  },
+  {
+    "label": "E1c-replay-child-archive-after-reassign",
+    "ok": true,
+    "observed": [
+      "children:rows=1",
+      "child_programme_enrollments:rows=1",
+      "child_class_memberships:rows=1",
+      "own-direct-still-active:true"
+    ],
+    "expected": [
+      "children:rows=1",
+      "child_programme_enrollments:rows=1",
+      "child_class_memberships:rows=1",
+      "own-direct-still-active:true"
+    ]
+  },
+  {
+    "label": "E2-delete-child-if-no-history-returns-false",
+    "ok": true,
+    "observed": [
+      "rpc:false",
+      "child-still-there:1",
+      "pull-scope-active-assignment:1"
+    ],
+    "expected": [
+      "rpc:false",
+      "child-still-there:1",
+      "pull-scope-active-assignment:1"
+    ]
+  },
+  {
+    "label": "E2-control-no-history-deletes",
+    "ok": true,
+    "observed": [
+      "rpc:true",
+      "child-still-there:0"
+    ],
+    "expected": [
+      "rpc:true",
+      "child-still-there:0"
+    ]
+  },
+  {
+    "label": "E3a-holds-class-exit-after-assignment-end",
+    "ok": true,
+    "observed": [
+      "child_programme_enrollments:rows=1",
+      "child_ea_assignments:rows=1",
+      "child_class_memberships:rows=1"
+    ],
+    "expected": [
+      "child_programme_enrollments:rows=1",
+      "child_ea_assignments:rows=1",
+      "child_class_memberships:rows=1"
+    ]
+  },
+  {
+    "label": "E3b-no-class-exit-after-assignment-end-zero-rows",
+    "ok": true,
+    "observed": [
+      "child_programme_enrollments:rows=1",
+      "child_ea_assignments:rows=1",
+      "child_class_memberships:rows=0",
+      "membership-still-active:true"
+    ],
+    "expected": [
+      "child_programme_enrollments:rows=1",
+      "child_ea_assignments:rows=1",
+      "child_class_memberships:rows=0",
+      "membership-still-active:true"
+    ]
+  },
+  {
+    "label": "E3b-control-exit-before-assignment-end-lands",
+    "ok": true,
+    "observed": [
+      "child_class_memberships:rows=1",
+      "child_ea_assignments:rows=1"
+    ],
+    "expected": [
+      "child_class_memberships:rows=1",
+      "child_ea_assignments:rows=1"
+    ]
+  },
+  {
+    "label": "E4-pass1-m1-lands-active",
+    "ok": true,
+    "observed": [
+      "m1:true"
+    ],
+    "expected": [
+      "m1:true"
+    ]
+  },
+  {
+    "label": "E4-pass1-m2-23505-while-m1-active",
+    "ok": true,
+    "observed": {
+      "status": 1,
+      "sqlstate": "23505",
+      "message": "duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\"",
+      "stdout": ""
+    },
+    "expected": "23505"
+  },
+  {
+    "label": "E4-pass2-m1-archive-then-forced-m2-lands",
+    "ok": true,
+    "observed": [
+      "child_group_memberships:rows=1",
+      "99000000-0000-0000-0000-000000000001:false",
+      "99000000-0000-0000-0000-000000000002:true"
+    ],
+    "expected": [
+      "child_group_memberships:rows=1",
+      "99000000-0000-0000-0000-000000000001:false",
+      "99000000-0000-0000-0000-000000000002:true"
+    ]
+  },
+  {
+    "label": "E5-co-ea-archive-and-ea-b-view",
+    "ok": true,
+    "observed": [
+      "classes:rows=1",
+      "children:rows=1",
+      "child_class_memberships:rows=1",
+      "class_ea_assignments:rows=1",
+      "b-roster-pull:37000000-0000-0000-0000-000000000004|archived=true",
+      "b-child7-membership-active:true",
+      "b-child7-assignment-active:true",
+      "classes:rows=1"
+    ],
+    "expected": [
+      "classes:rows=1",
+      "children:rows=1",
+      "child_class_memberships:rows=1",
+      "class_ea_assignments:rows=1",
+      "b-roster-pull:37000000-0000-0000-0000-000000000004|archived=true",
+      "b-child7-membership-active:true",
+      "b-child7-assignment-active:true",
+      "classes:rows=1"
+    ]
+  },
+  {
+    "label": "E6-no-class",
+    "ok": true,
+    "observed": [
+      "children:rows=1",
+      "child_class_memberships:rows=1",
+      "assignment-active:true",
+      "enrollment-active:true",
+      "open-class-memberships:0"
+    ],
+    "expected": [
+      "children:rows=1",
+      "child_class_memberships:rows=1",
+      "assignment-active:true",
+      "enrollment-active:true",
+      "open-class-memberships:0"
+    ]
+  }
+]

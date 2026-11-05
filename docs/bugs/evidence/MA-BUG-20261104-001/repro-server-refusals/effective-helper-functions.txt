@@ -1,0 +1,51 @@
+CREATE OR REPLACE FUNCTION private.current_user_can_write_for_child(p_child_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1
+    from public.child_ea_assignments cea
+    where cea.child_id = p_child_id
+      and cea.user_id = (select auth.uid())
+      and cea.unassigned_at is null
+  )
+  or exists (
+    select 1
+    from public.class_ea_assignments cls
+    join public.child_class_memberships ccm
+      on ccm.class_id = cls.class_id
+     and ccm.exited_at is null
+    where ccm.child_id = p_child_id
+      and cls.ea_user_id = (select auth.uid())
+      and cls.unassigned_at is null
+  )
+  or exists (
+    select 1
+    from public.group_ea_assignments grp
+    join public.child_group_memberships cgm
+      on cgm.group_id = grp.group_id
+     and cgm.removed_at is null
+    where cgm.child_id = p_child_id
+      and grp.ea_user_id = (select auth.uid())
+      and grp.unassigned_at is null
+  );
+$function$
+
+CREATE OR REPLACE FUNCTION private.can_modify_session_attendee(p_session_id uuid, p_child_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select exists (
+    select 1
+    from public.sessions s
+    where s.id = p_session_id
+      and s.user_id = (select auth.uid())
+      and (select private.current_user_can_write_for_child(p_child_id))
+  );
+$function$
+
+'completed'::text

@@ -1,0 +1,101 @@
+/*
+ * THROWAWAY REPRO (repro-client-lifecycle-edges, E2 via the real ChildrenContext pull).
+ * Copied from __tests__/ChildrenContextPendingDelete.integration.test.js; the only change is the
+ * hard_delete outbox row's status: 'pending' (existing contract) vs 'terminal' ARCHIVE_REQUIRED.
+ */
+jest.mock('../test-support/handleServiceMocks', () => ({
+  startSessionHistoryPull: jest.fn(),
+  resetSessionHistoryStatusForActorChange: jest.fn(),
+}));
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+
+import fs from 'fs';
+import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { renderHook, waitFor } from '@testing-library/react-native';
+import { __reset, __setDatabaseFactory } from 'expo-sqlite';
+import { ChildrenProvider, useChildren } from '../src/context/ChildrenContext';
+import { initializeTestDatabase, closeDefaultTestHandle, getTestWriter } from '../test-support/testDatabase';
+import { syncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createLocalStateRepository } from '../src/db/repositories/localStateRepository';
+import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
+
+const OUT = process.env.REPRO_OUT || '/tmp/repro-lifecycle-observations.jsonl';
+const ACTOR = '00000000-0000-4000-8000-0000000000aa';
+const mockPullPreloadedChildData = jest.fn();
+
+jest.mock('../src/context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: '00000000-0000-4000-8000-0000000000aa' } }),
+}));
+jest.mock('../src/context/OfflineContext', () => ({
+  useOffline: () => ({ isOnline: true, refreshSyncStatus: jest.fn(), isSyncing: false }),
+}));
+jest.mock('../src/services/preloadedChildData', () => ({
+  ...jest.requireActual('../src/services/preloadedChildData'),
+  pullPreloadedChildData: (...args) => mockPullPreloadedChildData(...args),
+}));
+
+const wrapper = ({ children }) => <ChildrenProvider>{children}</ChildrenProvider>;
+let testDb;
+
+const setup = async (status) => {
+  await AsyncStorage.clear();
+  await closeDefaultTestHandle();
+  __reset();
+  testDb = createBetterSqliteTestDatabase();
+  __setDatabaseFactory(async () => testDb);
+  await initializeTestDatabase();
+  const db = await getTestWriter();
+  await seedCoreData(db);
+  await createLocalStateRepository({ database: db }).set('reference_data_complete_at', '2026-10-16T00:00:00.000Z');
+  await db.runAsync(`update staff_programme_assignments set user_id = '${ACTOR}'`);
+  await testDb.execAsync('PRAGMA foreign_keys = ON');
+  // State left by deleteIfNoHistory: local child + relationships gone, hard_delete queued.
+  await syncOutboxRepository.enqueue({ tableName: 'children', recordId: 'child-9', operation: 'hard_delete', payload: { id: 'child-9' } });
+  if (status === 'terminal') {
+    // What finalizeTerminalFailure writes after delete_child_if_no_history returned false (offlineSync.js:723-740, 944-974).
+    await db.runAsync(`update sync_outbox set status = 'terminal', error_class = 'terminal', error_code = 'ARCHIVE_REQUIRED',
+      last_error = 'Child has history and must be archived instead of hard-deleted'
+      where table_name = 'children' and record_id = 'child-9'`);
+  }
+  const ok = (rows) => ({ ok: true, rows, complete: true, failureKind: null });
+  mockPullPreloadedChildData.mockResolvedValue({
+    activeProgrammeId: 'programme-a',
+    scopes: {
+      programmeAssignment: ok([{ programme_id: 'programme-a' }]),
+      children: ok([]),
+      classes: ok([]),
+      childEaAssignments: ok([{ id: 'cea-9', child_id: 'child-9', user_id: ACTOR, created_by: ACTOR, synced: true,
+        children: { id: 'child-9', first_name: 'Deleted', last_name: 'Child', created_by: ACTOR, synced: true } }]),
+      childProgrammeEnrollments: ok([{ id: 'cpe-9', child_id: 'child-9', programme_id: 'programme-a', created_by: ACTOR, synced: true }]),
+      childClassMemberships: ok([{ id: 'ccm-9', child_id: 'child-9', class_id: 'class-1', academic_year_id: 'year-2026', created_by: ACTOR, synced: true }]),
+      groups: ok([]),
+      groupEaAssignments: ok([]),
+      childrenGroups: ok([]),
+    },
+  });
+};
+
+afterEach(async () => { await closeDefaultTestHandle(); __reset(); });
+
+test.each(['pending', 'terminal'])('E2-ctx: ChildrenContext pull with a %s hard_delete outbox row', async (status) => {
+  await setup(status);
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(mockPullPreloadedChildData).toHaveBeenCalled());
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  const observation = {
+    scenario: 'E2-ctx', step: `hard_delete-${status}`,
+    contextChildren: result.current.children.map(row => row.id),
+    localChild: await testDb.getFirstAsync("select id, archived_at, sync_status from children where id = 'child-9'"),
+    localRelationships: await testDb.getAllAsync(`
+      select 'child_ea_assignments' as t, id, unassigned_at as ended from child_ea_assignments where child_id = 'child-9'
+      union all select 'child_programme_enrollments', id, ended_at from child_programme_enrollments where child_id = 'child-9'
+      union all select 'child_class_memberships', id, exited_at from child_class_memberships where child_id = 'child-9'`),
+    outbox: await testDb.getAllAsync('select id, status, error_code from sync_outbox'),
+  };
+  // eslint-disable-next-line no-console
+  console.log(`OBS ${JSON.stringify(observation)}`);
+  try { fs.appendFileSync(OUT, `${JSON.stringify(observation)}\n`); } catch (e) { /* ignore */ }
+  expect(true).toBe(true);
+});

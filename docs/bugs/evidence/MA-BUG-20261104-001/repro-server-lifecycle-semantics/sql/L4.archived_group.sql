@@ -1,0 +1,10 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO archives group G', $dml$UPDATE public.groups SET archived_at = now(), archived_by_user_id = '1a000000-0000-0000-0000-000000000001', archive_reason = 'HO closed group' WHERE id = '7a000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A group membership C_FREE->G (merge upsert)', $dml$INSERT INTO public.child_group_memberships (id, child_id, group_id, joined_at, created_by, row_version) VALUES ('9b000000-0000-0000-0000-000000000020', '5a000000-0000-0000-0000-000000000005', '7a000000-0000-0000-0000-000000000001', now(), '1a000000-0000-0000-0000-000000000002', '2') ON CONFLICT (id) DO UPDATE SET child_id = EXCLUDED.child_id, group_id = EXCLUDED.group_id, joined_at = EXCLUDED.joined_at, created_by = EXCLUDED.created_by, row_version = EXCLUDED.row_version RETURNING id$dml$);
+SELECT harness.try_dml('EA_A session for group G (insert-or-ignore)', $dml$INSERT INTO public.sessions (id, user_id, programme_id, group_id, session_date) VALUES ('86000000-0000-0000-0000-000000000002', '1a000000-0000-0000-0000-000000000002', (SELECT id FROM public.programmes WHERE code = 'literacy'), '7a000000-0000-0000-0000-000000000001', '2026-11-04') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+SELECT harness.try_dml('EA_A attendee C_FREE in that session with group G (merge upsert)', $dml$INSERT INTO public.session_attendees (id, session_id, child_id, group_id) VALUES ('96000000-0000-0000-0000-000000000001', '86000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000005', '7a000000-0000-0000-0000-000000000001') ON CONFLICT (id) DO UPDATE SET session_id = EXCLUDED.session_id, child_id = EXCLUDED.child_id, group_id = EXCLUDED.group_id RETURNING id$dml$);
+ROLLBACK;

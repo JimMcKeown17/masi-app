@@ -1,0 +1,955 @@
+{
+  "C1": {
+    "deleteResult": {
+      "success": true,
+      "deletedNoHistory": false
+    },
+    "outboxAfterSave": [
+      "sessions:insert",
+      "session_attendees:insert",
+      "letter_mastery:update"
+    ],
+    "outboxQueuedBeforeSync": [
+      "sessions:insert",
+      "session_attendees:insert",
+      "letter_mastery:update",
+      "child_ea_assignments:archive",
+      "children:archive",
+      "child_class_memberships:archive",
+      "child_group_memberships:archive",
+      "child_programme_enrollments:archive"
+    ],
+    "pass1": {
+      "success": false,
+      "totalSynced": 6,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pushOrderPass1": [
+      "#1 PATCH update children eq.c0000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#2 PATCH update child_programme_enrollments eq.faf573ec-b68c-5bc8-af11-899280001ce3 -> 200 ok rows=1",
+      "#3 PATCH update child_class_memberships eq.cc000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#4 PATCH update child_group_memberships eq.cb000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#5 PATCH update child_ea_assignments eq.d7c9e31f-056a-522b-9f61-186f0a5a3c84 -> 200 ok rows=1",
+      "#6 POST upsert sessions abb4d913-e07f-4edd-ab82-96f4c4c965be -> 201 ok rows=1",
+      "#7 POST upsert session_attendees bab748ad-7ed6-5cb9-8e42-93ab2546de60 child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#8 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "outboxAfterPass1": [
+      {
+        "id": "session_attendees:bab748ad-7ed6-5cb9-8e42-93ab2546de60:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      },
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "attentionAfterPass1": {
+      "needsAttentionCount": 2,
+      "waitingCount": 0,
+      "headerState": "needs_attention",
+      "headerMessage": "2 items need attention",
+      "homeCards": [
+        "2 items need attention"
+      ],
+      "needsAttentionItems": [
+        {
+          "table": "session_attendees",
+          "operation": "insert",
+          "reason": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+        },
+        {
+          "table": "letter_mastery",
+          "operation": "update",
+          "reason": "42501-authenticated: Active child delivery assignment required"
+        }
+      ]
+    },
+    "incidentsAfterPass1": [
+      {
+        "kind": "upload_terminal",
+        "status": "pending"
+      },
+      {
+        "kind": "upload_terminal",
+        "status": "pending"
+      }
+    ],
+    "serverAfterPass1": {
+      "sessions": [
+        "abb4d913-e07f-4edd-ab82-96f4c4c965be"
+      ],
+      "attendees": [],
+      "letterMastery": [],
+      "cDirectAssignmentUnassigned": "2026-11-04T19:50:51.825Z"
+    },
+    "localDomainStatus": [
+      {
+        "t": "session_attendees",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "sync_status": "terminal",
+        "last_sync_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      },
+      {
+        "t": "letter_mastery",
+        "child_id": "c0000000-0000-4000-8000-000000000001",
+        "sync_status": "terminal",
+        "last_sync_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "forcedPass": {
+      "success": false,
+      "totalSynced": 0,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "forcedPassRequests": [
+      "#9 POST upsert session_attendees bab748ad-7ed6-5cb9-8e42-93ab2546de60 child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#10 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\"",
+      "#11 POST rpc report_mobile_support_incident_v2 -> 200 ok"
+    ],
+    "outboxAfterForced": [
+      {
+        "id": "session_attendees:bab748ad-7ed6-5cb9-8e42-93ab2546de60:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      },
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "retryPass": {
+      "success": false,
+      "totalSynced": 0,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "retryPassRequests": [
+      "#12 POST upsert session_attendees bab748ad-7ed6-5cb9-8e42-93ab2546de60 child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#13 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "outboxAfterRetry": [
+      {
+        "id": "session_attendees:bab748ad-7ed6-5cb9-8e42-93ab2546de60:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      },
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "attentionAfterRetry": {
+      "needsAttentionCount": 2,
+      "waitingCount": 0,
+      "headerState": "needs_attention",
+      "headerMessage": "2 items need attention",
+      "homeCards": [
+        "2 items need attention"
+      ],
+      "needsAttentionItems": [
+        {
+          "table": "session_attendees",
+          "operation": "insert",
+          "reason": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+        },
+        {
+          "table": "letter_mastery",
+          "operation": "update",
+          "reason": "42501-authenticated: Active child delivery assignment required"
+        }
+      ]
+    }
+  },
+  "C2": {
+    "pass1": {
+      "success": false,
+      "totalSynced": 8,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pushOrderPass1": [
+      "#1 PATCH update children eq.c0000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#2 PATCH update child_programme_enrollments eq.faf573ec-b68c-5bc8-af11-899280001ce3 -> 200 ok rows=1",
+      "#3 PATCH update child_class_memberships eq.cc000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#4 PATCH update child_group_memberships eq.cb000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#5 PATCH update child_ea_assignments eq.d7c9e31f-056a-522b-9f61-186f0a5a3c84 -> 200 ok rows=1",
+      "#6 POST upsert sessions 736f0741-4e1c-4960-bac0-18d139c1b2bb -> 201 ok rows=1",
+      "#7 POST upsert[batch:2] session_attendees 4af94cea-afb4-51cc-9e7d-aeab6a974292,94405b77-ca5c-5008-9708-ee039f0f3b4f child=c0000000-0000-4000-8000-000000000002,c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#8 POST upsert session_attendees 4af94cea-afb4-51cc-9e7d-aeab6a974292 child=c0000000-0000-4000-8000-000000000002 -> 201 ok rows=1",
+      "#9 POST upsert session_attendees 94405b77-ca5c-5008-9708-ee039f0f3b4f child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#10 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#11 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "outboxAfterPass1": [
+      {
+        "id": "session_attendees:94405b77-ca5c-5008-9708-ee039f0f3b4f:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      },
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "attentionAfterPass1": {
+      "needsAttentionCount": 2,
+      "waitingCount": 0,
+      "headerState": "needs_attention",
+      "headerMessage": "2 items need attention",
+      "homeCards": [
+        "2 items need attention"
+      ],
+      "needsAttentionItems": [
+        {
+          "table": "session_attendees",
+          "operation": "insert",
+          "reason": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+        },
+        {
+          "table": "letter_mastery",
+          "operation": "update",
+          "reason": "42501-authenticated: Active child delivery assignment required"
+        }
+      ]
+    },
+    "serverFamily": {
+      "session": {
+        "id": "736f0741-4e1c-4960-bac0-18d139c1b2bb",
+        "group_id": "a0000000-0000-4000-8000-000000000005"
+      },
+      "attendeesOnServer": [
+        "D"
+      ],
+      "letterMasteryOnServer": [
+        "D"
+      ]
+    },
+    "localSessionChildrenIds": [
+      "D",
+      "C"
+    ]
+  },
+  "C3a": {
+    "headOfficeEnded": "direct assignment only",
+    "phonePull": "reconcile",
+    "reconcileResult": {
+      "applied": 1,
+      "skipped": 0,
+      "failed": 0,
+      "ended": 1,
+      "fallbackUsed": false,
+      "reconcileCompleted": true
+    },
+    "localAfterPull": [
+      {
+        "t": "cea",
+        "ended": "2026-10-20T12:00:00.000Z",
+        "sync_status": "synced"
+      },
+      {
+        "t": "letter_mastery",
+        "ended": "2026-10-19T09:00:00.000Z",
+        "sync_status": "pending"
+      }
+    ],
+    "pass1": {
+      "success": false,
+      "totalSynced": 4,
+      "totalTerminal": 1,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pushOrderPass1": [
+      "#1 POST upsert sessions f6d68e18-b172-4c5e-aed1-016389887e20 -> 201 ok rows=1",
+      "#2 POST upsert[batch:2] session_attendees 067c19bd-4fd8-552a-b5f4-350a10b63d6a,adcdf45f-d29e-57dd-ae64-250e37105c36 child=c0000000-0000-4000-8000-000000000002,c0000000-0000-4000-8000-000000000001 -> 201 ok rows=2",
+      "#3 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#4 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "outboxAfterPass1AndForced": [
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "forcedPassRequests": [
+      "#5 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "forced": {
+      "success": false,
+      "totalSynced": 0,
+      "totalTerminal": 1,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "attention": {
+      "needsAttentionCount": 1,
+      "waitingCount": 0,
+      "headerState": "needs_attention",
+      "headerMessage": "1 item needs attention",
+      "homeCards": [
+        "1 item needs attention"
+      ],
+      "needsAttentionItems": [
+        {
+          "table": "letter_mastery",
+          "operation": "update",
+          "reason": "42501-authenticated: Active child delivery assignment required"
+        }
+      ]
+    },
+    "attendeesOnServer": [
+      "D",
+      "C"
+    ]
+  },
+  "C3b": {
+    "headOfficeEnded": "direct assignment + class membership + group membership",
+    "phonePull": "no-pull",
+    "reconcileResult": null,
+    "localAfterPull": [
+      {
+        "t": "cea",
+        "ended": null,
+        "sync_status": "synced"
+      },
+      {
+        "t": "letter_mastery",
+        "ended": "2026-10-19T09:00:00.000Z",
+        "sync_status": "pending"
+      }
+    ],
+    "pass1": {
+      "success": false,
+      "totalSynced": 3,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pushOrderPass1": [
+      "#1 POST upsert sessions 0a304979-7b68-4f30-b03a-8822926ad172 -> 201 ok rows=1",
+      "#2 POST upsert[batch:2] session_attendees 15d4bc96-b253-5c7c-b725-0f9ac8e4528a,3a4a870e-182e-5c25-8d43-677f2d21dfdf child=c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#3 POST upsert session_attendees 15d4bc96-b253-5c7c-b725-0f9ac8e4528a child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#4 POST upsert session_attendees 3a4a870e-182e-5c25-8d43-677f2d21dfdf child=c0000000-0000-4000-8000-000000000002 -> 201 ok rows=1",
+      "#5 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\"",
+      "#6 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok"
+    ],
+    "outboxAfterPass1AndForced": [
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      },
+      {
+        "id": "session_attendees:15d4bc96-b253-5c7c-b725-0f9ac8e4528a:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      }
+    ],
+    "forcedPassRequests": [
+      "#7 POST upsert session_attendees 15d4bc96-b253-5c7c-b725-0f9ac8e4528a child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#8 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "forced": {
+      "success": false,
+      "totalSynced": 0,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "attention": {
+      "needsAttentionCount": 2,
+      "waitingCount": 0,
+      "headerState": "needs_attention",
+      "headerMessage": "2 items need attention",
+      "homeCards": [
+        "2 items need attention"
+      ],
+      "needsAttentionItems": [
+        {
+          "table": "session_attendees",
+          "operation": "insert",
+          "reason": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+        },
+        {
+          "table": "letter_mastery",
+          "operation": "update",
+          "reason": "42501-authenticated: Active child delivery assignment required"
+        }
+      ]
+    },
+    "attendeesOnServer": [
+      "D"
+    ]
+  },
+  "C3c": {
+    "headOfficeEnded": "direct assignment + class membership + group membership",
+    "phonePull": "reconcile",
+    "reconcileResult": {
+      "applied": 1,
+      "skipped": 0,
+      "failed": 0,
+      "ended": 1,
+      "fallbackUsed": false,
+      "reconcileCompleted": true
+    },
+    "localAfterPull": [
+      {
+        "t": "cea",
+        "ended": "2026-10-20T12:00:00.000Z",
+        "sync_status": "synced"
+      },
+      {
+        "t": "letter_mastery",
+        "ended": "2026-10-19T09:00:00.000Z",
+        "sync_status": "pending"
+      }
+    ],
+    "pass1": {
+      "success": false,
+      "totalSynced": 3,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pushOrderPass1": [
+      "#1 POST upsert sessions 267d1eca-d1d1-40ad-8ece-95d4eaa707f5 -> 201 ok rows=1",
+      "#2 POST upsert[batch:2] session_attendees a8c9098c-583b-5237-a5f2-1d8605c61a2e,d6ee9121-1296-5977-9449-b549272d987d child=c0000000-0000-4000-8000-000000000002,c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#3 POST upsert session_attendees a8c9098c-583b-5237-a5f2-1d8605c61a2e child=c0000000-0000-4000-8000-000000000002 -> 201 ok rows=1",
+      "#4 POST upsert session_attendees d6ee9121-1296-5977-9449-b549272d987d child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#5 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#6 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "outboxAfterPass1AndForced": [
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      },
+      {
+        "id": "session_attendees:d6ee9121-1296-5977-9449-b549272d987d:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      }
+    ],
+    "forcedPassRequests": [
+      "#7 POST upsert session_attendees d6ee9121-1296-5977-9449-b549272d987d child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#8 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "forced": {
+      "success": false,
+      "totalSynced": 0,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "attention": {
+      "needsAttentionCount": 2,
+      "waitingCount": 0,
+      "headerState": "needs_attention",
+      "headerMessage": "2 items need attention",
+      "homeCards": [
+        "2 items need attention"
+      ],
+      "needsAttentionItems": [
+        {
+          "table": "session_attendees",
+          "operation": "insert",
+          "reason": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+        },
+        {
+          "table": "letter_mastery",
+          "operation": "update",
+          "reason": "42501-authenticated: Active child delivery assignment required"
+        }
+      ]
+    },
+    "attendeesOnServer": [
+      "D"
+    ]
+  },
+  "C4c": {
+    "pass": {
+      "success": true,
+      "totalSynced": 6,
+      "totalTerminal": 0,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "requests": [
+      "#9 POST upsert sessions 89e62316-40ed-4ebf-9901-9fa2ecfe8240 -> 201 ok rows=1",
+      "#10 POST upsert[batch:5] session_attendees 1d967d75-5192-577c-b5e7-c2d26c3ea3b9,23c37718-5feb-516c-ae25-88eaa4955410,8e63ff43-a922-5f95-9e2c-812e8abcc444,bdf3b8a6-05e0-55cc-94a9-9a6d6740b829,f7af2daf-daaa-5cbb-8bbe-710662607137 child=c0000000-0000-4000-8000-000000000104,c0000000-0000-4000-8000-000000000102,c0000000-0000-4000-8000-000000000103,c0000000-0000-4000-8000-000000000101,c0000000-0000-4000-8000-000000000105 -> 201 ok rows=5"
+    ],
+    "healthyLanded": 5,
+    "outbox": [
+      {
+        "t": "session_attendees",
+        "s": "terminal"
+      },
+      {
+        "t": "letter_mastery",
+        "s": "terminal"
+      }
+    ]
+  },
+  "C4a": {
+    "terminalBefore": [
+      "letter_mastery:update",
+      "session_attendees:insert"
+    ],
+    "pendingBeforeCounts": {
+      "sessions": 1,
+      "session_attendees": 5
+    },
+    "forced": {
+      "success": false,
+      "totalSynced": 6,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "forcedPassRequests": [
+      "#9 POST upsert sessions 607c9df0-4f75-4f4d-b07d-7c116041bc96 -> 201 ok rows=1",
+      "#10 POST upsert[batch:6] session_attendees 47fddc84-8325-5372-b5f7-3ef2076dc6f9,6a5b20a7-e660-52bd-bf7b-2a1dbeb83e0a,8be2e0f5-f043-57e1-a514-9317382b5fdf,b8bbbf94-906e-52f0-b1cc-6c2283df8dc5,c56820cf-76e1-5802-aa28-eef4a5dc627e,f7b07733-7bdb-50cb-8777-5c662ecccaa8 child=c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000103,c0000000-0000-4000-8000-000000000102,c0000000-0000-4000-8000-000000000104,c0000000-0000-4000-8000-000000000105,c0000000-0000-4000-8000-000000000101 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#11 POST upsert session_attendees 47fddc84-8325-5372-b5f7-3ef2076dc6f9 child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#12 POST upsert session_attendees 6a5b20a7-e660-52bd-bf7b-2a1dbeb83e0a child=c0000000-0000-4000-8000-000000000103 -> 201 ok rows=1",
+      "#13 POST upsert session_attendees 8be2e0f5-f043-57e1-a514-9317382b5fdf child=c0000000-0000-4000-8000-000000000102 -> 201 ok rows=1",
+      "#14 POST upsert session_attendees b8bbbf94-906e-52f0-b1cc-6c2283df8dc5 child=c0000000-0000-4000-8000-000000000104 -> 201 ok rows=1",
+      "#15 POST upsert session_attendees c56820cf-76e1-5802-aa28-eef4a5dc627e child=c0000000-0000-4000-8000-000000000105 -> 201 ok rows=1",
+      "#16 POST upsert session_attendees f7b07733-7bdb-50cb-8777-5c662ecccaa8 child=c0000000-0000-4000-8000-000000000101 -> 201 ok rows=1",
+      "#17 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "healthyLanded": 5,
+    "healthyTotal": 5,
+    "outboxAfterForced": [
+      {
+        "t": "letter_mastery",
+        "s": "terminal",
+        "ec": "terminal",
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "terminal",
+        "ec": "terminal",
+        "retry": 0
+      }
+    ]
+  },
+  "C4b": {
+    "terminalBefore": [
+      "letter_mastery:update",
+      "session_attendees:insert"
+    ],
+    "pendingBeforeCounts": {
+      "session_attendees": 30,
+      "sessions": 1
+    },
+    "forced": {
+      "success": false,
+      "totalSynced": 25,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 6
+    },
+    "forcedPassRequests": [
+      "#9 POST upsert sessions e9b42485-4125-42a7-b9f9-20a94a589bac -> 201 ok rows=1",
+      "#10 POST upsert[batch:31] session_attendees 785b32f3-e455-5437-9a78-c07c0d371a54,1d24bbc2-9dd2-57ae-87c6-1b652a44cc27,3baf9642-a1c0-55ef-a82a-f36182167b44,f26f0ba7-56f3-5baf-acb1-49edf916cc0b,ff7f89ff-fdf0-5515-ba0a-33bf5d64b75b,11e49105-48f4-5372-a6b7-b02c71622382,14293c99-04f6-5a47-97b2-18381472a30c,2a97abb0-5fa8-5edc-a743-2c40eaf47f6b,56a10f53-6153-5c5b-a306-e53fda986869,6275d4b9-91be-5899-8db5-72a0f94eec35,6fe371e7-cf03-597e-b940-18c19feb312d,2255f7ab-b120-5664-b8db-2cf539708ee7,3727d135-07fc-587b-8639-1978e574a99e,4ef2b60d-8286-5fd8-b07e-fc66908081d9,543c52f8-df39-5d39-82a9-e695507592a4,88a2d6b3-d960-52fe-87c7-0d01d7fc2cd4,9d8b0527-023f-527f-a82d-2b30f326bea6,f6ecd122-bc4a-5d11-b685-67f0e2f7a934,1388e28a-bf67-5013-8a11-53f46d14dbfc,15aa73f6-6092-5ad9-9e35-3faf174e768f,842f3b9f-cb98-5ddf-9fcb-360790617a48,8ff268c9-4825-5256-9050-f2580bbd0f94,a0c03254-91e7-54ec-b529-c84fbd51ecdf,ae428872-6c91-55d6-bdf3-c82ac60f6a1e,d0ab995d-aeed-54f2-be35-166fbc3c713c,3694f460-e328-50a2-909d-41bba97fe4b3,79aa9434-2415-5c99-b3ed-c499c7e7b81d,b829917e-a74a-5c28-a635-ce176d0bf0c8,ce57e834-4f60-56a8-99c7-aa3e6a62d1ed,db3735f2-058d-5871-a32b-4bc3769583b3,f76410e6-2619-5b8d-97e1-1122ac8321ac child=c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000103,c0000000-0000-4000-8000-000000000102,c0000000-0000-4000-8000-000000000101,c0000000-0000-4000-8000-000000000104,c0000000-0000-4000-8000-000000000105,c0000000-0000-4000-8000-000000000110,c0000000-0000-4000-8000-000000000107,c0000000-0000-4000-8000-000000000106,c0000000-0000-4000-8000-000000000109,c0000000-0000-4000-8000-000000000108,c0000000-0000-4000-8000-000000000113,c0000000-0000-4000-8000-000000000111,c0000000-0000-4000-8000-000000000117,c0000000-0000-4000-8000-000000000112,c0000000-0000-4000-8000-000000000116,c0000000-0000-4000-8000-000000000115,c0000000-0000-4000-8000-000000000114,c0000000-0000-4000-8000-000000000120,c0000000-0000-4000-8000-000000000118,c0000000-0000-4000-8000-000000000119,c0000000-0000-4000-8000-000000000123,c0000000-0000-4000-8000-000000000121,c0000000-0000-4000-8000-000000000122,c0000000-0000-4000-8000-000000000124,c0000000-0000-4000-8000-000000000130,c0000000-0000-4000-8000-000000000126,c0000000-0000-4000-8000-000000000129,c0000000-0000-4000-8000-000000000128,c0000000-0000-4000-8000-000000000127,c0000000-0000-4000-8000-000000000125 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#11 POST upsert session_attendees 785b32f3-e455-5437-9a78-c07c0d371a54 child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#12 POST upsert session_attendees 1d24bbc2-9dd2-57ae-87c6-1b652a44cc27 child=c0000000-0000-4000-8000-000000000103 -> 201 ok rows=1",
+      "#13 POST upsert session_attendees 3baf9642-a1c0-55ef-a82a-f36182167b44 child=c0000000-0000-4000-8000-000000000102 -> 201 ok rows=1",
+      "#14 POST upsert session_attendees f26f0ba7-56f3-5baf-acb1-49edf916cc0b child=c0000000-0000-4000-8000-000000000101 -> 201 ok rows=1",
+      "#15 POST upsert session_attendees ff7f89ff-fdf0-5515-ba0a-33bf5d64b75b child=c0000000-0000-4000-8000-000000000104 -> 201 ok rows=1",
+      "#16 POST upsert session_attendees 11e49105-48f4-5372-a6b7-b02c71622382 child=c0000000-0000-4000-8000-000000000105 -> 201 ok rows=1",
+      "#17 POST upsert session_attendees 14293c99-04f6-5a47-97b2-18381472a30c child=c0000000-0000-4000-8000-000000000110 -> 201 ok rows=1",
+      "#18 POST upsert session_attendees 2a97abb0-5fa8-5edc-a743-2c40eaf47f6b child=c0000000-0000-4000-8000-000000000107 -> 201 ok rows=1",
+      "#19 POST upsert session_attendees 56a10f53-6153-5c5b-a306-e53fda986869 child=c0000000-0000-4000-8000-000000000106 -> 201 ok rows=1",
+      "#20 POST upsert session_attendees 6275d4b9-91be-5899-8db5-72a0f94eec35 child=c0000000-0000-4000-8000-000000000109 -> 201 ok rows=1",
+      "#21 POST upsert session_attendees 6fe371e7-cf03-597e-b940-18c19feb312d child=c0000000-0000-4000-8000-000000000108 -> 201 ok rows=1",
+      "#22 POST upsert session_attendees 2255f7ab-b120-5664-b8db-2cf539708ee7 child=c0000000-0000-4000-8000-000000000113 -> 201 ok rows=1",
+      "#23 POST upsert session_attendees 3727d135-07fc-587b-8639-1978e574a99e child=c0000000-0000-4000-8000-000000000111 -> 201 ok rows=1",
+      "#24 POST upsert session_attendees 4ef2b60d-8286-5fd8-b07e-fc66908081d9 child=c0000000-0000-4000-8000-000000000117 -> 201 ok rows=1",
+      "#25 POST upsert session_attendees 543c52f8-df39-5d39-82a9-e695507592a4 child=c0000000-0000-4000-8000-000000000112 -> 201 ok rows=1",
+      "#26 POST upsert session_attendees 88a2d6b3-d960-52fe-87c7-0d01d7fc2cd4 child=c0000000-0000-4000-8000-000000000116 -> 201 ok rows=1",
+      "#27 POST upsert session_attendees 9d8b0527-023f-527f-a82d-2b30f326bea6 child=c0000000-0000-4000-8000-000000000115 -> 201 ok rows=1",
+      "#28 POST upsert session_attendees f6ecd122-bc4a-5d11-b685-67f0e2f7a934 child=c0000000-0000-4000-8000-000000000114 -> 201 ok rows=1",
+      "#29 POST upsert session_attendees 1388e28a-bf67-5013-8a11-53f46d14dbfc child=c0000000-0000-4000-8000-000000000120 -> 201 ok rows=1",
+      "#30 POST upsert session_attendees 15aa73f6-6092-5ad9-9e35-3faf174e768f child=c0000000-0000-4000-8000-000000000118 -> 201 ok rows=1",
+      "#31 POST upsert session_attendees 842f3b9f-cb98-5ddf-9fcb-360790617a48 child=c0000000-0000-4000-8000-000000000119 -> 201 ok rows=1",
+      "#32 POST upsert session_attendees 8ff268c9-4825-5256-9050-f2580bbd0f94 child=c0000000-0000-4000-8000-000000000123 -> 201 ok rows=1",
+      "#33 POST upsert session_attendees a0c03254-91e7-54ec-b529-c84fbd51ecdf child=c0000000-0000-4000-8000-000000000121 -> 201 ok rows=1",
+      "#34 POST upsert session_attendees ae428872-6c91-55d6-bdf3-c82ac60f6a1e child=c0000000-0000-4000-8000-000000000122 -> 201 ok rows=1",
+      "#35 POST upsert session_attendees d0ab995d-aeed-54f2-be35-166fbc3c713c child=c0000000-0000-4000-8000-000000000124 -> 201 ok rows=1",
+      "#36 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "healthyLanded": 24,
+    "healthyTotal": 30,
+    "outboxAfterForced": [
+      {
+        "t": "letter_mastery",
+        "s": "terminal",
+        "ec": "terminal",
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "terminal",
+        "ec": "terminal",
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      },
+      {
+        "t": "session_attendees",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      }
+    ],
+    "followUpNonForced": {
+      "success": true,
+      "totalSynced": 6,
+      "totalTerminal": 0,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "followUpRequests": [
+      "#37 POST upsert[batch:6] session_attendees 3694f460-e328-50a2-909d-41bba97fe4b3,79aa9434-2415-5c99-b3ed-c499c7e7b81d,b829917e-a74a-5c28-a635-ce176d0bf0c8,ce57e834-4f60-56a8-99c7-aa3e6a62d1ed,db3735f2-058d-5871-a32b-4bc3769583b3,f76410e6-2619-5b8d-97e1-1122ac8321ac child=c0000000-0000-4000-8000-000000000130,c0000000-0000-4000-8000-000000000126,c0000000-0000-4000-8000-000000000129,c0000000-0000-4000-8000-000000000128,c0000000-0000-4000-8000-000000000127,c0000000-0000-4000-8000-000000000125 -> 201 ok rows=6"
+    ],
+    "healthyLandedAfterFollowUp": 30,
+    "outboxAfterFollowUp": [
+      {
+        "t": "letter_mastery",
+        "s": "terminal"
+      },
+      {
+        "t": "session_attendees",
+        "s": "terminal"
+      }
+    ]
+  },
+  "C5a": {
+    "pass": {
+      "success": false,
+      "totalSynced": 8,
+      "totalTerminal": 2,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "requests": [
+      "#1 PATCH update children eq.c0000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#2 PATCH update child_programme_enrollments eq.faf573ec-b68c-5bc8-af11-899280001ce3 -> 200 ok rows=1",
+      "#3 PATCH update child_class_memberships eq.cc000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#4 PATCH update child_group_memberships eq.cb000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#5 PATCH update child_ea_assignments eq.d7c9e31f-056a-522b-9f61-186f0a5a3c84 -> 200 ok rows=1",
+      "#6 POST upsert sessions 904f6c90-d8e3-4b18-8314-7794caab11cc -> 201 ok rows=1",
+      "#7 POST upsert[batch:2] session_attendees 75888b01-d74b-54aa-a056-5148399a93ab,aaaab016-fb04-53ac-94ba-6dbb24a04a51 child=c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#8 POST upsert session_attendees 75888b01-d74b-54aa-a056-5148399a93ab child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#9 POST upsert session_attendees aaaab016-fb04-53ac-94ba-6dbb24a04a51 child=c0000000-0000-4000-8000-000000000002 -> 201 ok rows=1",
+      "#10 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#11 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 403 42501 \"Active child delivery assignment required\""
+    ],
+    "outbox": [
+      {
+        "id": "session_attendees:75888b01-d74b-54aa-a056-5148399a93ab:insert",
+        "table_name": "session_attendees",
+        "operation": "insert",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      },
+      {
+        "id": "letter_mastery:a8b55bcd-6c17-5a00-96ba-d34072774511:update",
+        "table_name": "letter_mastery",
+        "operation": "update",
+        "status": "terminal",
+        "retry_count": 0,
+        "error_class": "terminal",
+        "error_code": "42501",
+        "last_error": "42501-authenticated: Active child delivery assignment required"
+      }
+    ],
+    "attendeesOnServer": [
+      "D"
+    ]
+  },
+  "C5b": {
+    "pass": {
+      "success": true,
+      "totalSynced": 10,
+      "totalTerminal": 0,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "requests": [
+      "#1 PATCH update children eq.c0000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#2 PATCH update child_programme_enrollments eq.faf573ec-b68c-5bc8-af11-899280001ce3 -> 200 ok rows=1",
+      "#3 PATCH update child_class_memberships eq.cc000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#4 PATCH update child_group_memberships eq.cb000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#5 POST upsert sessions 3a85f7c4-d130-4f26-89c3-8f2e578c7e7b -> 201 ok rows=1",
+      "#6 POST upsert[batch:2] session_attendees df57642e-961b-536a-8563-8e65b09733b9,ed708c2f-ae9f-5c77-8764-a08bc7ad9e24 child=c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002 -> 201 ok rows=2",
+      "#7 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#8 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 200 ok",
+      "#9 PATCH update child_ea_assignments eq.d7c9e31f-056a-522b-9f61-186f0a5a3c84 -> 200 ok rows=1"
+    ],
+    "outbox": [],
+    "attendeesOnServer": [
+      "C",
+      "D"
+    ],
+    "letterMasteryOnServer": [
+      "D",
+      "C"
+    ],
+    "cDirectAssignmentOnServer": "2026-11-04T19:50:52.332Z",
+    "cChildArchivedOnServer": "2026-11-04T19:50:52.332Z"
+  },
+  "C5d": {
+    "pass1": {
+      "success": true,
+      "totalSynced": 7,
+      "totalTerminal": 0,
+      "totalRetriable": 2,
+      "totalDeferred": 0
+    },
+    "pass1Requests": [
+      "#1 PATCH update children eq.c0000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#2 PATCH update child_programme_enrollments eq.faf573ec-b68c-5bc8-af11-899280001ce3 -> 200 ok rows=1",
+      "#3 PATCH update child_class_memberships eq.cc000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#4 PATCH update child_group_memberships eq.cb000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#5 POST upsert sessions 526c9b87-0e18-4e06-a023-81bc497966a8 -> 201 ok rows=1",
+      "#6 POST upsert[batch:2] session_attendees 137e2985-0ea2-586d-81bb-4e2c8c323cc0,859b48b0-4bc1-542f-9907-4eadfcfc7307 child=c0000000-0000-4000-8000-000000000002,c0000000-0000-4000-8000-000000000001 -> 503 undefined rows=0 \"upstream request timeout\"",
+      "#7 POST upsert session_attendees 137e2985-0ea2-586d-81bb-4e2c8c323cc0 child=c0000000-0000-4000-8000-000000000002 -> 503 undefined rows=0 \"upstream request timeout\"",
+      "#8 POST upsert session_attendees 859b48b0-4bc1-542f-9907-4eadfcfc7307 child=c0000000-0000-4000-8000-000000000001 -> 503 undefined rows=0 \"upstream request timeout\"",
+      "#9 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#10 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 200 ok"
+    ],
+    "outboxAfter1": [
+      {
+        "t": "session_attendees",
+        "op": "insert",
+        "s": "failed",
+        "ec": "retryable",
+        "retry": 1
+      },
+      {
+        "t": "session_attendees",
+        "op": "insert",
+        "s": "failed",
+        "ec": "retryable",
+        "retry": 1
+      },
+      {
+        "t": "child_ea_assignments",
+        "op": "archive",
+        "s": "pending",
+        "ec": null,
+        "retry": 0
+      }
+    ],
+    "pass2": {
+      "success": true,
+      "totalSynced": 1,
+      "totalTerminal": 0,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pass2Requests": [
+      "#11 PATCH update child_ea_assignments eq.d7c9e31f-056a-522b-9f61-186f0a5a3c84 -> 200 ok rows=1"
+    ],
+    "outboxAfter2": [
+      {
+        "t": "session_attendees",
+        "op": "insert",
+        "s": "failed",
+        "ec": "retryable"
+      },
+      {
+        "t": "session_attendees",
+        "op": "insert",
+        "s": "failed",
+        "ec": "retryable"
+      }
+    ],
+    "pass3": {
+      "success": false,
+      "totalSynced": 1,
+      "totalTerminal": 1,
+      "totalRetriable": 0,
+      "totalDeferred": 0
+    },
+    "pass3Requests": [
+      "#12 POST upsert[batch:2] session_attendees 137e2985-0ea2-586d-81bb-4e2c8c323cc0,859b48b0-4bc1-542f-9907-4eadfcfc7307 child=c0000000-0000-4000-8000-000000000002,c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\"",
+      "#13 POST upsert session_attendees 137e2985-0ea2-586d-81bb-4e2c8c323cc0 child=c0000000-0000-4000-8000-000000000002 -> 201 ok rows=1",
+      "#14 POST upsert session_attendees 859b48b0-4bc1-542f-9907-4eadfcfc7307 child=c0000000-0000-4000-8000-000000000001 -> 403 42501 rows=0 \"new row violates row-level security policy for table \"session_attendees\"\""
+    ],
+    "outboxAfter3": [
+      {
+        "t": "session_attendees",
+        "op": "insert",
+        "s": "terminal",
+        "ec": "42501",
+        "err": "42501-authenticated: new row violates row-level security policy for table \"session_attendees\""
+      }
+    ]
+  },
+  "C5c": {
+    "passes": [
+      {
+        "tableName": "sessions",
+        "success": true,
+        "totalSynced": 1,
+        "totalTerminal": 0,
+        "totalRetriable": 0,
+        "totalDeferred": 0
+      },
+      {
+        "tableName": "session_attendees",
+        "success": true,
+        "totalSynced": 2,
+        "totalTerminal": 0,
+        "totalRetriable": 0,
+        "totalDeferred": 0
+      },
+      {
+        "tableName": "letter_mastery",
+        "success": true,
+        "totalSynced": 2,
+        "totalTerminal": 0,
+        "totalRetriable": 0,
+        "totalDeferred": 0
+      },
+      {
+        "tableName": null,
+        "success": true,
+        "totalSynced": 5,
+        "totalTerminal": 0,
+        "totalRetriable": 0,
+        "totalDeferred": 0
+      }
+    ],
+    "requests": [
+      "#1 POST upsert sessions ca237fbb-7a08-4ac5-a495-0dde277e1b4f -> 201 ok rows=1",
+      "#2 POST upsert[batch:2] session_attendees d99c5957-f5ac-55d5-9187-5f1152f740d2,dda2d522-e2f8-5a58-9db0-e79fe3f6a1ed child=c0000000-0000-4000-8000-000000000001,c0000000-0000-4000-8000-000000000002 -> 201 ok rows=2",
+      "#3 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000001 -> 200 ok",
+      "#4 POST rpc set_letter_mastery child=c0000000-0000-4000-8000-000000000002 -> 200 ok",
+      "#5 PATCH update children eq.c0000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#6 PATCH update child_programme_enrollments eq.faf573ec-b68c-5bc8-af11-899280001ce3 -> 200 ok rows=1",
+      "#7 PATCH update child_class_memberships eq.cc000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#8 PATCH update child_group_memberships eq.cb000000-0000-4000-8000-000000000001 -> 200 ok rows=1",
+      "#9 PATCH update child_ea_assignments eq.d7c9e31f-056a-522b-9f61-186f0a5a3c84 -> 200 ok rows=1"
+    ],
+    "outbox": [],
+    "attendeesOnServer": [
+      "C",
+      "D"
+    ]
+  }
+}

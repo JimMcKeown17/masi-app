@@ -1,0 +1,953 @@
+/*
+ * THROWAWAY REPRO (repro-client-lifecycle-edges). Not for commit.
+ * Real SQLite (better-sqlite3) + Masi's real repositories, real outbox sync engine,
+ * real pullPreloadedChildData / persistPreloadedChildData / pullClassData.
+ * Only the Supabase transport is fake: a stateful in-memory server whose RLS answers
+ * follow supabase/migrations (see scratchpad masi-server-rules.md; the key answers are
+ * re-checked against real PostgreSQL by repro-lifecycle-pg-harness.cjs).
+ */
+jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
+jest.mock('../src/services/supabaseClient', () => ({
+  ...require('../test-support/supabaseTestConfig'),
+  supabase: {},
+}));
+
+import fs from 'fs';
+import { bindTestActor } from '../test-support/actorTestUtils';
+import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { runMigrations } from '../src/db/migrations';
+import { createOutboxSyncEngine } from '../src/services/offlineSync';
+import {
+  pullPreloadedChildData,
+  persistPreloadedChildData,
+  pullClassData,
+} from '../src/services/preloadedChildData';
+import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
+import { createClassesRepository } from '../src/db/repositories/classesRepository';
+import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
+import { createClassEaAssignmentsRepository } from '../src/db/repositories/classEaAssignmentsRepository';
+import { createGroupEaAssignmentsRepository } from '../src/db/repositories/groupEaAssignmentsRepository';
+import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
+import { createSyncStateRepository } from '../src/db/repositories/syncStateRepository';
+
+const OUT = process.env.REPRO_OUT || '/tmp/repro-lifecycle-observations.jsonl';
+const record = (scenario, step, data) => {
+  const line = JSON.stringify({ scenario, step, ...data });
+  // eslint-disable-next-line no-console
+  console.log(`OBS ${line}`);
+  try { fs.appendFileSync(OUT, `${line}\n`); } catch (e) { /* best effort */ }
+};
+
+const EA = 'ea-a';
+const EA_B = 'ea-b';
+const HO = 'head-office';
+const P = 'programme-a';
+const SCHOOL = 'school-1';
+const YEAR = 'year-2026';
+const T0 = '2026-10-01T08:00:00.000Z';
+const HO_END = '2026-10-20T07:00:00.000Z';
+
+// ---------------------------------------------------------------- fake server
+const RELATIONS = {
+  'child_ea_assignments.children': { one: true, table: 'children', local: 'child_id', foreign: 'id' },
+  'children.child_ea_assignments': { one: false, table: 'child_ea_assignments', local: 'id', foreign: 'child_id' },
+  'children.child_programme_enrollments': { one: false, table: 'child_programme_enrollments', local: 'id', foreign: 'child_id' },
+  'child_class_memberships.classes': { one: true, table: 'classes', local: 'class_id', foreign: 'id' },
+  'child_class_memberships.academic_years': { one: true, table: 'academic_years', local: 'academic_year_id', foreign: 'id' },
+  'groups.group_ea_assignments': { one: false, table: 'group_ea_assignments', local: 'id', foreign: 'group_id' },
+  'class_ea_assignments.classes': { one: true, table: 'classes', local: 'class_id', foreign: 'id' },
+  'classes.class_ea_assignments': { one: false, table: 'class_ea_assignments', local: 'id', foreign: 'class_id' },
+};
+const VERSIONED = new Set([
+  'children', 'classes', 'groups', 'child_ea_assignments', 'class_ea_assignments', 'group_ea_assignments',
+  'child_programme_enrollments', 'child_class_memberships', 'child_group_memberships', 'grouping_versions',
+]);
+
+const createFakeServer = (initial = {}) => {
+  const T = {};
+  const table = (name) => { if (!T[name]) T[name] = new Map(); return T[name]; };
+  for (const [name, rows] of Object.entries(initial)) {
+    for (const row of rows) table(name).set(row.id, { ...(VERSIONED.has(name) ? { row_version: 1 } : {}), ...row });
+  }
+  const calls = [];
+  const interceptors = [];
+  const all = (name) => [...table(name).values()];
+  const intercept = (fn) => interceptors.push(fn);
+  const runInterceptors = (op) => {
+    for (let i = 0; i < interceptors.length; i += 1) {
+      const outcome = interceptors[i](op);
+      if (outcome) {
+        if (outcome.once !== false) interceptors.splice(i, 1);
+        return outcome;
+      }
+    }
+    return null;
+  };
+
+  const clientFor = (actor) => {
+    // ---- RLS helpers (pre-statement snapshot), modelled on 20260521144901 + later migrations.
+    const writeForChild = (childId) => (
+      all('child_ea_assignments').some(a => a.child_id === childId && a.user_id === actor && a.unassigned_at == null)
+      || all('class_ea_assignments').some(ca => ca.ea_user_id === actor && ca.unassigned_at == null
+        && all('child_class_memberships').some(m => m.child_id === childId && m.class_id === ca.class_id && m.exited_at == null))
+      || all('group_ea_assignments').some(ga => ga.ea_user_id === actor && ga.unassigned_at == null
+        && all('child_group_memberships').some(m => m.child_id === childId && m.group_id === ga.group_id && m.removed_at == null))
+    );
+    const writeForClass = (classId) => table('classes').get(classId)?.created_by === actor
+      || all('class_ea_assignments').some(ca => ca.class_id === classId && ca.ea_user_id === actor && ca.unassigned_at == null);
+    const accessClass = (classId) => {
+      const c = table('classes').get(classId);
+      if (!c) return false;
+      return c.created_by === actor
+        || all('class_ea_assignments').some(ca => ca.class_id === classId && ca.ea_user_id === actor)
+        || all('staff_programme_assignments').some(s => s.user_id === actor && s.ended_at == null && s.school_id === c.school_id);
+    };
+    const writeForGroup = (groupId) => table('groups').get(groupId)?.created_by === actor
+      || all('group_ea_assignments').some(g => g.group_id === groupId && g.ea_user_id === actor && g.unassigned_at == null);
+    const accessGroup = (groupId) => table('groups').get(groupId)?.created_by === actor
+      || all('group_ea_assignments').some(g => g.group_id === groupId && g.ea_user_id === actor);
+    const readChild = (childId) => {
+      const c = table('children').get(childId);
+      if (!c) return false;
+      return c.created_by === actor
+        || all('child_ea_assignments').some(a => a.child_id === childId && a.user_id === actor)
+        || writeForChild(childId);
+    };
+    const openProgramme = (programmeId) => all('staff_programme_assignments')
+      .some(s => s.user_id === actor && s.programme_id === programmeId && s.ended_at == null);
+
+    const canSelect = {
+      staff_programme_assignments: r => r.user_id === actor,
+      academic_years: () => true,
+      children: r => readChild(r.id),
+      child_ea_assignments: r => r.user_id === actor,
+      child_programme_enrollments: r => readChild(r.child_id),
+      child_class_memberships: r => readChild(r.child_id) || accessClass(r.class_id),
+      classes: r => accessClass(r.id),
+      class_ea_assignments: r => r.ea_user_id === actor,
+      groups: r => accessGroup(r.id),
+      group_ea_assignments: r => r.ea_user_id === actor,
+      child_group_memberships: r => readChild(r.child_id) || accessGroup(r.group_id),
+    };
+    const canUpdate = {
+      classes: r => writeForClass(r.id),
+      children: r => r.created_by === actor || writeForChild(r.id),
+      child_ea_assignments: r => r.user_id === actor,
+      class_ea_assignments: r => r.ea_user_id === actor,
+      group_ea_assignments: r => r.ea_user_id === actor,
+      child_programme_enrollments: r => writeForChild(r.child_id),
+      child_class_memberships: r => writeForChild(r.child_id) && accessClass(r.class_id),
+      child_group_memberships: r => writeForChild(r.child_id) && writeForGroup(r.group_id),
+      groups: r => writeForGroup(r.id),
+    };
+    const canInsert = {
+      children: r => r.created_by === actor,
+      child_ea_assignments: r => r.user_id === actor && r.created_by === actor
+        && table('children').get(r.child_id)?.created_by === actor,
+      child_programme_enrollments: r => r.created_by === actor && writeForChild(r.child_id),
+      child_class_memberships: r => r.created_by === actor && writeForChild(r.child_id) && accessClass(r.class_id),
+      child_group_memberships: r => r.created_by === actor && writeForChild(r.child_id) && writeForGroup(r.group_id),
+      classes: r => r.created_by === actor,
+      class_ea_assignments: r => r.ea_user_id === actor && accessClass(r.class_id) && openProgramme(r.programme_id),
+      groups: r => r.created_by === actor && openProgramme(r.programme_id),
+      group_ea_assignments: r => r.ea_user_id === actor && table('groups').get(r.group_id)?.created_by === actor
+        && openProgramme(r.programme_id),
+      sessions: r => r.user_id === actor && openProgramme(r.programme_id),
+      session_attendees: r => writeForChild(r.child_id),
+    };
+    const uniqueViolation = (name, r) => {
+      if (name === 'child_group_memberships' && r.removed_at == null && r.grouping_version_id != null) {
+        return all(name).some(o => o.id !== r.id && o.removed_at == null && o.child_id === r.child_id
+          && o.grouping_version_id === r.grouping_version_id) && 'idx_child_group_memberships_active_by_version';
+      }
+      if (name === 'child_class_memberships' && r.exited_at == null) {
+        return all(name).some(o => o.id !== r.id && o.exited_at == null && o.child_id === r.child_id
+          && o.academic_year_id === r.academic_year_id) && 'idx_child_class_memberships_active_unique';
+      }
+      if (name === 'group_ea_assignments' && r.unassigned_at == null) {
+        return all(name).some(o => o.id !== r.id && o.unassigned_at == null && o.group_id === r.group_id)
+          && 'idx_group_ea_assignments_active_unique';
+      }
+      return false;
+    };
+    const rls = (name) => ({ code: '42501', message: `new row violates row-level security policy for table "${name}"` });
+
+    const matches = (row, filters) => filters.every(({ kind, c, v }) => {
+      if (kind === 'eq') return row[c] === v;
+      if (kind === 'is') return v === null ? row[c] == null : row[c] === v;
+      if (kind === 'in') return v.includes(row[c]);
+      return true;
+    });
+
+    const executeSelect = (state) => {
+      const baseFilters = state.filters.filter(f => !f.c.includes('.'));
+      const embeds = [...String(state.columns).matchAll(/(\w+)(!inner)?\(([^)]*)\)/g)]
+        .map(([, rel, inner]) => ({ rel, inner: Boolean(inner) }));
+      const plain = String(state.columns).replace(/(\w+)(!inner)?\(([^)]*)\)/g, '')
+        .split(',').map(s => s.trim()).filter(Boolean);
+      let rows = all(state.name).filter(r => (canSelect[state.name] || (() => true))(r) && matches(r, baseFilters));
+      const out = [];
+      for (const base of rows) {
+        let keep = true;
+        const next = { ...base };
+        for (const { rel, inner } of embeds) {
+          const spec = RELATIONS[`${state.name}.${rel}`];
+          if (!spec) throw new Error(`fake server: unknown relation ${state.name}.${rel}`);
+          const relFilters = state.filters.filter(f => f.c.startsWith(`${rel}.`))
+            .map(f => ({ ...f, c: f.c.slice(rel.length + 1) }));
+          const related = all(spec.table).filter(r => r[spec.foreign] === base[spec.local]
+            && (canSelect[spec.table] || (() => true))(r) && matches(r, relFilters));
+          if (inner && related.length === 0) keep = false;
+          next[rel] = spec.one ? (related[0] ? { ...related[0] } : null) : related.map(r => ({ ...r }));
+        }
+        if (!keep) continue;
+        if (!plain.includes('*') && plain.length > 0) {
+          const projected = {};
+          for (const c of plain) projected[c] = next[c];
+          for (const { rel } of embeds) projected[rel] = next[rel];
+          out.push(projected);
+        } else out.push(next);
+      }
+      rows = out.slice(0, state.limitN);
+      return { data: rows, error: null };
+    };
+
+    const executeUpdate = (state) => {
+      const op = { type: 'update', table: state.name, filters: state.filters, patch: state.patch, actor };
+      calls.push(op);
+      const forced = runInterceptors(op);
+      if (forced?.throw) throw forced.throw;
+      if (forced?.result) { op.result = forced.result; return forced.result; }
+      const target = all(state.name).filter(r => matches(r, state.filters));
+      const visible = target.filter(r => (canSelect[state.name] || (() => true))(r)
+        && (canUpdate[state.name] || (() => true))(r));
+      for (const r of visible) {
+        if (VERSIONED.has(state.name) && typeof state.patch.row_version === 'number'
+          && state.patch.row_version < r.row_version) {
+          op.result = { error: { code: 'MV001', message: 'stale_version' } };
+          return { data: null, error: { code: 'MV001', message: 'stale_version' } };
+        }
+      }
+      for (const r of visible) table(state.name).set(r.id, { ...r, ...state.patch });
+      const result = { data: state.wantSelect ? visible.map(r => ({ id: r.id })) : null, error: null };
+      op.result = { rowsAffected: visible.length };
+      return result;
+    };
+
+    const doUpsert = async (name, payload, options = {}) => {
+      const rows = Array.isArray(payload) ? payload : [payload];
+      const op = { type: 'upsert', table: name, ids: rows.map(r => r.id), ignoreDuplicates: Boolean(options.ignoreDuplicates), actor };
+      calls.push(op);
+      const forced = runInterceptors({ ...op, rows });
+      if (forced?.throw) throw forced.throw;
+      if (forced?.result) { op.result = forced.result; return forced.result; }
+      // Validate the whole statement first (PostgREST bulk upsert is one atomic statement).
+      const staged = new Map();
+      for (const r of rows) {
+        const existing = table(name).get(r.id) || staged.get(r.id);
+        const insertOk = (canInsert[name] || (() => true))(r);
+        if (!insertOk) { op.result = { error: rls(name) }; return { error: rls(name) }; }
+        if (existing && options.ignoreDuplicates) continue;
+        if (existing && !(canUpdate[name] || (() => true))(existing)) {
+          const e = { code: '42501', message: `new row violates row-level security policy (USING expression) for table "${name}"` };
+          op.result = { error: e };
+          return { error: e };
+        }
+        const merged = { ...(VERSIONED.has(name) ? { row_version: 1 } : {}), ...existing, ...r };
+        // Unique check sees committed + earlier rows in this statement.
+        const saved = new Map(table(name));
+        for (const [k, v] of staged) table(name).set(k, v);
+        const violated = uniqueViolation(name, merged);
+        T[name] = saved;
+        if (violated) {
+          const e = { code: '23505', message: `duplicate key value violates unique constraint "${violated}"` };
+          op.result = { error: e };
+          return { error: e };
+        }
+        staged.set(r.id, merged);
+      }
+      for (const [k, v] of staged) table(name).set(k, v);
+      op.result = { applied: staged.size };
+      return { data: null, error: null };
+    };
+
+    const hasHistory = (childId) => (
+      ['session_attendees', 'assessments', 'letter_mastery', 'skill_mastery', 'battery_runs', 'child_group_memberships']
+        .some(n => all(n).some(r => r.child_id === childId))
+      || all('child_ea_assignments').some(r => r.child_id === childId && r.unassigned_at != null)
+      || all('child_programme_enrollments').some(r => r.child_id === childId && r.ended_at != null)
+      || all('child_class_memberships').some(r => r.child_id === childId && r.exited_at != null)
+    );
+
+    const acknowledgments = () => {
+      const spa = all('staff_programme_assignments').filter(s => s.user_id === actor && s.ended_at == null)[0];
+      const prog = spa?.programme_id || null;
+      const ca = all('child_ea_assignments').filter(a => a.user_id === actor && a.unassigned_at == null);
+      const visible = [...new Set(ca.map(a => a.child_id).filter(childId => all('child_programme_enrollments')
+        .some(e => e.child_id === childId && e.programme_id === prog && e.ended_at == null)))];
+      const enrollments = all('child_programme_enrollments').filter(e => ca.some(a => a.child_id === e.child_id)
+        && e.programme_id === prog && e.ended_at == null);
+      const memberships = all('child_class_memberships').filter(m => visible.includes(m.child_id) && m.exited_at == null);
+      const classAssignments = all('class_ea_assignments').filter(a => a.ea_user_id === actor && a.programme_id === prog && a.unassigned_at == null);
+      const roster = all('child_class_memberships').filter(m => classAssignments.some(a => a.class_id === m.class_id) && m.exited_at == null);
+      const groupAssignments = all('group_ea_assignments').filter(g => g.ea_user_id === actor && g.programme_id === prog
+        && g.unassigned_at == null && table('groups').get(g.group_id)?.programme_id === prog);
+      const groupMemberships = all('child_group_memberships').filter(m => groupAssignments.some(g => g.group_id === m.group_id) && m.removed_at == null);
+      const ids = rows => rows.map(r => r.id).sort();
+      return {
+        schema_version: 1, complete: true, user_id: actor, generated_at: new Date().toISOString(),
+        active_programme_id: prog,
+        child_ea_assignment_ids: ids(ca), assigned_child_ids: ca.map(a => a.child_id).sort(),
+        visible_child_ids: visible.sort(), child_programme_enrollment_ids: ids(enrollments),
+        child_class_membership_ids: ids(memberships), class_ea_assignment_ids: ids(classAssignments),
+        class_ids: classAssignments.map(a => a.class_id).sort(), roster_class_ids: classAssignments.map(a => a.class_id).sort(),
+        roster_membership_ids: ids(roster), group_ea_assignment_ids: ids(groupAssignments),
+        group_ids: groupAssignments.map(g => g.group_id).sort(), child_group_membership_ids: ids(groupMemberships),
+      };
+    };
+
+    const rpc = async (fn, args) => {
+      const op = { type: 'rpc', fn, args, actor };
+      calls.push(op);
+      const forced = runInterceptors(op);
+      if (forced?.throw) throw forced.throw;
+      if (forced?.result) { op.result = forced.result; return forced.result; }
+      if (fn === 'get_reconcile_acknowledgments') return { data: acknowledgments(), error: null };
+      if (fn === 'delete_child_if_no_history') {
+        const id = args.p_child_id;
+        const child = table('children').get(id);
+        if (!child) { op.result = { data: true }; return { data: true, error: null }; }
+        if (!(child.created_by === actor || writeForChild(id))) {
+          const e = { code: '42501', message: `Not authorized to delete child ${id}` };
+          op.result = { error: e };
+          return { data: null, error: e };
+        }
+        if (hasHistory(id)) { op.result = { data: false }; return { data: false, error: null }; }
+        for (const n of ['child_class_memberships', 'child_programme_enrollments', 'child_ea_assignments']) {
+          for (const r of all(n)) if (r.child_id === id) table(n).delete(r.id);
+        }
+        table('children').delete(id);
+        op.result = { data: true };
+        return { data: true, error: null };
+      }
+      return { data: null, error: { code: 'PGRST202', message: `unknown rpc ${fn}` } };
+    };
+
+    const from = (name) => {
+      const state = { name, op: 'select', columns: '*', filters: [], limitN: Infinity, patch: null, wantSelect: false };
+      const b = {
+        select(cols = '*') { if (state.op === 'update') state.wantSelect = true; else state.columns = cols; return b; },
+        update(patch) { state.op = 'update'; state.patch = patch; return b; },
+        eq(c, v) { state.filters.push({ kind: 'eq', c, v }); return b; },
+        is(c, v) { state.filters.push({ kind: 'is', c, v }); return b; },
+        in(c, v) { state.filters.push({ kind: 'in', c, v }); return b; },
+        order() { return b; },
+        limit(n) { state.limitN = n; return b; },
+        upsert: (payload, options) => doUpsert(name, payload, options),
+        then(resolve, reject) {
+          return Promise.resolve()
+            .then(() => (state.op === 'update' ? executeUpdate(state) : executeSelect(state)))
+            .then(resolve, reject);
+        },
+      };
+      return b;
+    };
+    return { from, rpc, auth: {} };
+  };
+
+  return { table, all, calls, intercept, clientFor };
+};
+
+// ---------------------------------------------------------------- local phone
+const insertLocal = async (db, tableName, row) => {
+  const record = { ...row, sync_status: 'synced' };
+  const keys = Object.keys(record);
+  await db.runAsync(
+    `insert into ${tableName} (${keys.join(', ')}) values (${keys.map(() => '?').join(', ')})`,
+    ...keys.map(k => record[k]),
+  );
+};
+
+const createPhone = async (actor) => {
+  const db = bindTestActor(createBetterSqliteTestDatabase(), actor);
+  await runMigrations(db);
+  await db.execAsync('PRAGMA foreign_keys = ON');
+  await db.runAsync("insert into schools (id, name, sync_status) values (?, 'Masi Primary', 'synced')", SCHOOL);
+  await db.runAsync("insert into programmes (id, code, name, sync_status) values (?, 'literacy', 'Literacy', 'synced')", P);
+  await db.runAsync(`insert into academic_years (id, label, starts_on, ends_on, is_active, sync_status)
+    values (?, '2026', '2026-01-15', '2026-12-15', 1, 'synced')`, YEAR);
+  await db.runAsync(`insert into staff_programme_assignments (id, user_id, programme_id, school_id, assigned_at, sync_status)
+    values (?, ?, ?, ?, '2026-01-15T00:00:00.000Z', 'synced')`, `spa-${actor}`, actor, P, SCHOOL);
+  const repositories = {
+    children: createChildrenRepository({ database: db }),
+    classes: createClassesRepository({ database: db }),
+    groups: createGroupsRepository({ database: db }),
+    classEaAssignments: createClassEaAssignmentsRepository({ database: db }),
+    groupEaAssignments: createGroupEaAssignmentsRepository({ database: db }),
+    syncOutbox: createSyncOutboxRepository({ database: db }),
+    syncState: createSyncStateRepository({ database: db }),
+  };
+  return { db, actor, repositories };
+};
+
+const engineFor = (phone, server) => createOutboxSyncEngine({
+  database: phone.db,
+  supabaseClient: server.clientFor(phone.actor),
+  outboxRepository: phone.repositories.syncOutbox,
+  enqueueRequest: (task) => task(),
+  getAuthSession: async () => ({ data: { session: { user: { id: phone.actor } } } }),
+});
+
+// The production pull: ChildrenContext/handleServices pull + persist, plus the ClassesContext class pull.
+const pullAll = async (phone, server) => {
+  const client = server.clientFor(phone.actor);
+  const pulled = await pullPreloadedChildData({ userId: phone.actor, supabaseClient: client, enqueueRequest: t => t() });
+  await persistPreloadedChildData({ pulled, userId: phone.actor, repositories: phone.repositories });
+  await pullClassData({ userId: phone.actor, supabaseClient: client, enqueueRequest: t => t(), repositories: phone.repositories });
+  return {
+    scopes: Object.fromEntries(Object.entries(pulled.scopes).map(([k, s]) => [k, s.ok
+      ? (Array.isArray(s.rows) ? s.rows.map(r => r.id) : Object.fromEntries(Object.entries(s.rows).map(([kk, v]) => [kk, v.map(r => r.id)])))
+      : `NOT_OK:${s.failureKind}`])),
+  };
+};
+
+const outbox = (phone) => phone.db.getAllAsync(`
+  select id, status, error_class, error_code, retry_count, substr(last_error, 1, 140) as last_error
+  from sync_outbox order by id`);
+
+const readers = async (phone) => ({
+  getClasses: (await phone.repositories.classes.getClasses({ userId: phone.actor })).map(c => c.id),
+  getMyChildren: (await phone.repositories.children.getMyChildren(phone.actor)).map(c => c.id),
+  getAssessableChildren: (await phone.repositories.children.getAssessableChildren(phone.actor))
+    .map(c => `${c.id}${c.is_delivery ? '(delivery)' : '(class-only)'}`),
+});
+
+const localRow = (phone, tableName, id, cols) => phone.db.getFirstAsync(
+  `select ${cols} from ${tableName} where id = ?`, id,
+);
+const callSummary = (server, from = 0) => server.calls.slice(from)
+  .filter(c => c.type !== 'select')
+  .map(c => {
+    if (c.type === 'rpc') return `rpc:${c.fn}${c.args?.p_child_id ? `(${c.args.p_child_id})` : ''} -> ${JSON.stringify(c.result || '')}`;
+    if (c.type === 'update') {
+      const id = c.filters.find(f => f.c === 'id')?.v;
+      return `update:${c.table}:${id} ${JSON.stringify(Object.keys(c.patch))} -> ${JSON.stringify(c.result || '')}`;
+    }
+    return `upsert:${c.table}:${c.ids.join('+')}${c.ignoreDuplicates ? '(ignoreDuplicates)' : ''} -> ${JSON.stringify(c.result || '')}`;
+  });
+
+const baseServerRows = () => ({
+  academic_years: [{ id: YEAR, is_active: true }],
+  staff_programme_assignments: [EA, EA_B].map(u => ({ id: `spa-${u}`, user_id: u, programme_id: P, school_id: SCHOOL, assigned_at: '2026-01-15T00:00:00.000Z', ended_at: null })),
+  classes: [], children: [], child_ea_assignments: [], child_programme_enrollments: [],
+  child_class_memberships: [], class_ea_assignments: [], groups: [], group_ea_assignments: [],
+  child_group_memberships: [], grouping_versions: [], session_attendees: [], assessments: [],
+});
+
+const klass = (id, createdBy = HO) => ({ id, school_id: SCHOOL, name: `Class ${id}`, grade: '2', academic_year_id: YEAR, created_by: createdBy, archived_at: null });
+const child = (id, classId, createdBy = HO) => ({ id, first_name: 'Child', last_name: id, class_id: classId, created_by: createdBy, archived_at: null });
+const childAssignment = (id, userId, childId, unassignedAt = null, createdBy = HO) => ({ id, user_id: userId, child_id: childId, assigned_at: T0, unassigned_at: unassignedAt, created_by: createdBy });
+const enrollment = (id, childId, createdBy = HO) => ({ id, child_id: childId, programme_id: P, enrolled_at: T0, ended_at: null, created_by: createdBy });
+const classMembership = (id, childId, classId, createdBy = HO) => ({ id, child_id: childId, class_id: classId, academic_year_id: YEAR, enrolled_at: T0, exited_at: null, created_by: createdBy });
+const classAssignment = (id, classId, eaUserId, unassignedAt = null) => ({ id, class_id: classId, ea_user_id: eaUserId, programme_id: P, assigned_at: T0, unassigned_at: unassignedAt, created_by: HO });
+
+const seedBoth = async (phone, server, tableName, row, { serverOverride } = {}) => {
+  await insertLocal(phone.db, tableName, row);
+  server.table(tableName).set(row.id, { row_version: 1, ...row, ...(serverOverride || {}) });
+};
+
+afterEach(() => { jest.useRealTimers(); });
+
+// ================================================================= E1
+describe('E1 terminal archive then pull', () => {
+  test('E1a class: realistic Head Office handover (EA class assignment ended on server), EA archives class offline', async () => {
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k'));
+    await seedBoth(phone, server, 'class_ea_assignments', classAssignment('cea-a-k', 'class-k', EA), { serverOverride: { unassigned_at: HO_END } });
+    server.table('class_ea_assignments').set('cea-b-k', { row_version: 1, ...classAssignment('cea-b-k', 'class-k', EA_B) });
+    await seedBoth(phone, server, 'children', child('child-1', 'class-k'));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-1', EA, 'child-1'));
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-1', 'child-1'));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-1', 'child-1', 'class-k'));
+    record('E1a', 'before', { readers: await readers(phone) });
+
+    await phone.repositories.classes.archiveClass('class-k', { actorUserId: EA });
+    record('E1a', 'after-local-archive', { outbox: await outbox(phone), readers: await readers(phone) });
+
+    const pass1 = await engineFor(phone, server).syncAll();
+    record('E1a', 'pass1', {
+      result: { success: pass1.success, totalTerminal: pass1.totalTerminal, totalRetriable: pass1.totalRetriable },
+      calls: callSummary(server), outbox: await outbox(phone),
+      server: {
+        class: server.table('classes').get('class-k'),
+        ceaA: server.table('class_ea_assignments').get('cea-a-k'),
+        child1ClassId: server.table('children').get('child-1').class_id,
+        ccm1ExitedAt: server.table('child_class_memberships').get('ccm-1').exited_at,
+      },
+    });
+    const pulled = await pullAll(phone, server);
+    record('E1a', 'after-pull', {
+      pulled,
+      localClass: await localRow(phone, 'classes', 'class-k', 'archived_at, sync_status, last_sync_error'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    const callsBefore = server.calls.length;
+    const forced = await engineFor(phone, server).syncAll({ force: true });
+    record('E1a', 'forced-sync-now', {
+      result: { success: forced.success, totalTerminal: forced.totalTerminal },
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+    });
+    const callsBefore2 = server.calls.length;
+    const ordinary = await engineFor(phone, server).syncAll();
+    record('E1a', 'ordinary-pass-after', {
+      result: { success: ordinary.success, totalTerminal: ordinary.totalTerminal },
+      calls: callSummary(server, callsBefore2), outbox: await outbox(phone),
+      server: { class: server.table('classes').get('class-k'), ccm1: server.table('child_class_memberships').get('ccm-1'), ceaA: server.table('class_ea_assignments').get('cea-a-k') },
+    });
+    const pulled2 = await pullAll(phone, server);
+    record('E1a', 'final-pull', {
+      pulled: pulled2,
+      localClass: await localRow(phone, 'classes', 'class-k', 'archived_at, sync_status, last_sync_error'),
+      localChild: await localRow(phone, 'children', 'child-1', 'class_id, archived_at, sync_status'),
+      localCea: await localRow(phone, 'class_ea_assignments', 'cea-a-k', 'unassigned_at, sync_status'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    // Stale-intent replay: Head Office later gives the class back to EA_A (re-opens the same assignment row).
+    server.table('class_ea_assignments').set('cea-a-k', { ...server.table('class_ea_assignments').get('cea-a-k'), unassigned_at: null, row_version: 3 });
+    await pullAll(phone, server);
+    record('E1a', 'replay-ho-reassigns-then-pull', {
+      localClass: await localRow(phone, 'classes', 'class-k', 'archived_at, sync_status'),
+      localCea: await localRow(phone, 'class_ea_assignments', 'cea-a-k', 'unassigned_at, sync_status'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    const callsBefore3 = server.calls.length;
+    await engineFor(phone, server).syncAll({ force: true });
+    record('E1a', 'replay-sync-now', {
+      calls: callSummary(server, callsBefore3), outbox: await outbox(phone),
+      serverClass: server.table('classes').get('class-k'),
+      serverCeaB: server.table('class_ea_assignments').get('cea-b-k'),
+    });
+    await pullAll(phone, server);
+    record('E1a', 'replay-final-pull', {
+      localClass: await localRow(phone, 'classes', 'class-k', 'archived_at, sync_status'),
+      readers: await readers(phone),
+    });
+    expect(true).toBe(true);
+  });
+
+  test('E1c child: realistic Head Office handover (direct assignment ended on server, no class path), EA deletes child with local history', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-20T08:00:00.000Z'));
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k2'));
+    await seedBoth(phone, server, 'children', child('child-2', 'class-k2'));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-2', EA, 'child-2'), { serverOverride: { unassigned_at: HO_END } });
+    server.table('child_ea_assignments').set('cha-b-2', { row_version: 1, ...childAssignment('cha-b-2', EA_B, 'child-2') });
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-2', 'child-2'));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-2', 'child-2', 'class-k2'));
+    await phone.db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status)
+      values ('assess-2', ?, 'child-2', ?, 'letter_egra', '2026-10-15', 'synced')`, EA, P);
+
+    // ChildrenContext.deleteChild: deleteIfNoHistory, else archiveChild (src/context/ChildrenContext.js:558-573)
+    const deleted = await phone.repositories.children.deleteIfNoHistory('child-2');
+    if (!deleted) await phone.repositories.children.archiveChild('child-2', { actorUserId: EA });
+    record('E1c', 'after-local-delete', { deleteIfNoHistory: deleted, outbox: await outbox(phone) });
+
+    const pass1 = await engineFor(phone, server).syncAll();
+    record('E1c', 'pass1', {
+      result: { success: pass1.success, totalTerminal: pass1.totalTerminal, totalRetriable: pass1.totalRetriable },
+      calls: callSummary(server), outbox: await outbox(phone),
+      cheaTableResult: pass1.tableResults.child_ea_assignments,
+    });
+    jest.setSystemTime(new Date('2026-10-20T08:00:30.000Z'));
+    let callsBefore = server.calls.length;
+    const pass2 = await engineFor(phone, server).syncAll();
+    record('E1c', 'pass2', {
+      result: { success: pass2.success, totalTerminal: pass2.totalTerminal },
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      serverAssignmentA: server.table('child_ea_assignments').get('cha-a-2'),
+    });
+    jest.setSystemTime(new Date('2026-10-20T08:01:00.000Z'));
+    callsBefore = server.calls.length;
+    const pass3 = await engineFor(phone, server).syncAll();
+    record('E1c', 'pass3', {
+      result: { success: pass3.success, totalTerminal: pass3.totalTerminal },
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      serverAssignmentA: server.table('child_ea_assignments').get('cha-a-2'),
+    });
+    const pulled = await pullAll(phone, server);
+    record('E1c', 'after-pull', {
+      pulled,
+      localChild: await localRow(phone, 'children', 'child-2', 'archived_at, sync_status'),
+      serverChild: server.table('children').get('child-2'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll({ force: true });
+    record('E1c', 'forced-sync-now', { calls: callSummary(server, callsBefore), outbox: await outbox(phone) });
+    // Stale-intent replay: Head Office gives child-2 back to EA_A (re-opens EA_A's assignment row).
+    server.table('child_ea_assignments').set('cha-a-2', { ...server.table('child_ea_assignments').get('cha-a-2'), unassigned_at: null, row_version: 3 });
+    await pullAll(phone, server);
+    record('E1c', 'replay-ho-reassigns-then-pull', {
+      localChild: await localRow(phone, 'children', 'child-2', 'archived_at, sync_status'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll({ force: true });
+    record('E1c', 'replay-sync-now', {
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      server: {
+        child: server.table('children').get('child-2'),
+        assignmentA: server.table('child_ea_assignments').get('cha-a-2'),
+        enrollment: server.table('child_programme_enrollments').get('cpe-2'),
+        membership: server.table('child_class_memberships').get('ccm-2'),
+      },
+    });
+    await pullAll(phone, server);
+    record('E1c', 'replay-final-pull', {
+      localChild: await localRow(phone, 'children', 'child-2', 'archived_at, sync_status'),
+      localAssignment: await localRow(phone, 'child_ea_assignments', 'cha-a-2', 'unassigned_at, sync_status'),
+      readers: await readers(phone),
+    });
+    expect(true).toBe(true);
+  });
+
+  test('E1d child: forced zero-row answer on the child archive, pull lands while the delivery assignment archive is still owed', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-20T08:00:00.000Z'));
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k'));
+    await seedBoth(phone, server, 'class_ea_assignments', classAssignment('cea-a-k', 'class-k', EA));
+    await seedBoth(phone, server, 'children', child('child-3', 'class-k'));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-3', EA, 'child-3'));
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-3', 'child-3'));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-3', 'child-3', 'class-k'));
+    await phone.db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status)
+      values ('assess-3', ?, 'child-3', ?, 'letter_egra', '2026-10-15', 'synced')`, EA, P);
+
+    const deleted = await phone.repositories.children.deleteIfNoHistory('child-3');
+    if (!deleted) await phone.repositories.children.archiveChild('child-3', { actorUserId: EA });
+    server.intercept(op => op.type === 'update' && op.table === 'children' && { result: { data: [], error: null } });
+    server.intercept(op => op.type === 'update' && op.table === 'child_programme_enrollments'
+      && { throw: new Error('Network request failed') });
+    const pass1 = await engineFor(phone, server).syncAll();
+    record('E1d', 'pass1', {
+      result: { success: pass1.success, totalTerminal: pass1.totalTerminal, totalRetriable: pass1.totalRetriable },
+      calls: callSummary(server), outbox: await outbox(phone),
+    });
+    const pulled = await pullAll(phone, server);
+    record('E1d', 'pull-between-passes', {
+      pulled,
+      localChild: await localRow(phone, 'children', 'child-3', 'archived_at, sync_status'),
+      localAssignment: await localRow(phone, 'child_ea_assignments', 'cha-a-3', 'unassigned_at, sync_status'),
+      localMembership: await localRow(phone, 'child_class_memberships', 'ccm-3', 'exited_at, sync_status'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    jest.setSystemTime(new Date('2026-10-20T08:20:00.000Z'));
+    const callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll();
+    const pulled2 = await pullAll(phone, server);
+    record('E1d', 'pass2-then-pull', {
+      calls: callSummary(server, callsBefore), pulled: pulled2,
+      localChild: await localRow(phone, 'children', 'child-3', 'archived_at, sync_status'),
+      serverChild: server.table('children').get('child-3'),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    expect(true).toBe(true);
+  });
+});
+
+// ================================================================= E2
+describe('E2 hard delete refused', () => {
+  test('E2 EA-created child with no local history but server history: hard delete -> ARCHIVE_REQUIRED, then pull', async () => {
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k'));
+    await seedBoth(phone, server, 'class_ea_assignments', classAssignment('cea-a-k', 'class-k', EA));
+    await seedBoth(phone, server, 'children', child('child-4', 'class-k', EA));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-4', EA, 'child-4', null, EA));
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-4', 'child-4', EA));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-4', 'child-4', 'class-k', EA));
+    // Server-only history the phone never pulled: an attendee row recorded by a co-EA.
+    server.table('session_attendees').set('att-b-4', { id: 'att-b-4', session_id: 'session-b', child_id: 'child-4' });
+    record('E2', 'before', { readers: await readers(phone) });
+
+    const deleted = await phone.repositories.children.deleteIfNoHistory('child-4');
+    if (!deleted) await phone.repositories.children.archiveChild('child-4', { actorUserId: EA });
+    record('E2', 'after-local-delete', {
+      deleteIfNoHistory: deleted, outbox: await outbox(phone), readers: await readers(phone),
+      localChildCount: await phone.db.getFirstAsync("select count(*) as n from children where id = 'child-4'"),
+    });
+    const pass1 = await engineFor(phone, server).syncAll();
+    record('E2', 'pass1', {
+      result: { success: pass1.success, totalTerminal: pass1.totalTerminal },
+      calls: callSummary(server), outbox: await outbox(phone),
+    });
+    const pendingDeleteIds = [...await phone.repositories.syncOutbox.getPendingHardDeleteIds({ tableName: 'children', ownerUserId: EA })];
+    const pulled = await pullAll(phone, server);
+    record('E2', 'after-pull', {
+      getPendingHardDeleteIds: pendingDeleteIds, pulled,
+      localChild: await localRow(phone, 'children', 'child-4', 'archived_at, sync_status'),
+      localRelationships: await phone.db.getAllAsync(`
+        select 'child_ea_assignments' as t, id, unassigned_at as ended, sync_status from child_ea_assignments where child_id = 'child-4'
+        union all select 'child_programme_enrollments', id, ended_at, sync_status from child_programme_enrollments where child_id = 'child-4'
+        union all select 'child_class_memberships', id, exited_at, sync_status from child_class_memberships where child_id = 'child-4'`),
+      outbox: await outbox(phone), readers: await readers(phone),
+    });
+    let callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll();
+    record('E2', 'ordinary-pass', { calls: callSummary(server, callsBefore), outbox: await outbox(phone) });
+    callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll({ force: true });
+    record('E2', 'forced-sync-now', { calls: callSummary(server, callsBefore), outbox: await outbox(phone), readers: await readers(phone) });
+    // SyncStatusScreen per-row Retry: retryFailedItem(table, id) then syncNow({ force: true }) (SyncStatusScreen.js:102-108)
+    const engine = engineFor(phone, server);
+    await engine.retryFailedItem('children', 'child-4');
+    record('E2', 'after-retryFailedItem', {
+      outbox: await outbox(phone),
+      localChild: await localRow(phone, 'children', 'child-4', 'archived_at, sync_status'),
+      getPendingHardDeleteIds: [...await phone.repositories.syncOutbox.getPendingHardDeleteIds({ tableName: 'children', ownerUserId: EA })],
+    });
+    callsBefore = server.calls.length;
+    await engine.syncAll({ force: true });
+    record('E2', 'retry-forced-pass', { calls: callSummary(server, callsBefore), outbox: await outbox(phone), localChild: await localRow(phone, 'children', 'child-4', 'archived_at, sync_status'), readers: await readers(phone) });
+    // The EA can now delete again from My Children: what happens?
+    const deletedAgain = await phone.repositories.children.deleteIfNoHistory('child-4');
+    if (!deletedAgain) await phone.repositories.children.archiveChild('child-4', { actorUserId: EA });
+    record('E2', 'second-delete-tap', { deleteIfNoHistory: deletedAgain, outbox: await outbox(phone) });
+    callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll();
+    record('E2', 'second-delete-pass', { calls: callSummary(server, callsBefore), outbox: await outbox(phone) });
+    const pulled3 = await pullAll(phone, server);
+    record('E2', 'pull-after-second-delete', { pulled: pulled3, outbox: await outbox(phone), readers: await readers(phone) });
+    expect(true).toBe(true);
+  });
+});
+
+// ================================================================= E3
+describe('E3 cross-pass cleanup gate', () => {
+  test.each([
+    ['E3a', 'EA holds the class assignment for the child class', true],
+    ['E3b', 'EA delivers to the child but does not hold its class', false],
+  ])('%s: %s; class-membership exit fails retryably in pass 1', async (label, _desc, holdsClass) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-20T08:00:00.000Z'));
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k3'));
+    if (holdsClass) await seedBoth(phone, server, 'class_ea_assignments', classAssignment('cea-a-k3', 'class-k3', EA));
+    else server.table('class_ea_assignments').set('cea-b-k3', { row_version: 1, ...classAssignment('cea-b-k3', 'class-k3', EA_B) });
+    await seedBoth(phone, server, 'children', child('child-5', 'class-k3'));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-5', EA, 'child-5'));
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-5', 'child-5'));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-5', 'child-5', 'class-k3'));
+    await phone.db.runAsync(`insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date, sync_status)
+      values ('assess-5', ?, 'child-5', ?, 'letter_egra', '2026-10-15', 'synced')`, EA, P);
+
+    const deleted = await phone.repositories.children.deleteIfNoHistory('child-5');
+    if (!deleted) await phone.repositories.children.archiveChild('child-5', { actorUserId: EA });
+    record(label, 'after-local-delete', { deleteIfNoHistory: deleted, outbox: await outbox(phone) });
+
+    server.intercept(op => op.type === 'update' && op.table === 'child_class_memberships'
+      && { throw: new Error('Network request failed') });
+    const pass1 = await engineFor(phone, server).syncAll();
+    record(label, 'pass1@08:00:00', {
+      result: { success: pass1.success, totalRetriable: pass1.totalRetriable, totalTerminal: pass1.totalTerminal },
+      calls: callSummary(server), outbox: await outbox(phone),
+      next_retry_at: await phone.db.getAllAsync('select id, next_retry_at from sync_outbox'),
+      cheaTableResult: pass1.tableResults.child_ea_assignments,
+    });
+
+    jest.setSystemTime(new Date('2026-10-20T08:00:02.000Z'));
+    let callsBefore = server.calls.length;
+    const pass2 = await engineFor(phone, server).syncAll();
+    record(label, 'pass2@08:00:02(non-forced,inside-backoff)', {
+      result: { success: pass2.success, totalTerminal: pass2.totalTerminal },
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      serverAssignment: server.table('child_ea_assignments').get('cha-a-5'),
+    });
+
+    jest.setSystemTime(new Date('2026-10-20T08:01:00.000Z'));
+    callsBefore = server.calls.length;
+    const pass3 = await engineFor(phone, server).syncAll();
+    record(label, 'pass3@08:01:00(backoff-elapsed)', {
+      result: { success: pass3.success, totalTerminal: pass3.totalTerminal },
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      serverMembership: server.table('child_class_memberships').get('ccm-5'),
+    });
+    callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll({ force: true });
+    record(label, 'forced-sync-now', { calls: callSummary(server, callsBefore), outbox: await outbox(phone) });
+    expect(true).toBe(true);
+  });
+});
+
+// ================================================================= E4
+describe('E4 seeded group remove then re-add offline', () => {
+  test('E4 group with non-null grouping_version_id: add -> remove -> add again offline, then sync', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-20T08:00:00.000Z'));
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k'));
+    await seedBoth(phone, server, 'class_ea_assignments', classAssignment('cea-a-k', 'class-k', EA));
+    await seedBoth(phone, server, 'grouping_versions', {
+      id: 'gv-1', class_id: 'class-k', academic_year_id: YEAR, version_number: 1, status: 'active', created_by: HO,
+    });
+    await seedBoth(phone, server, 'groups', {
+      id: 'group-seeded', name: 'Group 1', programme_id: P, class_id: 'class-k', grouping_version_id: 'gv-1',
+      display_number: 1, archived_at: null, created_by: HO,
+    });
+    await seedBoth(phone, server, 'group_ea_assignments', {
+      id: 'gea-1', group_id: 'group-seeded', ea_user_id: EA, programme_id: P, assigned_at: T0, unassigned_at: null, created_by: HO,
+    });
+    await seedBoth(phone, server, 'children', child('child-6', 'class-k'));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-6', EA, 'child-6'));
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-6', 'child-6'));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-6', 'child-6', 'class-k'));
+
+    // ChildrenContext.addChildToGroup / removeChildFromGroup (src/context/ChildrenContext.js:705-765)
+    const addMembership = (id) => phone.repositories.groups.addChildToGroup({
+      id, child_id: 'child-6', group_id: 'group-seeded', created_by: EA,
+      created_at: new Date().toISOString(), synced: false,
+    });
+    await addMembership('cgm-m1');
+    jest.setSystemTime(new Date('2026-10-20T08:00:01.000Z'));
+    await phone.repositories.groups.removeChildFromGroup('child-6', 'group-seeded');
+    jest.setSystemTime(new Date('2026-10-20T08:00:02.000Z'));
+    await addMembership('cgm-m2');
+    record('E4', 'after-offline-edits', {
+      outbox: await outbox(phone),
+      localMemberships: await phone.db.getAllAsync('select id, grouping_version_id, removed_at, sync_status from child_group_memberships order by id'),
+      visible: (await phone.repositories.groups.getVisibleChildrenGroups({ userId: EA })).map(m => m.id),
+    });
+
+    jest.setSystemTime(new Date('2026-10-20T08:05:00.000Z'));
+    const pass1 = await engineFor(phone, server).syncAll();
+    record('E4', 'pass1', {
+      result: { success: pass1.success, totalTerminal: pass1.totalTerminal },
+      calls: callSummary(server), outbox: await outbox(phone),
+      cgmTableResult: pass1.tableResults.child_group_memberships,
+      serverMemberships: server.all('child_group_memberships'),
+    });
+    let callsBefore = server.calls.length;
+    const pass2 = await engineFor(phone, server).syncAll();
+    record('E4', 'pass2', {
+      result: { success: pass2.success, totalTerminal: pass2.totalTerminal },
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      serverMemberships: server.all('child_group_memberships'),
+      localMemberships: await phone.db.getAllAsync('select id, removed_at, sync_status from child_group_memberships order by id'),
+    });
+    const pulled = await pullAll(phone, server);
+    record('E4', 'pull', {
+      pulled,
+      localMemberships: await phone.db.getAllAsync('select id, removed_at, sync_status from child_group_memberships order by id'),
+      visible: (await phone.repositories.groups.getVisibleChildrenGroups({ userId: EA })).map(m => m.id),
+      outbox: await outbox(phone),
+    });
+    callsBefore = server.calls.length;
+    await engineFor(phone, server).syncAll({ force: true });
+    record('E4', 'forced-sync-now', {
+      calls: callSummary(server, callsBefore), outbox: await outbox(phone),
+      serverMemberships: server.all('child_group_memberships'),
+    });
+    expect(true).toBe(true);
+  });
+});
+
+// ================================================================= E5
+describe('E5 shared class archived by a co-EA', () => {
+  test('E5 EA_A archives shared class; EA_B phone pulls while EA_B class assignment is still active', async () => {
+    const server = createFakeServer(baseServerRows());
+    const phoneA = await createPhone(EA);
+    const phoneB = await createPhone(EA_B);
+    for (const phone of [phoneA, phoneB]) {
+      await insertLocal(phone.db, 'classes', klass('class-shared'));
+    }
+    server.table('classes').set('class-shared', { row_version: 1, ...klass('class-shared') });
+    await seedBoth(phoneA, server, 'class_ea_assignments', classAssignment('cea-a-s', 'class-shared', EA));
+    await seedBoth(phoneB, server, 'class_ea_assignments', classAssignment('cea-b-s', 'class-shared', EA_B));
+    // EA_A's delivery child c8, EA_B's delivery child c7, both in the shared class.
+    for (const [phone, id, ea] of [[phoneA, 'child-8', EA], [phoneB, 'child-7', EA_B]]) {
+      await seedBoth(phone, server, 'children', child(id, 'class-shared'));
+      await seedBoth(phone, server, 'child_ea_assignments', childAssignment(`cha-${id}`, ea, id));
+      await seedBoth(phone, server, 'child_programme_enrollments', enrollment(`cpe-${id}`, id));
+      await seedBoth(phone, server, 'child_class_memberships', classMembership(`ccm-${id}`, id, 'class-shared'));
+    }
+    // EA_B also sees c8 as a class-only (control) child via its roster.
+    for (const row of [child('child-8', 'class-shared')]) await insertLocal(phoneB.db, 'children', row);
+    await insertLocal(phoneB.db, 'child_class_memberships', classMembership('ccm-child-8', 'child-8', 'class-shared'));
+    record('E5', 'EA_B-before', { readers: await readers(phoneB) });
+
+    await phoneA.repositories.classes.archiveClass('class-shared', { actorUserId: EA });
+    const passA = await engineFor(phoneA, server).syncAll();
+    record('E5', 'EA_A-pass', {
+      result: { success: passA.success, totalTerminal: passA.totalTerminal },
+      calls: callSummary(server), outbox: await outbox(phoneA),
+      server: {
+        class: server.table('classes').get('class-shared'),
+        ceaA: server.table('class_ea_assignments').get('cea-a-s'),
+        ceaB: server.table('class_ea_assignments').get('cea-b-s'),
+        ccm7: server.table('child_class_memberships').get('ccm-child-7'),
+        ccm8: server.table('child_class_memberships').get('ccm-child-8'),
+        cha7: server.table('child_ea_assignments').get('cha-child-7'),
+      },
+    });
+    const pulledB = await pullAll(phoneB, server);
+    record('E5', 'EA_B-after-pull', {
+      pulled: pulledB,
+      localClass: await localRow(phoneB, 'classes', 'class-shared', 'archived_at, sync_status'),
+      localCeaB: await localRow(phoneB, 'class_ea_assignments', 'cea-b-s', 'unassigned_at, sync_status'),
+      localCha7: await localRow(phoneB, 'child_ea_assignments', 'cha-child-7', 'unassigned_at, sync_status'),
+      localCcm7: await localRow(phoneB, 'child_class_memberships', 'ccm-child-7', 'exited_at, sync_status'),
+      readers: await readers(phoneB),
+      getClassById: (await phoneB.repositories.classes.getClassById('class-shared'))?.archived_at,
+      getChildren_all: (await phoneB.repositories.children.getChildren()).map(c => c.id),
+      outbox: await outbox(phoneB),
+    });
+    expect(true).toBe(true);
+  });
+});
+
+// ================================================================= E6
+describe('E6 "No class" orphaning', () => {
+  test('E6 EditChild sets class to "No class" for a delivery child', async () => {
+    const server = createFakeServer(baseServerRows());
+    const phone = await createPhone(EA);
+    await seedBoth(phone, server, 'classes', klass('class-k'));
+    await seedBoth(phone, server, 'class_ea_assignments', classAssignment('cea-a-k', 'class-k', EA));
+    await seedBoth(phone, server, 'children', child('child-9', 'class-k'));
+    await seedBoth(phone, server, 'child_ea_assignments', childAssignment('cha-a-9', EA, 'child-9'));
+    await seedBoth(phone, server, 'child_programme_enrollments', enrollment('cpe-9', 'child-9'));
+    await seedBoth(phone, server, 'child_class_memberships', classMembership('ccm-9', 'child-9', 'class-k'));
+    record('E6', 'before', { readers: await readers(phone) });
+
+    // EditChildScreen.handleClassSelect(NO_CLASS) -> ChildrenContext.updateChild(childId, { class_id: null })
+    await phone.repositories.children.updateChild('child-9', {
+      class_id: null, updated_at: new Date().toISOString(), synced: false,
+    }, { actorUserId: EA });
+    record('E6', 'after-no-class', {
+      outbox: await outbox(phone), readers: await readers(phone),
+      localAssignment: await localRow(phone, 'child_ea_assignments', 'cha-a-9', 'unassigned_at, sync_status'),
+      localEnrollment: await localRow(phone, 'child_programme_enrollments', 'cpe-9', 'ended_at, sync_status'),
+      localMembership: await localRow(phone, 'child_class_memberships', 'ccm-9', 'exited_at, sync_status'),
+    });
+    const pass = await engineFor(phone, server).syncAll();
+    const pulled = await pullAll(phone, server);
+    record('E6', 'after-sync-and-pull', {
+      result: { success: pass.success, totalTerminal: pass.totalTerminal },
+      calls: callSummary(server), pulled, outbox: await outbox(phone), readers: await readers(phone),
+      server: {
+        child: server.table('children').get('child-9'),
+        assignment: server.table('child_ea_assignments').get('cha-a-9'),
+        enrollment: server.table('child_programme_enrollments').get('cpe-9'),
+        membership: server.table('child_class_memberships').get('ccm-9'),
+      },
+      localChildRow: await localRow(phone, 'children', 'child-9', 'class_id, archived_at, sync_status'),
+    });
+    expect(true).toBe(true);
+  });
+});
