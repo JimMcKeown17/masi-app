@@ -105,7 +105,8 @@ describe('debug database export metadata', () => {
     expect(exported.app_version).toBe('1.2.0');
     expect(exported.android_version_code).toBe(55);
     expect(exported.releaseMetadata).toEqual(expect.objectContaining({
-      appVersion: '1.2.0', androidVersionCode: 55, releaseLabel: '1.2.0 (55)', gitCommit: 'abc1234',
+      // The release identity: not an update launch, so the plain version. The build is its own field.
+      appVersion: '1.2.0', androidVersionCode: 55, releaseLabel: '1.2.0', gitCommit: 'abc1234',
       supabaseTarget: 'sqlite-staging',
       supabaseProjectId: 'segygjzpujphwvrubusm',
     }));
