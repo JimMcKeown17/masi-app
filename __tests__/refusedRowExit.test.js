@@ -392,3 +392,44 @@ test('a refused clock-out is re-sent by forced passes and waits for the EA, neve
   expect(await itemFor(updateId)).toMatchObject({ delivery: 'delivered', canRemove: true, clearsItself: false });
   expect(await engine.removeDeliveredItem(updateId)).toEqual({ removed: true });
 });
+
+// Second review, LOW: when a receipt exit removes a record's last outbox row, a domain row still
+// marked pending (an earlier acknowledgement left it so while a refused sibling remained) becomes
+// terminal, so the next pull converges it instead of skipping it forever.
+describe('the last outbox row leaving through its exit', () => {
+  const CHILD = '30000000-0000-4000-8000-0000000000c1';
+  const seedPendingChild = async ({ operation, code }) => {
+    await h.withTransaction(txn => txn.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
+      values (?, 'Thandi', 'Mbeki', ?, 'pending')`, CHILD, h.userId));
+    await h.services.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: CHILD, operation,
+      payload: { id: CHILD, first_name: 'Thandi', archived_at: operation === 'archive' ? '2026-11-04T08:00:00.000Z' : undefined } });
+    await h.services.repositories.syncOutbox.markTerminalFailure(`children:${CHILD}:${operation}`, { errorMessage: 'refused', errorCode: code });
+    return `children:${CHILD}:${operation}`;
+  };
+  const domainStatus = () => h.getReader().then(db => db.getFirstAsync('select sync_status from children where id = ?', CHILD));
+
+  test('the EA\'s exit leaves the record terminal so a pull converges it', async () => {
+    const id = await seedPendingChild({ operation: 'archive', code: 'OTHER' });
+    await syncAndReport();
+    expect(await itemFor(id)).toMatchObject({ delivery: 'delivered', canRemove: true });
+    expect(await engine.removeDeliveredItem(id)).toEqual({ removed: true });
+    expect(await domainStatus()).toEqual({ sync_status: 'terminal' });
+  });
+
+  test('a refusal that clears by itself leaves the record terminal too', async () => {
+    const id = await seedPendingChild({ operation: 'update', code: 'MV001' });
+    await syncAndReport();
+    expect(await outboxRow(id)).toBeNull();
+    expect(await domainStatus()).toEqual({ sync_status: 'terminal' });
+  });
+
+  test('a record that still has queued work stays pending', async () => {
+    const id = await seedPendingChild({ operation: 'archive', code: 'OTHER' });
+    await syncAndReport();
+    await h.withTransaction(txn => txn.runAsync(`insert into sync_outbox (id, table_name, record_id, operation, payload, owner_user_id, status, created_at, updated_at)
+      values (?, 'children', ?, 'update', '{}', ?, 'pending', '2026-11-04T09:00:00.000Z', '2026-11-04T09:00:00.000Z')`,
+    `children:${CHILD}:update`, CHILD, h.userId));
+    expect(await engine.removeDeliveredItem(id)).toEqual({ removed: true });
+    expect(await domainStatus()).toEqual({ sync_status: 'pending' });
+  });
+});

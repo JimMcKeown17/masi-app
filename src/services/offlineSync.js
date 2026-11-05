@@ -2066,6 +2066,21 @@ export const createOutboxSyncEngine = ({
     return { exit, ...await readDeliveredReceipt(db, row) };
   };
 
+  // A refused row leaves through its exit: the row, its proof key, and, when it was the record's
+  // last outbox row, a domain row still marked pending becomes terminal so the next pull converges
+  // it (a pending row is never overwritten by a pull). All in the caller's transaction.
+  const leaveThroughExit = async (txn, row, incidentId) => {
+    await outboxRepository.deleteRecord(row.id, { transaction: txn });
+    await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
+    const config = getConfig(row.table_name);
+    if (!config) return;
+    const remaining = await txn.getFirstAsync(
+      'select id from sync_outbox where table_name = ? and record_id = ? limit 1', row.table_name, row.record_id);
+    if (remaining) return;
+    await txn.runAsync(`update ${quoteIdentifier(config.tableName)} set sync_status = 'terminal'
+      where id = ? and sync_status = 'pending'`, row.record_id);
+  };
+
   const resolveDeliveredRefusals = async (ownerUserId) => runRepositoryTransaction(database, async (txn) => {
     const refused = await txn.getAllAsync(
       "select * from sync_outbox where status = 'terminal' and owner_user_id = ?", ownerUserId);
@@ -2074,8 +2089,7 @@ export const createOutboxSyncEngine = ({
     for (const row of refused) {
       const { exit, delivery, incidentId } = await readRefusalExit(txn, row, removedChildIds);
       if (exit !== 'clears_itself' || delivery !== 'delivered') continue;
-      await outboxRepository.deleteRecord(row.id, { transaction: txn });
-      await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
+      await leaveThroughExit(txn, row, incidentId);
       cleared += 1;
     }
     await txn.runAsync(`
@@ -2100,8 +2114,7 @@ export const createOutboxSyncEngine = ({
         outcome = { removed: false, delivery };
         return;
       }
-      await outboxRepository.deleteRecord(row.id, { transaction: txn });
-      await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
+      await leaveThroughExit(txn, row, incidentId);
       outcome = { removed: true };
     });
     return outcome;
