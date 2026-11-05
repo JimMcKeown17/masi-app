@@ -121,6 +121,8 @@ grant execute on function private.other_active_holder(text, uuid, uuid, boolean)
 --         lock protocol); a class also needs the caller to be its creator (D4). Otherwise
 --         archived_at stays NULL, which means "leave". An archive that applies records
 --         archived_by_user_id = the caller.
+--      d. An UPDATE keeps OLD's start as well, so rule 1 can never move a kept end and an EA
+--         cannot shrink an interval another EA's history authority relies on.
 --   3. Always RETURN NEW. Never NULL, never RAISE.
 create or replace function private.guard_lifecycle_row()
 returns trigger
@@ -138,12 +140,24 @@ declare
   v_old_end timestamptz := (v_old ->> v_end_col)::timestamptz;
   v_start timestamptz := case when v_start_col is null then null
     else (v_new ->> v_start_col)::timestamptz end;
+  v_start_moved boolean := false;
   v_patch jsonb := '{}'::jsonb;
   v_actor uuid;
   v_applies boolean;
   v_column text;
 begin
   if current_user = 'authenticated' then
+    -- 2d. An EA cannot move a start either (review follow-up 1): moving it past a kept end would
+    -- move that end through rule 1, and shrinking it would cut history authority another EA
+    -- relies on. The three assignment tables already refuse a changed assigned_at (their
+    -- identity trigger fires first); enrolments and memberships keep OLD's start here.
+    if tg_op = 'UPDATE' and v_start_col is not null then
+      v_start := (v_old ->> v_start_col)::timestamptz;
+      v_start_moved := (v_new -> v_start_col) is distinct from (v_old -> v_start_col);
+      if v_start_moved then
+        v_patch := v_patch || pg_catalog.jsonb_build_object(v_start_col, v_old -> v_start_col);
+      end if;
+    end if;
     if v_old_end is not null then
       -- 2a. Written once: keep OLD's end and everything that belongs to it.
       v_end := v_old_end;

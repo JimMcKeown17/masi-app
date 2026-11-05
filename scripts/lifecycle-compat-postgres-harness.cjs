@@ -770,6 +770,37 @@ const buildCases = ({ literacyId, numeracyId }) => {
       check('still archived', `SELECT archived_at = TIMESTAMPTZ '${ARCHIVE_AT}' AS archived FROM public.children WHERE id = '${child}'`, [{ archived: true }]),
     ]);
   }
+  // ===== Review follow-up 1: an EA write cannot move a kept end by moving the start.
+  add('L3b.start_move_keeps_end', 'T1 ends stay put (review follow-up 1, exp1)', "Head Office ended H's enrolment; the EA's re-enrol upsert with a later start must not move the end", [
+    asHO('ho.end enrolment', `UPDATE public.child_programme_enrollments SET ended_at = '2026-10-01T09:00:00+02:00' WHERE id = '${CPE_H}' RETURNING id`, rows(1)),
+    asEA(EA_A, 're-enrol merge upsert, later start', upsert('child_programme_enrollments', {
+      id: CPE_H, child_id: H, programme_id: { sql: LIT }, enrolled_at: '2026-11-03T08:00:00+02:00', ended_at: null, created_by: EA_A,
+    }), rows(1)),
+    check('start and end unchanged', `SELECT enrolled_at = TIMESTAMPTZ '${GRANT_START}' AS start_kept, ended_at = TIMESTAMPTZ '2026-10-01T09:00:00+02:00' AS end_kept FROM public.child_programme_enrollments WHERE id = '${CPE_H}'`, [{ start_kept: true, end_kept: true }]),
+  ]);
+  {
+    const session = uid('e1', 4100); const attendee = uid('e2', 4100); const eaBOnK = uid('f9', 41);
+    add('L3c.start_move_cannot_shrink_other_ea_history', 'T1 history lands (review follow-up 1, exp2c)', "EA_A moves C's class-membership start past Head Office's end; EA_B's late attendee for the day it held K must still land", [
+      asHO('ho.EA_B held K until the handover', `INSERT INTO public.class_ea_assignments (id, class_id, ea_user_id, programme_id, assigned_at, unassigned_at, created_by) VALUES ('${eaBOnK}', '${K}', '${EA_B}', ${LIT}, '${GRANT_START}', '${HO_END}', '${HO}') RETURNING id`, rows(1)),
+      hoEnd('ho.exit C from K', 'child_class_memberships', CCM_C, 'exited_at'),
+      asHO('ho.EA_B session landed', `INSERT INTO public.sessions (id, user_id, programme_id, class_id, session_date, started_at, ended_at, activities, notes) VALUES ('${session}', '${EA_B}', ${LIT}, '${K}', DATE '${WORK_DAY}', '${WORK_AT}', '${WORK_END}', '{}', '') RETURNING id`, rows(1)),
+      asEA(EA_A, 'membership merge upsert, later start', upsert('child_class_memberships', {
+        id: CCM_C, child_id: C, class_id: K, academic_year_id: { sql: YEAR }, enrolled_at: '2026-11-04T08:00:00+02:00', exited_at: null, created_by: EA_A,
+      }), rows(1)),
+      asEA(EA_B, 'EA_B late attendee for C', upsert('session_attendees', attendeePayload({ id: attendee, session, child: C, group: null })), rows(1)),
+      check('membership interval unchanged', `SELECT enrolled_at = TIMESTAMPTZ '${GRANT_START}' AS start_kept, exited_at = TIMESTAMPTZ '${HO_END}' AS end_kept FROM public.child_class_memberships WHERE id = '${CCM_C}'`, [{ start_kept: true, end_kept: true }]),
+    ]);
+  }
+  {
+    const replay = { id: CCM_F, child_id: F, class_id: KA, academic_year_id: { sql: YEAR }, enrolled_at: GRANT_START, exited_at: null, created_by: EA_A, row_version: 2 };
+    add('L3d.replay_with_original_start_unchanged', 'preserved (review follow-up 1)', "A 1.5.0 merge-upsert replay of the EA's own membership with its original start changes nothing, open or ended", [
+      asEA(EA_A, 'replay while open', upsert('child_class_memberships', replay), rows(1)),
+      check('open row unchanged', `SELECT enrolled_at = TIMESTAMPTZ '${GRANT_START}' AS start_kept, exited_at IS NULL AS open FROM public.child_class_memberships WHERE id = '${CCM_F}'`, [{ start_kept: true, open: true }]),
+      hoEnd('ho.exit F', 'child_class_memberships', CCM_F, 'exited_at'),
+      asEA(EA_A, 'replay after Head Office ended it', upsert('child_class_memberships', replay), rows(1)),
+      check('ended row unchanged', `SELECT enrolled_at = TIMESTAMPTZ '${GRANT_START}' AS start_kept, exited_at = TIMESTAMPTZ '${HO_END}' AS end_kept FROM public.child_class_memberships WHERE id = '${CCM_F}'`, [{ start_kept: true, end_kept: true }]),
+    ]);
+  }
   add('E.group_handover_bare_id_archive', 'T1 other (H1 group handover)', "Head Office hands G to EA_B with a fresh-id row; EA_A's 1.5.0 archiveGroup chain converges", [
     hoEnd('ho.end EA_A on G', 'group_ea_assignments', GEA_G, 'unassigned_at', ", handover_reason = 'HO handover'"),
     asHO('ho.EA_B on G (fresh id)', `INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by) VALUES ('${uid('fb', 10)}', '${G}', '${EA_B}', ${LIT}, '${HO}') RETURNING id`, rows(1)),
