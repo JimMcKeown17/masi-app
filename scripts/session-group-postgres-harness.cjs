@@ -142,7 +142,9 @@ const sessionUpsert = ({
     columns.push('state');
     values.push(`'${state}'`);
   }
-  return upsertSql('sessions', columns, values, true);
+  // Sessions upload only as insert-or-ignore (INSERT_OR_IGNORE_TABLES); since 20261105120000 EAs
+  // hold no UPDATE on sessions, so a merge upsert is not a client shape.
+  return insertOrIgnoreSql('sessions', columns, values);
 };
 
 const attendeeUpsert = ({ id, session, child = CHILD_C, group = null }) => {
@@ -299,7 +301,7 @@ const runSessionGroupCases = (databaseUrl) => {
   const conflictSession = sessionId(12);
   const conflictAttendee = attendeeId(12);
   accepts(
-    'session-upsert-conflict-after-end',
+    'session-insert-or-ignore-conflict-after-end',
     asActor(
       EA_A,
       `${sessionUpsert({ id: conflictSession, group: G1 })}
@@ -308,9 +310,11 @@ const runSessionGroupCases = (databaseUrl) => {
        ${setupAttendee({ id: conflictAttendee, session: conflictSession, group: G1 })}
        ${endG1Assignment}`
     ),
-    [conflictSession, G1]
+    [G1]
   );
 
+  // Since 20261105120000 an EA holds no UPDATE on sessions at all: the PATCH is refused by the
+  // missing privilege before RLS or the identity trigger is reached.
   const updateSession = sessionId(13);
   denies(
     'session-update-to-unheld-group',
@@ -320,7 +324,7 @@ const runSessionGroupCases = (databaseUrl) => {
       `${setupSession({ id: updateSession, group: G1 })}
        ${setupAttendee({ id: attendeeId(13), session: updateSession, group: G1 })}`
     ),
-    '23514'
+    '42501'
   );
 
   const S_RETRY = sessionId(20);
@@ -497,7 +501,6 @@ const runSessionGroupCases = (databaseUrl) => {
         count(*) FILTER (
           WHERE policyname IN (
             'sessions_state_completed_group_held_insert',
-            'sessions_state_completed_group_held_update',
             'session_attendees_group_held_insert',
             'session_attendees_group_held_update'
           ) AND permissive = 'RESTRICTIVE'
@@ -505,7 +508,9 @@ const runSessionGroupCases = (databaseUrl) => {
       FROM pg_catalog.pg_policies
       WHERE schemaname = 'public';
     `),
-    ['0|4']
+    // sessions_state_completed_group_held_update went with authenticated UPDATE on sessions
+    // (20261105120000): sessions are written once, by insert-or-ignore.
+    ['0|3']
   );
 
   // Review round 1: keep destructive/mutation cases last so earlier fixtures stay valid.
@@ -518,6 +523,10 @@ const runSessionGroupCases = (databaseUrl) => {
         (SELECT count(*) FROM public.group_ea_assignments WHERE id = '${G4_ASSIGNMENT}');
       RESET ROLE;
       SET LOCAL ROLE service_role;
+      -- Since 20261105120000 a group's assignment evidence is ON DELETE RESTRICT: a privileged
+      -- purge deletes it explicitly first instead of relying on a cascade.
+      ${refusedStatementSql(`DELETE FROM public.groups WHERE id = '${G4}';`, '23503')}
+      DELETE FROM public.group_ea_assignments WHERE group_id = '${G4}';
       DELETE FROM public.groups WHERE id = '${G4}' RETURNING id;
       RESET ROLE;
       SELECT
@@ -565,17 +574,20 @@ const runSessionGroupCases = (databaseUrl) => {
           WHERE user_id = '${EA_A}' AND programme_id = ${NUMERACY} AND ended_at IS NULL),
         private.has_active_session_attendee_assignment('${moveSession}'),
         private.current_user_has_held_group_assignment('${G3}', ${NUMERACY});
+      -- An EA holds no UPDATE on sessions (20261105120000).
+      ${refusedStatementSql(`${nullGroupMoveSql};`, '42501')}
+      ${unchangedIdentitySql}
+      -- The identity trigger still guards privileged writers (Head Office SQL, definer code).
+      RESET ROLE;
       ${refusedStatementSql(`${nullGroupMoveSql};`, '23514')}
       ${unchangedIdentitySql}
       ${refusedStatementSql(`${heldGroupMoveSql};`, '23514')}
       ${unchangedIdentitySql}
 
-      -- Counterfactual controls: only postgres drops the trigger; the EA sends each PATCH.
-      -- Each savepoint restores the same original A session before the next variant.
-      -- The outer case ROLLBACK also restores the trigger for all subsequent cases.
-      RESET ROLE;
+      -- Counterfactual controls: only the trigger is dropped; the same privileged UPDATE then
+      -- moves the session. Each savepoint restores the original A session before the next
+      -- variant. The outer case ROLLBACK also restores the trigger for all subsequent cases.
       DROP TRIGGER sessions_prevent_identity_change ON public.sessions;
-      SET LOCAL ROLE authenticated;
       SAVEPOINT move_without_trigger;
       ${nullGroupMoveSql} RETURNING id;
       SELECT s.programme_id = ${NUMERACY}, s.group_id IS NULL, sa.group_id = '${G1}'
@@ -595,14 +607,24 @@ const runSessionGroupCases = (databaseUrl) => {
       ${unchangedIdentitySql}
     `),
     [
-      moveSession, moveAttendee, 't|t|t|t', 't|t|t', 't|t|t',
+      moveSession, moveAttendee, 't|t|t|t', 't|t|t', 't|t|t', 't|t|t',
       moveSession, 't|t|t', 't|t|t', moveSession, 't|t|t', 't|t|t',
     ]
   );
 
+  // An EA holds no UPDATE on sessions (20261105120000); identity-preserving updates by a
+  // privileged writer still pass the identity trigger.
+  denies(
+    'session-update-by-ea-refused',
+    asActor(EA_A, updateByIdSql('sessions', "notes = 'EA edit'", moveSession),
+      `${setupSession({ id: moveSession, group: G1 })}
+        ${setupAttendee({ id: moveAttendee, session: moveSession, group: G1 })}`),
+    '42501'
+  );
   accepts(
     'session-update-keeping-identity-allowed',
     asActor(EA_A, `
+      RESET ROLE;
       ${updateByIdSql('sessions', `programme_id = ${LITERACY}, group_id = '${G1}', notes = 'Identity unchanged'`, moveSession)}
       SELECT notes, programme_id = ${LITERACY}, group_id = '${G1}'
       FROM public.sessions WHERE id = '${moveSession}';
@@ -650,7 +672,8 @@ const runSessionGroupCases = (databaseUrl) => {
       SELECT class_id IS NULL, archived_at IS NULL, programme_id = ${LITERACY}
       FROM public.groups WHERE id = '${G4}';
     `, ownedGroupSetupSql),
-    [G4, 'Renamed group|t', G4, G4, G4, 't|t|t']
+    // D5 (20261105120100): the EA's un-archive is a one-row no-op; the archive stays.
+    [G4, 'Renamed group|t', G4, G4, G4, 't|f|t']
   );
 
   return passed;
