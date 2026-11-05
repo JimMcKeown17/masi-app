@@ -406,7 +406,22 @@ export const createGroupsRepository = ({ database } = {}) => {
         and removed_at is null
     `, removedAt, removedAt, childId, groupId);
     for (const row of rows) {
-      await enqueueDomainOutbox(txn, 'child_group_memberships', row.id, 'archive', { id: row.id, removed_at: removedAt });
+      // E4 (plan O2 item 5; MA-BUG-20261104-016): a membership whose INSERT is still queued is
+      // merged, not archived separately. The INSERT is rewritten to carry removed_at, so it lands
+      // already ended (or ends a row a lost response left committed). A separate archive would wait
+      // behind that INSERT while a re-add, or a move to a sibling group of the same grouping version,
+      // is refused 23505 by idx_child_group_memberships_active_by_version. It is not dropped: a
+      // queued membership INSERT may already have committed, and only children INSERTs record that.
+      const queuedInsert = await txn.getFirstAsync(`
+        select id from sync_outbox
+        where table_name = 'child_group_memberships' and record_id = ? and operation = 'insert'
+      `, row.id);
+      if (queuedInsert) {
+        const ended = await txn.getFirstAsync('select * from child_group_memberships where id = ?', row.id);
+        await enqueueDomainOutbox(txn, 'child_group_memberships', row.id, 'insert', mapDomainRow(ended));
+      } else {
+        await enqueueDomainOutbox(txn, 'child_group_memberships', row.id, 'archive', { id: row.id, removed_at: removedAt });
+      }
     }
     return true;
   });
