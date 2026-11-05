@@ -38,7 +38,8 @@ Plan: [`2026-11-04-lifecycle-safety.md`](../superpowers/plans/2026-11-04-lifecyc
    it. Only Head Office reopens, through the operator script, which runs as a privileged role. `archived_at`
    is a label: write authority comes from intervals, never from `archived_at`.
 4. **The server decides archive-versus-archive conflicts.** An EA's Delete child or Delete class means
-   "leave" while someone else still holds the child or class. Only the last holder archives for
+   "leave" while someone else still holds the child or class. Someone holds a class when they teach
+   it or hold one of its children, directly or through a group of the class. Only the last holder archives for
    everyone, and for a class only if they created it. One shared definer predicate answers "does
    anyone else hold this?" for both the guard trigger and the Delete child function. The phone never
    decides a global effect from its partial copy.
@@ -70,8 +71,10 @@ Plan: [`2026-11-04-lifecycle-safety.md`](../superpowers/plans/2026-11-04-lifecyc
 - Held-at-time authority trusts phone-stamped work dates inside intervals the EA really held. A raw
   client could backdate inside such a window. This is bounded by the server's today and auditable
   from `created_at`.
-- **Starts stay EA-writable** through membership merge upserts. This is bounded, because held-at-time
-  authority intersects with the immutable assignment starts. We accept it rather than add another rule.
+- **Starts are written once as well.** An EA UPDATE keeps an interval's start, so moving a start
+  can neither move a kept end nor shrink an interval another EA's late history relies on
+  (independent review, 2026-11-05). Assignment starts were already immutable; enrolment and
+  membership starts now are too, for EA writes. The write is still a one-row acknowledgement.
 - An entity archive that reaches the server after its own assignment end degrades to "leave" with no
   holder. The daily invariant check lists unheld live children and classes.
 - A former deliverer's late tick can fill a letter the successor never touched. The
@@ -90,6 +93,15 @@ Plan: [`2026-11-04-lifecycle-safety.md`](../superpowers/plans/2026-11-04-lifecyc
 - A Head Office reopen while a phone still holds a queued archive lets that archive apply again
   when the phone is the sole holder. Head Office therefore reopens nothing for a phone whose
   receipts show refused archive or restore rows until it runs O1.
+- Because a 1.5.0 `group_ea_assignments` restore is now absorbed (D5), a membership insert that phone
+  sends next, for a group whose assignment Head Office ended with no successor, goes from synced
+  to a terminal `42501`. We accept it under D5: O1's exit releases the row once its receipt is
+  delivered, and the Head Office script has no group-end-without-successor command. The
+  compatibility harness lists it as its one documented exception.
+- Delete child locks the child row (`FOR UPDATE`) and then the child's classes and groups. A
+  concurrent attendee insert for the same child takes the child row's key-share lock for its
+  foreign key after the group's, so the two can deadlock (`40P01`). 1.5.0 retries unknown codes,
+  so this is a transient retry, not a refusal; we keep `FOR UPDATE` rather than weaken the lock.
 - A support receipt and an access event reference the auth user with `ON DELETE RESTRICT`, so an
   account that reported a problem cannot be deleted by deleting its auth user. Off-boarding is
   suspension.

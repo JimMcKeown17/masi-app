@@ -8848,3 +8848,36 @@ Office group delete with sessions already fails 23514 through the session identi
 hosted-default-privileges model shows `anon` with INSERT/UPDATE grants on most public tables, inert
 under RLS (no anon policies). A test account that sent a support receipt can no longer be removed
 by deleting its auth user.
+
+### 2026-11-05 — Lifecycle safety server batch: independent-review follow-ups (`feat/lifecycle-safety-server`)
+
+Two independent reviews (server batch; OTA) found nothing critical or high. Fixes and notes, each
+red first in `npm run verify:lifecycle-compat:postgres` against the previous migrations:
+
+| # | Finding | Fix | Red → green evidence |
+| --- | --- | --- | --- |
+| 1 (MEDIUM) | The guard kept OLD's end but not the start; enrolment/membership starts are EA-writable, so a later start moved the kept end through rule 1 (exp1) and cut EA_B's held interval so its late attendee failed 42501 (exp2c) | Guard rule 2d: an EA UPDATE keeps OLD's start; rule 1 uses it. Still one-row ack, never raises | `L3b` (start and end now unchanged), `L3c` (EA_B attendee lands); `L3d` replay with the original start passes before and after |
+| 2 (LOW) | S2 alone failed on the baseline: dropping `can_modify_session_attendee` while the attendee DELETE policy still used it | `20261105120200` drops that policy (if exists) first | `migration.s2_applies_alone_on_baseline`: red with "policy … depends on function", green after |
+| 4 (MEDIUM, OTA review) | Delete child before the EA's group assignment INSERT landed left the child's membership in the EA's own created group open | S3 also ends memberships in groups the caller created that no other EA holds | `E2.created_unheld_group_sole_holder`, `E2.created_unheld_group_co_held` |
+| 5 (MEDIUM, OTA review, reproduced) | A class's creator and only class holder archived it while another EA held one of its children directly or via a group of the class | `other_active_holder('classes')` also counts those holders; children/groups are read, not locked | `E1a.ea_class_child_held_directly_by_other`, `E1a.ea_class_child_held_via_group_of_class` (KA was archived before) |
+
+**Documented, no code (3a–c).** (a) A 1.5.0 group-assignment restore is absorbed (D5), so the
+membership insert it sends next, for a group Head Office ended with no successor, goes synced →
+terminal 42501; pinned as `E.group_restore_absorbed_then_membership_refused`, the harness's one
+`compatException` (printed on every run). (b) Delete child's `FOR UPDATE` can deadlock (40P01)
+with a concurrent attendee insert for the child; a transient retry for 1.5.0; lock kept. (c) Apply
+the batch in a quiet window: `20261105120000` holds ACCESS EXCLUSIVE on `auth.users`,
+`public.users`, `children`, `classes`, `groups` and the nine policy tables for the whole file, and
+the trigger DROP/CREATEs lock the nine lifecycle tables. `NOT VALID` + `VALIDATE` gives no lock
+benefit inside one transaction; kept because it is harmless (plan R1 step 0 added). ADR-0014 and
+the contract map are updated (the "starts stay EA-writable" residual is gone).
+
+**Verification (Node 20, disposable PG17 container `lifecycle-server-wo1b-pg`).**
+- `npm run verify:lifecycle-compat:postgres`: **77/77**, exit 0 (68 before + 9 new: L3b, L3c, L3d,
+  the D5 residual, two Delete-class holders, two Delete-child created-group cases, S2-alone).
+- Every other `verify:*:postgres` harness: exit 0, counts unchanged (history-authorization,
+  upload-contract, organisation-label, support-incident 232, assessment-results 114,
+  assessment-history 144, ea-access, letter-mastery 20, skill-mastery 31, session-group 37,
+  letter-order, reporting 181).
+- `npx jest`: **517 suites / 8,184 tests passed**; `npx jest -c jest.integration.config.js`:
+  **111 suites / 1,530 tests passed**.

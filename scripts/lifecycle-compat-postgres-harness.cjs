@@ -801,6 +801,19 @@ const buildCases = ({ literacyId, numeracyId }) => {
       check('ended row unchanged', `SELECT enrolled_at = TIMESTAMPTZ '${GRANT_START}' AS start_kept, exited_at = TIMESTAMPTZ '${HO_END}' AS end_kept FROM public.child_class_memberships WHERE id = '${CCM_F}'`, [{ start_kept: true, end_kept: true }]),
     ]);
   }
+  {
+    const membership = uid('fc', 44);
+    add('E.group_restore_absorbed_then_membership_refused', 'documented residual (review follow-up 3a, D5)', "Head Office ended EA_A's group assignment with no successor; the 1.5.0 restore is absorbed, so the membership insert it sends next is refused", [
+      hoEnd('ho.end EA_A on G (no successor)', 'group_ea_assignments', GEA_G, 'unassigned_at', ", handover_reason = 'HO end'"),
+      asEA(EA_A, 'restore (absorbed)', restore('group_ea_assignments', GEA_G, { unassigned_at: null, handover_reason: null, row_version: 2 }), rows(1)),
+      asEA(EA_A, 'queued membership insert for H in G', {
+        ...upsert('child_group_memberships', { id: membership, child_id: H, group_id: G, joined_at: '2026-11-02T08:00:00+02:00', created_by: EA_A }),
+        compatException: 'D5: a restore no longer reopens the group assignment, so this insert loses its authority (synced -> terminal 42501). Accepted; O1 releases the row after its receipt is delivered. H1 has no group-end-without-successor command.',
+      }, sqlstate('42501')),
+      check('assignment stays ended', `SELECT unassigned_at = TIMESTAMPTZ '${HO_END}' AS ended FROM public.group_ea_assignments WHERE id = '${GEA_G}'`, [{ ended: true }]),
+    ]);
+  }
+
   // ===== Review follow-up 5: Delete class leaves when another EA holds a child in the class.
   add('E1a.ea_class_child_held_directly_by_other', 'T1 archives (review follow-up 5)', "EA_A created KA and is its only class holder, but EA_B delivers to F in KA: Delete class means leave", [
     asHO('ho.EA_B delivers F', `INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by) VALUES ('${uid('f6', 42)}', '${EA_B}', '${F}', '${HO}') RETURNING id`, rows(1)),
@@ -1046,8 +1059,15 @@ const checkMeets = (returned, expected) => (
 
 // The "absorb, don't refuse" rule for one 1.5.0 request: never a worse disposition, never a new
 // SQLSTATE, never zero rows where 1.5.0 needs one (that surfaces as a worse disposition).
+const DOCUMENTED_COMPAT_EXCEPTIONS = [];
 const compatViolation = (req, base, cur) => {
   if (req.kind === 'ho' || req.kind === 'read') return null;
+  // A step may name a decided, documented exception (ADR-0014 residuals). It is still checked
+  // against its target, and the run lists every exception it relied on.
+  if (req.compatException) {
+    DOCUMENTED_COMPAT_EXCEPTIONS.push(req.compatException);
+    return null;
+  }
   if (!cur.ok && (base.ok || base.sqlstate !== cur.sqlstate) && !(req.noProducer && req.kind === 'delete')) {
     return `new SQLSTATE ${cur.sqlstate} (baseline: ${describe(base)})`;
   }
@@ -1415,6 +1435,9 @@ const main = async () => {
 
     const passed = summary.filter((s) => s.status === 'pass').length;
     for (const s of summary) process.stdout.write(`${s.status === 'pass' ? 'pass' : 'FAIL'}  ${s.id}  [${s.plan}]\n`);
+    for (const exception of [...new Set(DOCUMENTED_COMPAT_EXCEPTIONS)]) {
+      process.stdout.write(`documented compat exception: ${exception}\n`);
+    }
     process.stdout.write(`\n${passed}/${summary.length} lifecycle-compat cases passed (${all.length} migrations; baseline through ${BASELINE_LAST_MIGRATION})\n`);
     if (failures.length) {
       process.stdout.write(`\n${failures.length} failed assertions:\n${failures.map((f) => `  - ${f}`).join('\n')}\n`);
