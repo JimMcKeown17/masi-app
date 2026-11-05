@@ -150,8 +150,10 @@ shape.
   rows and adopts legacy ownerless ones; shared auth-session persistence is fenced by admitted
   identity. The null-owner claim this item warned about is closed. Plan 3's sign-out questions,
   left-behind reporting, minimal incident envelope and legacy `masi.db` discovery are built.
-  The Profile App Release information was already delivered at the bottom of Profile: version,
-  build, backend, project, device and update id. The incident migration is on `masi-app-sqlite`
+  Profile's App release card (2026-11-05; it replaced the caption footer) shows the release
+  (`1.5.0`, `1.5.0+N` for the Nth update published with `npm run ota:publish`), build, channel,
+  runtime, short update id, launch, publish time, source commit, backend and project, with device
+  and OS under it. The incident migration is on `masi-app-sqlite`
   (2026-10-17, grants verified against S2), and D1 passed on the Galaxy A03s with Android build 8.
   **Still open before the field:**
   - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.
@@ -218,6 +220,14 @@ shape.
 - [ ] **November 2026 EA retest (Jim):** add the EAs' Google accounts to Play internal testing (up
   to 100) and iOS testers to TestFlight. From the first EA session, `masi-app-sqlite` holds field
   data, so nothing on it is wiped without Jim.
+- [ ] **Lifecycle safety before real lessons** ([plan](../docs/superpowers/plans/2026-11-04-lifecycle-safety.md)
+  D10). Gate: the server batch is applied and verified, the
+  [interim rules](./lifecycle-interim-field-rules.md) are briefed, and every pilot phone is
+  confirmed on `1.5.0+4` or later by its Send diagnostics receipt. Open: the two-phone check on
+  installed 1.5.0 (#157); the app update device gate and per-phone uptake (#158, including plan
+  step G1.1, not done before the update went live); field verification (#159); the fix decision
+  for MA-BUG-20261105-003; and the first live `--apply` of the Head Office lifecycle script, which
+  needs Jim.
 - [ ] Confirm the EAS build logs contain successful Sentry source-map uploads.
 - [ ] Pass device gates N1, N2, N4, N6, and N7 for symbolication, structured sync reporting, local
   evidence, and telemetry privacy.
@@ -225,9 +235,11 @@ shape.
 - [ ] Add Sentry fingerprint overrides for known native SQLite/Expo rejections (single-exception
   events with a recognized pattern only; never put native error text into the fingerprint), so
   unrelated rejections do not merge into one issue (Zazi `dff00db8`, `6339c958`).
-- [ ] One-command OTA publish wrapper that binds channel to build profile and reads back the
-  published manifest. Native version bumps come before any OTA that needs them. A raw `eas update`
-  published Zazi's wrong-lane bundle ([F3](./zazi-sync-lessons-for-masi-2026-10-08.md)).
+- [ ] `npm run ota:publish` (2026-11-05) numbers each update, checks the channel's branch, and
+  refuses to roll phones back by accident ([DEPLOYMENT.md](../DEPLOYMENT.md)). Still to add: read
+  back the published manifest (a manual check today), and bind the channel to the build profile.
+  Native version bumps come before any OTA that needs them. A raw `eas update` published Zazi's
+  wrong-lane bundle ([F3](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [ ] Make sure server rows carry the evidence a future User Health view needs (actor, app build,
   and last-sync time), so "who is active / who needs help" can be derived rather than reconstructed
   from spreadsheets ([F5](./zazi-sync-lessons-for-masi-2026-10-08.md)).

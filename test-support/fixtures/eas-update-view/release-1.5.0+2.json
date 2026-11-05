@@ -1,0 +1,26 @@
+[
+  {
+    "id": "01a1accc-289c-7734-a8af-803a9eafc0d9",
+    "createdAt": "2026-11-05T17:40:23.324Z",
+    "group": "2ed208c1-1760-4c1d-b450-0844d4eeb7f0",
+    "branch": "preview",
+    "message": "OTA 1.5.0+2: App release card on Profile; Delete child and Head Office restore fixes (#163, #167) (e9a4360)",
+    "runtimeVersion": "1.5.0",
+    "platform": "ios",
+    "manifestPermalink": "https://u.expo.dev/update/01a1accc-289c-7734-a8af-803a9eafc0d9",
+    "isRollBackToEmbedded": false,
+    "gitCommitHash": "e9a4360d47ce9d9b1c1c40ed3ffb8f0dfa2277db"
+  },
+  {
+    "id": "01a1accc-289c-7935-8740-2cc659d1b4be",
+    "createdAt": "2026-11-05T17:40:23.324Z",
+    "group": "2ed208c1-1760-4c1d-b450-0844d4eeb7f0",
+    "branch": "preview",
+    "message": "OTA 1.5.0+2: App release card on Profile; Delete child and Head Office restore fixes (#163, #167) (e9a4360)",
+    "runtimeVersion": "1.5.0",
+    "platform": "android",
+    "manifestPermalink": "https://u.expo.dev/update/01a1accc-289c-7935-8740-2cc659d1b4be",
+    "isRollBackToEmbedded": false,
+    "gitCommitHash": "e9a4360d47ce9d9b1c1c40ed3ffb8f0dfa2277db"
+  }
+]

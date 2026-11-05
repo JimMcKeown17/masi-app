@@ -44,6 +44,7 @@
     "testers:provision": "node scripts/createTesters.js",
     "content:xh-test-pack": "node scripts/build-isixhosa-test-pack.cjs",
     "sentry:sourcemaps": "sentry-expo-upload-sourcemaps dist",
+    "ota:publish": "node scripts/ota-publish.cjs",
     "test": "jest",
     "test:integration": "jest --runInBand --config jest.integration.config.js",
     "test:types": "tsc --noEmit -p tsconfig.assessment-questions.json",
