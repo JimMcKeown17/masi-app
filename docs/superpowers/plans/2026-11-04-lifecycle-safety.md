@@ -433,6 +433,15 @@ branch**:
 
 ### R1: apply to staging and prove it on 1.5.0 phones (Jim's go-ahead required)
 
+0. **Apply in a quiet window** (independent review, 2026-11-05). Each migration file runs as one
+   transaction. `20261105120000` takes ACCESS EXCLUSIVE locks on `auth.users`, `public.users`,
+   `children`, `classes`, `groups` and the nine policy tables for the whole file (the foreign-key
+   swaps and policy drops), and the trigger `DROP`/`CREATE`s in `20261105120100` lock the nine
+   lifecycle tables. Uploads and pulls queue behind those locks until each file commits
+   (`lock_timeout` is 10 s, so a busy table fails the push rather than stalls it). Inside one
+   transaction `NOT VALID` then `VALIDATE` gives no lock benefit; it is kept because it is harmless
+   and checks existing rows the same way. Pick a time no EA is syncing, or ask EAs not to open the
+   app for those minutes.
 1. Run `npm run sqlite:staging:dry-run`, then `npm run sqlite:staging:push`; confirm
    `project_ref=segygjzpujphwvrubusm`.
 2. Read back the staging catalog: re-run the preflight fingerprint diff, and re-run the staging probes.

@@ -115,6 +115,13 @@ function mockAdmin({
         };
         return query;
       },
+      // Rollback removes the account's own rows children first (ON DELETE RESTRICT).
+      delete: () => ({
+        eq: async (column, value) => {
+          writes.push({ table, operation: 'delete', filters: { [column]: value } });
+          return { error: null };
+        },
+      }),
       insert: jest.fn(async (payload) => {
         writes.push({ table, operation: 'insert', payload });
         return { error: null };
@@ -325,7 +332,11 @@ describe('provisioning workflow with a mocked admin client', () => {
     await expect(processRow(admin, row, lookupMaps, ORGANISATION_ID))
       .resolves.toEqual({ status: 'error', reason: 'profile update failed: update unavailable' });
     expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
-    expect(writes.filter(write => write.table === 'staff_programme_assignments')).toEqual([]);
+    expect(writes.filter(write => write.table === 'staff_programme_assignments' && write.operation !== 'delete'))
+      .toEqual([]);
+    // Rollback order under ON DELETE RESTRICT: assignment rows, then the profile, then auth.
+    expect(writes.filter(write => write.operation === 'delete').map(write => write.table))
+      .toEqual(['staff_programme_assignments', 'users', 'auth.users']);
   });
 
   test.each([false, true])('unknown organisations stop the entire run before user access (dryRun=%s)', async (dryRun) => {
