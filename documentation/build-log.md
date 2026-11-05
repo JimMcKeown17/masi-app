@@ -8694,3 +8694,62 @@ Round 2 approved.
 letter tracker's tap timing, which uses the same wait-then-repaint pattern and has no baseline).
 ForgotPasswordScreen enables its keyboard avoidance on iOS only (found by code scan, not seen on a
 phone, not recorded as a bug).
+
+### 2026-11-04 — Dashboard real-data fixes: SQL reporting v2 (fix/dashboard-real-data)
+
+Implemented the SQL scope of the approved real-data fixes spec rev 4, sections 4.1, 4.6 and
+5.1 (`masi-app-dashboard-web/docs/superpowers/specs/2026-11-04-masi-app-dashboard-real-data-fixes.md`).
+The investigation found that download-failure cards lacked identifying payload fields and groups
+with no explicit class showed no class despite having members in a classroom.
+
+**Changes.** New migration `20261104132732_masi_reporting_v2.sql` copies and extends the v1 bodies
+without calling or modifying v1. Incidents add ten nullable diagnostic fields using the phone's
+actual camelCase payload keys; `lastFailureMessage` is bounded to 500 characters and hours remain
+numeric. Group detail adds creation time and a distinct, sorted union of the non-archived explicit
+class and active members' current classes. The current-class resolver is copied from roster v1:
+latest open membership in a non-archived class, then smallest class id, with no academic-year
+filter. Existing member counts and all other v1 fields retain their semantics.
+
+Both functions retain standalone `BEGIN ATOMIC` bodies, STABLE, SECURITY DEFINER, empty search
+path, postgres ownership, reader-only EXECUTE grants, exact v2 success/refusal versions and v1
+caps. The migration follows v1's session SET/RESET timeout convention, with no top-level SET
+LOCAL. No table schema, RLS policy, phone write path or live data changes. The contract map now
+documents all eleven reporting functions and the coordinated caller rollout/cleanup conditions.
+
+**Harness.** Atomic-body and denylist audits cover all reporting versions; the executable
+allowlist gains the v2 pair. Added security metadata/PUBLIC ACL audit, v2/v1 parity cases,
+phone-shaped diagnostic cases, all-null human-report detail, message bound, group creation time,
+member classes, distinct/sorted explicit-plus-member classes, empty explicit class, archived
+explicit class yielding [], absent classes, removed/exited/archived exclusions, archived groups,
+ended assignments, cross-year latest membership and equal-enrollment class-id tie-break against
+roster v1. Added invalid-argument/version and span-boundary cases. The existing exact/plus-one
+cap fixtures now also exercise v2's 5,000 receipts and 100 groups, with version checks on both
+success and refusal documents. Original v1 cap case names and expectations remain.
+
+**Local verification.**
+- `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH node --check scripts/reporting-postgres-harness.cjs`:
+  passed; module-load check confirmed eleven unique reporting signatures.
+- `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --runInBand --watchman=false __tests__/incidentPayloads.test.js __tests__/readSupportIncidents.test.js __tests__/fieldDiagnosticsMigration.test.js`:
+  **3 suites / 94 tests passed**. No `reportingMigration*` tests or other tests reading the reporting
+  migration/harness were found.
+- Temporary static check: both safety declarations and exact v1 cap/refusal/output-assembly tails
+  passed; roster resolver matched apart from projecting the class name; exactly two new functions,
+  no v1 dependency and no top-level SET LOCAL.
+- Temporary cap-generator smoke (stubbed psql, no SQL execution): **22 generated cases**, including
+  exact and plus-one for each v2 function, passed. The first smoke attempt rejected the harness
+  shebang inside a VM wrapper; stripping the shebang in the temporary check corrected it.
+- `git diff --check`: passed.
+
+**Open verification.** PostgreSQL cannot be started in this sandbox. No SQL RED/GREEN execution,
+migration replay, catalog/grant audit, row-result or cap result is claimed here. The orchestrator
+must run `npm run verify:reporting:postgres` against disposable PG17, followed by the specified
+Django/web decoder integration gates. No live schema was inspected or migration applied; this
+build extends the supplied v1 contract. No unresolved spec ambiguity required clarification.
+All changes remain uncommitted and unstaged for the orchestrator.
+
+**Orchestrator verification (2026-11-04).** `npm run verify:reporting:postgres` on a disposable PG17
+17.11 cluster: **181 cases passed** (v1 131 + v2), including v2 caps, refusals, grants and the
+class resolver. Codex code review (gpt-6-astra): approve; its one finding (the class-order case
+could not tell name order from id order) is fixed by giving the fixture classes names whose order
+opposes their ids. The Django real-Postgres gate (`api/tests_masi_app_postgres.py`) passed against
+the retained harness database, decoding both v2 functions through the new read-only guard.
