@@ -964,6 +964,44 @@ COMMIT;`, label);
     assert.deepEqual(r13Hits(), [], 'restore left the child in group 13 once');
     pass('restore-refuses-a-second-open-membership-of-the-same-group');
 
+    // ---- Case 10: a removal that did not end the EA's delivery row -> refused, nothing changed.
+    // X added R8 and R9 (the app lets the creator Delete child) and teaches their class, but Head
+    // Office moved R8's delivery to Y and ended R9's delivery three days earlier. X's Delete child
+    // then ends only X's group membership (R8, a leave: Y delivers) or archives the child (R9: X
+    // is its last holder, through the class). Restore must not take the Head Office end for the
+    // removal and reopen that delivery row, nor reopen the removal's rows without it.
+    const refusedNoChange = (child, label) => {
+      const before = digest();
+      let refusal;
+      for (const argv of [restore(R_EMAIL.X, child), [...restore(R_EMAIL.X, child), '--apply']]) {
+        const refused = cli(argv);
+        assert.match(refused.error?.message ?? '', new RegExp(`refused: ${label}`));
+        assert.ok(refused.calls.every(input => !/\bCOMMIT\b/.test(input)));
+        refusal = refused.plan.refusals.find(entry => entry.code === label);
+      }
+      assert.equal(digest(), before, `${child}: a refused restore changed something`);
+      return refusal;
+    };
+    hoApply(['handover', 'child', '--from', R_EMAIL.X, '--to', R_EMAIL.Y, '--children', R8], 'r8-handover');
+    hoApply(['end-delivery', '--ea', R_EMAIL.X, '--children', R9], 'r9-end-delivery');
+    sql(`UPDATE public.child_ea_assignments SET unassigned_at = unassigned_at - interval '3 days'
+      WHERE id IN ('${restoreDet(RX, R8)}', '${restoreDet(RX, R9)}');`, 'r8-r9-head-office-ends-earlier');
+    serverDeleteChild(RX, R8);
+    serverDeleteChild(RX, R9);
+    const r8Removed = ends(R8);
+    const r9Removed = ends(R9);
+    assert.equal(r8Removed.archived.archived_at, null, 'Y delivers R8: a leave');
+    assert.ok(r8Removed.rows[groupMembership(8, 1)].end, "the leave ended X's group 8 membership");
+    assert.deepEqual([r9Removed.archived.archived_by_user_id, r9Removed.rows[groupMembership(9, 1)].end],
+      [RX, r9Removed.archived.archived_at], "X's removal archived R9");
+    const r8Refusal = refusedNoChange(R8, 'delivery_not_part_of_removal');
+    assert.deepEqual([r8Refusal.id, r8Refusal.delivery_ended_at, r8Refusal.removed_at],
+      [restoreDet(RX, R8), r8Removed.rows[restoreDet(RX, R8)].end, r8Removed.rows[groupMembership(8, 1)].end]);
+    const r9Refusal = refusedNoChange(R9, 'delivery_not_part_of_removal');
+    assert.deepEqual([r9Refusal.id, r9Refusal.delivery_ended_at, r9Refusal.removed_at],
+      [restoreDet(RX, R9), r9Removed.rows[restoreDet(RX, R9)].end, r9Removed.archived.archived_at]);
+    pass('restore-refuses-a-removal-that-did-not-end-the-eas-delivery');
+
     // ---- Other refusals change nothing and never reach a COMMIT.
     const beforeOther = digest();
     for (const [label, argv, message] of [

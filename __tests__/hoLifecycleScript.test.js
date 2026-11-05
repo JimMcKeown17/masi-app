@@ -160,11 +160,11 @@ describe('SQL programs', () => {
     expect(classes).toBeGreaterThan(children);
     expect(groups).toBeGreaterThan(classes);
     expect(firstWrite).toBeGreaterThan(groups);
-    // The classes and groups of the child's open memberships AND of the memberships ended at the
-    // removal instant (the ones restore reopens), plus the class of each such group.
+    // The classes and groups of the child's open memberships AND of the memberships ended inside
+    // the removal window (the ones restore reopens), plus the class of each such group.
     const lockSection = sql.slice(children, groups);
-    expect(lockSection).toContain('m.exited_at IS NULL OR m.exited_at = r.t');
-    expect(lockSection).toContain('m.removed_at IS NULL OR m.removed_at = r.t');
+    expect(lockSection).toContain('m.exited_at IS NULL OR m.exited_at BETWEEN r.t_from AND r.t_to');
+    expect(lockSection).toContain('m.removed_at IS NULL OR m.removed_at BETWEEN r.t_from AND r.t_to');
     expect(lockSection).toContain('SELECT g.class_id FROM public.child_group_memberships m');
     expect(sql).toMatch(/ho_lifecycle_retry[^\n]*\n\s*USING ERRCODE = '40001'/);
     expect(sql).not.toMatch(/\bINSERT INTO public\./);
