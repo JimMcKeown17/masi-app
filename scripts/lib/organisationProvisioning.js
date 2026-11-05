@@ -1,4 +1,4 @@
-const PROVISIONING_USAGE = 'Usage: node scripts/createTesters.js [--dry-run] --organization <slug> <path-to-csv>';
+const PROVISIONING_USAGE = 'Usage: node scripts/createTesters.js [--dry-run] [--field-staff] --organization <slug> <path-to-csv>';
 
 function parseOrganisationArg(argv) {
   const flagIndex = argv.indexOf('--organization');

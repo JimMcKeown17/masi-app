@@ -158,7 +158,13 @@ async function rollbackCreatedTester(admin, userId) {
   await admin.auth.admin.deleteUser(userId);
 }
 
-async function processRow(admin, row, lookupMaps, organisationId, { dryRun = false } = {}) {
+async function processRow(
+  admin,
+  row,
+  lookupMaps,
+  organisationId,
+  { dryRun = false, fieldStaff = false } = {}
+) {
   let existingUser;
   try {
     existingUser = await findUserByEmail(admin, row.email);
@@ -198,7 +204,8 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
       password: row.password,
       email_confirm: true,
       // The website dashboard excludes test accounts from every figure by default.
-      app_metadata: { is_test_account: true },
+      // Field staff are counted, and only when the operator says so with --field-staff.
+      app_metadata: { is_test_account: !fieldStaff },
     });
     if (createError) {
       return { status: 'error', reason: `auth create failed: ${createError.message}` };
@@ -258,16 +265,29 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
   return { status: createdNow ? 'created' : 'reused' };
 }
 
-async function main(args = process.argv.slice(2)) {
+const KNOWN_FLAGS = new Set(['--dry-run', '--field-staff']);
+
+function parseProvisioningArgs(args) {
   const organisationSlug = parseOrganisationArg(args);
-  const dryRun = args.includes('--dry-run');
   const organisationFlagIndex = args.indexOf('--organization');
-  const positionalArgs = args.filter((arg, index) => (
-    arg !== '--dry-run' && index !== organisationFlagIndex && index !== organisationFlagIndex + 1
+  const rest = args.filter((_, index) => (
+    index !== organisationFlagIndex && index !== organisationFlagIndex + 1
   ));
-  if (positionalArgs.length !== 1 || positionalArgs[0].startsWith('--')) {
+  const flags = rest.filter(arg => arg.startsWith('--'));
+  const positionalArgs = rest.filter(arg => !arg.startsWith('--'));
+  if (positionalArgs.length !== 1 || flags.some(flag => !KNOWN_FLAGS.has(flag))) {
     throw new Error(PROVISIONING_USAGE);
   }
+  return {
+    organisationSlug,
+    dryRun: flags.includes('--dry-run'),
+    fieldStaff: flags.includes('--field-staff'),
+    csvArg: positionalArgs[0],
+  };
+}
+
+async function main(args = process.argv.slice(2)) {
+  const { organisationSlug, dryRun, fieldStaff, csvArg } = parseProvisioningArgs(args);
 
   const safeEnv = validateTesterProvisioningEnv({
     ...loadEnvFiles(),
@@ -278,18 +298,21 @@ async function main(args = process.argv.slice(2)) {
   });
   // Resolve once, including dry runs, before looking up or changing any user.
   const organisationId = await resolveOrganisationId(admin, organisationSlug);
-  const csvPath = path.resolve(process.cwd(), positionalArgs[0]);
+  const csvPath = path.resolve(process.cwd(), csvArg);
   const rows = normalizeTesterRows(parseCsvFile(csvPath));
   const lookupMaps = await loadLookupMaps(admin, rows);
   console.log(`Target: masi-app-sqlite (${SQLITE_PROJECT_ID})`);
   console.log(`Organisation: ${organisationSlug}`);
   console.log(`Processing ${rows.length} row(s) from ${csvPath}`);
-  console.log(`Mode: zero-class tester provisioning${dryRun ? ' (dry run)' : ''}\n`);
+  const accountKind = fieldStaff
+    ? 'field staff accounts (counted in the dashboard)'
+    : 'test accounts (hidden from the dashboard)';
+  console.log(`Mode: zero-class provisioning of ${accountKind}${dryRun ? ' (dry run)' : ''}\n`);
 
   const summary = { created: 0, reused: 0, 'dry-run': 0, error: 0 };
 
   for (const row of rows) {
-    const result = await processRow(admin, row, lookupMaps, organisationId, { dryRun });
+    const result = await processRow(admin, row, lookupMaps, organisationId, { dryRun, fieldStaff });
     summary[result.status] += 1;
     const line = `line ${row.__line} ${row.email}`;
     if (result.status === 'error') {
@@ -323,4 +346,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, processRow };
+module.exports = { main, processRow, parseProvisioningArgs };
