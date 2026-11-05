@@ -9295,3 +9295,33 @@ words per step plus the books' words. The PR bundles `isixhosa-draft-content-v3`
 books), `english-draft-content-v2` (682) and `afrikaans-draft-content-v2` (534), books `fbe909f`.
 Pack tests now assert at most 25 words per step, all from the preview's candidates, with blends
 unchanged.
+
+### 2026-11-05 — Update `1.5.0+4`: main's #165 update had dropped the lifecycle app update (`feat/app-release-card` b759128f)
+
+**What happened.** #165 (draft words, blends and books) merged at 17:55 UTC. Its release note said
+to ship it with a plain `eas update` from main, and update group `9542a163` was published that way at
+17:57 UTC from main `9f6b0f96`. Main did not contain the lifecycle app update (#163) or the App
+release card (#167), which are still unmerged PRs. So from 17:57 every 1.5.0 phone that restarted
+was handed main's client: the lifecycle client fixes and the card were gone, and plan D10
+(the full lifecycle app update on every pilot phone) no longer held. The served manifest showed
+`gitCommit 9f6b0f96…` and no `otaRelease`. The server batch stayed applied throughout, and it
+keeps 1.5.0 clients safe on its own (absorb, don't refuse).
+
+**Fix.** Merged `origin/main` (#164, #165) into this branch (b759128f; build-log union only), then
+ran the full suites and the content check:
+- unit 526 suites / 8,413 tests;
+- integration 114 suites / 1,568 tests;
+- `npm run test:content` 45/45.
+
+Published with `npm run ota:publish … --publish`. The script counted #165's group as the third 1.5.0
+update, so this release is **`1.5.0+4`**: group `dd1ef964-c7bd-4559-9f34-d8f542926793`, iOS
+`01a1ace8-157e-70e1-9d5b-e61d88dc87a0`, Android `01a1ace8-157e-7757-a4f1-994c707e6f59`, Sentry maps
+uploaded. Published before CI finished on the merge, to shorten the regression window: both parents
+had passed CI and the merged tree passed every local suite; CI ran in parallel. Both served
+manifests (iOS and Android, fetched as a 1.5.0 phone) now show `gitCommit b759128f`, `otaRelease 4`.
+The regression window was 17:57–18:10 UTC.
+
+**Why it could happen.** Two publish paths (a bare `eas update` and `npm run ota:publish`) and a
+`main` that lags behind the code phones run. Until the lifecycle stack merges, publish only from a
+tree that contains `feat/app-release-card`. Follow-up: `ota:publish` will refuse to publish a tree
+that does not contain the commit of the update phones are running now.
