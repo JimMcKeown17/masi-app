@@ -123,6 +123,21 @@ test.each([['isixhosa', 2], ['english', 1], ['afrikaans', 1]])(
   }
 );
 
+test('a mapped preview is chosen only with explicit permission (registry fixture)', () => {
+  // No order has a preview mapping today; keep the selection rule tested for the next one.
+  const release = getPackById('isixhosa-draft-content-v1');
+  const preview = getPackById('isixhosa-candidates-preview-v2', { allowPreview: true });
+  const registry = createPackRegistry([release, preview], {
+    release: { 'isixhosa-order-2026-10-23': release.id },
+    preview: { 'isixhosa-order-2026-10-23': preview.id },
+  });
+  for (const options of [undefined, null, { allowPreview: false }, { allowPreview: 'yes' }, { allowPreview: 1 }]) {
+    expect(registry.getPackForOrder('isixhosa-order-2026-10-23', options)).toBe(release);
+    expect(registry.getPackById(preview.id, options)).toBeNull();
+  }
+  expect(registry.getPackForOrder('isixhosa-order-2026-10-23', { allowPreview: true })).toBe(preview);
+});
+
 test('pack letter order ids use the explicit field before the frozen legacy mapping', () => {
   const { LEGACY_PACK_LETTER_ORDERS } = require('../src/lessonPlan/packs/packLetterOrder');
   expect(LEGACY_PACK_LETTER_ORDERS).toEqual({

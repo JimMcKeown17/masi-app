@@ -8779,5 +8779,8 @@ failures were 4 pack tests that encoded letters-only packs (since rewritten:
 `task5AuthRaces.test.js`, which passes 40/40 alone (timing under full-suite load, unrelated to
 packs). `LessonScreen`, `useLessonDraft`, `LessonWrapUp.save`, `lessonInputs`, `contentDiagnostics`
 and `lessonPlanPacks` pass; `LessonWrapUp.save` and one `LessonScreen` blend test timed out only
-while a second full run competed for CPU. No native change since the 1.5.0 pilot builds
-(`8b79eae5`), so this ships by OTA on channel `preview`.
+while a second full run competed for CPU. No native change since either set of 1.5.0 pilot
+builds (iOS 26 / Android 55 from `f002e08`; iOS 28 / Android 58 from `8b79eae5`): dependencies,
+lockfile and native config are unchanged (Codex review), so this ships by OTA on channel `preview`.
+Codex review of `03f47ec1`: no correctness findings; three P3s (a preview-mapping registry test,
+three stale doc lines, this baseline) fixed in the follow-up commit.

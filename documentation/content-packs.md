@@ -158,7 +158,7 @@ The script records the books HEAD in `generated_from` and refuses uncommitted ch
 
 The CLI writes deterministic two-space JSON with a final newline only after the entire pack passes `lintMasiPack`. Source or validation failures leave an existing output unchanged.
 
-The preview JSON is statically bundled in every binary, but lookup resolves it only with `{ allowPreview: true }` (decision 8). Normal lookup still returns the interim release pack; callers must use the C12 developer-build gate described above to opt in. Bundling is not permission to display candidate content to field users.
+The preview JSON is statically bundled in every binary, but lookup resolves it only with `{ allowPreview: true }` (decision 8). Since 2026-11-05 no order maps to a preview pack, so order lookup returns the draft content release pack in every build; a preview pack is reached only by id with the C12 developer-build gate described above. Bundling is not permission to display candidate content to field users.
 
 The generator does not produce the current books exports. Keep the retained preview v1 bytes and id so saved drafts continue to resolve; the legacy order table lets that unchanged output pass the order lint.
 
