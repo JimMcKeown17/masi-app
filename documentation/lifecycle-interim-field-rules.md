@@ -1,9 +1,9 @@
 # Interim field rules: removing children, classes and groups (November 2026)
 
 **Status:** in force from 2026-11-04 until the fixes below are live. Each rule says what lifts it.
-**2026-11-05:** the server batch (plan step R1) is applied to `masi-app-sqlite`; the two-phone
-check on installed 1.5.0 (#157) is still open. The lifecycle app update is in `1.5.0+4` and every
-later update; `1.5.0+5` (Wrap up cards, #169) is live. A phone has it only when
+**2026-11-05:** the server batch (plan step R1) is applied to `masi-app-sqlite`. Jim decided that the
+app update device gate (#158) replaces the two-phone check on installed 1.5.0 (#157). The lifecycle app update is in `1.5.0+4` and every
+later update. A phone has it only when
 [its receipt says so](#how-to-tell-a-phone-has-the-app-update).
 **Why:** the 1.5.0 pilot builds can strand recorded work when a child, class or group is removed,
 or when Head Office changes who teaches whom while a phone is offline. The bug records are
@@ -87,7 +87,7 @@ current update, then sends diagnostics again.
 | Rule | Lifted by | How you know |
 | --- | --- | --- |
 | EA: no Delete child / Delete class / No class | App update (plan steps O1, O2, G1) | That phone's Send diagnostics receipt shows Release `1.5.0+4` or later ([how to tell](#how-to-tell-a-phone-has-the-app-update)) |
-| Head Office: upload everything first | "Held on the day" server rule (plan step R1) **and** the app update on that EA's phone | Build log records R1 applied and the two-phone check passed, and the phone's receipt shows Release `1.5.0+4` or later |
+| Head Office: upload everything first | "Held on the day" server rule (plan step R1) **and** the app update on that EA's phone | Build log records R1 applied and the app update device gate (#158) passed, and the phone's receipt shows Release `1.5.0+4` or later |
 | No reopen / no pull to refresh after a refused archive | App update on that phone | The phone's receipt shows Release `1.5.0+4` or later |
 | Suspend-only off-boarding | Permanent | — |
 | No 2027 year | "Held on the day" server rule | As for R1 |

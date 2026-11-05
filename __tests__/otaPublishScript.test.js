@@ -69,6 +69,7 @@ const fakeEas = ({ list = previewPage, views = viewFixtures } = {}) => jest.fn((
 // error such as an unknown commit; execFileSync puts the exit code on error.status.
 const gitExit = (key, status) => Object.assign(new Error(`Command failed: git ${key}`), { status });
 const MERGED_TREE = '7d3c1f0e9b8a7c6d5e4f30211a2b3c4d5e6f7a8b';
+const PARENT = '3a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d';
 // A known commit that is not in HEAD's history gets the content check: merging it into HEAD
 // (merge-tree) would change `missing`, beyond documentation. Real-git tests below cover how
 // git itself answers; this fake only answers the commands.
@@ -100,6 +101,8 @@ const fakeGit = ({
     if (key === `diff-tree -r --name-only -z ${head} ${MERGED_TREE}`) return missing.map(file => `${file}\0`).join('');
     // The branch tips that contain the commit (none by default): real-git tests below cover them.
     if (args[0] === 'for-each-ref' && args.includes('--contains')) return branchTips;
+    // A commit's parents: one, so no commit here is a merge. Real-git tests below cover merges.
+    if (args.length === 2 && args[0] === 'rev-parse' && args[1].endsWith('^@')) return `${PARENT}\n`;
     throw new Error(`unexpected git ${key}`);
   };
   return { git, calls };
@@ -755,7 +758,7 @@ describe('the content check, with real git', () => {
       return git(['rev-parse', 'HEAD']).trim();
     };
     const head = () => git(['rev-parse', 'HEAD']).trim();
-    return { origin, git, commit, head };
+    return { origin, dir, git, commit, head };
   };
   // base: src/app.js and documentation/build-log.md on main. feat's tip C adds the lifecycle line
   // phones run, and a build-log entry; main then gets its own build-log entry.
@@ -956,5 +959,142 @@ describe('the content check, with real git', () => {
     const { output, error } = dryRun(git, repo.feature);
     expect(error).toBeUndefined();
     expect(output).toContain(`Check passed: this commit (${short(repo.head())}) has commit ${short(repo.feature)} in its history.`);
+  });
+
+  // Phones run a merge commit on a release branch. 1.5.0+5 runs 1bddda8e: the 1.5.0 release line
+  // (513dd664, which main has through #167's squash) merged with feat/wrap-up-child-cards (014a069a).
+  // That branch then changed a line 014a069a had changed and was squashed onto main (#169), so merging
+  // 1bddda8e into the squash conflicts on that line, and the only branch tip with 1bddda8e in its
+  // history was the release branch, whose tip is 1bddda8e itself.
+  // Here the release line L changes src/card.js. Each feature changes its own src/ file, and the first
+  // also the build log, so its merge into the release branch conflicts there (resolved as a union, as on
+  // the real build log). The release branch merges the features in turn; phones run its tip C. Each
+  // feature then changes its src/ line again and, if in `squashed`, merges main and is squashed onto
+  // main after L's squash. `evil`: C also changes src/other.js itself. `conflicted`: L also changes the
+  // first feature's src/ line, so the release merge conflicts there and is resolved by hand.
+  const releaseMerge = (name, { features = ['feat'], squashed = features, evil = false, conflicted = false } = {}) => {
+    const repo = newRepo(name);
+    const { dir, git, commit } = repo;
+    const [first] = features;
+    // git merge without committing; then `resolved` replaces what git left (a conflict resolved by
+    // hand, or the merge's own change), and the result is committed.
+    const mergeWith = (args, resolved, message) => {
+      try { git(['merge', '-q', '--no-commit', ...args]); } catch (error) { if (error.status !== 1) throw error; }
+      Object.entries(resolved).forEach(([file, text]) => fs.writeFileSync(path.join(dir, file), text));
+      git(['add', '-A']);
+      git(['commit', '-q', '-m', message]);
+      return repo.head();
+    };
+    const log = (...entries) => ({ 'documentation/build-log.md': ['log', ...entries, ''].join('\n') });
+    commit({
+      'src/card.js': 'card 1\n', 'src/other.js': 'other\n', ...log(),
+      ...Object.fromEntries(features.map(feature => [`src/${feature}.js`, 'base\n'])),
+    }, 'Base');
+    git(['checkout', '-q', '-b', 'line']);
+    const line = commit({
+      'src/card.js': 'card 2\n', ...log('line entry'), ...(conflicted ? { [`src/${first}.js`]: 'base\nline\n' } : {}),
+    }, 'Release line');
+    const featureCommits = features.map((feature) => {
+      git(['checkout', '-q', '-b', feature, 'main']);
+      return commit({ [`src/${feature}.js`]: `base\n${feature}\n`, ...(feature === first ? log(`${feature} entry`) : {}) }, feature);
+    });
+    git(['checkout', '-q', '-b', 'release', 'line']);
+    const merges = features.map((feature, index) => mergeWith(['--no-ff', feature], {
+      ...(feature === first ? { ...log('line entry', `${feature} entry`), [`src/${feature}.js`]: `base\n${conflicted ? 'line, ' : ''}${feature}\n` } : {}),
+      ...(evil && index === features.length - 1 ? { 'src/other.js': 'other, on the release branch only\n' } : {}),
+    }, `Merge ${feature} into the release line`));
+    git(['checkout', '-q', 'main']);
+    mergeWith(['--squash', 'line'], {}, 'Release line (#167)');
+    features.forEach((feature) => {
+      git(['checkout', '-q', feature]);
+      commit({ [`src/${feature}.js`]: `base\n${feature}, later\n` }, `${feature}: later work on the same line`);
+      if (!squashed.includes(feature)) return;
+      mergeWith(['--no-ff', 'main'], {
+        ...(feature === first ? log('line entry', `${feature} entry`) : {}),
+        [`src/${feature}.js`]: `base\n${conflicted && feature === first ? 'line, ' : ''}${feature}, later\n`,
+      }, `Merge main into ${feature}`);
+      git(['checkout', '-q', 'main']);
+      mergeWith(['--squash', feature], {}, `${feature} (#169)`);
+    });
+    git(['checkout', '-q', 'main']);
+    git(['push', '-q', 'origin', 'main', 'line', 'release', ...features]);
+    return { ...repo, line, features: featureCommits, merges, phonesRunCommit: merges[merges.length - 1] };
+  };
+  const tipOf = (repo, branch) => short(repo.git(['rev-parse', branch]).trim());
+
+  test('a merge on a release branch phones run (1.5.0+5), whose feature branch later changed the same src/ line and was '
+    + 'squashed onto main: passes, because the merge adds nothing of its own and this commit has both its parents', () => {
+    const repo = releaseMerge('release-merge');
+    const C = repo.phonesRunCommit;
+    const [feature] = repo.features;
+    expect(repo.git(['rev-parse', `${C}^@`]).trim().split('\n')).toEqual([repo.line, feature]);
+    // Every other check fails: C is not in main's history, merging it conflicts on the feature's line, and
+    // the only branch tips with C in their history are C itself (release, origin/release).
+    expect(repo.git(['for-each-ref', '--contains', C, '--format=%(objectname)', 'refs/heads', 'refs/remotes'])
+      .split('\n').filter(Boolean)).toEqual([C, C]);
+    const { output, error } = dryRun(repo.git, C);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: commit ${short(C)} is not in this commit's (${short(repo.head())}) history, but it is a merge `
+      + `of ${short(repo.line)} and ${short(feature)}, adds nothing of its own that reaches phones, and this commit has both `
+      + `(${short(repo.line)}'s changes; the changes of branch feat (${tipOf(repo, 'feat')}), which has ${short(feature)} in its history).`);
+    expect(output).toContain('Next release: 1.5.0+3');
+  });
+
+  test('the same merge, but it also changed a file that reaches phones itself (an evil merge): refused, since having '
+    + 'both its parents does not give this commit the merge\'s own change', () => {
+    const repo = releaseMerge('release-merge-evil', { evil: true });
+    const { error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`from commit ${repo.phonesRunCommit}, and this commit (${short(repo.head())}) does not contain it`);
+    expect(error.message).toContain(`It is a merge of ${short(repo.line)} and ${short(repo.features[0])}, but not a clean one: it has `
+      + 'changes of its own in files that reach phones (1 file: src/other.js).');
+    expect(error.message).toContain('Publishing would roll phones back to code without it.');
+  });
+
+  test('a merge whose parents conflict in a file that reaches phones, resolved by hand: refused, since the resolution is '
+    + 'the merge\'s own change', () => {
+    const repo = releaseMerge('release-merge-conflicted', { conflicted: true });
+    const { error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`from commit ${repo.phonesRunCommit}, and this commit (${short(repo.head())}) does not contain it`);
+    expect(error.message).toContain(`It is a merge of ${short(repo.line)} and ${short(repo.features[0])}, but not a clean one: it has `
+      + 'changes of its own in files that reach phones (1 file: src/feat.js).');
+  });
+
+  test('a merge on a release branch whose feature main never got: refused, naming the parent this commit does not have; '
+    + 'each git question is asked once', () => {
+    const repo = releaseMerge('release-merge-unmerged', { squashed: [] });
+    const [feature] = repo.features;
+    const calls = [];
+    const git = (args) => { calls.push(args.join(' ')); return repo.git(args); };
+    const { error } = dryRun(git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`from commit ${repo.phonesRunCommit}, and this commit (${short(repo.head())}) does not contain it`);
+    expect(error.message).toContain(`It is a merge of ${short(repo.line)} and ${short(feature)} that adds nothing of its own that `
+      + `reaches phones, but this commit does not have ${short(feature)}: merging ${short(feature)} would change files that reach `
+      + 'phones (1 file: src/feat.js).');
+    expect(error.message).not.toContain(`does not have ${short(repo.line)}`);
+    expect(error.message).toContain('Publishing would roll phones back to code without it.');
+    // The feature's branch tips include the release branch, whose tip is the merge: already checked, not checked again.
+    expect(calls.length).toBe(new Set(calls).size);
+  });
+
+  test('a release branch that merged two features in turn: passes through the first merge, itself a merge that adds '
+    + 'nothing of its own', () => {
+    const repo = releaseMerge('release-two-merges', { features: ['feat', 'feat2'] });
+    const [inner, C] = repo.merges;
+    const [feature, feature2] = repo.features;
+    const { output, error } = dryRun(repo.git, C);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`but it is a merge of ${short(inner)} and ${short(feature2)}, adds nothing of its own that reaches phones, `
+      + `and this commit has both (${short(inner)}, a merge of ${short(repo.line)} and ${short(feature)} that adds nothing of its own `
+      + `that reaches phones, through both its parents (${short(repo.line)}'s changes and the changes of branch feat `
+      + `(${tipOf(repo, 'feat')}), which has ${short(feature)} in its history); the changes of branch feat2 (${tipOf(repo, 'feat2')}), `
+      + `which has ${short(feature2)} in its history).`);
+  });
+
+  test('merges are followed at most 2 deep: a release branch that merged three features in turn is refused, saying so', () => {
+    const repo = releaseMerge('release-three-merges', { features: ['feat', 'feat2', 'feat3'] });
+    const { error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`It is a merge of ${short(repo.merges[1])} and ${short(repo.features[2])} that adds nothing of its `
+      + `own that reaches phones, but this commit does not have ${short(repo.merges[1])}: merging ${short(repo.merges[1])} would change `
+      + 'files that reach phones (2 files: src/feat.js, src/feat2.js). The script follows merges at most 2 deep.');
   });
 });
