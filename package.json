@@ -35,6 +35,8 @@
     "verify:lifecycle-compat:postgres": "node scripts/lifecycle-compat-postgres-harness.cjs",
     "ea:status": "node scripts/ea-access.cjs status",
     "bugs:incidents": "node scripts/read-support-incidents.cjs",
+    "device:phone": "node scripts/device/phone.cjs",
+    "device:server-check": "node scripts/device/server-check.cjs",
     "ea:suspend": "node scripts/ea-access.cjs suspend",
     "ea:restore": "node scripts/ea-access.cjs restore",
     "ho:handover": "node scripts/ho-lifecycle.cjs handover",

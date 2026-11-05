@@ -61,3 +61,6 @@ scripts/testers.*.csv
 
 # Private bug-report originals; commit only safe evidence derivatives.
 docs/bugs/user-submissions*/
+
+# Private USB walkthrough evidence
+device-runs/
