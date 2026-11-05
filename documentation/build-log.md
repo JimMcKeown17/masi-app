@@ -10225,3 +10225,24 @@ the merge's own `merge-tree` into HEAD, and its walk.
   same lines, found along HEAD's first-parent line, counts as deliberate.
 - Cost: a refusal on real history took 1.7–2.8 s. Each check now holds its git answers in memory
   until it finishes.
+
+### 2026-11-05 — #169 merged; publish from main checked live; #158's gate replaces the #157 check
+
+- **#169 merged** (Wrap up child cards, fc0bae37, Jim's approval). It was one docs-only commit behind main (#168).
+  `git merge-tree` of main and the tested head 017c422a differed from the tested tree only in `docs/bugs/`, with
+  no conflicts. Main's tree after the squash equals that prediction.
+- **Live dry run from main fc0bae37** (`npm run ota:publish`, no `--publish`) PASSED against `1.5.0+5`
+  (3ec327af, 1bddda8e) through the branch-tip rule: "…has the changes of branch release/ota-wrap-up-cards
+  (e312df7), which has commit 1bddda8 in its history". The next release would be `1.5.0+6`. Nothing was
+  published.
+- **The earlier dry run** from f4ba06bd (main before #169), at 20:40 UTC, was REFUSED as intended: "(4 files:
+  src/components/lessons/WrapUpChildCard.js, …)". That was the first live run of the guard. It confirmed the
+  script parses real `eas update:view` output.
+- **The false refusal this branch fixes:** MA-BUG-20261105-008. The workaround (the release branch moved to
+  e312df77) is what made the dry run above pass. Keep `release/ota-wrap-up-cards` and `feat/wrap-up-child-cards`
+  on origin until an update published from main is live.
+- **Jim, 2026-11-05:**
+  - The app update device gate (#158) replaces the two-phone check on installed 1.5.0 (#157).
+  - #154 stays open until the Head Office script's first live use.
+  - Docs updated: the interim field rules, the contract map, and the ROADMAP.
+  - Status comments posted on #153–#158.
