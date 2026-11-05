@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 90
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: deleting one EA's login account removed their sessions, attendance, assessments, assessment items, time entries and every assignment (counts 1 to 0), while the same delete was refused only when the EA also had a tick or run row; the complete foreign-key inventory with ON DELETE actions was read from the live catalog of the same database."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T02:30:00Z
+updated_at_utc: 2026-11-05T09:00:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -180,6 +180,7 @@ today, so a deliberate delete of a never-used account still drops them.
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L6.*, `docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153, #154; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server, feat/lifecycle-ho-tools |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
 
 ## Open questions
 

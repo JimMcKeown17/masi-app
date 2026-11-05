@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Controlled Postgres 17 scenario (S2) refuses attendance and ticks after Head Office ends access, and three real-SQLite chains (C3a, C3b, C3c) through the production sync engine reproduce it with the recorded requests replayed into the same Postgres; the same payloads land when history goes first (MA-BUG-20261104-001 control). The approved fix is not yet tested."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T02:30:00Z
+updated_at_utc: 2026-11-05T09:00:00Z
 first_observed_at: 2026-11-04T19:50:52Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -163,6 +163,7 @@ Approved by Jim on 2026-11-04.
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | S2; C3a, C3b, C3c; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
 
 ## Open questions
 

@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Real SQLite through the production repositories, sync engine and pull shows the child leave My Children after 'No class', with the same writes accepted by disposable PostgreSQL 17 (E6-no-class)."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T02:30:00Z
+updated_at_utc: 2026-11-05T09:00:00Z
 first_observed_at: 2026-11-04T19:55:33Z
 last_observed_at: 2026-11-04T19:55:33Z
 
@@ -161,6 +161,7 @@ OTA arrives.
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | E6, `docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #156; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-removal |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
 
 ## Open questions
 
