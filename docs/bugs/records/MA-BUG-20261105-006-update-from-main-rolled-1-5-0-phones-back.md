@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: E2E_REPRO_CLOSED
 
 root_cause_confidence_pct: 85
-confidence_basis: Both served manifests were fetched as a 1.5.0 iPhone and show which commit each update carried; the missing guard is isolated, but no guarded publish has been exercised yet.
+confidence_basis: Both served manifests were fetched as a 1.5.0 iPhone and show which commit each update carried; the guard, merged in f4ba06bd, refused a live dry run from a main that lacked the live update's commit (the same shape), and passed a real guarded publish (1.5.0+5).
 
 created_at_utc: 2026-11-05T18:30:00Z
-updated_at_utc: 2026-11-05T18:30:00Z
+updated_at_utc: 2026-11-05T20:45:00Z
 first_observed_at: 2026-11-05T17:57:43Z
 last_observed_at: 2026-11-05T18:10:53Z
 
@@ -148,6 +148,9 @@ In progress: work order 9 on `feat/app-release-card` (PR #167). `ota:publish` re
 | 2026-11-05T17:57:43Z | Claude | Group 9542a163 published from main 9f6b0f961da8 | Served manifest: that commit, no `otaRelease` |
 | 2026-11-05T18:10:53Z | Claude | `1.5.0+4` published with `npm run ota:publish` | Manifests: commit b759128f, `otaRelease 4` |
 | 2026-11-05T18:30:00Z | Claude | Report recorded | Guard in progress in PR #167 (work order 9) |
+| 2026-11-05T19:55:00Z | Another Claude session | `1.5.0+5` published with `npm run ota:publish` from a release branch containing b759128f | The guard passed against `1.5.0+4` (b759128f); group 3ec327af, commit 1bddda8e |
+| 2026-11-05T20:30:00Z | Jim (merge approval), Claude | Guard merged to main | PR #167 squash f4ba06bd; CI green on dd09429d |
+| 2026-11-05T20:40:00Z | Claude | Live dry run from main f4ba06bd (lacks #169's Wrap up cards, which `1.5.0+5` carries): REFUSED | "Refusing to publish: phones on preview run update group 3ec327af… (release 1.5.0+5) from commit 1bddda8e…, and this commit (f4ba06b) does not contain it … (4 files: src/components/lessons/WrapUpChildCard.js, …). Nothing was published." The real EAS `update:view` output parsed. Delivery RELEASED, verification E2E_REPRO_CLOSED |
 
 ## Open questions
 
