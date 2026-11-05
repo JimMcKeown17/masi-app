@@ -245,26 +245,29 @@ describe('EditChildScreen', () => {
     expect(StyleSheet.flatten(screen.getByTestId('toast-status', { includeHiddenElements: true }).props.style).backgroundColor).toBe(colors.success);
   });
 
-  test('clears the current class through the explicit No class option', async () => {
+  // MA-BUG-20261104-015: "No class" ended the child's only class membership, and no reader lists
+  // a child without one. The picker now only moves a child to another real class.
+  test('the class picker offers only real classes, never an option that removes the class', () => {
     const screen = renderScreen();
 
     fireEvent.press(screen.getByLabelText('Choose class for Amahle Dlamini'));
-    fireEvent.press(screen.getByLabelText('Select no class'));
 
-    await waitFor(() => expect(mockUpdateChild).toHaveBeenCalledWith(
-      'child-1',
-      { class_id: null },
-    ));
+    expect(screen.queryByText('No class')).toBeNull();
+    expect(screen.queryByLabelText('Select no class')).toBeNull();
+    expect(screen.queryByText('Remove the current class assignment')).toBeNull();
+    expect(screen.getByLabelText('Select class 1A')).toBeTruthy();
+    expect(screen.getByLabelText('Select class 2B')).toBeTruthy();
   });
 
-  test('still offers No class when no assignable classes are available', () => {
+  test('says there is nothing to choose when no classes are available', () => {
     mockClasses = [];
     const screen = renderScreen();
 
     fireEvent.press(screen.getByLabelText('Choose class for Amahle Dlamini'));
 
-    expect(screen.getByLabelText('Select no class')).toBeTruthy();
-    expect(screen.queryByText('No classes available. Create a class first.')).toBeNull();
+    expect(screen.queryByLabelText('Select no class')).toBeNull();
+    expect(screen.getByText('No classes available. Create a class first.')).toBeTruthy();
+    expect(mockUpdateChild).not.toHaveBeenCalled();
   });
 });
 
