@@ -112,6 +112,19 @@ test('AppReleaseInfo pairs short facts and gives the long ones a full row, so no
   expect(rows).toEqual([['Release'], ['Build', 'Channel'], ['Runtime', 'Update'], ['Running', 'Source'], ['Published'], ['Backend']]);
 });
 
+test('AppReleaseInfo centres each row\'s facts in the row height, as ListRow centres its text, and keeps paired facts top-aligned', () => {
+  // ListRow (the Profile info rows above the card) is minHeight 64 with its content centred; a
+  // label over a value is 36dp, so a top-aligned fact would sit 10dp from the top and 18dp from the bottom.
+  const ui = render(<AppReleaseInfo release={release} device={device} />);
+  for (const row of ui.getAllByTestId('release-fact-row')) {
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ minHeight: 64, paddingVertical: 10, paddingHorizontal: 16, justifyContent: 'center' });
+    const facts = row.findAll(node => node.type === 'View' && node.props.accessible === true);
+    const pair = parentView(facts[0]);
+    expect(StyleSheet.flatten(pair.props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md });
+    expect(parentView(pair)).toBe(row);
+  }
+});
+
 test('AppReleaseInfo for the built-in bundle shows no published time and says it is running the built-in bundle', () => {
   const ui = render(<AppReleaseInfo device={device} release={{
     ...release, releaseLabel: '1.5.0', launch: 'Built-in', otaRelease: null, publishedAt: null, publishedAtIso: null,

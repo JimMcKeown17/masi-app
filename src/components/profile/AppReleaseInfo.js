@@ -17,10 +17,11 @@ function Fact({ label, value, note, large = false }) {
   </View>;
 }
 
-// A ListGroup row: ListGroup passes showDivider to every row but the last.
+// A ListGroup row: ListGroup passes showDivider to every row but the last. Like ListRow, the
+// row centres its content in its height; two facts in one row stay top-aligned with each other.
 function FactRow({ children, showDivider = false }) {
   return <View testID="release-fact-row" style={styles.row}>
-    {children}
+    <View style={styles.facts}>{children}</View>
     {showDivider ? <View testID="list-row-divider" pointerEvents="none" style={styles.divider} /> : null}
   </View>;
 }
@@ -59,7 +60,8 @@ export default function AppReleaseInfo({ release, device, platform = Platform })
 }
 
 const styles = StyleSheet.create({
-  row: { minHeight: 64, paddingVertical: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  row: { minHeight: 64, paddingVertical: 10, paddingHorizontal: 16, justifyContent: 'center' },
+  facts: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   cell: { flex: 1 },
   label: { ...typeRoles.textLabel, color: colors.textSecondary },
   value: { ...typeRoles.textData, color: colors.text, marginTop: 2 },
