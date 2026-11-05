@@ -455,8 +455,9 @@ it does not introduce another retry policy.
 **App release**:
 Which JavaScript a phone is running, shown at the top of Profile → App release and carried as
 `releaseLabel` in incident receipts and support exports. A store build's own bundle is its app
-version (`1.5.0`); the Nth update published for that version is `1.5.0+N`; an update published
-without `npm run ota:publish` shows `1.5.0+?`. The native **build** number (`1.5.0 (55)`) is a
+version (`1.5.0`); the Nth update published for that version is `1.5.0+N`; an update of this code
+published without `npm run ota:publish` shows `1.5.0+?` (updates published before the card
+existed show the old footer instead). The native **build** number (`1.5.0 (55)`) is a
 separate fact: one build can run many releases.
 _Avoid_: calling the update id or the build number "the version"; confusing it with a content
 pack's **release** (reviewed content).

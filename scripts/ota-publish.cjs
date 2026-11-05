@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // The one supported way to publish a Masi app update (OTA):
-//   npm run ota:publish -- --message "what changed" [--channel preview] [--dry-run]
+//   npm run ota:publish -- --message "what changed" [--channel preview]            (dry run)
+//   npm run ota:publish -- --message "what changed" [--channel preview] --publish  (publishes)
+//
+// A dry run is the default, like the Head Office scripts' --apply: only an explicit --publish
+// reaches phones, so a flag npm swallows or a typo leaves the script on the safe side.
 //
 // It numbers the update: the Nth update published for a runtime is release <version>+N
 // (1.5.0+2), so a tester can read Profile → App release and know which update the phone runs.
@@ -18,13 +22,13 @@ const MAX_PAGES = 200;
 const CHANNEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const IGNORED_UNTRACKED = /^\?\? (node_modules|dist)(\/.*)?$/;
 const MESSAGE_REQUIRED = 'Missing --message: --message "describe what changed" is required.';
-const USAGE = 'npm run ota:publish -- --message "…" [--channel preview] [--dry-run]';
+const USAGE = 'npm run ota:publish -- --message "…" [--channel preview] [--publish]';
 
 // npm reads flags written before the `--` as its own settings and passes the script only what
 // follows it, so `npm run ota:publish --dry-run -- --message x` would reach this script as a real
 // publish. npm exports such a setting as npm_config_<name>; any of this script's flags there means
 // the command was not what it looks like, so refuse it rather than guess what was meant.
-const NPM_TAKEN_FLAGS = [['dry_run', '--dry-run'], ['channel', '--channel'], ['message', '--message']];
+const NPM_TAKEN_FLAGS = [['dry_run', '--dry-run'], ['publish', '--publish'], ['channel', '--channel'], ['message', '--message']];
 const refuseFlagsNpmTook = (env) => {
   for (const [name, flag] of NPM_TAKEN_FLAGS) {
     const value = env[`npm_config_${name}`];
@@ -35,14 +39,15 @@ const refuseFlagsNpmTook = (env) => {
 };
 
 const parseArgs = (argv) => {
-  const options = { message: undefined, channel: 'preview', dryRun: false };
+  const options = { message: undefined, channel: 'preview', publish: false, dryRunFlag: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--message' || arg === '-m') { options.message = argv[index + 1]; index += 1; }
     else if (arg.startsWith('--message=')) options.message = arg.slice('--message='.length);
     else if (arg === '--channel') { options.channel = argv[index + 1]; index += 1; }
     else if (arg.startsWith('--channel=')) options.channel = arg.slice('--channel='.length);
-    else if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--dry-run') options.dryRunFlag = true;
+    else if (arg === '--publish') options.publish = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
   const message = typeof options.message === 'string' ? options.message.trim() : '';
@@ -53,7 +58,8 @@ const parseArgs = (argv) => {
   if (typeof options.channel !== 'string' || !CHANNEL_NAME.test(options.channel)) {
     throw new Error('--channel needs a channel name, such as preview or production.');
   }
-  return { message, channel: options.channel, dryRun: options.dryRun };
+  if (options.publish && options.dryRunFlag) throw new Error('--publish and --dry-run cannot be used together.');
+  return { message, channel: options.channel, dryRun: !options.publish };
 };
 
 // Under the appVersion runtime policy the runtime is the app version, so numbering per
@@ -196,6 +202,7 @@ const main = (argv, { git, runForOutput, run, loadConfig, env = process.env, now
     log(`Update message: ${updateMessage}`);
     log(`Would run: ${describe(update, releaseEnv)}`);
     log(`Then: ${describe(sourcemaps)}`);
+    log('Nothing was published. Add --publish to publish.');
     return result;
   }
 

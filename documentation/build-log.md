@@ -9086,3 +9086,14 @@ dry-run readiness cases (2 failed against the mutant), and the row-alignment tes
 `npx jest` on `a42d8933`: 525 suites / 8,389 tests passed, exit 0. `npx jest -c
 jest.integration.config.js`: 113 suites / 1,555 tests passed, exit 0. No SQL, sync or RLS change,
 so no PostgreSQL harness and no contract-map change; no lint script.
+
+**Follow-up (orchestrator, 2026-11-05): a dry run is the default.** The fix round's verifier found
+that a misspelled flag written before the `--` (`npm run ota:publish --dryrun -- --message x`)
+still published for real: npm took it as `npm_config_dryrun`, which is not on the refused list. A
+longer refusal list can't close this class of mistake, so the default is inverted, as the Head
+Office scripts do with `--apply`. A run is a dry run unless `--publish` is given, `--publish` with
+`--dry-run` is refused, and `npm_config_publish` joins the refused npm settings. Red first in
+`__tests__/otaPublishScript.test.js` (12 failed): no-flag runs published, `--publish` was an
+unknown argument, and the `npm_config_dryrun` typo case published. Green: 58/58. DEPLOYMENT.md,
+CONTEXT.md and the `releaseMetadata.js` comment now say that only updates of this code published
+without the script show `1.5.0+?`; older bundles show the old footer.

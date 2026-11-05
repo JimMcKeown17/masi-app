@@ -53,8 +53,8 @@ const LAUNCH = { update: 'Update', builtIn: 'Built-in', development: 'Developmen
  * `npm run ota:publish` stamped into that update. On a built-in launch it returns the
  * config embedded in the binary, which has no number.
  *
- * releaseLabel: built-in bundle `1.5.0`; numbered update `1.5.0+2`; an update published
- * before numbering `1.5.0+?` (honest, never invented).
+ * releaseLabel: built-in bundle `1.5.0`; numbered update `1.5.0+2`; an update of this code
+ * published without `npm run ota:publish` `1.5.0+?` (honest, never invented).
  */
 export const buildReleaseIdentity = ({ expoConfig = {}, application = {}, updates = {}, platformOS } = {}) => {
   const config = expoConfig || {};

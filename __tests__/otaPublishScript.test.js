@@ -61,11 +61,17 @@ const deps = (overrides = {}) => {
 };
 
 describe('arguments', () => {
-  test('a message is required; the channel defaults to preview', () => {
-    expect(parseArgs(['--message', 'Release card'])).toEqual({ message: 'Release card', channel: 'preview', dryRun: false });
+  test('a message is required; the channel defaults to preview; a dry run is the default', () => {
+    expect(parseArgs(['--message', 'Release card'])).toEqual({ message: 'Release card', channel: 'preview', dryRun: true });
     expect(parseArgs(['--message=Release card', '--channel=production', '--dry-run']))
       .toEqual({ message: 'Release card', channel: 'production', dryRun: true });
     expect(parseArgs(['-m', '  Trimmed  ', '--channel', 'preview'])).toMatchObject({ message: 'Trimmed' });
+  });
+
+  test('only --publish publishes; --publish with --dry-run is refused', () => {
+    expect(parseArgs(['--message', 'x', '--publish'])).toEqual({ message: 'x', channel: 'preview', dryRun: false });
+    expect(() => parseArgs(['--message', 'x', '--publish', '--dry-run'])).toThrow(/--publish and --dry-run/);
+    expect(() => parseArgs(['--message', '--publish'])).toThrow(/--message needs a description, not "--publish"/);
   });
 
   test.each([
@@ -97,6 +103,7 @@ describe('flags npm takes for itself', () => {
     ['npm run ota:publish --channel production -- --message x', { npm_config_channel: 'true' }, '--channel'],
     ['npm run ota:publish --message x', { npm_config_message: 'x' }, '--message'],
     ['npm run ota:publish -m x', { npm_config_message: 'x' }, '--message'],
+    ['npm run ota:publish --publish -- --message x', { npm_config_publish: 'true' }, '--publish'],
   ])('%s is refused before anything is checked, listed or published', (_typed, env, flag) => {
     const d = deps({ env });
     let error;
@@ -108,9 +115,15 @@ describe('flags npm takes for itself', () => {
     expect(d.run).not.toHaveBeenCalled();
   });
 
+  test('a misspelled flag npm takes for itself leaves the script on the safe side: a dry run', () => {
+    const d = deps({ env: { npm_config_dryrun: 'true' } });
+    expect(main(['--message', 'x'], d)).toMatchObject({ dryRun: true, releaseLabel: '1.5.0+2' });
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
   test('npm settings that are unset or false do not block a publish', () => {
     const d = deps({ env: { npm_config_dry_run: 'false', npm_config_message: '', npm_config_loglevel: 'warn' } });
-    expect(main(['--message', 'x'], d)).toMatchObject({ dryRun: false, releaseLabel: '1.5.0+2' });
+    expect(main(['--message', 'x', '--publish'], d)).toMatchObject({ dryRun: false, releaseLabel: '1.5.0+2' });
     expect(d.run).toHaveBeenCalledTimes(2);
   });
 });
@@ -263,7 +276,7 @@ describe('release readiness', () => {
 describe('main', () => {
   test('publishes the next numbered release, then uploads its source maps', () => {
     const d = deps();
-    const result = main(['--message', 'App release card'], d);
+    const result = main(['--message', 'App release card', '--publish'], d);
     expect(result).toMatchObject({ release: 2, releaseLabel: '1.5.0+2', message: 'OTA 1.5.0+2: App release card (fd053cf)' });
     expect(d.run.mock.calls).toEqual([
       ['npx', buildUpdateCommand({ channel: 'preview', message: 'OTA 1.5.0+2: App release card (fd053cf)' }).args,
@@ -275,12 +288,13 @@ describe('main', () => {
 
   test('a dry run checks and counts, prints the number, message and both commands, and runs nothing', () => {
     const d = deps();
-    const result = main(['--message', "Jim's card", '--dry-run'], d);
+    const result = main(['--message', "Jim's card"], d);
     expect(result).toMatchObject({ release: 2, releaseLabel: '1.5.0+2', dryRun: true });
     expect(d.run).not.toHaveBeenCalled();
     expect(d.runForOutput.mock.calls.map(([, args]) => args[2])).toEqual(['channel:view', 'update:list']);
     const output = d.lines.join('\n');
     expect(output).toContain('Next release: 1.5.0+2');
+    expect(output).toContain('Nothing was published. Add --publish to publish.');
     expect(output).toContain("OTA 1.5.0+2: Jim's card (fd053cf)");
     expect(output).toContain("MASI_OTA_RELEASE=2 MASI_OTA_PUBLISHED_AT=2026-11-05T09:11:02.000Z npx --yes eas-cli@26.0.0 update --channel preview --environment preview --non-interactive --message 'OTA 1.5.0+2: Jim'\\''s card (fd053cf)'");
     expect(output).toContain("npx --yes eas-cli@26.0.0 env:exec preview 'npm run sentry:sourcemaps' --non-interactive");
@@ -298,7 +312,7 @@ describe('main', () => {
 
   test('a dirty tree is refused before EAS is asked anything', () => {
     const d = deps({ git: fakeGit({ status: ' M app.config.js\n' }).git });
-    expect(() => main(['--message', 'x'], d)).toThrow(/uncommitted changes/);
+    expect(() => main(['--message', 'x', '--publish'], d)).toThrow(/uncommitted changes/);
     expect(d.runForOutput).not.toHaveBeenCalled();
     expect(d.run).not.toHaveBeenCalled();
   });
@@ -308,13 +322,13 @@ describe('main', () => {
       if (isChannelView(args)) return JSON.stringify(previewChannel);
       throw new Error('network down');
     }) });
-    expect(() => main(['--message', 'x'], d)).toThrow(/Could not list the updates/);
+    expect(() => main(['--message', 'x', '--publish'], d)).toThrow(/Could not list the updates/);
     expect(d.run).not.toHaveBeenCalled();
   });
 
   test.each([false, true])('a channel pointed at another branch publishes nothing and counts nothing (dry run: %p)', (dryRun) => {
     const d = deps({ runForOutput: jest.fn((command, args) => (isChannelView(args) ? channelView(['wave2-canary']) : JSON.stringify(previewPage))) });
-    expect(() => main(['--message', 'x', ...(dryRun ? ['--dry-run'] : [])], d)).toThrow(/sends its updates to branch wave2-canary/);
+    expect(() => main(['--message', 'x', ...(dryRun ? [] : ['--publish'])], d)).toThrow(/sends its updates to branch wave2-canary/);
     expect(d.runForOutput).toHaveBeenCalledTimes(1);
     expect(d.run).not.toHaveBeenCalled();
   });
@@ -322,14 +336,14 @@ describe('main', () => {
   test('a failed update never uploads source maps', () => {
     const d = deps();
     d.run.mockImplementationOnce(() => { throw new Error('npx exited with code 1'); });
-    expect(() => main(['--message', 'x'], d)).toThrow(/npx exited with code 1/);
+    expect(() => main(['--message', 'x', '--publish'], d)).toThrow(/npx exited with code 1/);
     expect(d.run).toHaveBeenCalledTimes(1);
   });
 
   test('a failed source-map upload after a published update says the update is out and how to finish', () => {
     const d = deps();
     d.run.mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new Error('sentry 401'); });
-    expect(() => main(['--message', 'x', '--channel', 'preview'], d))
+    expect(() => main(['--message', 'x', '--channel', 'preview', '--publish'], d))
       .toThrow(/1\.5\.0\+2 is published[\s\S]*source maps[\s\S]*npx --yes eas-cli@26\.0\.0 env:exec preview 'npm run sentry:sourcemaps' --non-interactive/);
   });
 });

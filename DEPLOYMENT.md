@@ -96,20 +96,23 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 Publish every update with the script, from a clean commit that is pushed to origin:
 
 ```bash
-npm run ota:publish -- --message "describe what changed" --dry-run   # check: prints the number and both commands
-npm run ota:publish -- --message "describe what changed"             # publish on channel preview
+npm run ota:publish -- --message "describe what changed"             # dry run: prints the number and both commands
+npm run ota:publish -- --message "describe what changed" --publish   # publish on channel preview
 ```
+
+A dry run is the default; only `--publish` reaches phones (`--publish` with `--dry-run` is refused).
 
 After the field launch, add `--channel production` (the EAS environment has the channel's name).
 Write every flag after the `--`. npm keeps a flag written before it for itself and hides it from
-the script (`npm run ota:publish --dry-run -- --message "…"` would otherwise be a real publish), so
-the script refuses whenever npm has taken `--dry-run`, `--channel` or `--message`. A message cannot
-start with `-`, so `--message --dry-run` is refused rather than published with that message.
+the script, so the script refuses whenever npm has taken `--dry-run`, `--publish`, `--channel` or
+`--message`. Because publishing needs `--publish`, any other flag npm swallows (a typo such as
+`--dryrun` included) leaves the run a dry run. A message cannot start with `-`, so
+`--message --publish` is refused rather than taken as the message.
 
 The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
 
 1. Refuses unless the working tree is clean (untracked `node_modules`/`dist` aside) and HEAD is on
-   an origin branch, so every update's Source commit can be found later. `--dry-run` makes the
+   an origin branch, so every update's Source commit can be found later. A dry run makes the
    same checks as a publish, through step 3.
 2. Checks the channel. `npx eas-cli@26.0.0 channel:view <channel> --json --non-interactive` must
    show the channel pointing at exactly one branch, named after the channel. `eas update
