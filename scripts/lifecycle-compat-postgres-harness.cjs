@@ -1200,8 +1200,9 @@ const raceCases = [
     id: 'race.delete_child_vs_class_grant',
     plan: 'T1 overlapping transactions (review finding 4)',
     child: X,
+    // Head Office locks only the class row (a class grant touches no child row), so the EA's
+    // Delete child can block only through other_active_holder's class lock.
     holderSql: `
-      SELECT id FROM public.children WHERE id = '${X}' FOR UPDATE;
       SELECT id FROM public.classes WHERE id = '${KX}' FOR UPDATE;
       INSERT INTO public.class_ea_assignments (id, class_id, ea_user_id, programme_id, created_by) VALUES ('${uid('f9', 30)}', '${KX}', '${EA_B}', ${LIT}, '${HO}');`,
     eaSql: `SELECT public.delete_child_if_no_history('${X}'::uuid);`,
@@ -1217,8 +1218,8 @@ const raceCases = [
     id: 'race.delete_child_vs_group_handover',
     plan: 'T1 overlapping transactions (review finding 4)',
     child: Z,
+    // Only the group row is locked, so the wait proves other_active_holder's group lock.
     holderSql: `
-      SELECT id FROM public.children WHERE id = '${Z}' FOR UPDATE;
       SELECT id FROM public.groups WHERE id = '${GZ}' FOR UPDATE;
       UPDATE public.group_ea_assignments SET unassigned_at = pg_catalog.now(), handover_reason = 'HO handover' WHERE id = '${GEA_GZ}';
       INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by) VALUES ('${uid('fb', 30)}', '${GZ}', '${EA_B}', ${LIT}, '${HO}');`,
@@ -1252,7 +1253,7 @@ const runRaces = async (databaseUrl, failures, summary) => {
     const holder = runAsync({
       databaseUrl,
       label: holderLabel,
-      sql: `BEGIN;\n${race.holderSql}\nSELECT pg_catalog.pg_sleep(2);\nCOMMIT;\n`,
+      sql: `BEGIN;\n${race.holderSql}\nSELECT pg_catalog.pg_sleep(3);\nCOMMIT;\n`,
     });
     const holderReady = await waitFor(databaseUrl, `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE application_name = 'masi-history-rls-${holderLabel}' AND wait_event = 'PgSleep')`, `${race.id}-poll-holder`);
     const ea = runAsync({
