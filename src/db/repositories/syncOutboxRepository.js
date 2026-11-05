@@ -35,6 +35,21 @@ export const outboxRecordId = (tableName, recordId, operation) => (
   `${tableName}:${recordId}:${operation}`
 );
 
+// Lifecycle safety O1: the refused (terminal) rows a forced pass may send again. History is
+// idempotent: every insert is an upsert or insert-or-ignore, and the history RPCs acknowledge a
+// replay. The children hard_delete is decided by the server's RPC. A refused archive, restore or
+// edit is never sent again: it could land on newer server state (MA-BUG-20261104-011, -018). It
+// leaves the phone only through its delivered receipt (services/deliveredReceipt.js).
+const HISTORY_RPC_UPDATE_TABLES = ['battery_runs', 'letter_mastery', 'skill_mastery'];
+export const isResendableRefusal = ({ table_name: tableName, operation } = {}) => (
+  operation === 'insert'
+  || (operation === 'update' && HISTORY_RPC_UPDATE_TABLES.includes(tableName))
+  || (operation === 'hard_delete' && tableName === 'children')
+);
+export const RESENDABLE_REFUSAL_SQL = `(operation = 'insert'
+  or (operation = 'update' and table_name in (${HISTORY_RPC_UPDATE_TABLES.map((table) => `'${table}'`).join(', ')}))
+  or (operation = 'hard_delete' and table_name = 'children'))`;
+
 // Spec §7.2: the one definition of unsent work. The sign-out warning, the left-behind report
 // and any future deletion rule all read it through readUnsentSummary.
 export const UNSENT_STATUSES = ['pending', 'failed', 'in_flight', 'terminal'];
@@ -94,11 +109,12 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     ownerUserId,
   } = {}) => {
     const db = await resolveDatabase(database);
-    // A forced ("Sync Now") pass also resurrects terminal rows so the user can clear a stuck
-    // dependency chain (e.g. assessment_items that 42501'd because their parent had not synced yet);
-    // auto-sync (includeTerminal=false) keeps skipping terminal rows so genuine permission failures
-    // do not retry-storm.
-    const statuses = includeTerminal ? "('pending', 'failed', 'terminal')" : "('pending', 'failed')";
+    // A forced pass (Sync now, Retry, pull-to-refresh, sign-out) also sends refused history again,
+    // so a server fix heals it without an app release. It never sends a refused archive, restore or
+    // edit (isResendableRefusal). Auto-sync skips every terminal row so refusals do not retry-storm.
+    const statuses = includeTerminal
+      ? `(status in ('pending', 'failed') or (status = 'terminal' and ${RESENDABLE_REFUSAL_SQL}))`
+      : "status in ('pending', 'failed')";
     const ownerScoped = ownerUserId !== undefined;
     const params = [];
     if (!includeBackedOff) params.push(now);
@@ -107,7 +123,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     const rows = await db.getAllAsync(`
       select *
       from sync_outbox
-      where status in ${statuses}
+      where ${statuses}
         ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
         ${ownerScoped ? 'and owner_user_id = ?' : ''}
       order by created_at, table_name, record_id

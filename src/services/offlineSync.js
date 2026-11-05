@@ -19,7 +19,9 @@ import {
 } from '../db/repositories/sqliteRepositoryUtils';
 import {
   createSyncOutboxRepository,
+  isResendableRefusal,
   outboxRecordId,
+  RESENDABLE_REFUSAL_SQL,
 } from '../db/repositories/syncOutboxRepository';
 import {
   createSyncStateRepository,
@@ -1664,7 +1666,11 @@ export const createOutboxSyncEngine = ({
         result.tableResults[tableKey].success = false;
         result.tableResults[tableKey].failed += 1;
         result.failedRecords.push(recordResult.failedRecord);
-        rememberBlockedRecord(outboxRecord);
+        // A refused archive, restore or edit says nothing about whether its row exists on the
+        // server, and it is never sent again, so it must not hold back anything (O1).
+        if (!(recordResult.terminal && !isResendableRefusal(outboxRecord))) {
+          rememberBlockedRecord(outboxRecord);
+        }
       }
     };
     const fallbackBudget = {
@@ -1893,7 +1899,8 @@ export const createOutboxSyncEngine = ({
     // Route through the engine's `database` closure (undefined in prod → writer), NOT a
     // resolved reader handle — resolving first and passing it would hit the query_only reader.
     await runRepositoryTransaction(database, async (txn) => {
-      await txn.runAsync(`
+      // Retry is a forced pass for one item: a refused archive, restore or edit is never re-sent.
+      const result = await txn.runAsync(`
         update sync_outbox
         set status = 'pending',
             retry_count = 0,
@@ -1903,10 +1910,10 @@ export const createOutboxSyncEngine = ({
             updated_at = ?
         where lower(table_name) = ?
           and record_id = ?
-          and status in ('failed', 'terminal')
+          and (status = 'failed' or (status = 'terminal' and ${RESENDABLE_REFUSAL_SQL}))
       `, timestamp(), tableName, id);
       const config = getConfig(tableName);
-      if (config) {
+      if (config && (result?.changes || 0) > 0) {
         await setDomainSyncResult(txn, config.tableName, id, {
           syncStatus: 'pending',
           lastSyncError: null,
