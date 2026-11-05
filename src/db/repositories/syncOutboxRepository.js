@@ -184,23 +184,35 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
+  // Claims the rows for upload. A refused archive, restore or edit is never claimed (O1). The
+  // claim remembers each row's status, and the domain status it flips, so a refused row that is
+  // then not attempted goes back to terminal (restoreRefusedClaims, MA-BUG-20261104-021).
   const updateInFlight = async (txn, ids, now) => {
+    const before = await txn.getAllAsync(`
+      select id, table_name, record_id, operation, status
+      from sync_outbox
+      where id in (${sqlPlaceholders(ids.length)})
+        and (status <> 'terminal' or ${RESENDABLE_REFUSAL_SQL})
+    `, ...ids);
+    const claims = new Map();
+    if (before.length === 0) return claims;
+    const claimable = new Set(before.map((row) => row.id));
+    const claimedIds = ids.filter((id) => claimable.has(id));
     await txn.runAsync(`
       update sync_outbox
       set status = 'in_flight',
           last_error = case when table_name = 'children' and operation = 'insert'
             then coalesce(last_error, 'Upload started; server outcome unknown') else last_error end,
           updated_at = ?
-      where id in (${sqlPlaceholders(ids.length)})
-    `, now, ...ids);
-    const rows = await txn.getAllAsync(`
-      select id, table_name, record_id, operation
-      from sync_outbox
-      where id in (${sqlPlaceholders(ids.length)})
-    `, ...ids);
-    for (const row of rows) {
+      where id in (${sqlPlaceholders(claimedIds.length)})
+    `, now, ...claimedIds);
+    for (const row of before) {
+      const claim = { claimedFromStatus: row.status, claimedDomainStatus: null };
+      claims.set(row.id, claim);
       if (!isStampedOperation(row.table_name, row.operation)) continue;
       const table = quoteIdentifier(row.table_name);
+      const domain = await txn.getFirstAsync(`select sync_status from ${table} where id = ?`, row.record_id);
+      claim.claimedDomainStatus = domain?.sync_status ?? null;
       // A forced terminal retry must be protected from overlapping pulls until it settles.
       await txn.runAsync(`
         update ${table}
@@ -215,6 +227,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
         `, local.row_version, row.id);
       }
     }
+    return claims;
   };
 
   const markInFlight = async (ids, { transaction } = {}) => {
@@ -228,14 +241,44 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
   const markInFlightAndGet = async (ids, { transaction } = {}) => {
     if (!ids || ids.length === 0) return [];
     return runWrite(transaction, async (txn) => {
-      await updateInFlight(txn, ids, timestamp());
+      const claims = await updateInFlight(txn, ids, timestamp());
+      if (claims.size === 0) return [];
+      const claimedIds = ids.filter((id) => claims.has(id));
       const rows = await txn.getAllAsync(`
         select *
         from sync_outbox
-        where id in (${sqlPlaceholders(ids.length)})
-      `, ...ids);
-      const rowsById = new Map(rows.map((row) => [row.id, toOutboxRecord(row)]));
+        where id in (${sqlPlaceholders(claimedIds.length)})
+      `, ...claimedIds);
+      const rowsById = new Map(rows.map((row) => [row.id, { ...toOutboxRecord(row), ...claims.get(row.id) }]));
       return ids.map((id) => rowsById.get(id)).filter(Boolean);
+    });
+  };
+
+  // MA-BUG-20261104-021: a refused row forced into a pass and then not attempted (deferred, a
+  // user switch, a throw) goes back to terminal, never pending or failed. The compare-and-set on
+  // the claim's updated_at leaves a newer local revision alone. The domain row gets back the
+  // status the claim flipped; its version stays equal to the payload's.
+  const restoreRefusedClaims = async (claimedRecords, { transaction } = {}) => {
+    const records = (claimedRecords || []).filter(Boolean);
+    if (records.length === 0) return 0;
+    return runWrite(transaction, async (txn) => {
+      let restored = 0;
+      for (const record of records) {
+        const result = await txn.runAsync(`
+          update sync_outbox
+          set status = 'terminal', next_retry_at = null, updated_at = ?
+          where id = ? and status = 'in_flight' and updated_at = ?
+        `, timestamp(), record.id, record.updated_at);
+        if ((result?.changes || 0) === 0) continue;
+        restored += 1;
+        if (record.claimedDomainStatus === 'terminal') {
+          await txn.runAsync(`
+            update ${quoteIdentifier(record.table_name)} set sync_status = 'terminal'
+            where id = ? and sync_status = 'pending'
+          `, record.record_id);
+        }
+      }
+      return restored;
     });
   };
 
@@ -306,13 +349,14 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return result;
   };
 
+  // Neither reset ever demotes a refused (terminal) row to waiting (MA-BUG-20261104-021).
   const markReady = async (id, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await txn.runAsync(`
       update sync_outbox
       set status = 'pending',
           next_retry_at = null,
           updated_at = ?
-      where id = ?
+      where id = ? and status <> 'terminal'
     `, timestamp(), id);
     return true;
   });
@@ -327,7 +371,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
           set status = 'pending',
               next_retry_at = null,
               updated_at = ?
-          where id = ?
+          where id = ? and status <> 'terminal'
         `, now, id);
       }
       return true;
@@ -508,6 +552,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getTerminalRecords,
     markInFlight,
     markInFlightAndGet,
+    restoreRefusedClaims,
     resetInFlight,
     quarantineForeignOwners,
     markReady,

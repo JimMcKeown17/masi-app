@@ -836,8 +836,10 @@ const setDomainSyncResult = async (txn, tableName, recordId, {
 };
 
 const restorePendingAfterStaleFinalize = async (txn, outboxRecord, tableName) => {
-  const existing = await txn.getFirstAsync('select id from sync_outbox where id = ?', outboxRecord.id);
+  const existing = await txn.getFirstAsync('select id, status from sync_outbox where id = ?', outboxRecord.id);
   if (!existing) return false;
+  // A stale finalize never turns a refused row into waiting work (MA-BUG-20261104-021).
+  if (existing.status === 'terminal') return false;
 
   await txn.runAsync(`
     update sync_outbox
@@ -1148,7 +1150,46 @@ export const createOutboxSyncEngine = ({
     }
   };
 
-  const processRecord = async (outboxRecord, passUserId) => {
+  const wasRefused = (claimedRecord) => claimedRecord?.claimedFromStatus === 'terminal';
+
+  // Hands claimed rows back without an attempt: a refused row returns to terminal, owed work to
+  // pending (MA-BUG-20261104-021).
+  const releaseClaims = async (claimedRecords) => {
+    const records = claimedRecords.filter(Boolean);
+    const refused = records.filter(wasRefused);
+    const owedIds = records.filter((record) => !wasRefused(record)).map((record) => record.id);
+    if (refused.length > 0) await outboxRepository.restoreRefusedClaims(refused);
+    if (owedIds.length === 0) return;
+    if (typeof outboxRepository.markReadyMany === 'function') {
+      await outboxRepository.markReadyMany(owedIds);
+    } else {
+      for (const id of owedIds) await outboxRepository.markReady(id);
+    }
+  };
+
+  // A claim that throws may have rolled back (nothing changed: a refused row is still terminal, a
+  // backed-off row keeps its backoff) or committed before failing. Hand back only the rows it
+  // left in_flight, as their status before the pass, so it neither changes nor strands anything.
+  const settleThrownClaims = async (outboxRecords, batchClaims = new Map()) => {
+    const leftInFlight = [];
+    for (const record of outboxRecords) {
+      const current = await outboxRepository.getById(record.id);
+      if (current?.status !== 'in_flight') continue;
+      const prior = batchClaims.get(record.id);
+      const priorStatus = prior?.claimedFromStatus ?? record.status;
+      leftInFlight.push({
+        ...current,
+        claimedFromStatus: priorStatus,
+        claimedDomainStatus: prior?.claimedDomainStatus ?? (priorStatus === 'terminal' ? 'terminal' : null),
+      });
+    }
+    await releaseClaims(leftInFlight);
+    return leftInFlight;
+  };
+
+  // `batchClaim` is this row's claim by processBatch, when the batch fell back to single rows:
+  // the batch claim, not the re-claim, knows whether the row was refused before the pass.
+  const processRecord = async (outboxRecord, passUserId, { batchClaim = null } = {}) => {
     const config = getConfig(outboxRecord.table_name);
     if (!config) {
       if (!await getMatchingPassSession(passUserId)) {
@@ -1163,7 +1204,25 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    const [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id]);
+    let inFlightRecord = null;
+    try {
+      [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id]);
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      const reason = recordedFailure(error) || 'Sync claim threw';
+      try {
+        await settleThrownClaims([outboxRecord], batchClaim ? new Map([[outboxRecord.id, batchClaim]]) : undefined);
+      } catch (settleError) {
+        if (isStaleActorError(settleError)) throw settleError;
+        // resetInFlight is the cross-pass backstop for a row this could not hand back.
+      }
+      const refused = (batchClaim?.claimedFromStatus ?? outboxRecord.status) === 'terminal';
+      return { success: false, terminal: refused, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    }
+    if (inFlightRecord && batchClaim) {
+      inFlightRecord.claimedFromStatus = batchClaim.claimedFromStatus;
+      inFlightRecord.claimedDomainStatus = batchClaim.claimedDomainStatus;
+    }
     try {
       if (!inFlightRecord) {
         const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
@@ -1171,7 +1230,7 @@ export const createOutboxSyncEngine = ({
       }
 
       if (!await getMatchingPassSession(passUserId)) {
-        await outboxRepository.markReady(outboxRecord.id);
+        await releaseClaims([inFlightRecord]);
         return { success: false, abortedUserSwitch: true };
       }
 
@@ -1290,29 +1349,39 @@ export const createOutboxSyncEngine = ({
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
       // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).
       const reason = recordedFailure(error) || 'Sync record processing threw';
+      const refused = wasRefused(inFlightRecord);
       try {
-        await finalizeRetriableFailure({
-          database,
-          outboxRecord: inFlightRecord || outboxRecord,
-          tableName: config.tableName,
-          outboxRepository,
-          reason,
-          ...dispositionFor(error, { transport: true }),
-        });
+        if (refused) {
+          // A throw is not a new server answer: the row stays refused (MA-BUG-20261104-021).
+          await outboxRepository.restoreRefusedClaims([inFlightRecord]);
+        } else {
+          await finalizeRetriableFailure({
+            database,
+            outboxRecord: inFlightRecord || outboxRecord,
+            tableName: config.tableName,
+            outboxRepository,
+            reason,
+            ...dispositionFor(error, { transport: true }),
+          });
+        }
       } catch (finalizeError) {
         if (isStaleActorError(finalizeError)) throw finalizeError;
         // Full finalize (CAS + domain update) failed; last-resort plain outbox status reset so the
         // row isn't left in_flight within THIS pass (markReady only touches sync_outbox, so it can
         // succeed even when the domain write can't). resetInFlight is the cross-pass backstop.
-        try { await outboxRepository.markReady(outboxRecord.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        // A refused row is left for that backstop rather than made waiting here.
+        if (!refused) {
+          try { await outboxRepository.markReady(outboxRecord.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        }
       }
-      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      return { success: false, terminal: refused, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
   };
 
   // Per-record fallback for a batch (used when the batch can't/didn't upsert as a unit). The shared
   // budget bounds the whole pass, while small allSettled waves preserve sibling-safe cleanup.
-  const processBatchFallback = async (outboxRecords, passUserId, fallbackBudget) => {
+  // `batchClaims` maps outbox id to the batch's claim; only rows the batch claimed are released.
+  const processBatchFallback = async (outboxRecords, passUserId, fallbackBudget, batchClaims = new Map()) => {
     const attemptCount = Math.min(
       outboxRecords.length,
       Math.max(0, fallbackBudget.remaining)
@@ -1326,7 +1395,7 @@ export const createOutboxSyncEngine = ({
     // each wave: one record rejecting must not let batch cleanup overwrite a sibling that synced.
     for (const wave of chunkArray(attemptedRecords, SYNC_BATCH_LIMITS.maxFallbackConcurrency)) {
       const settled = await Promise.allSettled(
-        wave.map((record) => processRecord(record, passUserId))
+        wave.map((record) => processRecord(record, passUserId, { batchClaim: batchClaims.get(record.id) }))
       );
       const stale = settled.find((outcome) => outcome.status === 'rejected' && isStaleActorError(outcome.reason));
       if (stale) throw stale.reason;
@@ -1339,25 +1408,26 @@ export const createOutboxSyncEngine = ({
         }
         const record = wave[index];
         const reason = recordedFailure(outcome.reason) || 'Fallback record processing threw';
-        try { await outboxRepository.markReady(record.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
-        results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
+        const batchClaim = batchClaims.get(record.id);
+        try {
+          if (batchClaim) await releaseClaims([batchClaim]);
+          else await outboxRepository.markReady(record.id);
+        } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        results.push({ success: false, terminal: wasRefused(batchClaim), failedRecord: makeFailedRecord(record, reason) });
       }
     }
 
     if (deferredRecords.length > 0) {
-      const deferredIds = deferredRecords.map((record) => record.id);
+      // A row the batch did not claim was not touched, so it needs no reset.
+      const deferredClaims = deferredRecords.map((record) => batchClaims.get(record.id)).filter(Boolean);
       try {
-        if (typeof outboxRepository.markReadyMany === 'function') {
-          await outboxRepository.markReadyMany(deferredIds);
-        } else {
-          for (const id of deferredIds) await outboxRepository.markReady(id);
-        }
+        await releaseClaims(deferredClaims);
       } catch (resetError) {
         if (isStaleActorError(resetError)) throw resetError;
         // Keep sibling outcomes intact. Best-effort per-row cleanup may recover a partial bulk
         // reset; resetInFlight is the cross-pass backstop for any row that remains in_flight.
-        for (const id of deferredIds) {
-          try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        for (const claim of deferredClaims) {
+          try { await releaseClaims([claim]); } catch (retryError) { if (isStaleActorError(retryError)) throw retryError; }
         }
       }
       results.push(...deferredRecords.map(() => ({
@@ -1373,13 +1443,26 @@ export const createOutboxSyncEngine = ({
     let inFlightRecords = null;
     try {
       inFlightRecords = await outboxRepository.markInFlightAndGet(ids);
-
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      // Report the rows as not attempted; dependents wait for the next pass. Only rows the claim
+      // left in_flight are handed back (MA-BUG-20261104-021).
+      console.warn('Sync batch claim failed:', errorMessage(error));
+      try {
+        await settleThrownClaims(outboxRecords);
+      } catch (settleError) {
+        if (isStaleActorError(settleError)) throw settleError;
+      }
+      return outboxRecords.map(() => ({ success: false, deferredBatchFallback: true }));
+    }
+    const batchClaims = new Map(inFlightRecords.map((record) => [record.id, record]));
+    try {
       if (inFlightRecords.length !== outboxRecords.length) {
-        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget, batchClaims);
       }
 
       if (!await getMatchingPassSession(passUserId)) {
-        await Promise.all(ids.map((id) => outboxRepository.markReady(id)));
+        await releaseClaims(inFlightRecords);
         return outboxRecords.map(() => ({ success: false, abortedUserSwitch: true }));
       }
 
@@ -1393,13 +1476,13 @@ export const createOutboxSyncEngine = ({
         // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
         // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
         // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
-        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget, batchClaims);
       }
 
       if (isStaleActorError(serverResult.error)) throw serverResult.error;
       assertActorOpen();
       if (!serverResult.success) {
-        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget, batchClaims);
       }
 
       await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName, applyAcknowledgedPayload });
@@ -1407,27 +1490,32 @@ export const createOutboxSyncEngine = ({
       return outboxRecords.map(() => ({ success: true }));
     } catch (error) {
       if (isStaleActorError(error)) throw error;
-      // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
-      // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
-      // hits → failed+backoff); else the originals (CAS misses → restore pending).
+      // Post-claim throw (batch request / fallback / finalizeManySuccess) — don't strand the batch
+      // in_flight. Owed rows: finalizeManyRetriableFailure (CAS hits → failed+backoff). Refused rows
+      // go back to terminal (MA-BUG-20261104-021).
       const reason = recordedFailure(error) || 'Batch processing threw';
+      const refused = inFlightRecords.filter(wasRefused);
+      const owed = inFlightRecords.filter((record) => !wasRefused(record));
       try {
-        await finalizeManyRetriableFailure({
-          database,
-          records: inFlightRecords || outboxRecords,
-          tableName: config.tableName,
-          reason,
-          ...dispositionFor(error, { transport: true }),
-        });
+        if (refused.length > 0) await outboxRepository.restoreRefusedClaims(refused);
+        if (owed.length > 0) {
+          await finalizeManyRetriableFailure({
+            database,
+            records: owed,
+            tableName: config.tableName,
+            reason,
+            ...dispositionFor(error, { transport: true }),
+          });
+        }
       } catch (finalizeError) {
         if (isStaleActorError(finalizeError)) throw finalizeError;
         // Last-resort per-id outbox status reset (see processRecord note).
-        for (const id of ids) {
+        for (const { id } of owed) {
           try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         }
       }
       return outboxRecords.map((record) => (
-        { success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) }
+        { success: false, terminal: wasRefused(batchClaims.get(record.id)), failedRecord: makeFailedRecord(record, reason) }
       ));
     }
   };
@@ -1707,7 +1795,16 @@ export const createOutboxSyncEngine = ({
       for (let index = 0; index < filteredRecords.length; index += 1) {
         const outboxRecord = filteredRecords[index];
         const config = getConfig(outboxRecord.table_name);
-        const skippedDependency = await findBlockingDependency(outboxRecord);
+        let skippedDependency;
+        try {
+          skippedDependency = await findBlockingDependency(outboxRecord);
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          // A failed dependency read fails only this row, which was not claimed or changed.
+          const reason = recordedFailure(error) || 'Dependency check threw';
+          applyRecordResult(outboxRecord, config, { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
+          continue;
+        }
         if (skippedDependency) {
           const tableResult = result.tableResults[outboxRecord.table_name] || {
             success: false,
