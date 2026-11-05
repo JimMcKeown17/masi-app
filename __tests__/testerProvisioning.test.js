@@ -215,4 +215,34 @@ describe('tester account creation', () => {
       app_metadata: { is_test_account: true },
     }));
   });
+
+  test('marks new field staff accounts as counted staff when asked explicitly', async () => {
+    const { processRow } = require('../scripts/createTesters');
+    const createUser = jest.fn().mockResolvedValue({ data: null, error: { message: 'stop after create' } });
+    const admin = {
+      auth: { admin: { listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }), createUser } },
+    };
+    const row = { email: 'coach@example.org', password: 'unique-temporary-password' };
+    await processRow(admin, row, {}, 'org-id', { fieldStaff: true });
+    expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'coach@example.org',
+      app_metadata: { is_test_account: false },
+    }));
+  });
+});
+
+describe('tester provisioning arguments', () => {
+  test('reads --field-staff and --dry-run around the organisation and CSV path', () => {
+    const { parseProvisioningArgs } = require('../scripts/createTesters');
+    expect(parseProvisioningArgs(['--field-staff', '--organization', 'masinyusane', 'coaches.csv']))
+      .toEqual({ organisationSlug: 'masinyusane', dryRun: false, fieldStaff: true, csvArg: 'coaches.csv' });
+    expect(parseProvisioningArgs(['--dry-run', '--organization', 'masinyusane', 'testers.csv']))
+      .toEqual({ organisationSlug: 'masinyusane', dryRun: true, fieldStaff: false, csvArg: 'testers.csv' });
+  });
+
+  test('rejects unknown flags instead of treating them as the CSV path', () => {
+    const { parseProvisioningArgs } = require('../scripts/createTesters');
+    expect(() => parseProvisioningArgs(['--organization', 'masinyusane', '--feild-staff', 'coaches.csv']))
+      .toThrow(/Usage/);
+  });
 });

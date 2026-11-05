@@ -199,7 +199,8 @@ insight flows where specified by the locked navigation contract.
   active Programme assignment.
 
 Pilot provisioning uses `scripts/createTesters.js` for explicit zero-class testers on the exact
-SQLite backend. The generic legacy loader is disabled.
+SQLite backend. Accounts are test accounts (hidden from reporting) by default; `--field-staff`
+creates counted staff accounts. The generic legacy loader is disabled.
 
 ### 6.2 Home
 

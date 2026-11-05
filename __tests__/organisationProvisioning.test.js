@@ -16,7 +16,7 @@ const { parseCsvFile } = require('../scripts/lib/parseCsv');
 const ORGANISATION_ID = 'a111879f-d066-47c9-95a1-bed2a400319a';
 const OTHER_ORGANISATION_ID = '22000000-0000-0000-0000-000000000001';
 const USER_ID = '12000000-0000-0000-0000-000000000001';
-const USAGE = 'Usage: node scripts/createTesters.js [--dry-run] --organization <slug> <path-to-csv>';
+const USAGE = 'Usage: node scripts/createTesters.js [--dry-run] [--field-staff] --organization <slug> <path-to-csv>';
 const row = {
   email: 'pilot@example.org',
   password: 'unique-temporary-password',

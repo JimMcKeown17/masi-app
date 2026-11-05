@@ -129,7 +129,8 @@ shape.
   the field roster. Provision unique temporary credentials privately and prove each account through
   real password sign-in plus the same authenticated RLS reads the app requires.
 - [ ] Mark every test, demo, and fixture account with `app_metadata.is_test_account = true` at
-  creation (`scripts/createTesters.js` sets nothing today), and exclude marked accounts from every
+  creation (`scripts/createTesters.js` marks every account it creates unless the operator passes
+  `--field-staff` for counted staff), and exclude marked accounts from every
   report and staff view. Zazi's unmarked demo pair appeared as real EAs on a live staff page
   ([Z15](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [x] **Organisation decision closed (Jim, 2026-10-14):** a partner organisation is plausible
@@ -904,7 +905,8 @@ When this resumes:
   ([Z16](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 
 Current narrow capability: `scripts/createTesters.js` provisions explicit zero-class pilot testers
-against the exact SQLite backend. `scripts/ea-access.cjs` supplies audited suspension/status/restore
+against the exact SQLite backend; they are test accounts hidden from the dashboard unless
+`--field-staff` creates them as counted staff (used for the November 2026 coach cohort). `scripts/ea-access.cjs` supplies audited suspension/status/restore
 tooling (applied to hosted and device-proven 2026-10-18, §0). `scripts/loadTestUsers.js` is deliberately disabled. The archived
 [`seed plan`](./archive/seed_data_plan.md) and
 [`bulk-import plan`](./archive/bulk_import_children_plan.md) are schema-dead and must not be revived.
