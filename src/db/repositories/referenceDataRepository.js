@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { isResendableRefusal } from './syncOutboxRepository';
 import {
   mapRowFromSqlite,
   quoteIdentifier,
@@ -326,7 +327,7 @@ export const createReferenceDataRepository = ({
   const retargetOutboxPayloadReferences = async (txn, reference, fromId, toId) => {
     const rows = await txn.getAllAsync(
       `
-      select id, payload
+      select id, table_name, operation, status, payload
       from sync_outbox
       where table_name = ?
         and payload is not null
@@ -335,6 +336,9 @@ export const createReferenceDataRepository = ({
     );
 
     for (const row of rows) {
+      // Lifecycle safety O1: requeueing is a retry, so a refused archive, restore or edit is left
+      // as it is; it is never sent again, and its delivered receipt must keep matching.
+      if (row.status === 'terminal' && !isResendableRefusal(row)) continue;
       const payload = parseOutboxPayload(row.payload);
       if (!payload || payload[reference.column] !== fromId) continue;
 

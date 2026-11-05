@@ -7,6 +7,7 @@ export const AUTO_CLOCK_OUT_NOTICE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const autoClockOutKey = 'home_attention.auto_clock_out';
 const assessmentDismissedKey = 'home_attention.assessment_due_dismissed_on';
+const syncAttentionDismissedKey = 'home_attention.sync_attention_dismissed';
 
 export const createHomeAttentionStore = ({ database, localState }) => {
   const recordAutoClockOutNotice = async (txn, { entry, detectedAt }) => {
@@ -49,11 +50,19 @@ export const createHomeAttentionStore = ({ database, localState }) => {
     await localState.set(assessmentDismissedKey, localDate);
   };
 
+  // The signature of the items the EA dismissed once the office had a copy of each (O1).
+  const getSyncAttentionDismissed = async () => localState.get(syncAttentionDismissedKey, null);
+  const dismissSyncAttention = async (signature) => {
+    await localState.set(syncAttentionDismissedKey, signature);
+  };
+
   return {
     recordAutoClockOutNotice,
     loadAutoClockOutNotice,
     dismissAutoClockOutNotice,
     getAssessmentDismissedOn,
     dismissAssessmentForDay,
+    getSyncAttentionDismissed,
+    dismissSyncAttention,
   };
 };

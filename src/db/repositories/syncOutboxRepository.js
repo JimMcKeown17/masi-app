@@ -21,6 +21,7 @@ const toOutboxRecord = (row) => {
 };
 
 const toFailedItem = (row) => ({
+  outboxId: row.id,
   table: row.table_name,
   id: row.record_id,
   operation: row.operation,
@@ -34,6 +35,21 @@ const toFailedItem = (row) => ({
 export const outboxRecordId = (tableName, recordId, operation) => (
   `${tableName}:${recordId}:${operation}`
 );
+
+// Lifecycle safety O1: the refused (terminal) rows a forced pass may send again. History is
+// idempotent: every insert is an upsert or insert-or-ignore, and the history RPCs acknowledge a
+// replay. The children hard_delete is decided by the server's RPC. A refused archive, restore or
+// edit is never sent again: it could land on newer server state (MA-BUG-20261104-011, -018). It
+// leaves the phone only through its delivered receipt (services/deliveredReceipt.js).
+const HISTORY_RPC_UPDATE_TABLES = ['battery_runs', 'letter_mastery', 'skill_mastery'];
+export const isResendableRefusal = ({ table_name: tableName, operation } = {}) => (
+  operation === 'insert'
+  || (operation === 'update' && HISTORY_RPC_UPDATE_TABLES.includes(tableName))
+  || (operation === 'hard_delete' && tableName === 'children')
+);
+export const RESENDABLE_REFUSAL_SQL = `(operation = 'insert'
+  or (operation = 'update' and table_name in (${HISTORY_RPC_UPDATE_TABLES.map((table) => `'${table}'`).join(', ')}))
+  or (operation = 'hard_delete' and table_name = 'children'))`;
 
 // Spec §7.2: the one definition of unsent work. The sign-out warning, the left-behind report
 // and any future deletion rule all read it through readUnsentSummary.
@@ -94,11 +110,12 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     ownerUserId,
   } = {}) => {
     const db = await resolveDatabase(database);
-    // A forced ("Sync Now") pass also resurrects terminal rows so the user can clear a stuck
-    // dependency chain (e.g. assessment_items that 42501'd because their parent had not synced yet);
-    // auto-sync (includeTerminal=false) keeps skipping terminal rows so genuine permission failures
-    // do not retry-storm.
-    const statuses = includeTerminal ? "('pending', 'failed', 'terminal')" : "('pending', 'failed')";
+    // A forced pass (Sync now, Retry, pull-to-refresh, sign-out) also sends refused history again,
+    // so a server fix heals it without an app release. It never sends a refused archive, restore or
+    // edit (isResendableRefusal). Auto-sync skips every terminal row so refusals do not retry-storm.
+    const statuses = includeTerminal
+      ? `(status in ('pending', 'failed') or (status = 'terminal' and ${RESENDABLE_REFUSAL_SQL}))`
+      : "status in ('pending', 'failed')";
     const ownerScoped = ownerUserId !== undefined;
     const params = [];
     if (!includeBackedOff) params.push(now);
@@ -107,7 +124,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     const rows = await db.getAllAsync(`
       select *
       from sync_outbox
-      where status in ${statuses}
+      where ${statuses}
         ${includeBackedOff ? '' : 'and (next_retry_at is null or next_retry_at <= ?)'}
         ${ownerScoped ? 'and owner_user_id = ?' : ''}
       order by created_at, table_name, record_id
@@ -172,23 +189,45 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toOutboxRecord);
   };
 
+  // Claims the rows for upload. A refused archive, restore or edit is never claimed (O1). Each
+  // claim records the row exactly as it was (status, updated_at, payload, last_error, and the
+  // domain status and version the stamp changes), so a refused row that is then not attempted is
+  // put back unchanged (restoreRefusedClaims, MA-BUG-20261104-021).
   const updateInFlight = async (txn, ids, now) => {
+    const before = await txn.getAllAsync(`
+      select id, table_name, record_id, operation, status, updated_at, payload, last_error
+      from sync_outbox
+      where id in (${sqlPlaceholders(ids.length)})
+        and (status <> 'terminal' or ${RESENDABLE_REFUSAL_SQL})
+    `, ...ids);
+    const claims = new Map();
+    if (before.length === 0) return claims;
+    const claimable = new Set(before.map((row) => row.id));
+    const claimedIds = ids.filter((id) => claimable.has(id));
     await txn.runAsync(`
       update sync_outbox
       set status = 'in_flight',
           last_error = case when table_name = 'children' and operation = 'insert'
             then coalesce(last_error, 'Upload started; server outcome unknown') else last_error end,
           updated_at = ?
-      where id in (${sqlPlaceholders(ids.length)})
-    `, now, ...ids);
-    const rows = await txn.getAllAsync(`
-      select id, table_name, record_id, operation
-      from sync_outbox
-      where id in (${sqlPlaceholders(ids.length)})
-    `, ...ids);
-    for (const row of rows) {
+      where id in (${sqlPlaceholders(claimedIds.length)})
+    `, now, ...claimedIds);
+    for (const row of before) {
+      const claim = {
+        claimedFromStatus: row.status,
+        claimedFromUpdatedAt: row.updated_at,
+        claimedFromPayload: row.payload,
+        claimedFromLastError: row.last_error,
+        claimedDomainStatus: null,
+        claimedDomainVersion: null,
+        claimedVersion: null,
+      };
+      claims.set(row.id, claim);
       if (!isStampedOperation(row.table_name, row.operation)) continue;
       const table = quoteIdentifier(row.table_name);
+      const domain = await txn.getFirstAsync(`select sync_status, row_version from ${table} where id = ?`, row.record_id);
+      claim.claimedDomainStatus = domain?.sync_status ?? null;
+      claim.claimedDomainVersion = domain?.row_version ?? null;
       // A forced terminal retry must be protected from overlapping pulls until it settles.
       await txn.runAsync(`
         update ${table}
@@ -198,11 +237,13 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
       `, row.record_id);
       const local = await txn.getFirstAsync(`select row_version from ${table} where id = ?`, row.record_id);
       if (local) {
+        claim.claimedVersion = local.row_version;
         await txn.runAsync(`
           update sync_outbox set payload = json_set(payload, '$.row_version', ?) where id = ?
         `, local.row_version, row.id);
       }
     }
+    return claims;
   };
 
   const markInFlight = async (ids, { transaction } = {}) => {
@@ -216,14 +257,57 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
   const markInFlightAndGet = async (ids, { transaction } = {}) => {
     if (!ids || ids.length === 0) return [];
     return runWrite(transaction, async (txn) => {
-      await updateInFlight(txn, ids, timestamp());
+      const claims = await updateInFlight(txn, ids, timestamp());
+      if (claims.size === 0) return [];
+      const claimedIds = ids.filter((id) => claims.has(id));
       const rows = await txn.getAllAsync(`
         select *
         from sync_outbox
-        where id in (${sqlPlaceholders(ids.length)})
-      `, ...ids);
-      const rowsById = new Map(rows.map((row) => [row.id, toOutboxRecord(row)]));
+        where id in (${sqlPlaceholders(claimedIds.length)})
+      `, ...claimedIds);
+      const rowsById = new Map(rows.map((row) => [row.id, { ...toOutboxRecord(row), ...claims.get(row.id) }]));
       return ids.map((id) => rowsById.get(id)).filter(Boolean);
+    });
+  };
+
+  // MA-BUG-20261104-021: a refused row forced into a pass and then not attempted (deferred, a
+  // user switch, a throw) goes back to terminal, never pending or failed. With the claim's record
+  // it goes back exactly as it was, so its delivered receipt still matches; without one (a claim
+  // that committed and then threw) only its status is restored. The compare-and-set on the
+  // claim's updated_at leaves a newer local revision alone, and the domain version is reverted
+  // only from the version this claim stamped, so domain and payload versions stay equal.
+  const restoreRefusedClaims = async (claimedRecords, { transaction } = {}) => {
+    const records = (claimedRecords || []).filter(Boolean);
+    if (records.length === 0) return 0;
+    return runWrite(transaction, async (txn) => {
+      let restored = 0;
+      for (const record of records) {
+        const exact = record.claimedFromPayload !== undefined;
+        const result = exact
+          ? await txn.runAsync(`
+            update sync_outbox
+            set status = 'terminal', next_retry_at = null, updated_at = ?, payload = ?, last_error = ?
+            where id = ? and status = 'in_flight' and updated_at = ?
+          `, record.claimedFromUpdatedAt ?? timestamp(), record.claimedFromPayload, record.claimedFromLastError ?? null,
+          record.id, record.updated_at)
+          : await txn.runAsync(`
+            update sync_outbox
+            set status = 'terminal', next_retry_at = null, updated_at = ?
+            where id = ? and status = 'in_flight' and updated_at = ?
+          `, record.claimedFromUpdatedAt ?? timestamp(), record.id, record.updated_at);
+        if ((result?.changes || 0) === 0) continue;
+        restored += 1;
+        const table = quoteIdentifier(record.table_name);
+        if (exact && record.claimedDomainVersion != null && record.claimedVersion != null) {
+          await txn.runAsync(`update ${table} set row_version = ? where id = ? and row_version = ?`,
+            record.claimedDomainVersion, record.record_id, record.claimedVersion);
+        }
+        if (record.claimedDomainStatus === 'terminal') {
+          await txn.runAsync(`update ${table} set sync_status = 'terminal' where id = ? and sync_status = 'pending'`,
+            record.record_id);
+        }
+      }
+      return restored;
     });
   };
 
@@ -294,13 +378,14 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return result;
   };
 
+  // Neither reset ever demotes a refused (terminal) row to waiting (MA-BUG-20261104-021).
   const markReady = async (id, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await txn.runAsync(`
       update sync_outbox
       set status = 'pending',
           next_retry_at = null,
           updated_at = ?
-      where id = ?
+      where id = ? and status <> 'terminal'
     `, timestamp(), id);
     return true;
   });
@@ -315,7 +400,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
           set status = 'pending',
               next_retry_at = null,
               updated_at = ?
-          where id = ?
+          where id = ? and status <> 'terminal'
         `, now, id);
       }
       return true;
@@ -337,6 +422,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
               updated_at = ?
           where id = ?
             and status = 'terminal'
+            and ${RESENDABLE_REFUSAL_SQL}
         `, timestamp(), id);
         count += result?.changes || 0;
       }
@@ -401,10 +487,14 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toFailedItem);
   };
 
-  // Preserve the public count shape while sharing the file-wide unsent definition.
+  // Preserve the public count shape while sharing the file-wide unsent definition. needsAttention
+  // is the refused (terminal) share of the same rows: the sign-out sheet promises an upload only
+  // for the rest (MA-BUG-20261104-020).
   const countUnsent = async () => {
-    const { total, byTable } = await readUnsentSummary(await resolveDatabase(database));
-    return { total, byTable };
+    const db = await resolveDatabase(database);
+    const { total, byTable } = await readUnsentSummary(db);
+    const refused = await db.getFirstAsync("select count(*) as count from sync_outbox where status = 'terminal'");
+    return { total, byTable, needsAttention: refused?.count ?? 0 };
   };
 
   const getSyncStatus = async () => {
@@ -496,6 +586,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getTerminalRecords,
     markInFlight,
     markInFlightAndGet,
+    restoreRefusedClaims,
     resetInFlight,
     quarantineForeignOwners,
     markReady,

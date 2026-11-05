@@ -199,27 +199,79 @@ describe('SQLite outbox offline sync', () => {
     await db.closeAsync();
   });
 
-  test('Sync Now (force) resurrects terminal rows; auto-sync leaves them terminal', async () => {
+  // Lifecycle safety O1 / D6: a forced pass replays refused history (inserts are idempotent),
+  // never a refused archive, restore or edit, which could land on newer server state.
+  test('Sync Now (force) re-sends a refused insert but never a refused archive, restore or edit', async () => {
     await db.runAsync(`
       insert into classes (id, school_id, name, grade, sync_status)
-      values ('class-term', 'school-1', 'Grade 1A', '1', 'terminal')
+      values ('class-term', 'school-1', 'Grade 1A', '1', 'terminal'),
+             ('class-gone', 'school-1', 'Grade 1B', '1', 'terminal')
+    `);
+    await db.runAsync(`
+      insert into children (id, first_name, last_name, created_by, sync_status)
+      values ('child-edit', 'Amahle', 'Dlamini', 'user-1', 'terminal')
+    `);
+    await db.runAsync(`
+      insert into groups (id, name, programme_id, created_by, sync_status)
+      values ('group-x', 'Group 1', 'programme-1', 'user-1', 'synced')
+    `);
+    await db.runAsync(`
+      insert into group_ea_assignments (id, group_id, ea_user_id, programme_id, assigned_at, created_by, sync_status)
+      values ('gea-restore', 'group-x', 'user-1', 'programme-1', '2026-05-01T00:00:00.000Z', 'user-1', 'terminal')
     `);
     await enqueue(db, 'classes', 'class-term', 'insert', { id: 'class-term', school_id: 'school-1', name: 'Grade 1A', grade: '1' });
+    await enqueue(db, 'classes', 'class-gone', 'archive', { id: 'class-gone', archived_at: '2026-05-25T12:00:00.000Z' });
+    await enqueue(db, 'children', 'child-edit', 'update', { id: 'child-edit', first_name: 'Stale' });
+    await enqueue(db, 'group_ea_assignments', 'gea-restore', 'restore', { id: 'gea-restore', unassigned_at: null });
     const outbox = createSyncOutboxRepository({ database: db });
     await outbox.markTerminalFailure('classes:class-term:insert', { errorMessage: 'RLS denied' });
+    await outbox.markTerminalFailure('classes:class-gone:archive', { errorMessage: 'not applied', errorCode: 'ARCHIVE_NOT_APPLIED' });
+    await outbox.markTerminalFailure('children:child-edit:update', { errorMessage: 'stale_version', errorCode: 'MV001' });
+    await outbox.markTerminalFailure('group_ea_assignments:gea-restore:restore', { errorMessage: 'not applied', errorCode: 'RESTORE_NOT_APPLIED' });
 
-    // Auto-sync (non-force): the terminal row is NOT retried and stays terminal.
+    // Auto-sync (non-force): no terminal row is retried.
     const auto = createSupabaseMock();
     await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: auto.supabaseClient }).syncAll();
-    expect(auto.calls.filter((c) => c.tableName === 'classes')).toEqual([]);
+    expect(auto.calls).toEqual([]);
     expect((await outbox.getById('classes:class-term:insert')).status).toBe('terminal');
 
-    // Sync Now (force): the terminal row is resurrected, uploaded, and finalized synced.
+    // Sync Now (force): only the refused insert is sent again, and it lands.
     const forced = createSupabaseMock();
     await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient: forced.supabaseClient }).syncAll({ force: true });
     expect(forced.calls.map((c) => `${c.type}:${c.tableName}`)).toEqual(['upsert:classes']);
     expect(await db.getFirstAsync('select sync_status from classes where id = ?', 'class-term'))
       .toEqual({ sync_status: 'synced' });
+    expect(await db.getAllAsync('select id, status from sync_outbox order by id')).toEqual([
+      { id: 'children:child-edit:update', status: 'terminal' },
+      { id: 'classes:class-gone:archive', status: 'terminal' },
+      { id: 'group_ea_assignments:gea-restore:restore', status: 'terminal' },
+    ]);
+  });
+
+  test('a refused archive does not hold back the rest of its family in the same pass', async () => {
+    const graph = await seedChildArchiveGraph(db);
+    for (const table of ['child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships',
+      'group_ea_assignments', 'child_group_memberships']) {
+      await db.runAsync(`update ${table} set sync_status = 'synced'`);
+    }
+    await enqueue(db, 'children', graph.childId, 'archive', { id: graph.childId, archived_at: graph.archivedAt });
+    await enqueue(db, 'child_programme_enrollments', graph.enrollmentId, 'archive', { id: graph.enrollmentId, ended_at: graph.archivedAt });
+    await enqueue(db, 'child_ea_assignments', graph.assignmentId, 'archive', { id: graph.assignmentId, unassigned_at: graph.archivedAt });
+    // Head Office removed this EA's other paths: the child and enrolment archives match 0 rows.
+    const { supabaseClient, calls } = createSupabaseMock({ updateResults: {
+      children: { data: [], error: null },
+      child_programme_enrollments: { data: [], error: null },
+    } });
+    const result = await createOutboxSyncEngine({ enqueueRequest: (task) => task(), getAuthSession: liveTestSession, database: db, supabaseClient }).syncAll();
+    expect(calls.map((c) => `${c.type}:${c.tableName}`)).toEqual([
+      'update:children', 'update:child_programme_enrollments', 'update:child_ea_assignments',
+    ]);
+    expect(result.tableResults.child_ea_assignments).toMatchObject({ synced: 1 });
+    expect(result.tableResults.child_ea_assignments.skipped).toBeUndefined();
+    expect(await db.getAllAsync('select id, status, error_code from sync_outbox order by id')).toEqual([
+      { id: `child_programme_enrollments:${graph.enrollmentId}:archive`, status: 'terminal', error_code: 'ARCHIVE_NOT_APPLIED' },
+      { id: `children:${graph.childId}:archive`, status: 'terminal', error_code: 'ARCHIVE_NOT_APPLIED' },
+    ]);
   });
 
   test('processes parents before children and finalizes success locally', async () => {

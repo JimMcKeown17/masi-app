@@ -368,7 +368,10 @@ describe('row versions at upload claim', () => {
     expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
   });
 
-  test.each(['MV001', '42501'])('terminal recovery keeps the recovered edit after %s', async code => {
+  // Lifecycle safety D6 (MA-BUG-20261104-018): the server wins. A forced pass never replays a
+  // refused edit over Head Office's newer version; the refused edit leaves the phone only through
+  // its delivered receipt (refusedRowExit.test.js).
+  test.each(['MV001', '42501'])('a forced pass never replays an edit refused with %s; the newer server version stays', async code => {
     const localVersion = code === '42501' ? 7 : 1;
     await children.saveChildRecord({ ...childPayload(), row_version: localVersion, sync_status: 'synced' });
     await children.updateChild(CHILD_ID, { first_name: 'Corrected' });
@@ -382,24 +385,25 @@ describe('row versions at upload claim', () => {
     expect(await children.saveServerChildRows([{ ...server.rows.get(CHILD_ID), sync_status: 'synced' }]))
       .toMatchObject({ applied: 1, failed: 0 });
     expect(await readChild()).toMatchObject({ first_name: 'Original', row_version: 7, sync_status: 'synced' });
-    expect((await outbox.getTerminalRecords())[0].payload.first_name).toBe('Corrected');
 
-    expect(await engine.syncAll({ force: true })).toMatchObject({ totalSynced: 1, totalFailed: 0 });
-    expect(server.calls[1].payload).toMatchObject({ first_name: 'Corrected', row_version: 8 });
-    expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Corrected', row_version: 8 });
-    expect(await readChild()).toMatchObject({ first_name: 'Corrected', row_version: 8, sync_status: 'synced' });
+    expect(await engine.syncAll({ force: true })).toMatchObject({ totalSynced: 0, totalFailed: 0 });
+    expect(server.calls).toHaveLength(1);
+    expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Original', row_version: 7 });
+    expect(await readChild()).toMatchObject({ first_name: 'Original', row_version: 7 });
+    expect((await outbox.getTerminalRecords()).map(record => record.payload.first_name)).toEqual(['Corrected']);
 
+    // The EA's next edit starts from the server's version, never from the refused one.
     await children.updateChild(CHILD_ID, { age: 8 });
     expect(await engine.syncAll()).toMatchObject({ totalSynced: 1, totalFailed: 0 });
-    expect(server.calls[2].payload).toMatchObject({ first_name: 'Corrected', age: 8, row_version: 9 });
-    expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Corrected', age: 8, row_version: 9 });
+    expect(server.calls[1].payload).toMatchObject({ first_name: 'Original', age: 8, row_version: 8 });
+    expect(server.rows.get(CHILD_ID)).toMatchObject({ first_name: 'Original', age: 8, row_version: 8 });
     expect(await outbox.countUnsent()).toMatchObject({ total: 0 });
   });
 
-  test('a forced terminal retry is protected from an overlapping pull', async () => {
+  test('a forced retry of a refused insert is protected from an overlapping pull', async () => {
     await seedChild();
-    await children.updateChild(CHILD_ID, { first_name: 'Claimed' });
-    await db.runAsync("update children set row_version = 7, sync_status = 'terminal' where id = ?", CHILD_ID);
+    await enqueue('insert', { ...childPayload(), first_name: 'Claimed' });
+    await db.runAsync("update children set first_name = 'Claimed', row_version = 7, sync_status = 'terminal' where id = ?", CHILD_ID);
     await db.runAsync("update sync_outbox set status = 'terminal'");
     const pull = jest.fn(async () => {
       await children.saveServerChildRows([{ ...childPayload(), first_name: 'Old pull', row_version: 4, sync_status: 'synced' }]);

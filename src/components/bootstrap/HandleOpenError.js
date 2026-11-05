@@ -44,7 +44,8 @@ export default function HandleOpenError({ error, onRetry, onSignOut }) {
         </Text>
         <Text style={styles.message}>
           {schemaTooNew
-            ? 'This phone has data from a newer version of Masi. Install the latest version from the app store, then open Masi again.'
+            // A same-version OTA rollback leaves the store with nothing newer to install.
+            ? 'This phone has work saved by a newer version of Masi. Your saved work has not been deleted. Contact support.'
             : 'Your saved work has not been deleted. Try again. If this keeps happening, share the error logs with Masi support.'}
         </Text>
         <Text style={styles.supportCode}>Support code: {errorCode(error)}</Text>

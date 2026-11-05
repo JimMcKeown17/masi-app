@@ -13,7 +13,7 @@ export const terminalPayload = row => {
     wirePayload = buildSyncPayload(row.table_name, typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload, row.operation);
     serverRecordId = ['letter_mastery', 'skill_mastery'].includes(row.table_name) ? null : wirePayload?.id ?? wirePayload?.p_assessment?.id ?? row.record_id;
   } catch (error) { wirePayload = null; wirePayloadError = error.message; }
-  return { table: row.table_name, operation: row.operation, recordId: row.record_id, serverRecordId,
+  return { table: row.table_name, operation: row.operation, recordId: row.record_id, outboxId: row.id, serverRecordId,
     errorClass: row.error_class, errorCode: row.error_code, lastError: row.last_error, retryCount: row.retry_count,
     outboxCreatedAt: row.created_at, outboxUpdatedAt: row.updated_at, wirePayload,
     ...(wirePayloadError === undefined ? {} : { wirePayloadError }) };

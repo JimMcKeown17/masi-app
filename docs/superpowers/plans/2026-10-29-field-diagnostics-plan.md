@@ -1,5 +1,11 @@
 # Field Diagnostics Implementation Plan — Revision 4.1
 
+> **Status note (2026-11-05):** the `upload_backlog_stale` threshold is now 24 h, not 72 h
+> (lifecycle safety O1, `docs/superpowers/plans/2026-11-04-lifecycle-safety.md`). The
+> `upload_terminal` payload also carries `outboxId`, and `markSent` writes a delivery proof to
+> `local_state`. The current contract is `documentation/rls-sync-contract-map.md`; this document
+> is otherwise unchanged as the record of its revision.
+
 > **For agentic workers:** Implement one numbered task at a time with the local TDD skill. The orchestrator assigns the six slices to separate Git worktrees. Builders leave reviewable changes and a list of files to stage; they do not stage or commit. Checkbox steps are execution instructions, not claims that checks have already passed.
 
 **Goal:** Complete the November field-test feedback loop: a phone preserves diagnostic evidence when a reportable condition occurs, an EA can report a problem or send diagnostics, and an operator can enumerate immutable receipts and turn them into the existing `MA-BUG` registry.

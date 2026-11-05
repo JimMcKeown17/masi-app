@@ -5,8 +5,24 @@ import InlineNote from '../common/InlineNote';
 import BottomSheet from '../common/BottomSheet';
 import { spacing } from '../../constants/colors';
 
+// MA-BUG-20261104-020: only work that is waiting is promised an upload. An item the office
+// refused (needs attention) does not upload by itself.
+const unsentSubtitle = (total, needsAttention = 0) => {
+  const attention = Math.min(Math.max(needsAttention || 0, 0), total);
+  const waiting = total - attention;
+  if (attention === 0) {
+    return `If you sign out, ${total === 1 ? "it'll" : "they'll"} upload next time you sign in on this phone.`;
+  }
+  const byItself = attention === 1 ? 'itself' : 'themselves';
+  if (waiting === 0) {
+    return `${attention === 1 ? 'It needs' : 'They need'} attention and won't upload by ${byItself}. Check Sync status first.`;
+  }
+  return `If you sign out, ${waiting} will upload next time you sign in on this phone. `
+    + `${attention} ${attention === 1 ? 'needs' : 'need'} attention and won't upload by ${byItself}. Check Sync status first.`;
+};
+
 export default function SignOutSheets({
-  step, unsentCount, busy, message, isOnline,
+  step, unsentCount, needsAttentionCount = 0, busy, message, isOnline,
   clockOutNow, stayClockedIn, tryUploadNow, recheck, signOutAnyway, cancel,
 }) {
   const isBusy = busy !== null;
@@ -44,7 +60,7 @@ export default function SignOutSheets({
       title={countUnknown ? message : `${unsentCount} ${unsentCount === 1 ? "item hasn't" : "items haven't"} uploaded yet.`}
       subtitle={countUnknown
         ? 'If you sign out, anything not uploaded stays on this phone until you sign in here again.'
-        : `If you sign out, ${unsentCount === 1 ? "it'll" : "they'll"} upload next time you sign in on this phone.`}
+        : unsentSubtitle(unsentCount, needsAttentionCount)}
       scrollable={false}
       keyboardAvoiding={false}
       maxHeight={520}

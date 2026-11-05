@@ -228,26 +228,23 @@ describe('requeueTerminalRlsFailures', () => {
     }));
   });
 
-  test('heals stamped hard-delete rows without a domain reset', async () => {
-    await classesRepository.saveClass({
-      id: 'class-hard-delete',
-      school_id: 'school-1',
-      name: 'Grade 2A',
-      grade: '2',
-      academic_year_id: 'year-2026',
-      created_by: 'user-1',
-      sync_status: 'pending',
-    });
+  // The children hard_delete is the only resendable deletion (lifecycle safety O1); no other table
+  // has a hard_delete producer, and the server no longer grants EA deletes.
+  test('heals a stamped child hard-delete without a domain reset, and never another table\'s', async () => {
+    await seedChild({ id: 'child-hard-delete' });
     await clearOutbox();
-    await db.runAsync("delete from classes where id = 'class-hard-delete'");
+    await db.runAsync("delete from children where id = 'child-hard-delete'");
     const outboxId = await enqueueTerminal({
+      tableName: 'children',
+      recordId: 'child-hard-delete',
+      operation: 'hard_delete',
+      payload: { id: 'child-hard-delete', created_by: 'user-1' },
+    });
+    const classDeleteId = await enqueueTerminal({
       tableName: 'classes',
       recordId: 'class-hard-delete',
       operation: 'hard_delete',
-      payload: {
-        id: 'class-hard-delete',
-        created_by: 'user-1',
-      },
+      payload: { id: 'class-hard-delete', created_by: 'user-1' },
       errorMessage: 'new row violates row-level security policy for table "classes"',
     });
 
@@ -256,8 +253,9 @@ describe('requeueTerminalRlsFailures', () => {
       status: 'pending',
       last_error: null,
     }));
-    expect(await db.getFirstAsync("select id from classes where id = 'class-hard-delete'"))
+    expect(await db.getFirstAsync("select id from children where id = 'child-hard-delete'"))
       .toBeNull();
+    expect(await outboxRepository.getById(classDeleteId)).toEqual(expect.objectContaining({ status: 'terminal' }));
   });
 
   test('never heals non-RLS terminal rows', async () => {
@@ -300,7 +298,10 @@ describe('requeueTerminalRlsFailures', () => {
     await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(0);
   });
 
-  test('heals class_grouping_state by its stamped owner', async () => {
+  // Lifecycle safety O1: the no-replay rule covers every retry entry point, including this heal.
+  // A refused archive, restore or edit is never re-sent; only idempotent history and the children
+  // hard_delete are healed.
+  test('never heals a refused class_grouping_state edit', async () => {
     await classGroupingStateRepository.save({
       id: 'grouping-state-1',
       class_id: 'class-1',
@@ -325,10 +326,33 @@ describe('requeueTerminalRlsFailures', () => {
       errorMessage: 'new row violates row-level security policy for table "class_grouping_state"',
     });
 
+    await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(0);
+    expect(await outboxRepository.getById(outboxId)).toEqual(expect.objectContaining({ status: 'terminal' }));
+  });
+
+  test.each(['archive', 'restore', 'update'])('never heals a refused %s with an unmarked 42501, but heals refused history', async operation => {
+    await seedChild({ id: 'child-life' });
+    await clearOutbox();
+    await markDomainTerminal('children', 'child-life');
+    const lifecycleId = await enqueueTerminal({
+      tableName: 'children',
+      recordId: 'child-life',
+      operation,
+      payload: { id: 'child-life', archived_at: operation === 'archive' ? '2026-11-04T08:00:00.000Z' : null, first_name: 'Amahle' },
+    });
+    await db.runAsync(`insert into time_entries (id, user_id, sign_in_time, sync_status)
+      values ('time-heal', 'user-1', '2026-11-04T07:00:00.000Z', 'terminal')`);
+    const historyId = await enqueueTerminal({
+      tableName: 'time_entries',
+      recordId: 'time-heal',
+      payload: { id: 'time-heal', user_id: 'user-1', sign_in_time: '2026-11-04T07:00:00.000Z' },
+      errorMessage: 'new row violates row-level security policy for table "time_entries"',
+    });
+
     await expect(engine.requeueTerminalRlsFailures('user-1')).resolves.toBe(1);
-    expect(await outboxRepository.getById(outboxId)).toEqual(expect.objectContaining({
-      status: 'pending',
-      last_error: null,
-    }));
+    expect(await outboxRepository.getById(lifecycleId)).toEqual(expect.objectContaining({ status: 'terminal', retry_count: 3 }));
+    expect(await db.getFirstAsync("select sync_status from children where id = 'child-life'")).toEqual({ sync_status: 'terminal' });
+    expect(await outboxRepository.getById(historyId)).toEqual(expect.objectContaining({ status: 'pending', retry_count: 0 }));
+    expect(await db.getFirstAsync("select sync_status from time_entries where id = 'time-heal'")).toEqual({ sync_status: 'pending' });
   });
 });

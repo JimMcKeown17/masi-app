@@ -41,7 +41,9 @@ test('a newer schema explains the update and offers Sign out instead of Retry', 
   />);
 
   expect(view.getByText('Update Masi to continue')).toBeTruthy();
-  expect(view.getByText('This phone has data from a newer version of Masi. Install the latest version from the app store, then open Masi again.')).toBeTruthy();
+  // A same-version OTA rollback leaves the store with nothing newer to install (O1 item 7).
+  expect(view.getByText('This phone has work saved by a newer version of Masi. Your saved work has not been deleted. Contact support.')).toBeTruthy();
+  expect(view.queryByText(/app store/i)).toBeNull();
   expect(view.queryByText(/try again/i)).toBeNull();
   expect(view.getAllByRole('button')).toHaveLength(1);
   fireEvent.press(view.getByRole('button', { name: 'Sign out' }));
