@@ -248,10 +248,11 @@ never changed. The class's edition and language together identify its teaching o
 The immutable teaching content for one language at one version, produced by the early reader
 books project (the same file Zazi reads) and bundled in the app: letter steps, per-step syllables
 (blends) and headline words, the word bank, and early readers. A pack names its `letter_order`
-and is chosen by the class's letter order. A **release** pack holds only reviewed content and is
-the only kind a field build loads; a **preview** pack holds unreviewed candidates and is available
-only in developer builds. An **interim letters-only pack** supplies the letter steps until a
-reviewed pack with blends and readers is available.
+and is chosen by the class's letter order. A **release** pack is the only kind a field build loads; a **preview** pack is available only in
+developer builds. A **draft content pack** is a release pack whose words and books are not yet
+signed off by native speakers: Jim chose on 2026-11-05 to ship these to pilot builds so the team
+can test lessons with words, blends and books, while the language team reviews the lists before
+January 2027. An **interim letters-only pack** (retained for saved lessons) has letter steps only.
 _Avoid_: "curriculum" or "sequence file" for the whole pack; confusing it with an **Item set**
 (assessment content); editing a pack in place (a change is a new version).
 

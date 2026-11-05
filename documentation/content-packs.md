@@ -47,11 +47,28 @@ The current edition is `2026-10-23`:
 
 | Code | Letter order | Current release | Current preview |
 |---|---|---|---|
-| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-interim-letters-v2` | `isixhosa-candidates-preview-v2` |
-| `en` | `english-order-2026-10-23` | `english-interim-letters-v2` | `english-candidates-preview-v1` |
-| `af` | `afrikaans-order-2026-10-23` | `afrikaans-interim-letters-v2` | `afrikaans-candidates-preview-v1` |
+| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-draft-content-v1` | none (falls back to release) |
+| `en` | `english-order-2026-10-23` | `english-draft-content-v1` | none (falls back to release) |
+| `af` | `afrikaans-order-2026-10-23` | `afrikaans-draft-content-v1` | none (falls back to release) |
 
-Each v2 release uses the v1 JSON format and key order with `letter_order` added after `channel`.
+### Draft content packs (2026-11-05)
+
+**Jim's decision, 2026-11-05:** Masi's team is testing the app now and needs every candidate word
+and blend, plus the books, on pilot builds. The language team reviews the lists over the next two
+months, ahead of January 2027. So the current release for each `2026-10-23` order is a **draft
+content pack**: a release-channel pack whose words and books are not yet native-speaker approved
+(its `generated_from.note` says so). Every build teaches from it, with or without preview content,
+because the `2026-10-23` orders have no preview mapping. The preview gate (C12) is unchanged and
+remains the lane for future experimental content.
+
+The files are copied unchanged from the books repository's `exports/app-release/` at commit
+`5d3b486`, built by `npm run app-pack -- --version 1` from `5b3c109`. Their words, blends and
+steps equal the preview exports below (each records its source preview file and SHA-256);
+`isixhosa-draft-content-v1` adds one reader, **Molo, Lolo!** (`xh-int-v1-r01`), at step 1.
+English and Afrikaans have no books yet. Later versions (more books, then the signed-off lists)
+are new files with new ids; never edit these.
+
+The retained letters-only v2 releases (current until 2026-11-05) use the v1 JSON format and key order with `letter_order` added after `channel`.
 It has the alphabetical 26-letter sound inventory and 12 letter steps from the named order:
 four letters in step 1, then pairs. Every step has empty blends, words and readers, with no
 `size_exception`. Sound steps, word bank, readers and reader details are empty.
@@ -111,9 +128,9 @@ The three current previews are copied unchanged from the books repository's
 `__tests__/lessonPlanPacks.test.js`; `generated_from` describes the export's source inputs, while
 this commit and the SHA-256 pins identify the adopted export files. Do not edit them in Masi.
 
-These exports contain candidate word banks and sound steps for the `2026-10-23` orders. They
-have no readers, so developer builds show no book (**Molo, Lolo!** is gone) until books adds
-readers. The retained isiXhosa preview v1 still holds that reader for saved drafts and sessions.
+These exports contain candidate word banks and sound steps for the `2026-10-23` orders, with no
+readers. Since 2026-11-05 no order maps to them; they stay bundled for saved drafts and as the
+source the draft content packs were built from. The retained isiXhosa preview v1 still holds that reader for saved drafts and sessions.
 
 To adopt another export, add a new version, copy it unchanged, verify its hash, bundle it, and
 update the appropriate order mapping and provenance pin. Retain versions referenced by saved

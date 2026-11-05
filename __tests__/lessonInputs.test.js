@@ -291,7 +291,7 @@ test('lesson base reports missing dependencies and honours an explicit programme
 test('lesson input uses a pinned pack and respects preview eligibility and unsupported languages', async () => {
   jest.spyOn(previewContent, 'isPreviewContentEnabled').mockReturnValue(true);
   const loadedPreview = await input({ languageCode: 'xh' });
-  expect(loadedPreview.pack.id).toBe('isixhosa-candidates-preview-v2');
+  expect(loadedPreview.pack.id).toBe('isixhosa-draft-content-v1');
   expect(loadedPreview.packIndex).toBe(packIndexFor(loadedPreview.pack));
   previewContent.isPreviewContentEnabled.mockReturnValue(false);
   expect((await input({ languageCode: 'xh', packId: 'isixhosa-candidates-preview-v1' })).pack).toBeNull();
@@ -390,8 +390,10 @@ test('picker ranking stays within six statements and shares programme and year w
 
 const currentClass = { id: 'class-1', letter_order_edition: '2026-10-23' };
 test.each([
-  [null, true, 'isixhosa-candidates-preview-v2'],
-  [null, false, 'isixhosa-interim-letters-v2'],
+  [null, true, 'isixhosa-draft-content-v1'],
+  [null, false, 'isixhosa-draft-content-v1'],
+  ['isixhosa-draft-content-v1', false, 'isixhosa-draft-content-v1'],
+  ['isixhosa-interim-letters-v2', false, 'isixhosa-interim-letters-v2'],
   ['isixhosa-candidates-preview-v2', true, 'isixhosa-candidates-preview-v2'],
   ['isixhosa-candidates-preview-v2', false, null],
   ['isixhosa-candidates-preview-v1', true, null],

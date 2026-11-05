@@ -520,9 +520,21 @@ testLesson('a resumed archived ECD class has no pair-reading section', async () 
   expect(view.queryByText('3 · Pair reading · 5 min')).toBeNull();
 });
 testLesson('a letters-only release pack says no blends and no books yet', async () => {
+  const lettersOnly = packs.getPackById('english-interim-letters-v2');
+  const original = packs.getPackForOrder;
+  const lookup = jest.spyOn(packs, 'getPackForOrder').mockImplementation((orderId, options) =>
+    orderId === lettersOnly.letter_order ? lettersOnly : original(orderId, options));
+  try {
+    const view = mount();
+    await ready(view);
+    expect(view.getByText('No blends for English yet.')).toBeTruthy();
+    expect(view.getByText('No books for English yet.')).toBeTruthy();
+  } finally { lookup.mockRestore(); }
+});
+testLesson('a pilot-build English lesson has draft blends but no books yet', async () => {
   const view = mount();
   await ready(view);
-  expect(view.getByText('No blends for English yet.')).toBeTruthy();
+  expect(view.queryByText('No blends for English yet.')).toBeNull();
   expect(view.getByText('No books for English yet.')).toBeTruthy();
 });
 testLesson('Wrap up creates the draft if needed and opens Wrap up', async () => {
@@ -618,9 +630,11 @@ testLesson('an unknown class edition asks for an app update and shows no letter 
   expect(view.queryAllByRole('button', { name: /^[A-Z], (not )?selected$/ })).toHaveLength(0);
 });
 
-testLesson('a new preview lesson has no books for isiXhosa yet', async () => {
+testLesson('a pilot-build isiXhosa lesson suggests Molo, Lolo! from the draft content pack', async () => {
   await previewLesson();
+  Constants.expoConfig.extra.previewContent = false;
   const view = mount();
-  expect(await view.findByText('No books for isiXhosa yet.')).toBeTruthy();
-  expect(view.queryByText('Molo, Lolo!')).toBeNull();
+  expect(await view.findByText('Molo, Lolo!')).toBeTruthy();
+  expect(view.getByText('Step 1')).toBeTruthy();
+  expect(view.queryByText('No books for isiXhosa yet.')).toBeNull();
 });

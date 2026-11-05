@@ -595,7 +595,7 @@ the current-state model better than Zazi's per-session carry-forward.
   V8. Still to check on the 1.4.0 pilot build: Wrap up's "None of these yet" and header date
   button, and lesson advice after the known-letters fix (both postdate build 24); iPhone V1, V2
   and V4; ECD (no ECD class on staging). v1 has no timer. C4/C5 reader/receipt work remains
-  separate; release packs are letters-only (P11). The build log holds implementation and review
+  separate; release packs were letters-only (P11) until the draft content packs of 2026-11-05 added draft words, blends and books. The build log holds implementation and review
   evidence.
 
 ### Upload contract (before pilot; priority item 5)

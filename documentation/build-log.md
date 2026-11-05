@@ -8753,3 +8753,31 @@ class resolver. Codex code review (gpt-6-astra): approve; its one finding (the c
 could not tell name order from id order) is fixed by giving the fixture classes names whose order
 opposes their ids. The Django real-Postgres gate (`api/tests_masi_app_postgres.py`) passed against
 the retained harness database, decoding both v2 functions through the new read-only guard.
+
+### 2026-11-05 — Draft content packs: words, blends and books on pilot builds
+
+**Decision (Jim, 2026-11-05).** Masi's team is testing the app now and needs every candidate word and
+blend, plus the books, on pilot builds. The language team reviews the lists before January 2027.
+Rather than delete the C12 preview gate, the content was promoted: new **release** packs
+`isixhosa-draft-content-v1`, `english-draft-content-v1` and `afrikaans-draft-content-v1` are now
+current for the three `2026-10-23` orders, and those orders have no preview mapping, so every build
+teaches from them. The preview gate code and build refusal are unchanged.
+
+**Provenance.** Copied unchanged from early-reader-books commit `5d3b486` (`exports/app-release/`,
+built by `npm run app-pack -- --version 1` from `5b3c109`; PR JimMcKeown17/early-reader-books#1).
+Words, blends and steps equal the preview exports; isiXhosa adds the reader `xh-int-v1-r01`
+(Molo, Lolo!) at step 1. Each file passed `lintMasiPack` with 0 errors before vendoring; SHA-256s
+are pinned in `RELEASE_PACK_SHA256`.
+
+**Behaviour now (pilot build, first session):** isiXhosa suggests o m l a, blends la mo ma lo and
+Molo, Lolo!; English s a n d with blends as ad an; Afrikaans a e k n with ne na ka ke. English and
+Afrikaans show "No books for … yet."
+
+**Verification.** Full `npx jest` (Node 20.19.4): 517 suites, 8,195 tests; 8,188 passed. The 7
+failures were 4 pack tests that encoded letters-only packs (since rewritten:
+`lessonPlanEngine.realPacks`, `letterOrderLeftovers`; 13/13 pass) and 3 in
+`task5AuthRaces.test.js`, which passes 40/40 alone (timing under full-suite load, unrelated to
+packs). `LessonScreen`, `useLessonDraft`, `LessonWrapUp.save`, `lessonInputs`, `contentDiagnostics`
+and `lessonPlanPacks` pass; `LessonWrapUp.save` and one `LessonScreen` blend test timed out only
+while a second full run competed for CPU. No native change since the 1.5.0 pilot builds
+(`8b79eae5`), so this ships by OTA on channel `preview`.
