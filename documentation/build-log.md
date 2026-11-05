@@ -8778,3 +8778,48 @@ listing on the device. If a tester reports the same, open the app's Play page an
 **Seen, not ours:** the A03s on build 58 shows "No active programme" right after reinstall
 (MA-BUG-20261031-002), and there are 7 `pull_failing` receipts from builds 26 and 28 since
 2026-11-03. Both need a `/bug-sync` sweep.
+
+### 2026-11-05 — Draft content packs: words, blends and books on pilot builds
+
+**Decision (Jim, 2026-11-05).** Masi's team is testing the app now and needs every candidate word and
+blend, plus the books, on pilot builds. The language team reviews the lists before January 2027.
+Rather than delete the C12 preview gate, the content was promoted: new **release** packs
+`isixhosa-draft-content-v1`, `english-draft-content-v1` and `afrikaans-draft-content-v1` are now
+current for the three `2026-10-23` orders, and those orders have no preview mapping, so every build
+teaches from them. The preview gate code and build refusal are unchanged.
+
+**Provenance.** Copied unchanged from early-reader-books commit `5d3b486` (`exports/app-release/`,
+built by `npm run app-pack -- --version 1` from `5b3c109`; PR JimMcKeown17/early-reader-books#1).
+Words, blends and steps equal the preview exports; isiXhosa adds the reader `xh-int-v1-r01`
+(Molo, Lolo!) at step 1. Each file passed `lintMasiPack` with 0 errors before vendoring; SHA-256s
+are pinned in `RELEASE_PACK_SHA256`.
+
+**Behaviour now (pilot build, first session):** isiXhosa suggests o m l a, blends la mo ma lo and
+Molo, Lolo!; English s a n d with blends as ad an; Afrikaans a e k n with ne na ka ke. English and
+Afrikaans show "No books for … yet."
+
+**Verification.** Full `npx jest` (Node 20.19.4): 517 suites, 8,195 tests; 8,188 passed. The 7
+failures were 4 pack tests that encoded letters-only packs (since rewritten:
+`lessonPlanEngine.realPacks`, `letterOrderLeftovers`; 13/13 pass) and 3 in
+`task5AuthRaces.test.js`, which passes 40/40 alone (timing under full-suite load, unrelated to
+packs). `LessonScreen`, `useLessonDraft`, `LessonWrapUp.save`, `lessonInputs`, `contentDiagnostics`
+and `lessonPlanPacks` pass; `LessonWrapUp.save` and one `LessonScreen` blend test timed out only
+while a second full run competed for CPU. No native change since either set of 1.5.0 pilot
+builds (iOS 26 / Android 55 from `f002e08`; iOS 28 / Android 58 from `8b79eae5`): dependencies,
+lockfile and native config are unchanged (Codex review), so this ships by OTA on channel `preview`.
+Codex review of `03f47ec1`: no correctness findings; three P3s (a preview-mapping registry test,
+three stale doc lines, this baseline) fixed in the follow-up commit.
+
+**Same day, isiXhosa v2 (before merge).** The books repo produced five more books (stories engine
+with a new print-fit gate), so the PR bundles `isixhosa-draft-content-v2` (books `6f4009d`,
+SHA-256 `ad7bf609…a48e`) instead of v1, which no build ever shipped. Two books per step for steps
+1-3. The LessonScreen book test now expects the engine's real pick for a group that knows letters
+through step 6: the first step-3 book, Ekunene, Malo!.
+
+**Same day, trimmed lists (before merge).** Jim judged 3,300 words too many: suggestions rotate
+over every decodable word and "+ more" lists them all, so EAs would mostly see rare words, and the
+list could not be reviewed by January. The books exporter now keeps the 25 best-ranked unflagged
+words per step plus the books' words. The PR bundles `isixhosa-draft-content-v3` (352 words, six
+books), `english-draft-content-v2` (682) and `afrikaans-draft-content-v2` (534), books `fbe909f`.
+Pack tests now assert at most 25 words per step, all from the preview's candidates, with blends
+unchanged.
