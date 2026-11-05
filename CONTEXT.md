@@ -461,7 +461,7 @@ an EA id or a hardware identifier.
 The EA who made a change, stamped on its outbox row from the signed-in EA handle. Never derived from the record's content (`created_by` is provenance, not ownership): an EA's edit of a Head Office-created child is that EA's to upload.
 
 **Restore child** (Head Office):
-Head Office's undo of one EA's mistaken Delete child (`npm run ho:restore`): it reopens, in place, exactly what that EA's removal ended at its one removal instant (the EA's delivery assignment, the child's enrolments and class and group memberships ended at that instant, and the archive when that EA's removal made it). EAs never restore (ADR-0014, D5).
+Head Office's undo of one EA's mistaken Delete child (`npm run ho:restore`): it reopens, in place, exactly what that EA's removal ended at its removal instant (the EA's delivery assignment, the child's enrolments and class and group memberships ended then, and the archive when that EA's removal made it); a 1.5.0 phone with a fast clock spreads that instant over a few seconds. A removal that did not end the EA's delivery is refused. EAs never restore (ADR-0014, D5).
 _Avoid_: "restore" for lifting a suspension (that is `ea:restore`) or for the retired phone `restore` upload.
 
 ## Relationships

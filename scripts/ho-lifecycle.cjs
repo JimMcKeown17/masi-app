@@ -738,7 +738,8 @@ const RESTORE_BODY = `
       IF (v_row ->> 'archived')::boolean THEN
         v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'class_archived_skipped', 'child_id', v_child,
           'table', 'child_class_memberships', 'id', v_row -> 'id', 'class_id', v_row -> 'class_id',
-          'class_name', v_row -> 'class_name'));
+          'class_name', v_row -> 'class_name',
+          'hint', 'the class is archived, so the child comes back without it; the app shows a child only through a live class, so the EA cannot fix this: record an MA-BUG with this output and ask Jim'));
         CONTINUE;
       END IF;${restoreConflict('child_class_memberships', 'year', "v_row ->> 'academic_year_id'",
     "o.child_id = v_child AND o.academic_year_id = (v_row ->> 'academic_year_id')::uuid AND o.exited_at IS NULL",
@@ -756,7 +757,8 @@ const RESTORE_BODY = `
       IF (v_row ->> 'archived')::boolean THEN
         v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'group_archived_skipped', 'child_id', v_child,
           'table', 'child_group_memberships', 'id', v_row -> 'id', 'group_id', v_row -> 'group_id',
-          'group_name', v_row -> 'group_name'));
+          'group_name', v_row -> 'group_name',
+          'hint', 'the group is archived, so the child comes back without it; the EA can add the child to a live group in the app'));
         CONTINUE;
       END IF;${restoreConflict('child_group_memberships', 'version', "v_row ->> 'grouping_version_id'",
     "o.child_id = v_child AND o.grouping_version_id = (v_row ->> 'grouping_version_id')::uuid AND o.removed_at IS NULL",

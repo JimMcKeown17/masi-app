@@ -226,27 +226,34 @@ for an EA whose receipts show a refused archive or restore until their phone has
 npm run ho:restore -- child --ea ea@example.test --children <child-id> --reason "Deleted by mistake" --operator "Your name"
 ```
 
-**What it works out.** Every removal ends its rows at one moment, printed as `removed_at` in
+**What it works out.** A removal ends its rows at one moment, printed as `removed_at` in
 `plan.removals`. If the child is archived, that is when it was archived, and the archive must be
 this EA's. If the child stayed live (another EA still holds it, so the EA only left), it is when this
-EA's delivery row ended.
+EA's delivery row ended. One exception: on the 1.5.0 app, a phone whose clock was ahead lands each
+row at the moment it reached the server, so an archive's rows end over a few seconds, from the
+archive to the EA's delivery row (`removed_until`, with a `removal_spread` note). Restore treats
+that span as the removal.
 
 **What it reopens, in place** (same ids, start dates and row versions; ends cleared):
 
-- the EA's own delivery row (`child_ea_assignments`), with the gap printed;
+- the EA's own delivery row (`child_ea_assignments`), with the gap printed. The removal must have
+  ended it; if it did not, restore refuses (`delivery_not_part_of_removal`, below);
 - every programme enrolment, class membership and group membership of the child that ended at
-  exactly `removed_at`;
+  `removed_at` (or inside the span up to `removed_until`);
 - the child itself, when the EA's removal archived it (`unarchive`: the archive date, archiver and
   reason are cleared).
 
 It never reopens a row that ended at any other time, and never another EA's delivery row. A rerun,
-or a child the EA already holds again, shows only `already_active` and changes nothing.
+or a child the EA already holds again, shows only `already_active` and changes nothing. That rerun
+no longer shows the notes, so **save the `--apply` output** (paste it into the MA-BUG record or the
+support ticket): it is the only record of what stayed ended.
 
 | Note | Meaning and what to do |
 | --- | --- |
-| `group_archived_skipped`, `class_archived_skipped` | The group or class has been archived since, so that membership stays ended. Place the child in a live group or class in the app. |
-| `near_miss_not_reopened` | Rows that ended within an hour of `removed_at` but not at the same moment (`seconds_from_t`). Usually a phone with a wrong clock; sometimes a separate change. They stay ended: check each one, and record an MA-BUG if one should have come back. |
-| `assignment_ended_at_another_time` | The EA's delivery row ended at a different time from the removal (for example a Head Office end). Restore reopens it anyway; check that is what you want. |
+| `class_archived_skipped` | The class has been archived since, so the child comes back without it. The app shows a child only through a live class (MA-BUG-20261104-015), so the EA cannot see the child and cannot fix this. Record an MA-BUG with the apply output and ask Jim to place the child in a live class. |
+| `group_archived_skipped` | The group has been archived since, so that membership stays ended. The EA can add the child to a live group in the app. |
+| `removal_spread` | The phone's clock was ahead, so the removal ended its rows over these seconds instead of at one moment. Restore reopens every row of the child that ended in between. Nothing to do. |
+| `near_miss_not_reopened` | Rows that ended within an hour of the removal but not with it (`seconds_from_t`): a group membership, or an enrolment or class membership on the side a wrong clock cannot explain. Usually a separate change. They stay ended: check each one, and record an MA-BUG if one should have come back. |
 
 | Refusal | Meaning and what to do |
 | --- | --- |
@@ -254,13 +261,17 @@ or a child the EA already holds again, shows only `already_active` and changes n
 | `ea_never_held_child` | This EA never had a delivery row for the child. Restore the EA who deleted it. |
 | `archived_by_another_ea` | Another EA's Delete child archived the child (`archived_by_user_id`). Restore that EA first, then this one. If `archived_by_user_id` is empty, record an MA-BUG and ask Jim. |
 | `removal_not_finished` | The child is archived but this EA still holds it: the phone is still sending the removal. Wait until it has synced, then run the dry run again. |
-| `active_row_conflict` | The child already has another open enrolment in that programme, class membership for that academic year, or group membership in that grouping (`conflicting_id`), so reopening would make two. Nothing was changed. Decide with Jim which one should stay. |
+| `delivery_not_part_of_removal` | The EA's removal (`removed_at`) did not end their delivery of the child, which had already ended at `delivery_ended_at`, usually by a Head Office handover or end-delivery. This happens when the EA added the child and deleted it from Class detail after Head Office moved it. Restore cannot tell which rows the removal ended without undoing Head Office's change. Nothing was changed. Record an MA-BUG with this output and ask Jim. |
+| `nearby_end_not_restored` | An enrolment or class membership ended close to the removal but not with it (`rows`). It may be part of the removal (a 1.5.0 phone whose clock was ahead, on a child another EA also holds) or a separate change, and restoring without it would leave the child in no class. Nothing was changed. Record an MA-BUG with this output and ask Jim. |
+| `active_row_conflict` | The child already has another open enrolment in that programme, class membership for that academic year, or membership of that group or grouping (`conflicting_id`, `rule`), so reopening would make two. Nothing was changed. Decide with Jim which one should stay. |
 
 A suspended EA, an unknown email and a profile-less login are refused as in the other commands.
 
-**What the EA sees.** On their next sync the child is back in My Children with its class and
-groups, and the lessons and assessments recorded before the removal are still attached. Ask them to
-tap Sync now. If the child does not come back, record an MA-BUG with their Share database export.
+**What the EA sees.** On their next sync the child is back in My Children, with the lessons and
+assessments recorded before the removal still attached, as long as the child has a class that is
+still live. With `class_archived_skipped` (and no other live class), the child comes back to no
+list in the app: see that note. Ask them to tap Sync now. If the child does not come back, record
+an MA-BUG with their Share database export and the saved apply output.
 
 Apply locks the child, then the classes and groups of its open memberships and of the memberships
 it reopens (and the class of each such group), works the plan out again, reopens only rows still

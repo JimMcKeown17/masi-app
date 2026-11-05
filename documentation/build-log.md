@@ -8947,3 +8947,59 @@ archive sent with a fast phone clock ends each row at a different server instant
 back only what matches T and lists the rest as near misses; there is no command yet to reopen those.
 Restore after a `reopen child` of the same EA is `already_active` and leaves memberships ended at the
 earlier removal untouched.
+
+### 2026-11-05 — `restore child` review fixes (feat/lifecycle-ho-tools)
+
+An independent review of `restore child` reproduced four defects on a disposable PG17 with all 46
+migrations. Each was reproduced again as a failing harness case before the fix. No live data,
+staging, Supabase CLI or `.env.local` was touched.
+
+**Fixed.**
+- **High: wrong removal instant for a creator's Delete child.** The app lets the child's creator
+  Delete child (`assertDeliveryChild`), and EditChild opens from Class detail. So an EA whose delivery
+  Head Office had already handed over or ended could still remove the child through the class. Restore
+  took the Head Office end for the removal: it reopened the handed-over row (two EAs delivering) and
+  missed the group membership the removal ended. For the archived variant it reopened the
+  end-delivered row with only a note. Now the removal must have ended the EA's own delivery row
+  inside the removal window, else `delivery_not_part_of_removal`, nothing changed. I chose refusal
+  over reopening only the removal's rows so that every applied restore reopens the delivery row:
+  a rerun is then `already_active`, never "undo the older Head Office end". Harness case 10.
+- **Medium: fast phone clock on a 1.5.0 archive.** The guard clamps each request as it lands, and
+  the chain pushes the child's archive first and the EA's delivery row last. For an archived child
+  the window now runs from the archive to the EA's delivery-row end (within an hour), and every
+  enrolment and class or group membership ended in it is reopened, with a `removal_spread` note. A
+  live child (the archive became a leave) has no start anchor. An enrolment or class membership ended
+  within the hour before the delivery-row end is refused as `nearby_end_not_restored`, instead of
+  restoring a child to no class. Harness case 11: realistic chains as the EA in push order, two minutes
+  ahead (five different ends) and two seconds ahead (only the archive clamped), both fully restored
+  with a clean daily check; the co-held fast-clock chain is refused.
+- **Medium: duplicate group membership.** The conflict check knew only
+  `idx_child_group_memberships_active_by_version`, and groups made in the app have no grouping
+  version. It now also refuses a second open membership of the same (child, group). The refusal's
+  `unique_index` field is now `rule`. Harness case 9: real `handover group`, then the new holder
+  re-adds the child.
+- **Low: runbook promises.** The "What the EA sees" claim now holds only when the child has a live
+  class. `class_archived_skipped` now says the EA cannot fix it (MA-BUG-20261104-015) and gives a
+  hint in the script too. The runbook says to save the `--apply` output, because a rerun shows only
+  `already_active`. Notes and refusals tables updated; contract map and CONTEXT term updated.
+
+**RED → GREEN.** Case 9: the dry run planned the reopen with no refusal (`''` did not match
+`refused: active_row_conflict`). Case 10: R8's dry run planned reopening the handed-over delivery row
+(`''` did not match `refused: delivery_not_part_of_removal`). Case 11: with only the first fix, the
+two-minutes chain was refused (`delivery_not_part_of_removal`); before both fixes it was the
+reviewer's partial restore that printed `confirmed: true`. The reviewer's repros rerun against the
+fixed script: Z and Z2 refused, nothing changed; A and A3 reopen enrolment, class and group, daily
+check clean; B refused with the new row as `conflicting_id`.
+
+**Design notes.** The near-miss refusal is one-sided on purpose: the 1.5.0 chain can only spread
+after the archive (archived child) or before the delivery-row end (live child). An enrolment or class
+membership that ended on the other side, such as an EA's class move just before the Delete child,
+stays a note rather than blocking the restore. Residual: a live-child restore still cannot tell
+an EA's Delete child that ended only their delivery row from a Head Office end-delivery. Both end
+exactly one row, as before this review; the dry run's gap hours are the operator's check.
+
+**Verification.** `npm run verify:ho-lifecycle:postgres` with the four server migrations from
+`HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR` (46 migrations): 60/60 checks, restore cases ran. Without them
+(42 migrations): 34/34, restore cases skipped as reported. `npx jest
+__tests__/hoLifecycleScript.test.js`: 82/82. `npx jest`: 518/518 suites, 8,265/8,265 tests. `npx jest
+-c jest.integration.config.js`: 111/111 suites, 1,530/1,530 tests. No `lint` script exists.
