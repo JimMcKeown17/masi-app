@@ -297,4 +297,29 @@ describe('sessionsRepository', () => {
       await db.closeAsync();
     }
   });
+
+  describe('countLiteracyLessons', () => {
+    let db;
+    let repository;
+    beforeEach(async () => {
+      db = await createMigratedDatabase(runMigrations);
+      await seedCoreData(db);
+      repository = createSessionsRepository({ database: db });
+    });
+    afterEach(async () => db.closeAsync());
+
+    test("counts only the EA's own saved literacy lessons, in every programme", async () => {
+      const insert = (id, userId, programmeId, activities) => db.runAsync(
+        'insert into sessions (id, user_id, programme_id, session_date, activities) values (?, ?, ?, ?, ?)',
+        id, userId, programmeId, '2026-11-05', JSON.stringify(activities));
+      await insert('lesson-a', 'user-1', 'programme-a', { lesson: { version: 1 } });
+      await insert('lesson-b', 'user-1', 'programme-b', { lesson: { version: 1 } });
+      await insert('numeracy', 'user-1', 'programme-a', { numeracy: { version: 1 } });
+      await insert('pre-lesson-flow', 'user-1', 'programme-a', { letters_focused: ['a'] });
+      // Another EA's lesson with a shared group is on this phone for group recency.
+      await insert('other-ea', 'user-2', 'programme-a', { lesson: { version: 1 } });
+      expect(await repository.countLiteracyLessons({ userId: 'user-1' })).toBe(2);
+      expect(await repository.countLiteracyLessons({ userId: 'user-3' })).toBe(0);
+    });
+  });
 });

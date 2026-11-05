@@ -202,6 +202,18 @@ export const createSessionsRepository = ({ database } = {}) => {
     return Number(row?.count || 0);
   };
 
+  // Literacy lessons this EA has saved, in any programme. A lesson-flow session carries
+  // activities.lesson; numeracy and pre-lesson-flow sessions do not. Other EAs' sessions for
+  // shared groups are on the phone too, so the user filter matters.
+  const countLiteracyLessons = async ({ userId }) => {
+    const db = await resolveDatabase(database);
+    const row = await db.getFirstAsync(
+      "select count(*) as count from sessions where user_id = ? and json_extract(activities, '$.lesson') is not null",
+      userId
+    );
+    return Number(row?.count || 0);
+  };
+
   const saveSession = async (session, { transaction } = {}) => runWrite(transaction, async (txn) => {
     assertRlsRequiredFields('sessions', session, ['user_id']);
     const programmeId = await resolveProgrammeId(txn, {
@@ -343,6 +355,7 @@ export const createSessionsRepository = ({ database } = {}) => {
     getSessions,
     getSessionCountsSince,
     countSessionsOnDate,
+    countLiteracyLessons,
     saveSession,
     saveHistoryPage,
     getUnsyncedRecords,

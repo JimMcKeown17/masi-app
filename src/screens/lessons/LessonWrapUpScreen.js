@@ -26,6 +26,7 @@ import { typeRoles } from '../../constants/typography';
 import { READING_LEVEL_OPTIONS } from '../../constants/literacyConstants';
 import { NO_TEXT_SUGGESTIONS } from '../../constants/textInputProps';
 import WrapUpChildRow from '../../components/lessons/WrapUpChildRow';
+import LetterRuleNote from '../../components/lessons/LetterRuleNote';
 import LetterTrackerBottomSheet from '../../components/session/LetterTrackerBottomSheet';
 import IconCircleButton from '../../components/common/IconCircleButton';
 import SelectSheet from '../../components/common/SelectSheet';
@@ -57,6 +58,8 @@ const errorMessage = (error, names) => {
   }
 };
 
+// Jim, 2026-11-05: the rule is bold for an EA's first 10 saved literacy lessons, then a plain line.
+const BOLD_RULE_LESSONS = 10;
 export default function LessonWrapUpScreen({ navigation, route }) {
   const { handle } = useSignedInEA();
   const repositories = handle.repositories;
@@ -97,15 +100,17 @@ export default function LessonWrapUpScreen({ navigation, route }) {
     if (!draft) return undefined;
     const load = async () => {
       const childIds = JSON.parse(childKey);
-      const [children, authority] = await Promise.all([
+      const [children, authority, lessonsSaved] = await Promise.all([
         repositories.children.getChildrenByIds(childIds),
         repositories.children.getWriteAuthority({ userId: handle.userId, childIds }),
+        // Only picks which reminder shows; an unknown count shows the bold one.
+        Promise.resolve().then(() => repositories.sessions.countLiteracyLessons({ userId: handle.userId })).catch(() => 0),
       ]);
       const mastery = Object.fromEntries(await Promise.all(childIds.map(async id => [id,
         authority[id]?.deliver && trackerLetters
           ? await loadMasteryState({ repositories, userId: handle.userId, childId: id, languageCode }) : null,
       ])));
-      if (current && handle.isCurrent()) setMetadata({ children, authority, mastery });
+      if (current && handle.isCurrent()) setMetadata({ children, authority, mastery, lessonsSaved });
     };
     void load().catch(caught => {
       if (current && !isStaleActorError(caught)) setError({ message: "Couldn't save the lesson. Try again." });
@@ -205,7 +210,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
       {dateLabel ? <Text testID="wrap-up-lesson-date" style={styles.note}>Lesson on {dateLabel}</Text> : null}
       {letters.length ? <View style={styles.heading}>
         <Text accessibilityRole="header" style={styles.title}>Who learned something new today?</Text>
-        <Text style={styles.note}>Tap a letter if the child knows it without help. Teaching it today doesn't count.</Text>
+        {metadata ? metadata.lessonsSaved < BOLD_RULE_LESSONS ? <LetterRuleNote />
+          : <Text style={styles.note}>Tap a letter if the child knows it without help. Teaching it today doesn't count.</Text> : null}
       </View> : null}
       {draft && metadata ? ids.map(id => metadata.children[id] ? <WrapUpChildRow key={id}
         child={metadata.children[id]} letters={letters} trackerLetters={trackerLetters}
