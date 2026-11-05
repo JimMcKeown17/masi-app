@@ -9002,3 +9002,57 @@ query is a 500, never a plausible empty result), leaves `row_version` alone on s
   6/6 passed (the two bug tests RED before their fixes); `npx jest` 523 suites / 8,299 tests passed;
   `npx jest -c jest.integration.config.js` 114 suites / 1,561 tests passed. No SQL or PostgreSQL
   harness changed (client and fake server only); `npm run lint` does not exist.
+
+#### Review fixes (2026-11-05, same branch)
+
+An independent review of the work order 6 commits found one medium and three low defects. Each
+was reproduced in the repo's own suites first; the fixes keep to the Delete child and restore code.
+
+- **Medium (fixed, `e149a250`): a phone clock that ran ahead wedged the Delete child
+  acknowledgement and re-removed a restored child.** `stampRefusalsRemovedWithChild` ended each
+  refused relationship row at the acknowledgement time. A membership made while the clock ran ahead
+  starts after that, so the end failed the local CHECK `removed_at >= joined_at`, rolled back all of
+  `finalizeSuccess`, left the `hard_delete` `failed`, and re-sent `delete_child_if_no_history` on
+  every pass, so a child Head Office restored meanwhile was removed again. RED (new test in
+  `headOfficeRestore.integration.test.js`): three RPC calls, and the outbox showed `children
+  hard_delete failed SQLITE_CONSTRAINT_CHECK`. Fix: the end is the later of the acknowledgement time
+  and the row's start, the same as the server guard's rule 1 (`end := greatest(end, start)`). GREEN:
+  one RPC, the membership ends at its own start, and the restore sticks across later passes.
+- **Same cause, one step earlier (fixed, `9107d37c`):** `removeChild` ended this EA's assignment
+  and held-group memberships at the tap time, so the same clock skew refused the whole Delete child
+  (`CHECK constraint failed: unassigned_at is null or unassigned_at >= assigned_at`). It now uses the
+  same bound. New `deleteChildChain.integration.test.js` test: RED, then GREEN.
+- **Low (fixed, `941f53c2`):**
+  - New test for the commonest `settleRemovedChildRow` trigger: a Delete child request that fails
+    once on the network. Mutation-checked: removing the settle step, or narrowing it to `pending`
+    rows, fails this test, and no other test catches the narrowing.
+  - The fake `restoreChild` now follows RESTORE_BODY: its checks in order with their codes
+    (`removal_not_finished` while the child is archived but the EA still holds it;
+    `ea_never_held_child`), its choice of delivery row (open, then the app's deterministic id, then
+    latest ended), and `handover_reason` left alone. Each part failed against the old fake.
+  - Test claims corrected:
+    - A child added offline gets its ticks back through the mastery history walk, not the restore
+      pull. The test now asserts the server keeps the tick.
+    - The co-held test's check on the other EA is labelled as a premise check on the fake.
+    - The fake returns nulls only for the columns listed in `NULL_COLUMNS`.
+- **Noticed, not fixed (pre-existing on main, outside this slice):** the phone's other local end
+  writes are not bounded by the row's start either. These are pull reconcile at `pulledAt`
+  (`childrenRepository.js:163`, `:229`, `:284`, `classesRepository.js:270`, `groupsRepository.js:173`,
+  and others), Remove from group, and the class and group archive flows. Probe (throwaway, not
+  committed): an assignment whose start is 6h ahead and which Head Office ended. The pull logs
+  `Pulled child_ea_assignments batch transaction failed; retrying rows without reconcile: CHECK
+  constraint failed`, reports `reconcileCompleted: false`, and the assignment stays open on the
+  phone until real time passes its start. The same assignment without the skew ends normally. This
+  is the phone-side companion of MA-BUG-20261104-007, which guard rule 1 fixed on the server; it
+  needs its own record or an addendum to 007.
+- Docs: the contract map's Delete child paragraph (both start bounds; the settle trigger now
+  includes a failed request) and "Head Office restore convergence" (the fake's fidelity and what
+  it leaves out).
+- Verification (Node 20):
+  - `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js
+    __tests__/deleteChildChain.integration.test.js __tests__/groupMembershipReAdd.integration.test.js`:
+    24/24.
+  - `npx jest`: 523 suites / 8,303 tests passed.
+  - `npx jest -c jest.integration.config.js`: 114 suites / 1,565 tests passed.
+  - No SQL changed, and the wire is unchanged (the `deleteChildChain` wire fixture still matches),
+    so no PostgreSQL harness applies. `npm run lint` does not exist.

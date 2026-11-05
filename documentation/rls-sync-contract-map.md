@@ -402,7 +402,9 @@ SQLite transaction (plan O2 item 2). It first runs `deleteIfNoHistory`, which ch
 history guards. With history that returns `false` without writing, and `removeChild` archives the
 child on this phone only (`archive_reason = 'removed_by_ea'`), ends only this EA's own direct
 assignment and memberships in groups they hold, on this phone only, and queues the same
-`hard_delete`. Shared rows (programme enrollments, class memberships) and other EAs' rows never
+`hard_delete`. Each end is the tap time or the row's own start, whichever is later (the server
+guard's rule 1, `end := greatest(end, start)`), so a row made while the phone's clock ran ahead
+never fails the local end-not-before-start CHECK and refuses the Delete child. Shared rows (programme enrollments, class memberships) and other EAs' rows never
 end on the phone, and no per-relationship archive row or children archive is queued (MA-BUG-20261104-014).
 A relationship row whose INSERT is still in the outbox stays open locally, matching that INSERT:
 it uploads open with the authority the rest of the family and the queued history need. The ended
@@ -431,16 +433,20 @@ lifecycle row, or stays visible as a support case if its receipt can never prove
 mark lives in the outbox, where no pull reaches it (second review): while the `hard_delete` is
 queued its row marks the child, and its acknowledgement stamps this EA's refused relationship
 INSERTs of the child `REMOVED_WITH_CHILD` in the same transaction. The same transaction ends each
-stamped row's local domain row (its end column and `updated_at`, at the acknowledgement time;
-work order 6, 2026-11-05): it stayed open only to upload open, it will never be sent, and no pull
+stamped row's local domain row (its end column and `updated_at`, at the acknowledgement time or
+the row's own start, whichever is later; work order 6, 2026-11-05). The start bound is the server
+guard's rule 1: a row made while the phone's clock ran ahead can start after the acknowledgement,
+and an earlier end would fail the local CHECK, roll back the whole acknowledgement and re-send the
+Delete child on every pass, removing again a child Head Office restored meanwhile. The row stayed open only to upload open, it will never be sent, and no pull
 or reconcile ends a row that is not `synced`, so left open it would show a child Head Office later
 restores in a group, or with a grant, the server never accepted. The outbox payload is unchanged,
 so the delivered-receipt digest still matches, and a server row under the same id still replaces
 the ended local row on the next pull that returns it. When the acknowledged `hard_delete` was the
 child's last outbox row, the same transaction also sets a local child row still `pending` or
-`failed` to `synced` (`settleRemovedChildRow`): a child INSERT or edit acknowledged while the
-removal waited leaves the row `pending`, and with nothing queued that row would refuse every
-pulled copy of the child forever (pending-local-wins). The child's own
+`failed` to `synced` (`settleRemovedChildRow`): a Delete child request that failed retryably (a
+network flake, the commonest case) leaves the archived row `failed`, and a child INSERT or edit
+acknowledged while the removal waited leaves it `pending`; with nothing queued either row would
+refuse every pulled copy of the child forever (pending-local-wins). The child's own
 `archive_reason` is not consulted: a co-held child stays live on the server and a pull rewrites
 it, and Head Office may un-archive a child and leave the reason set. History never waits. A waiting children `hard_delete` is
 never a parent (review rounds 3-4): `rememberBlockedRecord` never registers it, so no dependency
@@ -1287,14 +1293,16 @@ handling; its next normal pull converges, because:
   assignment and held-group memberships) keep `sync_status = 'synced'` with no outbox row, and
   PostgREST returns every column, so the pulled `archived_at`, `archive_reason`,
   `archived_by_user_id` and end columns, all null, overwrite them; a child deleted outright (no
-  local history) is inserted again from the pulled rows. A child added offline and deleted before
-  its first upload finished had its row left `pending` with nothing queued, which refused every
-  pull; the `hard_delete` acknowledgement now settles it (`settleRemovedChildRow`, above);
+  local history) is inserted again from the pulled rows. A removed child's row left `failed` by a
+  Delete child request that failed once, or `pending` because the child was added offline and
+  deleted before its first upload finished, refused every pull with nothing queued; the
+  `hard_delete` acknowledgement now settles it (`settleRemovedChildRow`, above);
 - the pending-hard-delete pull filter only applies while the phone's `hard_delete` is queued;
 - refused relationship INSERTs stamped `REMOVED_WITH_CHILD` are never re-sent (no duplicate or
   re-granted row), block no upload of the restored child, keep clearing under the
-  delivered-receipt rule, and their local rows were ended at the stamp, so the phone shows only the
-  memberships the server holds.
+  delivered-receipt rule, and their local rows were ended at the stamp (never before their start,
+  so a phone clock that ran ahead cannot undo the acknowledgement and re-send the removal), so the
+  phone shows only the memberships the server holds.
 
 Ticks of a child whose assignment INSERT was still queued at Delete child come back by the history
 walk, not the roster pull: that INSERT uploads open, so the first pull after the removal ends the
@@ -1318,7 +1326,9 @@ forced pass (Sync now, pull-to-refresh) re-sends every terminal row, refused arc
 1.5.0 phone needs the same precondition as a Head Office reopen, no refused archive or restore
 receipts. Tests: `headOfficeRestore.integration.test.js` (real SQLite and repositories, the
 handle's pull services over real supabase-js on `test-support/lifecycleServer.js`, whose
-`restoreChild` mirrors the Head Office command).
+`restoreChild` follows the Head Office command's checks, refusal codes, choice of the EA's delivery
+row and reopened columns; it does not model the command's `active_row_conflict` refusal or its
+notes). `deleteChildChain.integration.test.js` covers Delete child on a phone whose clock ran ahead.
 
 ### Class-roster pull (Whole-Class Access Task 3)
 
