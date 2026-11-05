@@ -19,12 +19,15 @@
 // - the pull: the roster, class and acknowledgment reads the app makes (`get_reconcile_acknowledgments`
 //   per 20261023120000, and PostgREST GETs with embeds, `!inner`, eq/is/in filters, order, limit).
 //   Every pull query scopes itself to the caller's own grants, so the fake applies the query's
-//   filters, not SELECT RLS. Like PostgREST it returns every column, nulls included;
+//   filters, not SELECT RLS. It returns each stored column, and null for the nullable lifecycle
+//   columns listed in NULL_COLUMNS when unset (PostgREST returns every column, nulls included);
 // - Head Office `restore child` (`restoreChild`, work order 5): reopens in place what one removal
 //   ended, with the same ids, starts and row_version.
 // Every request is recorded in the PostgREST wire shape used by
 // docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/pg-replay.cjs, so G1 can
 // replay a chain into PostgreSQL with the real migrations.
+
+import { childEaAssignmentDomainId } from '../src/db/repositories/domainRepositoryUtils';
 
 // The nullable columns PostgREST returns as null when the fake stores them unset.
 const NULL_COLUMNS = {
@@ -428,36 +431,42 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
     }
   };
 
-  // Head Office `restore child` (work order 5, `scripts/ho-lifecycle.cjs` in the HO branch): undoes
-  // one EA's Delete child in place. T is the removal instant: the child's archived_at when this
-  // EA archived it, otherwise the end of their latest ended direct assignment. It reopens their own
-  // assignment and every enrollment, class and group membership of the child that ended at exactly
-  // T (skipping a membership whose class or group is archived now), and un-archives a child archived
-  // at T. Ids, starts and row_version stay as they are; updated_at moves (the server trigger).
+  // Head Office `restore child` (work order 5, RESTORE_BODY in `scripts/ho-lifecycle.cjs` on the HO
+  // branch): undoes one EA's Delete child in place, with the command's checks in its order and its
+  // refusal codes (thrown, as the applying command raises and changes nothing). T is the removal
+  // instant: the child's archived_at, otherwise the end of the EA's latest ended direct assignment.
+  // The EA's delivery row is the open one, else the app's deterministic row, else the latest ended;
+  // it is reopened (only its end cleared), with every enrollment, class and group membership of the
+  // child that ended at exactly T (skipping a membership whose class or group is archived now), and a
+  // child archived by this EA's removal is un-archived. Ids, starts, row_version and handover_reason
+  // stay as they are; updated_at moves (the server trigger). Not modelled: the command's
+  // `active_row_conflict` refusal (an open row already holds the reopened row's unique key) and its
+  // notes (near-miss ends, an assignment ended at another time), which change nothing.
   const restoreChild = ({ eaUserId, childId }) => {
     const child = t('children').get(childId);
     if (!child) throw new Error('child_not_found');
+    const detId = childEaAssignmentDomainId({ userId: eaUserId, childId });
     const own = all('child_ea_assignments').filter(r => r.child_id === childId && r.user_id === eaUserId);
-    if (own.length === 0) throw new Error('never_held');
-    if (child.archived_at == null && own.some(r => r.unassigned_at == null)) return { outcome: 'already_active' };
-    let removedAt;
-    if (child.archived_at != null) {
-      removedAt = child.archived_at;
-      const ownEndedThen = own.some(r => r.unassigned_at === removedAt);
-      if (!(child.archived_by_user_id === eaUserId || (child.archived_by_user_id == null && ownEndedThen))) {
-        throw new Error('archived_by_another_ea');
-      }
-    } else {
-      removedAt = own.map(r => r.unassigned_at).filter(Boolean).sort().pop();
+    const [assignment] = [...own]
+      .sort((a, b) => (Number(a.unassigned_at != null) - Number(b.unassigned_at != null))
+        || (Number(a.id !== detId) - Number(b.id !== detId))
+        || String(b.unassigned_at ?? '').localeCompare(String(a.unassigned_at ?? ''))
+        || a.id.localeCompare(b.id));
+    if (!assignment) throw new Error('ea_never_held_child');
+    const archived = child.archived_at != null;
+    if (archived && (child.archived_by_user_id ?? null) !== eaUserId
+      && !(child.archived_by_user_id == null && own.some(r => r.unassigned_at === child.archived_at))) {
+      throw new Error('archived_by_another_ea');
     }
+    if (assignment.unassigned_at == null) {
+      // Archived while the EA still holds it: the phone has not finished sending the removal.
+      if (archived) throw new Error('removal_not_finished');
+      return { outcome: 'already_active' };
+    }
+    const removedAt = archived ? child.archived_at : own.map(r => r.unassigned_at).sort().pop();
     const at = now();
-    const reopen = (table, row) => {
-      t(table).set(row.id, { ...row, [END_COLUMNS[table]]: null, ...(table === 'child_ea_assignments' ? { handover_reason: null } : {}),
-        updated_at: at });
-    };
-    const assignment = own.find(r => r.unassigned_at == null)
-      || [...own].sort((a, b) => String(a.unassigned_at).localeCompare(String(b.unassigned_at))).pop();
-    if (assignment.unassigned_at != null) reopen('child_ea_assignments', assignment);
+    const reopen = (table, row) => t(table).set(row.id, { ...row, [END_COLUMNS[table]]: null, updated_at: at });
+    reopen('child_ea_assignments', assignment);
     const skipped = [];
     const parentArchived = { child_class_memberships: ['classes', 'class_id'], child_group_memberships: ['groups', 'group_id'] };
     for (const table of ['child_programme_enrollments', 'child_class_memberships', 'child_group_memberships']) {

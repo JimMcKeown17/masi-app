@@ -6,10 +6,15 @@
 // the network is fake (test-support/lifecycleServer.js: the post-server-batch contract, its pull
 // reads and its restore helper, under real supabase-js). Asserts the decided target behaviour:
 // - a sole holder's child, removed with or without local history, comes back to My Children with
-//   its class and group, stays writable, and keeps its history;
+//   its class and group and stays writable, including after a Delete child request that failed once;
+//   its sessions stay on the phone throughout, and so do its delivered ticks when the removal ended
+//   its assignment on the phone (a child added offline gets its ticks back by the mastery history
+//   walk instead: see that test);
 // - a co-held child this EA left comes back to this EA with their group;
 // - a refused relationship INSERT stamped REMOVED_WITH_CHILD is never sent again after the restore,
-//   blocks nothing, clears under the delivered-receipt rule, and the server's rows win on the phone.
+//   blocks nothing, clears under the delivered-receipt rule, and the server's rows win on the phone,
+//   even when it starts after the acknowledgement (a phone clock that ran ahead);
+// - the fake's restore follows the Head Office command where these tests could lean on it.
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
 jest.mock('expo-updates', () => ({ channel: null }));
 jest.mock('expo-file-system/next', () => ({ Paths: { availableDiskSpace: 123, totalDiskSpace: 456 } }));
@@ -243,10 +248,55 @@ test('sole holder, child with local history: after a restore the next pull bring
   expect(await groupsOf(C)).toEqual([GROUP]);
 });
 
+// The commonest way the removed child's own row is left unsettled: the Delete child request fails
+// once on a network flake, which marks the archived local child 'failed'. When the retry is
+// acknowledged nothing is owed for the child, so settleRemovedChildRow marks it synced; left
+// 'failed', every pull would refuse the server's copy and the restored child would never return.
+test('sole holder whose Delete child request failed once on the network: after the retry is acknowledged and a restore, the next pull brings it back', async () => {
+  await seedBoth([...baseRows(), ...serverChildRows(C, { group: true })]);
+  await pull();
+  await recordLesson(C);
+  tick();
+  expect(await repos.children.removeChild(C)).toBe(true);
+  tick();
+  let failedOnce = false;
+  server.state.refuse = ({ target }) => {
+    if (target === 'rpc/delete_child_if_no_history' && !failedOnce) {
+      failedOnce = true;
+      return { status: 503, code: 'PGRST000', message: 'upstream unavailable' };
+    }
+    return null;
+  };
+  await syncPasses([false]);
+  expect((await outbox()).map(row => `${row.table_name}:${row.operation}:${row.status}`)).toEqual(['children:hard_delete:failed']);
+  expect(await read('select sync_status from children where id = ?', C)).toEqual([{ sync_status: 'failed' }]);
+  await syncPasses([false, false]);
+  expect(await outbox()).toEqual([]);
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> PGRST000`, `rpc/delete_child_if_no_history:${C} -> ok`,
+  ]);
+  await pull();
+  expect(await myChildren()).toEqual([]);
+
+  server.restoreChild({ eaUserId: USER, childId: C });
+  tick();
+  await pull();
+
+  expect(await myChildren()).toEqual([C]);
+  expect(await groupsOf(C)).toEqual([GROUP]);
+  expect(await localChild()).toMatchObject({ archived_at: null, archived_by_user_id: null, archive_reason: null });
+  await expectWritable();
+});
+
 // A child added offline and deleted before its first upload: its INSERT is acknowledged while the
 // removal is still queued, then the removal is acknowledged. Nothing is owed for it any more, so
 // the next pull must be free to replace the phone's copy with the server's.
-test('sole holder, child added offline and deleted before its first upload: after a restore the next pull brings it back', async () => {
+// Its ticks are not this pull's job: the assignment INSERT was still queued at removal, so it
+// uploaded open, the first pull after the removal ended it by reconcile, and the handover rule
+// deleted the delivered tick from the phone (it stays on the server). The mastery history walk
+// fetches it again after the restore (letterMasteryHandover.test.js, "a handover inside the
+// freshness window still re-walks on return"); this fake server has no history reads.
+test('sole holder, child added offline and deleted before its first upload: after a restore the next pull brings it back with its sessions', async () => {
   await seedBoth(baseRows());
   await repos.children.save({
     id: C, first_name: 'Thandi', last_name: 'Mokoena', class_id: CLASS, created_by: USER, synced: false,
@@ -273,6 +323,7 @@ test('sole holder, child added offline and deleted before its first upload: afte
   expect(await groupsOf(C)).toEqual([GROUP]);
   expect(await openClassMemberships()).toEqual([CLASS]);
   expect(await read('select child_id from session_attendees')).toEqual([{ child_id: C }]);
+  expect(server.all('letter_mastery').map(row => row.child_id)).toEqual([C]);
   await expectWritable();
 });
 
@@ -324,6 +375,8 @@ test.each([
   expect(await myChildren()).toEqual([]);
   expect(await groupsOf(C)).toEqual([]);
 
+  // Premise check on the fake, not on the phone: its restore, like the command, reopens only this
+  // EA's rows and leaves the other EA's alone.
   const otherEaRowsBefore = JSON.stringify([server.all('child_ea_assignments'), server.all('class_ea_assignments')]
     .map(rows => rows.filter(row => (row.user_id || row.ea_user_id) === OTHER_EA)));
   expect(server.restoreChild({ eaUserId: USER, childId: C })).toMatchObject({ outcome: 'restored', skipped: [] });
@@ -462,4 +515,26 @@ test('a refused relationship INSERT that starts after the acknowledgement (phone
   expect(serverOpen('child_ea_assignments', 'unassigned_at').map(row => row.user_id)).toEqual([USER]);
   await pull();
   expect(await myChildren()).toEqual([C]);
+});
+
+// The fake restore follows the Head Office command (RESTORE_BODY) where these tests could lean on
+// it: it refuses while the removal is unfinished, reopens the app's deterministic delivery row
+// before an older one, and clears only the end, never handover_reason.
+test('the fake Head Office restore follows the command: refuses an unfinished removal, reopens the app\'s row, keeps handover_reason', () => {
+  const T = '2026-10-21T09:00:00.000Z';
+  const own = childEaAssignmentDomainId({ userId: USER, childId: C });
+  const other = 'ce000000-0000-4000-8000-000000000001';
+  server.seed('children', { id: C, first_name: 'Thandi', last_name: 'Mokoena', class_id: CLASS, created_by: HO,
+    archived_at: T, archived_by_user_id: USER, archive_reason: 'removed_by_ea' });
+  server.seed('child_ea_assignments', { id: own, user_id: USER, child_id: C, assigned_at: T_SEED, created_by: HO });
+  expect(() => server.restoreChild({ eaUserId: USER, childId: C })).toThrow('removal_not_finished');
+  expect(server.t('children').get(C).archived_at).toBe(T);
+
+  server.t('child_ea_assignments').set(own, { ...server.t('child_ea_assignments').get(own), unassigned_at: T, handover_reason: 'moved_class' });
+  server.seed('child_ea_assignments', { id: other, user_id: USER, child_id: C, assigned_at: T_SEED,
+    unassigned_at: '2026-10-21T09:10:00.000Z', created_by: HO });
+  expect(server.restoreChild({ eaUserId: USER, childId: C })).toMatchObject({ outcome: 'restored', removedAt: T });
+  expect(server.t('child_ea_assignments').get(own)).toMatchObject({ unassigned_at: null, handover_reason: 'moved_class' });
+  expect(server.t('child_ea_assignments').get(other).unassigned_at).toBe('2026-10-21T09:10:00.000Z');
+  expect(server.t('children').get(C)).toMatchObject({ archived_at: null, archived_by_user_id: null, archive_reason: null });
 });
