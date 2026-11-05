@@ -31,9 +31,10 @@ Until your coordinator tells you your app has the update:
    4. then make the change: end the old row before adding the new one, never set an end before its
       start, and never bump `row_version` on an end.
 
-   *Lifted when the "held on the day" server rule is live and verified (plan step R1).* After that,
-   queued work lands whatever order things upload in. Do not keep this rule beyond that: making changes
-   wait on uploads is how Zazi's problems started.
+   *Lifted for an EA once the "held on the day" server rule is live and verified (plan step R1) **and**
+   that EA's phone has the app update (its Send diagnostics receipt shows the new `updateId`).* After
+   that, queued work lands whatever order things upload in. Do not keep this rule beyond that: making
+   changes wait on uploads is how Zazi's problems started.
 2. **Don't reopen anything** (clear an end date or un-archive) for an EA whose diagnostics show a refused
    archive, and don't ask that EA to pull to refresh. Their phone would re-send the old archive and end
    it again. *Lifted per phone when its diagnostics show the app update (plan step G1).*
@@ -59,7 +60,7 @@ Until your coordinator tells you your app has the update:
 | Rule | Lifted by | How you know |
 | --- | --- | --- |
 | EA: no Delete child / Delete class / No class | App update (plan steps O1, O2, G1) | That phone's Send diagnostics receipt shows the new `updateId` |
-| Head Office: upload everything first | "Held on the day" server rule (plan step R1) | Build log records R1 applied and the two-phone check passed |
+| Head Office: upload everything first | "Held on the day" server rule (plan step R1) **and** the app update on that EA's phone | Build log records R1 applied and the two-phone check passed, and the phone's receipt shows the new `updateId` |
 | No reopen / no pull to refresh after a refused archive | App update on that phone | The phone's receipt shows the new `updateId` |
 | Suspend-only off-boarding | Permanent | — |
 | No 2027 year | "Held on the day" server rule | As for R1 |

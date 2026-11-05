@@ -54,7 +54,7 @@ a Delete child after an offline lesson uploads the session with zero attendees a
 | D7 | After a programme switch, accept work dated inside the old `staff_programme_assignments` interval, stamped with that programme. |
 | D8 | EAs get an exit from Needs attention ("The office has a copy — remove from this phone"), only after the row's receipt is delivered. |
 | D9 | Head Office lifecycle work in November goes through a 3-command dry-run script (handover, end-delivery, reopen). Off-boarding is suspend-only. |
-| D10 | Before EAs record real lessons: the server batch is applied and verified (R1), the interim rules are briefed, the H1 script and daily check exist, and **the Delete child part of the app update is on every pilot phone** (critic B2). The rest of the OTA may slip into retest week 1. |
+| D10 | Before EAs record real lessons: the server batch is applied and verified (R1), the interim rules are briefed, the H1 script and daily check exist, and **the app update (O1 and O2) is on every pilot phone**, confirmed by its `updateId`. O2 is needed for Delete child (critic B2); O1 is the only exit for rows the server cannot acknowledge (review finding 2). *Tightened 2026-11-05 by Codex review round 2: Jim's original D10 let the rest of the OTA slip into week 1.* O1's Needs attention polish, beyond the receipt rule and forced-pass change, may still slip. |
 
 ## Corrections adopted from the adversarial critique (2026-11-04)
 
@@ -103,9 +103,9 @@ Each finding and its resolution:
    class or group.** **Adopted:** one lock order, children → classes → groups (ids ascending). Every
    EA archive decision (S1 children/classes, S3) and every H1 grant change takes it, and the holder
    check re-runs after the locks are held.
-5. **[medium] O2's unsent relationship INSERTs could re-create grants after removal.** **Adopted:**
-   removal writes the end into every still-owed relationship INSERT payload, like `updateChild`
-   already does (O2 item 2).
+5. **[medium] O2's unsent relationship INSERTs could re-create grants after removal.** **Adopted:** the
+   Delete child op waits for the child's relationship family INSERTs. Writing ends into those INSERTs
+   was tried first and rejected in round 2 (finding 2); see O2 item 2.
 6. **[medium] Handover to a former holder repeats the deterministic-id no-op.** **Adopted:** handover
    reopens an existing successor row in place (H1).
 7. **[medium] The rule sheet still required "All saved and synced", which a Needs attention item
@@ -114,6 +114,27 @@ Each finding and its resolution:
 8. **Next steps.** The frozen 1.5.0 corpus is validated against the `f002e08` producer, not
    regenerated from current code; the OTA has its own expectations. Existing never-held and
    non-overlapping-interval denial cases stay.
+
+## Corrections adopted from the Codex adversarial review, round 2 (gpt-6-astra, 2026-11-05)
+
+Verdict: needs-attention (2 high, 1 medium). It confirmed the unbounded open-programme arm and the
+identity-preserving successor reopen.
+
+1. **[high] The receipt rule reconstructed delivery proof.** `freeze` stores the **bounded**
+   envelope in `report_snapshot`, and `markSent` clears it while keeping the unbounded `payload`
+   (`supportIncidents.js:69-75`, `supportIncidentRepository.js:152-155`). So "sent with no unsent
+   changes" did not mean the office holds the full payload.
+   **Adopted:** `markSent` persists delivery proof in the existing `local_state` table (O1 item 2).
+2. **[high] Writing ends into still-owed relationship INSERTs removes the authority needed to upload the
+   rest.** An ended `child_ea_assignments` INSERT leaves the enrollment and membership INSERTs, and
+   class-scoped Battery Runs, with no open path, so they hit 42501.
+   **Adopted instead:** the children `hard_delete` waits for the child's own still-owed relationship
+   INSERTs, extending the existing retained-insert gate from the child row to its relationship
+   family. This is same-record-family ordering, which ADR-0014 permits. History never waits. A
+   refused relationship insert leaves through O1's exit, so the wait is bounded. No coalescing.
+3. **[medium] D10 let O1 slip although declining the former-holder arm relies on it.**
+   **Adopted:** D10 now requires O1 and O2 on every pilot phone before real lessons. The interim sheet
+   lifts the per-phone rules on that phone's `updateId`.
 
 ## Live staging preflight (P0, done 2026-11-05 ~01:10Z, read-only)
 
@@ -454,19 +475,28 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
 2. **Leaving the phone: the exact-revision delivered-receipt rule** (review finding 1). A terminal
    outbox row R may leave the phone only when its `upload_terminal` incident row in
    `support_incident_queue` meets all of these:
-   - (a) `status = 'sent'` and `has_unsent_changes = 0`, so the stored `payload` is exactly what the
-     server accepted;
-   - (b) that payload names R: same outbox id, `outboxUpdatedAt` equal to R's current `updated_at`,
-     and a `wirePayload` deep-equal to `buildSyncPayload` of R's current row;
-   - (c) `boundedEnvelope` of that envelope returns it **uncut**: no `*Truncated` markers, no
-     `wirePayloadError`, not `TOO_LARGE`.
+   - (a) `status = 'sent'` and `has_unsent_changes = 0`;
+   - (b) a **delivery proof** for that incident's current `report_generation` exists in
+     `local_state` (key `delivered_receipt:<incident id>`), written by `markSent`. It is recorded from
+     the **bounded `report_snapshot` that was actually accepted** in the same transaction, before
+     `markSent` clears it. The proof holds `{ report_generation, outboxId, outboxUpdatedAt,
+     wireDigest, cut }`, where `cut` is true if any `*Truncated` marker or `wirePayloadError` was
+     present;
+   - (c) the proof matches R: same outbox id, `outboxUpdatedAt` equal to R's current `updated_at`,
+     `wireDigest` equal to the digest of `buildSyncPayload` of R's current row, and `cut = false`.
+
+   A sent incident without a proof, such as one sent before the OTA, is re-sent once through the
+   existing `promote` path, which produces a proof. Proof keys are deleted with their outbox row or
+   incident.
 
    The check and the delete run in one SQLite transaction. If any condition fails, the row stays and
    the card says what to do. Typically: "Connect to the internet so the office gets a copy." For an
    oversized row: "Send diagnostics, then contact support."
 
    No new table or column is needed. Tests:
-   - an oversized payload (no exit);
+   - an oversized payload, truncated on send (no exit), including the round-2 case where the delivery
+     metadata shrinks after the truncated send, so a re-bound would pass uncut;
+   - a pre-OTA sent incident without a proof (re-sent once, then exit);
    - a second refused edit reusing an already-sent repeat key (no exit until re-sent);
    - a payload changed after send (no exit);
    - a happy path (exit, then gone).
@@ -498,14 +528,20 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
      purged with no op.
    - A child with local history is archived locally, and **only this EA's own** relationship rows end
      locally, with no per-relationship archive rows.
-   - **Every still-owed relationship INSERT** for those rows (in `sync_outbox` and not yet
-     acknowledged) gets the end written into its payload, as `updateChild` does at
-     `childrenRepository.js:575-608` (review finding 5). They then land already ended, in any order
-     relative to the RPC, and keep the interval evidence that queued history needs.
-   - Test: an all-offline chain (create child → record a lesson and a tick → Delete child → sync,
-     including a failed first pass). Assert that all history is delivered and that no active grant or
-     membership for the child survives on the server.
-   - Keep the retained-insert gate and the pending-hard-delete pull filter.
+   - **Do not** write ends into still-owed relationship INSERTs (review round 2, finding 2). Instead,
+     extend the retained-insert gate in `findBlockingDependency` (`offlineSync.js` ~1548-1558; owned
+     by this slice). The children `hard_delete` also waits while any still-owed INSERT exists for the
+     child's own relationship rows: `child_ea_assignments`, `child_programme_enrollments`,
+     `child_class_memberships` and `child_group_memberships` with this `child_id`. Those rows then
+     land open, with the authority the rest of the family and the queued history need. The RPC then
+     ends them server-side (actor-scoped). This answers review round 1 finding 5 (no open grant
+     after an acknowledged removal) without stranding anything. History is never gated.
+   - Test: an all-offline chain (create child → record a lesson, a tick, a class-scoped Battery Run
+     and an assessment → Delete child → sync, including a failed first pass). Assert that all
+     history and relationship evidence are delivered with no terminal rows, that the `hard_delete`
+     ran last, and that no active grant or membership survives after the RPC's (faked) server ends.
+     G1 replays this chain's wire requests into Postgres with the server batch.
+   - Keep the pending-hard-delete pull filter.
    - Confirm copy: "Remove Thandi? Lessons and ticks you saved will still upload. If no other EA
      teaches Thandi, Thandi also leaves the class."
    - **Hard gate before real lessons (D10).**
@@ -520,7 +556,8 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
 ### G1: OTA gate, publish, per-phone uptake
 
 1. The T1 chains are green on the O1/O2 code. Re-freeze the T1 disposition fixture for the OTA commit
-   too, since two JS bundles will coexist.
+   too, since two JS bundles will coexist. Replay O2's all-offline chain wire requests into Postgres
+   with the server batch: no terminal rows, and no active grant after removal.
 2. **Two-phone device gate:** A03s + iPhone, default text size.
    - The C1 chain on the OTA.
    - A class-path or other-programme co-held child survives the other EA's Delete child.
