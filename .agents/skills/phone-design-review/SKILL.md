@@ -45,7 +45,7 @@ screen:
    Child results, Letter tracker, the Insights cards, Sync status, the lesson picker's group rows,
    and the other sheets and empty states you pass. Screenshot every screen and every state you meet
    (sheet, empty, loading, error, keyboard open). For each screen, write raw observations into
-   `$DEVICE_RUN_DIR/observations.md`: screenshot path, what you did, what you noticed against the
+   `device-runs/CURRENT/observations.md`: screenshot path, what you did, what you noticed against the
    lens, and the measurements. Done when every W1–W8 screen and every screen listed above has an
    entry, even if the entry is "nothing notable".
 
@@ -59,7 +59,7 @@ screen:
    it hurts (lost work > wrong data > confusion > slowness > polish), then by cost. Keep the top 10.
    The others go in a short "Also noticed" list.
 
-5. **Report.** Write `$DEVICE_RUN_DIR/design-review.md` and give Jim the summary. Each suggestion:
+5. **Report.** Write `device-runs/CURRENT/design-review.md` and give Jim the summary. Each suggestion:
    - **Title**, as the change you propose;
    - **Kind**: design or functionality;
    - **Where**: the screen, and the screenshot path;

@@ -104,3 +104,38 @@ if (args[0] === 'version') {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('start-run marks the newest run CURRENT so later commands find it without DEVICE_RUN_DIR', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-device-run-'));
+  const fake = path.join(dir, 'adb');
+  const runsRoot = path.join(dir, 'runs');
+  fs.writeFileSync(fake, `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args[0] === 'version') {
+  console.log('Android Debug Bridge');
+} else if (args[0] === 'devices') {
+  console.log('List of devices attached\\nfixture\\tdevice');
+} else if (args.at(-1) === 'dumpsys window') {
+  console.log('mCurrentFocus=Window{abc u0 org.masinyusane.masi/.Main}');
+} else if (args.at(-1) === 'wm size') {
+  console.log('Physical size: 720x1600');
+} else if (args.includes('screencap')) {
+  process.stdout.write('PNG');
+}
+`, { mode: 0o700 });
+  const env = { ...process.env, ADB: fake, ANDROID_SERIAL: 'fixture', DEVICE_PACKAGE: 'org.masinyusane.masi', DEVICE_RUNS_ROOT: runsRoot };
+  delete env.DEVICE_RUN_DIR;
+  const script = path.resolve(__dirname, '../scripts/device/phone.cjs');
+  try {
+    const started = spawnSync(process.execPath, [script, 'start-run', 'health'], { env, encoding: 'utf8' });
+    expect(started.status).toBe(0);
+    const runDir = started.stdout.split('\n')[0];
+    expect(started.stdout).toMatch(/startedAtUtc=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
+    expect(fs.realpathSync(path.join(runsRoot, 'CURRENT'))).toBe(fs.realpathSync(runDir));
+    const shot = spawnSync(process.execPath, [script, 'shot', 'home'], { env, encoding: 'utf8' });
+    expect(shot.status).toBe(0);
+    expect(fs.realpathSync(path.dirname(shot.stdout.trim()))).toBe(fs.realpathSync(runDir));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 15000);

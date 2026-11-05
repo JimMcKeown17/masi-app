@@ -13,7 +13,8 @@ const HELP = `device:phone <command> [options]
   scroll <up|down> [--small] | scroll-to <q> [--direction down|up] [--max N=8]
   swipe <x1> <y1> <x2> <y2> [ms=300]
 Options: --package ID, --run-dir DIR, --any-app, --no-settle, --exact
-Environment: ADB, ANDROID_HOME, ANDROID_SERIAL, DEVICE_PACKAGE, DEVICE_RUN_DIR
+Environment: ADB, ANDROID_HOME, ANDROID_SERIAL, DEVICE_PACKAGE, DEVICE_RUN_DIR, DEVICE_RUNS_ROOT
+Files go to --run-dir, else DEVICE_RUN_DIR, else device-runs/CURRENT (set by start-run).
 Exit: 0 ok; 1 usage/adb; 2 not found/timeout/dump failed; 3 wrong foreground.
 Focused text fields can make dumps slow; map fields before focusing, then use tapxy.
 Run artifacts (including screenshots) are private local evidence in device-runs/.`;
@@ -326,9 +327,16 @@ function printState(context, value) {
   return console.log(output);
 }
 
+function runsRoot() {
+  return path.resolve(process.env.DEVICE_RUNS_ROOT || path.join(ROOT, 'device-runs'));
+}
+
 function resolveRunDir(context) {
   const { options } = context;
-  const dir = path.resolve(options['run-dir'] || process.env.DEVICE_RUN_DIR || path.join(ROOT, 'device-runs/adhoc'));
+  // Each shell call starts fresh, so fall back to the run that start-run marked CURRENT.
+  const current = path.join(runsRoot(), 'CURRENT');
+  const fallback = fs.existsSync(current) ? fs.realpathSync(current) : path.join(runsRoot(), 'adhoc');
+  const dir = path.resolve(options['run-dir'] || process.env.DEVICE_RUN_DIR || fallback);
   fs.mkdirSync(dir, {
     recursive: true,
     mode: 0o700
@@ -347,7 +355,7 @@ async function startRunCommand(context) {
   }
   const startedAtUtc = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   const stamp = startedAtUtc.slice(0, 16).replace('T', '-').replace(':', '');
-  const dir = path.join(ROOT, 'device-runs', `${stamp}-${args[0]}`);
+  const dir = path.join(runsRoot(), `${stamp}-${args[0]}`);
   fs.mkdirSync(path.dirname(dir), {
     recursive: true,
     mode: 0o700
@@ -364,7 +372,10 @@ async function startRunCommand(context) {
   }, null, 2), {
     mode: 0o600
   });
-  console.log(`${dir}\nexport DEVICE_RUN_DIR=${ui.shellQuote(dir)}`);
+  const current = path.join(runsRoot(), 'CURRENT');
+  fs.rmSync(current, { force: true });
+  fs.symlinkSync(path.basename(dir), current);
+  console.log(`${dir}\nstartedAtUtc=${startedAtUtc}\nCURRENT -> ${path.basename(dir)}`);
 }
 
 function normalizationChanges(s) {
