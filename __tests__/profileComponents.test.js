@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { fireEvent } from '@testing-library/react-native';
+import { fireEvent, within } from '@testing-library/react-native';
 import { renderWithProviders as render } from '../test-support/renderWithProviders';
 import Avatar from '../src/components/common/Avatar';
 import ProfileIdentity from '../src/components/profile/ProfileIdentity';
-import AppReleaseInfo, { formatReleaseLines } from '../src/components/profile/AppReleaseInfo';
+import AppReleaseInfo from '../src/components/profile/AppReleaseInfo';
 import ExportDatabaseSheet from '../src/components/profile/ExportDatabaseSheet';
 import { colors, spacing } from '../src/constants/colors';
 import { typeRoles } from '../src/constants/typography';
@@ -21,17 +21,14 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 const profile = { first_name: 'Test', last_name: 'User', jobTitleName: 'Education Assistant' };
-const releaseMetadata = { supabaseTarget: 'sqlite-staging', supabaseProjectId: 'segygjzpujphwvrubusm' };
-const runtimeDiagnostics = {
-  application: { version: '1.2.0', build: '7' },
-  device: { modelName: 'iPhone', osName: 'iOS', osVersion: '18.0' },
-  update: { id: null },
+const release = {
+  releaseLabel: '1.5.0+2', version: '1.5.0', build: '55', buildLabel: '1.5.0 (55)', channel: 'preview',
+  runtimeVersion: '1.5.0', updateId: '0199a6f2-8add-7aae-9c11-3f0e5d1c2b4a', shortUpdateId: '0199a6f2',
+  launch: 'Update', otaRelease: 2, publishedAt: '2026-11-05 09:12 UTC', publishedAtIso: '2026-11-05T09:12:47.000Z',
+  sourceCommit: 'fd053cf', gitCommit: 'fd053cfc0a1b2c3d4e5f60718293a4b5c6d7e8f9',
+  backendTarget: 'sqlite-staging', backendProjectId: 'segygjzpujphwvrubusm',
 };
-const lines = [
-  'Version\u00a01.2.0\u00a0(Build\u00a07) · Backend\u00a0sqlite-staging',
-  'Project\u00a0segygjzpujphwvrubusm',
-  'Device\u00a0iPhone · iOS\u00a018.0 · Update\u00a0Embedded',
-];
+const device = { modelName: 'iPhone', osName: 'iOS', osVersion: '18.0' };
 const parentView = (node) => {
   let parent = node.parent;
   while (parent && parent.type !== 'View') parent = parent.parent;
@@ -69,32 +66,68 @@ test('ProfileIdentity never truncates and centres its avatar beside wrapping tex
   expect(StyleSheet.flatten(parentView(column).props.style)).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: spacing.md });
 });
 
-test('formatReleaseLines preserves the facts and only breaks spaces at separators', () => {
-  expect(formatReleaseLines({ releaseMetadata, runtimeDiagnostics })).toEqual(lines);
+test('AppReleaseInfo is an App release section that shows the release large and every fact under its label', () => {
+  const ui = render(<AppReleaseInfo release={release} device={device} />);
+  expect(ui.getByRole('header', { name: 'App release' })).toBeTruthy();
+  expect(ui.getByLabelText('Release, 1.5.0+2')).toBeTruthy();
+  for (const [label, value] of [
+    ['Build', '1.5.0 (55)'], ['Channel', 'preview'], ['Runtime', '1.5.0'], ['Update', '0199a6f2'],
+    ['Running', 'Update'], ['Published', '2026-11-05 09:12 UTC'], ['Source', 'fd053cf'],
+  ]) {
+    const cell = ui.getByLabelText(`${label}, ${value}`);
+    expect(within(cell).getByText(label)).toHaveStyle({ ...typeRoles.textLabel, color: colors.textSecondary });
+    expect(within(cell).getByText(value)).toHaveStyle({ ...typeRoles.textData, color: colors.text });
+  }
+  expect(ui.getByLabelText('Backend, sqlite-staging, segygjzpujphwvrubusm')).toBeTruthy();
+  // The full update id is never shown: the first 8 characters identify it.
+  expect(ui.queryByText(release.updateId)).toBeNull();
 });
 
-test('formatReleaseLines keeps build, device, OS and update fallbacks', () => {
-  expect(formatReleaseLines({ releaseMetadata, runtimeDiagnostics: {
-    application: { version: '1.2.0', build: null },
-    device: { modelName: null, osName: null, osVersion: null },
-    update: { id: 'ota-id' },
-  }, platform: { OS: 'android', Version: 35 } })).toEqual([
-    'Version\u00a01.2.0\u00a0(Build\u00a0?) · Backend\u00a0sqlite-staging',
-    lines[1],
-    'Device\u00a0Unknown · android\u00a035 · Update\u00a0ota-id',
-  ]);
-});
-
-test('AppReleaseInfo renders three centred tabular lines without truncation or outer spacing', () => {
-  const ui = render(<AppReleaseInfo releaseMetadata={releaseMetadata} runtimeDiagnostics={runtimeDiagnostics} />);
-  const texts = ui.UNSAFE_getAllByType(Text);
-  expect(texts).toHaveLength(3);
-  texts.forEach((node, index) => {
-    expect(node.props.children).toBe(lines[index]);
-    expect(StyleSheet.flatten(node.props.style)).toMatchObject({ ...typeRoles.textCaption, color: colors.textSecondary, fontVariant: ['tabular-nums'], textAlign: 'center' });
+test('AppReleaseInfo sets the release in large tabular numerals and lets support copy every value', () => {
+  const ui = render(<AppReleaseInfo release={release} device={device} />);
+  const value = ui.getByText('1.5.0+2');
+  expect(StyleSheet.flatten(value.props.style)).toMatchObject({ ...typeRoles.displayTitle, color: colors.text, fontVariant: ['tabular-nums'] });
+  for (const text of ['1.5.0+2', '1.5.0 (55)', '0199a6f2', '2026-11-05 09:12 UTC', 'fd053cf', 'sqlite-staging', 'segygjzpujphwvrubusm']) {
+    const node = ui.getByText(text);
+    expect(node.props.selectable).toBe(true);
     expect(node.props.numberOfLines).toBeUndefined();
-  });
-  expect(StyleSheet.flatten(texts[0].parent.props.style)?.marginTop).toBeUndefined();
+  }
+  expect(StyleSheet.flatten(ui.getByText('0199a6f2').props.style).fontVariant).toEqual(['tabular-nums']);
+  expect(ui.getByText('Release')).toHaveStyle({ ...typeRoles.textLabel, color: colors.textSecondary });
+  expect(ui.getByText('segygjzpujphwvrubusm')).toHaveStyle({ ...typeRoles.textCaption, color: colors.textSecondary });
+});
+
+test('AppReleaseInfo rows sit in one white group with a divider between rows, not after the last', () => {
+  const ui = render(<AppReleaseInfo release={release} device={device} />);
+  expect(ui.getAllByTestId('list-row-divider')).toHaveLength(4);
+});
+
+test('AppReleaseInfo for the built-in bundle shows no published time and says it is running the built-in bundle', () => {
+  const ui = render(<AppReleaseInfo device={device} release={{
+    ...release, releaseLabel: '1.5.0', launch: 'Built-in', otaRelease: null, publishedAt: null, publishedAtIso: null,
+    shortUpdateId: '7d3e1c55', updateId: '7d3e1c55-0b44-4f0e-8a9b-5c6d7e8f9a0b',
+  }} />);
+  expect(ui.getByLabelText('Release, 1.5.0')).toBeTruthy();
+  expect(ui.getByLabelText('Running, Built-in')).toBeTruthy();
+  expect(ui.getByLabelText('Published, \u2014')).toBeTruthy();
+});
+
+test('AppReleaseInfo shows a dash for each missing fact rather than leaving a gap', () => {
+  const ui = render(<AppReleaseInfo device={device} release={{
+    ...release, channel: null, runtimeVersion: null, updateId: null, shortUpdateId: null, publishedAt: null, sourceCommit: null,
+  }} />);
+  for (const label of ['Channel', 'Runtime', 'Update', 'Published', 'Source']) {
+    expect(ui.getByLabelText(`${label}, \u2014`)).toBeTruthy();
+  }
+});
+
+test('AppReleaseInfo keeps device and OS as one centred caption line under the card', () => {
+  const ui = render(<AppReleaseInfo release={release} device={device} />);
+  const line = ui.getByText('Device\u00a0iPhone · iOS\u00a018.0');
+  expect(StyleSheet.flatten(line.props.style)).toMatchObject({ ...typeRoles.textCaption, color: colors.textSecondary, textAlign: 'center' });
+  const fallback = render(<AppReleaseInfo release={release} device={{ modelName: null, osName: null, osVersion: null }}
+    platform={{ OS: 'android', Version: 35 }} />);
+  expect(fallback.getByText('Device\u00a0Unknown · android\u00a035')).toBeTruthy();
 });
 
 test('ExportDatabaseSheet presents the warning and routes Export and Cancel separately', () => {

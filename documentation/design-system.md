@@ -428,6 +428,16 @@ Other support actions remain independent; collapsing the panel does not suppress
 toasts. Database export first opens `ExportDatabaseSheet`, a `ConfirmSheet` wrapper with the
 Sensitive title accessory and `confirmVariant="destructive"`.
 
+Profile's **App release** section ([`AppReleaseInfo`](../src/components/profile/AppReleaseInfo.js),
+2026-11-05) sits after Legal and before Sign out: a `SectionHeader` over a `ListGroup` of read-only
+fact rows that honour `showDivider` (divider inset 16, as a lead-less `ListRow`). A row holds one
+fact, or two side by side (each `flex: 1`, gap 16, padding 10/16, min height 64, top-aligned): a
+caps `textLabel`/`textSecondary` label over a `textData`/ink value (tabular numerals). The Release
+value uses `displayTitle` with tabular numerals. Values are `selectable` and wrap; a missing value
+shows an em dash. Backend puts the project id under its target in `textCaption`/`textSecondary`.
+Each fact is one accessible "label, value" element. Device and OS are one centred
+`textCaption`/`textSecondary` line 12dp under the group.
+
 ### Children components (Bold Red PR 2)
 
 | Piece and source | Contract |
