@@ -17,7 +17,7 @@ import {
   shouldEnqueueOutbox,
   upsertDomainRecord,
 } from './domainRepositoryUtils';
-import { decodeJson, syncStatusFromSynced, timestamp } from './sqliteRepositoryUtils';
+import { syncStatusFromSynced } from './sqliteRepositoryUtils';
 import { v4 as uuidv4 } from 'uuid';
 
 const GROUP_COLUMNS = [
@@ -78,18 +78,6 @@ const assertGroupProgrammeUnchanged = (existing, programmeId) => {
   }
 };
 
-const writeOutboxPayload = async (txn, outboxIdValue, payload) => {
-  await txn.runAsync(`
-    update sync_outbox
-    set payload = ?,
-        status = 'pending',
-        last_error = null,
-        next_retry_at = null,
-        updated_at = ?
-    where id = ?
-  `, JSON.stringify(payload), timestamp(), outboxIdValue);
-};
-
 const createMissingGroupAssignment = async (txn, {
   groupId,
   ownerUserId,
@@ -112,50 +100,10 @@ const createMissingGroupAssignment = async (txn, {
   if (existingAssignment) return mapDomainRow(existingAssignment);
 
   const assignmentId = groupEaAssignmentDomainId({ groupId });
-  const archivedAssignment = await txn.getFirstAsync(`
-    select *
-    from group_ea_assignments
-    where group_id = ?
-    order by case when id = ? then 0 else 1 end
-    limit 1
-  `, groupId, assignmentId);
-  if (archivedAssignment?.id === assignmentId) {
-    const updatedAt = timestamp();
-    // Assignment identity fields are immutable server-side. Reactivation only
-    // clears lifecycle archive fields on the existing deterministic row.
-    await txn.runAsync(`
-      update group_ea_assignments
-      set unassigned_at = null,
-          handover_reason = null,
-          sync_status = ?,
-          last_sync_error = null,
-          updated_at = ?
-      where id = ?
-    `, syncStatus, updatedAt, assignmentId);
-    const reactivatedAssignment = await txn.getFirstAsync(
-      'select * from group_ea_assignments where id = ?',
-      assignmentId
-    );
-    const assignment = mapDomainRow(reactivatedAssignment);
-    const insertStillOwed = await txn.getFirstAsync(`
-      select 1 as owed from sync_outbox
-      where table_name = 'group_ea_assignments' and record_id = ? and operation = 'insert'
-        and status in ('pending', 'failed', 'in_flight')
-      limit 1
-    `, assignment.id);
-    // An unacknowledged insert may already have committed before its response was lost, so
-    // reactivation always carries an explicit restore. If the insert is still owed, replay it too:
-    // assignment inserts are insert-or-ignore and therefore safe to retry before the restore.
-    await enqueueLifecycleOutbox(txn, 'group_ea_assignments', assignment.id, 'restore', {
-      id: assignment.id,
-      unassigned_at: null,
-      handover_reason: null,
-    });
-    if (insertStillOwed) {
-      await enqueueDomainOutbox(txn, 'group_ea_assignments', assignment.id, 'insert', assignment);
-    }
-    return assignment;
-  }
+  // D5 (plan O2 item 4): an EA never reopens an ended group assignment; only Head Office does.
+  // An existing deterministic row is ended here (the active check above found none), so it stays
+  // ended and nothing is queued. Recreating it under the same id would be a hidden restore.
+  if (await txn.getFirstAsync('select id from group_ea_assignments where id = ?', assignmentId)) return null;
 
   const assignment = normalizeSyncFields({
     id: assignmentId,
@@ -550,145 +498,3 @@ export const createGroupsRepository = ({ database } = {}) => {
 };
 
 export const groupsRepository = createGroupsRepository();
-
-export const repairGroupOwnershipForSync = async ({ database } = {}) => (
-  runRepositoryTransaction(database, async (txn) => {
-    const groupOutboxRows = await txn.getAllAsync(`
-      select
-        g.id,
-        g.programme_id,
-        g.created_by,
-        g.created_at,
-        so.status as outbox_status,
-        so.id as outbox_id,
-        so.payload as outbox_payload
-      from groups g
-      join sync_outbox so
-        on so.table_name = 'groups'
-       and so.record_id = g.id
-       and so.operation = 'insert'
-      where so.status in ('pending', 'failed', 'terminal')
-    `);
-
-    for (const row of groupOutboxRows) {
-      const payload = decodeJson(row.outbox_payload, {});
-      const ownerUserId = row.created_by || payload.created_by || payload.staff_id || payload.user_id;
-      const programmeId = row.programme_id || payload.programme_id;
-      if (!ownerUserId || !programmeId) continue;
-
-      const rowNeedsRepair = row.created_by !== ownerUserId;
-      const payloadNeedsRepair = payload.created_by !== ownerUserId || payload.programme_id !== programmeId;
-      if (!rowNeedsRepair && !payloadNeedsRepair) continue;
-
-      if (rowNeedsRepair) {
-        await txn.runAsync(`
-          update groups
-          set created_by = ?,
-              sync_status = 'pending',
-              last_sync_error = null,
-              updated_at = ?
-          where id = ?
-        `, ownerUserId, timestamp(), row.id);
-      }
-
-      if (payloadNeedsRepair || row.outbox_status !== 'pending') {
-        await writeOutboxPayload(txn, row.outbox_id, {
-          ...payload,
-          id: row.id,
-          programme_id: programmeId,
-          created_by: ownerUserId,
-        });
-      }
-
-      await createMissingGroupAssignment(txn, {
-        groupId: row.id,
-        ownerUserId,
-        programmeId,
-        assignedAt: row.created_at || payload.created_at,
-      });
-    }
-
-    const membershipOutboxRows = await txn.getAllAsync(`
-      select
-        cgm.id,
-        cgm.child_id,
-        cgm.group_id,
-        cgm.grouping_version_id,
-        cgm.created_by,
-        g.programme_id as group_programme_id,
-        g.created_at as group_created_at,
-        g.grouping_version_id as group_grouping_version_id,
-        g.created_by as group_created_by,
-        gea.ea_user_id as group_ea_user_id,
-        so.status as outbox_status,
-        so.id as outbox_id,
-        so.payload as outbox_payload
-      from child_group_memberships cgm
-      join sync_outbox so
-        on so.table_name = 'child_group_memberships'
-       and so.record_id = cgm.id
-       and so.operation = 'insert'
-      left join groups g
-        on g.id = cgm.group_id
-      left join group_ea_assignments gea
-        on gea.group_id = cgm.group_id
-       and gea.unassigned_at is null
-      where so.status in ('pending', 'failed', 'terminal')
-    `);
-
-    for (const row of membershipOutboxRows) {
-      const payload = decodeJson(row.outbox_payload, {});
-      const ownerUserId = row.created_by
-        || payload.created_by
-        || row.group_ea_user_id
-        || row.group_created_by;
-      const groupProgrammeId = row.group_programme_id || payload.programme_id;
-      const groupingVersionId = row.grouping_version_id
-        || payload.grouping_version_id
-        || row.group_grouping_version_id
-        || null;
-      if (!ownerUserId) continue;
-
-      const repairedAssignment = row.group_ea_user_id
-        ? null
-        : await createMissingGroupAssignment(txn, {
-          groupId: row.group_id || payload.group_id,
-          ownerUserId,
-          programmeId: groupProgrammeId,
-          assignedAt: row.group_created_at || payload.joined_at,
-        });
-
-      const rowNeedsRepair = row.created_by !== ownerUserId
-        || row.grouping_version_id !== groupingVersionId;
-      const payloadNeedsRepair = payload.created_by !== ownerUserId
-        || (groupingVersionId && payload.grouping_version_id !== groupingVersionId);
-      const needsRetryReset = row.outbox_status !== 'pending' || Boolean(repairedAssignment);
-      if (!rowNeedsRepair && !payloadNeedsRepair && !needsRetryReset) continue;
-
-      if (rowNeedsRepair || needsRetryReset) {
-        await txn.runAsync(`
-          update child_group_memberships
-          set created_by = ?,
-              grouping_version_id = ?,
-              sync_status = 'pending',
-              last_sync_error = null,
-              updated_at = ?
-          where id = ?
-        `, ownerUserId, groupingVersionId, timestamp(), row.id);
-      }
-
-      if (payloadNeedsRepair || needsRetryReset) {
-        await writeOutboxPayload(txn, row.outbox_id, {
-          ...payload,
-          id: row.id,
-          child_id: row.child_id || payload.child_id,
-          group_id: row.group_id || payload.group_id,
-          ...(groupingVersionId ? { grouping_version_id: groupingVersionId } : {}),
-          created_by: ownerUserId,
-        });
-      }
-    }
-
-    return true;
-  })
-);
