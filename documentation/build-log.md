@@ -8753,3 +8753,75 @@ class resolver. Codex code review (gpt-6-astra): approve; its one finding (the c
 could not tell name order from id order) is fixed by giving the fixture classes names whose order
 opposes their ids. The Django real-Postgres gate (`api/tests_masi_app_postgres.py`) passed against
 the retained harness database, decoding both v2 functions through the new read-only guard.
+
+### 2026-11-04 — Lifecycle OTA, plan O2: Delete child through the server; no orphan-making UI (`feat/lifecycle-ota-removal`)
+
+Builder slice for work order 3 of `docs/superpowers/plans/2026-11-04-lifecycle-safety.md` (step O2,
+D3/D4/D5/D10; closes the phone side of MA-BUG-20261104-012, -013, -014, -015, -016). JS only for
+the 1.5.0 OTA: no SQLite migration, no new outbox operation. Hard gate before real lessons (D10).
+
+**What shipped.**
+- **"No class" removed** from Edit child (MA-BUG-015). The picker offers only real classes; with
+  none it shows "No classes available. Create a class first."
+- **Delete child = `childrenRepository.removeChild`**, one transaction that always queues the
+  existing children `hard_delete` (RPC `delete_child_if_no_history`; the server decides, D3). No
+  local history: deleted locally as before (`deleteIfNoHistory`), incl. the no-request purge of a
+  never-sent child. Local history: the child is archived on the phone only; only this EA's own
+  acknowledged direct assignment and memberships in groups they hold end, on the phone only; no
+  per-relationship archive rows, no children archive. Shared enrollments/class memberships and
+  other EAs' rows are never touched (B2). The old `archiveChild` cascade is deleted.
+- **Engine (only the O2-owned spots).** The children `hard_delete` gate also waits for the child's
+  own relationship INSERTs (`child_ea_assignments`, `child_programme_enrollments`,
+  `child_class_memberships`, `child_group_memberships`; any status; matched by payload
+  `child_id`). A children `hard_delete` is never a parent: one exclusion in
+  `rememberBlockedRecord`, and `hasPendingRecord` counts only a parent's `insert`/`update`. A
+  genuinely unacknowledged child INSERT keeps its blocker role while it backs off (owed child
+  INSERTs the pass will not send are registered as blockers).
+- **Pull filter** for a pending child `hard_delete` now also covers group memberships
+  (ChildrenContext and `persistPreloadedChildData`).
+- **Delete class** (`archiveClass`, MA-BUG-013): never exits a child's class membership or changes
+  `class_id`; ends only this EA's own class assignment. A known leave (another creator, or another
+  EA's active class assignment held locally; `classesRepository.isLeaveOnly`) queues no class
+  archive; otherwise the class archive is queued and the server decides (S1).
+- **Restore producer deleted** (D5): `createMissingGroupAssignment` reactivation,
+  `repairGroupOwnershipForSync` and startup repair v1, and `groupEaAssignmentsRepository.save`'s
+  restore branch (a local reopen is now refused). The engine still sends a queued 1.5.0 restore.
+- **E4** (MA-BUG-016): `removeChildFromGroup` rewrites a still-queued membership INSERT to carry
+  `removed_at` instead of queuing an archive behind it (re-add and sibling-group move).
+- **Sheets.** Delete child and Delete class confirm in a `ConfirmSheet` with draft plain-words copy
+  for Jim's wording pass ("Remove Thandi? …", "Leave 1A?" / "Delete 1A?").
+
+**Decisions and deviations (see the slice report for detail).**
+- Rows whose relationship INSERT is still queued are not ended on the phone at Delete child: an
+  ended local row stops counting as grant evidence (`hasPendingActiveAssignment` needs an open
+  row), and `applyAcknowledgedPayload` would reopen a stamped membership on acknowledgement. They
+  converge through the next pull after the removal lands.
+- A known-leave Delete class sends only the EA's class-assignment archive, so the EA's own
+  children never vanish while the class is still live (offline included).
+- E4 merges rather than drops: a queued membership INSERT may already have committed and only
+  children INSERTs record dispatch evidence.
+
+**Outbox-reader audit (Codex round 5 inventory, 16 items).** Changed: 2 (backoff blocker
+seeding), 3 (gate extension), 6/7/8/11 (central blocker exclusion), 9 (`hasPendingRecord`
+operation filter), 15 (filter extended to group memberships). Verified unchanged and safe: 1, 4,
+5, 10, 12, 13, 14, 16. New producer-side readers: `removeChild` (queued-INSERT check before a local
+end) and `removeChildFromGroup` (queued-INSERT merge); neither decides ordering or retry.
+
+**Evidence.** Real-SQLite tests through the real handle and supabase-js over
+`test-support/lifecycleServer.js` (post-batch contract): all-offline chain with a failed first
+pass, repeated ordinary and forced passes, permanently refused relationship INSERT before and after
+it leaves the outbox, acknowledged child refused 42501, class-path and other-programme co-held
+children, sole-holder hiding across pulls, Delete class shared/sole cases, E4 re-add and sibling
+move. Each engine change was reverted alone and its tests failed. The chain's wire is committed at
+`scripts/fixtures/lifecycle-ota/delete-child-offline-chain.wire.json`; replayed (GET filtered) by
+`docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/pg-replay.cjs` into disposable
+PG17 with all 42 current migrations: every replayed request agreed (relationship INSERTs, session,
+attendee, tick); the Battery Run, assessment and removal RPCs are not replayed by that tool (G1,
+with the server batch).
+
+**Residual risks.** A with-history child's local row stays `pending` after the removal lands when
+its own INSERT was still queued at Delete (the engine skips domain bookkeeping for `hard_delete`),
+so a later Head Office reopen of that same child would not un-archive it on this phone. A Delete
+class by the creator and only holder still leaves that class's delivery children in a closed class
+(same outcome as before; the sheet says to move them first). An acknowledged membership whose
+archive backs off can still meet a re-add 23505 (outside E4's still-queued case).
