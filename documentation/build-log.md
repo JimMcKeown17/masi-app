@@ -8942,3 +8942,15 @@ X2b and X4 are ported as regression tests.
 
 **Verification (Node 20).** `npx jest`: 522 suites / 8,285 tests passed. `npx jest -c
 jest.integration.config.js`: 113 suites / 1,554 tests passed. Container `wo4-jsonb-pg` removed.
+
+**Second review fixes (2026-11-05).**
+- MEDIUM (reviewer repro zzR2R1): the removed-child mark could be wiped by a pull, because it was
+  read from the local child's `archive_reason`, which a roster pull of a co-held child rewrites.
+  The mark now lives in the outbox: the `hard_delete` row while queued, and on its acknowledgement
+  the child's refused relationship INSERTs are stamped `REMOVED_WITH_CHILD` in the same
+  transaction (never resendable; clears under the receipt rule; Sync status says "You removed this
+  child, so this is no longer needed."). The `archive_reason` check is removed.
+- LOW: an exit that removes a record's last outbox row leaves a still-pending domain row terminal
+  so the next pull converges it.
+- Verification (Node 20): `npx jest` 522 suites / 8,293 tests passed; `npx jest -c
+  jest.integration.config.js` 113 suites / 1,555 tests passed.

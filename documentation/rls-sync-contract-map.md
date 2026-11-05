@@ -424,11 +424,15 @@ retry. The `hard_delete` also waits while this EA's owed (`pending`/`failed`/`in
 for the child's own `child_ea_assignments`, `child_programme_enrollments`,
 `child_class_memberships` or `child_group_memberships` (matched by the payload `child_id`) is in
 the outbox. A refused (terminal) one does not hold it (combined-OTA review, 2026-11-05): once the
-child's removal is queued or done (a children `hard_delete` row, or the local child archived as
-`removed_by_ea`), such an INSERT is never sent again by any path (`RESENDABLE_REFUSAL_SQL` and
-`isResendableRefusalHere`), so it cannot land after the removal and re-create a grant; it blocks
-nothing and clears under the delivered-receipt rule like a refused lifecycle row, or stays visible
-as a support case if its receipt can never prove delivery. History never waits. A waiting children `hard_delete` is
+child's removal is queued or acknowledged, such an INSERT is never sent again by any path
+(`RESENDABLE_REFUSAL_SQL` and `isResendableRefusalHere`), so it cannot land after the removal and
+re-create a grant; it blocks nothing and clears under the delivered-receipt rule like a refused
+lifecycle row, or stays visible as a support case if its receipt can never prove delivery. The
+mark lives in the outbox, where no pull reaches it (second review): while the `hard_delete` is
+queued its row marks the child, and its acknowledgement stamps this EA's refused relationship
+INSERTs of the child `REMOVED_WITH_CHILD` in the same transaction. The child's own
+`archive_reason` is not consulted: a co-held child stays live on the server and a pull rewrites
+it, and Head Office may un-archive a child and leave the reason set. History never waits. A waiting children `hard_delete` is
 never a parent (review rounds 3-4): `rememberBlockedRecord` never registers it, so no dependency
 skip, failure, batch deferral or archive subject index treats the child as blocked, and
 `hasPendingRecord` counts only a parent's owed `insert` or `update` as FK retry evidence. A
@@ -2070,7 +2074,9 @@ delivery block cannot re-bound it uncut. The check and the delete share one SQLi
 restores and edits (`ARCHIVE_NOT_APPLIED`, `RESTORE_NOT_APPLIED`, `MV001`, `UPDATE_NOT_APPLIED`,
 or `42501`, marked or not), and refused relationship INSERTs of a child this EA removed, whose rule
 holds: the server wins and the receipt keeps the EA's intent. None of them leaves while its own
-insert is still queued (`held`; see the same-record gate). The
+insert is still queued (`held`; see the same-record gate). When an exit removes a record's last
+outbox row, a domain row still marked `pending` becomes `terminal` in the same transaction, so the
+next pull converges it. The
 domain row keeps `sync_status = 'terminal'`, so any later pull converges it whatever its version.
 Every other refusal (history, the children `hard_delete`, other codes) waits for the EA's "The office
 has a copy — remove from this phone"
