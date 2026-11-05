@@ -2504,3 +2504,55 @@ the first missing earlier step, with that skill's name. A child whose only missi
 this curriculum no longer has gets no step (`stillOnStep` returns `null`) and is listed as "not
 ready yet", rather than the app throwing on content it no longer knows. Both rules are tested
 through the pure helpers in `src/numeracy/cards.js` and through the rendered card.
+
+## 2026-11-05 — Authorize history by what was held then, and let the server absorb old phones (lifecycle safety)
+
+**The bug class.** A field app records work offline and uploads it later. If the server asks "may
+this EA write for this child *now*?", every lifecycle change that happens between the lesson and
+the upload turns the lesson into a permanent refusal: the EA's own Delete child, a Head Office
+handover, a programme switch, even a new academic year. Zazi iZandi met this and answered with
+waiting: drain the outbox before access ends, hold uploads behind their parents, bind an archive to
+the uploads before it. Each wait needed an exit for when it never finished, and some exits needed a
+phone reset. Masi's reproductions showed the same thing in miniature: Delete child after an offline
+lesson uploaded the session with no attendees and lost the tick, and reordering the phone's pushes
+did not survive a failed first pass.
+
+**The fix is a different question, not more ordering.** History is a fact about the past, so the
+server now asks "did this EA hold this child and this programme on the SAST day the work
+happened?" (`private.user_held_grant_on`, `private.user_held_programme_on`,
+`private.can_record_session_attendee`). The evidence for that answer is the assignment and
+membership intervals, so two more rules protect it: an end, once set, cannot be moved or cleared by
+an EA (the `<table>_zz_lifecycle_guard` trigger), and nothing holding history can be hard-deleted
+or cascade-wiped (`ON DELETE RESTRICT`, no EA DELETE). With those three rules, a lifecycle end and
+the history recorded before it **commute**: whichever arrives first, the result is the same. Upload
+order becomes an optimisation. That is the mental model worth keeping: when two operations race,
+first look for a formulation in which they commute before building machinery that orders them.
+
+**Archive conflicts are a shared-state decision.** One phone's Delete class used to archive a class
+another EA still taught, because the phone decided a global effect from its partial copy. The
+server now decides with one predicate, `private.other_active_holder`: if someone else still holds
+the child or class, the removal means "leave" (end only my grants); only the last holder archives
+for everyone. Because Head Office can grant a new holder at the same moment, the predicate takes
+row locks in one global order (children → classes → groups) and then reads with a fresh snapshot.
+The harness proves this with two real database sessions: Head Office holds the class lock while
+granting EA B; EA A's Delete child waits on that lock and then leaves instead of archiving. Remove
+the lock and the same test fails, which is how we know it tests the lock and not luck.
+
+**Absorb, don't refuse.** A server migration lands on every installed phone at once, with no update
+step, and the 1.5.0 client classifies answers in fixed ways: an unknown SQLSTATE retries forever,
+`23505` is terminal, an archive needs exactly one returned id. So a server change is only safe if
+every request shape 1.5.0 sends gets the same or a better answer *as that client judges it*. The
+guard therefore never raises: a stale archive becomes a one-row no-op, a forbidden archive becomes
+"leave" with one row, and Delete child returns `true` on every non-error path. To make the rule
+checkable rather than aspirational, the classifier and acknowledgement rules were extracted by
+running a probe inside a checkout of the real 1.5.0 commit, frozen as a JSON fixture, and every
+case runs against both the server 1.5.0 shipped with and the current migrations
+(`npm run verify:lifecycle-compat:postgres`). The general rule: **test compatibility through the
+old client's own code, frozen, not through your memory of it or the current source**, because the
+current source is exactly what the OTA is about to change.
+
+**What it does not fix, on purpose.** Rows that the existing UPDATE policies hide from an EA still
+return 0 rows on embedded 1.5.0; the server cannot acknowledge a row the request never reaches
+without copying every authority predicate into a second "former holder" form. Those rows leave the
+phone through the O1 app update's delivered-receipt exit instead. Writing that trade-off down is
+part of the design: a residual you name and route is cheaper than a rule you duplicate.
