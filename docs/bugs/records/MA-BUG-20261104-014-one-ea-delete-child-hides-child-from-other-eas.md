@@ -17,13 +17,13 @@ priority: P1
 
 diagnosis_state: PROBABLE
 delivery_state: RELEASED
-verification_state: LOCAL_TESTED
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 70
 confidence_basis: "Mechanism traced step by step in the current source and the 1.5.0 pilot source and supported by executed single-EA archive runs (E1c, pg-results), but the two-EA (literacy plus numeracy) case itself was not executed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T15:44:00Z
+updated_at_utc: 2026-11-05T19:10:00Z
 first_observed_at: 2026-11-05T00:50:00Z
 last_observed_at: 2026-11-05T00:50:00Z
 
@@ -166,6 +166,7 @@ lessons. Interim: EAs do not use Delete child until their phone shows the OTA up
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #156, #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-removal, feat/lifecycle-safety-server |
 | 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555; feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
 | 2026-11-05T15:44:00Z | Claude | Released | Server batch applied to staging `segygjzpujphwvrubusm` at 15:39 UTC from `feat/lifecycle-safety-server` 09fb332a (PR #161; before/after checks in its build log, b15fb722); app update published to channel `preview`, runtime 1.5.0, update group `8addaae6` from `feat/lifecycle-ota` fd053cfc (PR #163). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
+| 2026-11-05T18:44:19Z | Jim, Claude | Device and server check on the released update: Delete child left the other EA's access intact | Jim, iPhone, app 1.5.0 build 28 on update 1.5.0+4, staging: "I ran a session offline with [a child] from class 1A (ms zantsi) then I deleted him ... I have no sync issues." Read-only staging queries by the orchestrator: class 1A is co-held (Jim's test EA account and the second test EA account both hold active class assignments). At 18:44:19.719975 UTC the server ended exactly Jim's direct assignment and his group membership, at one instant (one transaction: the `delete_child_if_no_history` fingerprint). The child was NOT archived; the class 1A membership and the programme enrollment stayed open, so the second test EA account still holds the child. No incident receipts from Jim's account after the deletion. Limit: the second test EA account's phone was not opened, so what that EA sees on screen was not looked at; the server rows are the evidence. Diagnosis stays PROBABLE (the two-EA literacy plus numeracy case was not run) |
 
 ## Open questions
 
