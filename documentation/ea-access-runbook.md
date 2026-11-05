@@ -234,6 +234,16 @@ row at the moment it reached the server, so an archive's rows end over a few sec
 archive to the EA's delivery row (`removed_until`, with a `removal_spread` note). Restore treats
 that span as the removal.
 
+**Check `removed_at` against what the EA tells you.** A Delete child that ended nothing leaves no
+trace in the data. That happens when the EA's delivery had already ended (a Head Office handover
+or end-delivery) and the child is in none of their groups: the app still lets the EA who added the
+child delete it. For a live child the plan then shows Head Office's end as `removed_at`. Restore
+refuses a handover (`ended_by_handover`, below), but it cannot tell an end-delivery from the EA's
+own removal. So compare `removed_at` (and the delivery row's gap hours) with when the EA says they
+deleted the child. If `removed_at` is clearly earlier, do not apply: the EA's Delete child changed
+nothing, and applying would undo Head Office's end. Use `reopen child` only when that Head Office
+end was the mistake.
+
 **What it reopens, in place** (same ids, start dates and row versions; ends cleared):
 
 - the EA's own delivery row (`child_ea_assignments`), with the gap printed. The removal must have
@@ -253,7 +263,7 @@ support ticket): it is the only record of what stayed ended.
 | `class_archived_skipped` | The class has been archived since, so the child comes back without it. The app shows a child only through a live class (MA-BUG-20261104-015), so the EA cannot see the child and cannot fix this. Record an MA-BUG with the apply output and ask Jim to place the child in a live class. |
 | `group_archived_skipped` | The group has been archived since, so that membership stays ended. The EA can add the child to a live group in the app. |
 | `removal_spread` | The phone's clock was ahead, so the removal ended its rows over these seconds instead of at one moment. Restore reopens every row of the child that ended in between. Nothing to do. |
-| `near_miss_not_reopened` | Rows that ended within an hour of the removal but not with it (`seconds_from_t`): a group membership, or an enrolment or class membership on the side a wrong clock cannot explain. Usually a separate change. They stay ended: check each one, and record an MA-BUG if one should have come back. |
+| `near_miss_not_reopened` | Rows that ended within an hour of the removal but not with it (`seconds_from_t`): a group membership; an enrolment or class membership the child can do without, because after the restore it is still enrolled in that programme and in a live class (for example the EA moved the child to another class just before the Delete child); or one that ended on the side a wrong clock cannot explain. Usually a separate change. They stay ended: check each one, and record an MA-BUG if one should have come back. |
 
 | Refusal | Meaning and what to do |
 | --- | --- |
@@ -262,7 +272,8 @@ support ticket): it is the only record of what stayed ended.
 | `archived_by_another_ea` | Another EA's Delete child archived the child (`archived_by_user_id`). Restore that EA first, then this one. If `archived_by_user_id` is empty, record an MA-BUG and ask Jim. |
 | `removal_not_finished` | The child is archived but this EA still holds it: the phone is still sending the removal. Wait until it has synced, then run the dry run again. |
 | `delivery_not_part_of_removal` | The EA's removal (`removed_at`) did not end their delivery of the child, which had already ended at `delivery_ended_at`, usually by a Head Office handover or end-delivery. This happens when the EA added the child and deleted it from Class detail after Head Office moved it. Restore cannot tell which rows the removal ended without undoing Head Office's change. Nothing was changed. Record an MA-BUG with this output and ask Jim. |
-| `nearby_end_not_restored` | An enrolment or class membership ended close to the removal but not with it (`rows`). It may be part of the removal (a 1.5.0 phone whose clock was ahead, on a child another EA also holds) or a separate change, and restoring without it would leave the child in no class. Nothing was changed. Record an MA-BUG with this output and ask Jim. |
+| `ended_by_handover` | Head Office handed this EA's delivery of the child to another EA (`successor_name`, `successor_email`) at `delivery_ended_at`: the handover ended this EA's row and started theirs at the same moment. The EA's Delete child did not end it (it may have ended nothing), and restoring it would make both EAs deliver. Nothing was changed. If the handover was the mistake, hand the child back with `handover child --from <successor> --to <this EA>`. Otherwise record an MA-BUG with this output and ask Jim. |
+| `nearby_end_not_restored` | An enrolment or class membership ended close to the removal but not with it (`rows`), and without it the restored child would have no open enrolment in that programme, or no class that is still live. It may be part of the removal (a 1.5.0 phone whose clock was ahead, on a child another EA also holds) or a separate change. Nothing was changed. Record an MA-BUG with this output and ask Jim. |
 | `active_row_conflict` | The child already has another open enrolment in that programme, class membership for that academic year, or membership of that group or grouping (`conflicting_id`, `rule`), so reopening would make two. Nothing was changed. Decide with Jim which one should stay. |
 
 A suspended EA, an unknown email and a profile-less login are refused as in the other commands.

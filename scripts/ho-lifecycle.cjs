@@ -517,7 +517,8 @@ ROLLBACK;`;
 // it (else the archive instant alone); for a live child, the end of the EA's most recent ended
 // delivery row. Every removal this command undoes ended the EA's own delivery row inside the
 // window; one that did not (a creator's Delete child after Head Office moved or ended their
-// delivery) is refused.
+// delivery) is refused, and so is a delivery row whose end is the start of another EA's (a
+// handover).
 // Restore reopens that delivery row, every enrolment and class or group membership of the child
 // ended inside the window, and the child when it is archived. It never touches a row ended at
 // another time or another EA's assignment, and never writes row_version, an identity column or a
@@ -569,6 +570,8 @@ DECLARE
   v_near jsonb;
   v_blocking jsonb;
   v_later jsonb;
+  v_successor jsonb;
+  v_reopening uuid[];
   v_child uuid;
   v_c public.children%ROWTYPE;
   v_from timestamptz;
@@ -623,8 +626,26 @@ const RESTORE_BODY = `
       CONTINUE;
     END IF;
     SELECT r.t_from, r.t_to INTO v_from, v_to FROM (${RESTORE_INSTANTS}) r WHERE r.child_id = v_child;
+    -- A live child whose group membership, in a group the EA held at that moment (or created, with
+    -- no other holder), ended after the EA's delivery row: that later end is the EA's removal, and
+    -- the delivery row had already ended (refused below as delivery_not_part_of_removal). The plan
+    -- shows that removal instant, as the refusal does.
+    v_later := NULL;
+    IF v_c.archived_at IS NULL THEN
+      SELECT jsonb_build_object('id', m.id, 'ended_at', m.removed_at) INTO v_later
+      FROM public.child_group_memberships m JOIN public.groups g ON g.id = m.group_id
+      WHERE m.child_id = v_child AND m.removed_at > v_to
+        AND (EXISTS (SELECT 1 FROM public.group_ea_assignments ga
+              WHERE ga.group_id = m.group_id AND ga.ea_user_id = v_ea AND ga.assigned_at <= m.removed_at
+                AND (ga.unassigned_at IS NULL OR ga.unassigned_at >= m.removed_at))
+          OR (g.created_by = v_ea AND NOT EXISTS (SELECT 1 FROM public.group_ea_assignments ga
+              WHERE ga.group_id = m.group_id AND ga.ea_user_id <> v_ea AND ga.assigned_at <= m.removed_at
+                AND (ga.unassigned_at IS NULL OR ga.unassigned_at >= m.removed_at))))
+      ORDER BY m.removed_at DESC, m.id LIMIT 1;
+    END IF;
     v_removals := v_removals || jsonb_build_array(jsonb_build_object('child_id', v_child,
-      'name', concat_ws(' ', v_c.first_name, v_c.last_name), 'removed_at', v_from, 'removed_until', v_to,
+      'name', concat_ws(' ', v_c.first_name, v_c.last_name),
+      'removed_at', coalesce(v_later -> 'ended_at', to_jsonb(v_from)), 'removed_until', coalesce(v_later -> 'ended_at', to_jsonb(v_to)),
       'archived', v_c.archived_at IS NOT NULL, 'archived_by_user_id', v_c.archived_by_user_id,
       'archive_reason', v_c.archive_reason));
 
@@ -672,25 +693,29 @@ const RESTORE_BODY = `
       CONTINUE;
     END IF;
 
-    -- Every removal restore undoes ended the EA's own delivery row inside its window. When the
-    -- archive (or, for a live child, a later end of a group membership of a group the EA held or
-    -- created and nobody else held) is not matched by that end, the EA's delivery had already
-    -- ended (a Head Office handover or end-delivery) and the removal was the app's creator Delete
-    -- child: restore cannot tell which rows are the removal's, and reopening the delivery row
-    -- would undo Head Office's change. Refuse.
-    v_later := NULL;
-    IF v_c.archived_at IS NULL THEN
-      SELECT jsonb_build_object('id', m.id, 'ended_at', m.removed_at) INTO v_later
-      FROM public.child_group_memberships m JOIN public.groups g ON g.id = m.group_id
-      WHERE m.child_id = v_child AND m.removed_at > v_to
-        AND (EXISTS (SELECT 1 FROM public.group_ea_assignments ga
-              WHERE ga.group_id = m.group_id AND ga.ea_user_id = v_ea AND ga.assigned_at <= m.removed_at
-                AND (ga.unassigned_at IS NULL OR ga.unassigned_at >= m.removed_at))
-          OR (g.created_by = v_ea AND NOT EXISTS (SELECT 1 FROM public.group_ea_assignments ga
-              WHERE ga.group_id = m.group_id AND ga.ea_user_id <> v_ea AND ga.assigned_at <= m.removed_at
-                AND (ga.unassigned_at IS NULL OR ga.unassigned_at >= m.removed_at))))
-      ORDER BY m.removed_at DESC, m.id LIMIT 1;
+    -- A delivery row that ended exactly when another EA's delivery row for the child started was
+    -- handed over: Head Office's handover ends one and inserts the other in one transaction, at one
+    -- now(). The EA's Delete child did not end it (often it ended nothing, which leaves no trace),
+    -- and reopening it would make two EAs deliver. Refuse, naming the successor.
+    SELECT jsonb_build_object('successor_user_id', o.user_id, 'successor_email', au.email,
+        'successor_name', concat_ws(' ', pu.first_name, pu.last_name), 'successor_assignment_id', o.id)
+      INTO v_successor
+      FROM public.child_ea_assignments o
+      LEFT JOIN auth.users au ON au.id = o.user_id LEFT JOIN public.users pu ON pu.id = o.user_id
+      WHERE o.child_id = v_child AND o.user_id <> v_ea AND o.assigned_at = (v_row ->> 'ended_at')::timestamptz
+      ORDER BY o.id LIMIT 1;
+    IF v_successor IS NOT NULL THEN
+      v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'ended_by_handover',
+        'child_id', v_child, 'id', v_row -> 'id', 'delivery_ended_at', v_row -> 'ended_at') || v_successor
+        || jsonb_build_object('hint', 'Head Office handed this EA''s delivery of the child to the successor at delivery_ended_at, so this EA''s Delete child did not end it; restoring it would make two EAs deliver. If that handover was the mistake, hand the child back with handover child; otherwise record an MA-BUG with this output and ask Jim'));
+      CONTINUE;
     END IF;
+
+    -- Every removal restore undoes ended the EA's own delivery row inside its window. When the
+    -- archive (or, for a live child, v_later) is not matched by that end, the EA's delivery had
+    -- already ended (a Head Office handover or end-delivery) and the removal was the app's creator
+    -- Delete child: restore cannot tell which rows are the removal's, and reopening the delivery
+    -- row would undo Head Office's change. Refuse.
     IF v_later IS NOT NULL OR (v_row ->> 'ended_at')::timestamptz NOT BETWEEN v_from AND v_to THEN
       v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'delivery_not_part_of_removal',
         'child_id', v_child, 'id', v_row -> 'id', 'delivery_ended_at', v_row -> 'ended_at',
@@ -770,33 +795,46 @@ const RESTORE_BODY = `
 
     -- Rows ended within an hour of the removal window but outside it: a phone with a wrong clock
     -- (the guard clamps each of its ends to the server's now as it lands) or a separate change.
-    -- Never reopened. seconds_from_t is measured from the nearer edge of the window. Such an
-    -- enrolment or class membership on the side a fast clock spreads the 1.5.0 chain (after the
-    -- archive; before a live child's delivery-row end, where no archive marks the start) may be
-    -- the removal's own, and without it the restored child is in no class, which the app cannot
-    -- show (MA-BUG-20261104-015): refused. Everything else is listed as a note.
+    -- Never reopened; listed as a note. seconds_from_t is measured from the nearer edge of the
+    -- window. One kind is refused instead: an enrolment or class membership on the side a fast
+    -- clock spreads the 1.5.0 chain (after the archive; before a live child's delivery-row end,
+    -- where no archive marks the start) that may be the removal's own, when without it the
+    -- restored child would have no open enrolment in that row's programme, or no open membership
+    -- in a live class, which the app cannot show (MA-BUG-20261104-015). Open means open now or
+    -- reopened by this plan. A class move or re-enrolment just before the removal leaves the child
+    -- in a live class or enrolled, so it stays a note.
+    v_reopening := ARRAY(SELECT (value ->> 'id')::uuid FROM pg_catalog.jsonb_array_elements(v_actions)
+      WHERE value ->> 'action' = 'reopen' AND (value ->> 'child_id')::uuid = v_child);
     SELECT coalesce(jsonb_agg(n.entry ORDER BY n.ended_at, n.id) FILTER (WHERE NOT n.blocks), '[]'::jsonb),
         coalesce(jsonb_agg(n.entry ORDER BY n.ended_at, n.id) FILTER (WHERE n.blocks), '[]'::jsonb)
       INTO v_near, v_blocking
       FROM (
         SELECT x.id, x.ended_at, jsonb_build_object('table', x.tbl, 'id', x.id, 'ended_at', x.ended_at,
             'seconds_from_t', round(extract(epoch FROM x.ended_at - CASE WHEN x.ended_at < v_from THEN v_from ELSE v_to END)::numeric, 1)) AS entry,
-          x.tbl IN ('child_programme_enrollments', 'child_class_memberships')
-            AND CASE WHEN v_c.archived_at IS NOT NULL THEN x.ended_at > v_to ELSE x.ended_at < v_from END AS blocks
+          CASE WHEN v_c.archived_at IS NOT NULL THEN x.ended_at > v_to ELSE x.ended_at < v_from END
+            AND CASE x.tbl
+              WHEN 'child_programme_enrollments' THEN NOT EXISTS (SELECT 1 FROM public.child_programme_enrollments o
+                WHERE o.child_id = v_child AND o.programme_id = x.programme_id
+                  AND (o.ended_at IS NULL OR o.id = ANY (v_reopening)))
+              WHEN 'child_class_memberships' THEN NOT EXISTS (SELECT 1 FROM public.child_class_memberships o
+                JOIN public.classes cl ON cl.id = o.class_id
+                WHERE o.child_id = v_child AND cl.archived_at IS NULL
+                  AND (o.exited_at IS NULL OR o.id = ANY (v_reopening)))
+              ELSE false END AS blocks
         FROM (
-          SELECT 'child_programme_enrollments' AS tbl, e.id, e.ended_at FROM public.child_programme_enrollments e
+          SELECT 'child_programme_enrollments' AS tbl, e.id, e.ended_at, e.programme_id FROM public.child_programme_enrollments e
             WHERE e.child_id = v_child AND e.ended_at NOT BETWEEN v_from AND v_to
               AND e.ended_at BETWEEN v_from - interval '1 hour' AND v_to + interval '1 hour'
-          UNION ALL SELECT 'child_class_memberships', m.id, m.exited_at FROM public.child_class_memberships m
+          UNION ALL SELECT 'child_class_memberships', m.id, m.exited_at, NULL::uuid FROM public.child_class_memberships m
             WHERE m.child_id = v_child AND m.exited_at NOT BETWEEN v_from AND v_to
               AND m.exited_at BETWEEN v_from - interval '1 hour' AND v_to + interval '1 hour'
-          UNION ALL SELECT 'child_group_memberships', m.id, m.removed_at FROM public.child_group_memberships m
+          UNION ALL SELECT 'child_group_memberships', m.id, m.removed_at, NULL::uuid FROM public.child_group_memberships m
             WHERE m.child_id = v_child AND m.removed_at NOT BETWEEN v_from AND v_to
               AND m.removed_at BETWEEN v_from - interval '1 hour' AND v_to + interval '1 hour') x) n;
     IF jsonb_array_length(v_blocking) > 0 THEN
       v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'nearby_end_not_restored', 'child_id', v_child,
         'removed_at', v_from, 'removed_until', v_to, 'rows', v_blocking,
-        'hint', 'an enrolment or class membership ended close to the removal but not with it (a phone clock that was wrong, or a separate change); restore cannot tell whether it belongs to the removal; record an MA-BUG with this output and ask Jim'));
+        'hint', 'an enrolment or class membership ended close to the removal but not with it (a phone clock that was wrong, or a separate change), and without it the restored child would have no open enrolment in that programme or no class that is still live; restore cannot tell whether it belongs to the removal; record an MA-BUG with this output and ask Jim'));
     END IF;
     IF jsonb_array_length(v_near) > 0 THEN
       v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'near_miss_not_reopened', 'child_id', v_child,

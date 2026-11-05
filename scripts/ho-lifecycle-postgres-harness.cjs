@@ -503,12 +503,17 @@ const R_EMAIL = { X: 'restore.x@example.test', Y: 'restore.y@example.test', S: '
 const R_SCHOOL = rid('2d', 1);
 const R_YEAR_2028 = rid('3d', 1);
 const RK = rid('4d', 1); const RKB = rid('4d', 2); const RK5 = rid('4d', 5);
+const RKM = rid('4d', 3); const RKA = rid('4d', 4);
 const R1 = rid('5d', 1); const R2 = rid('5d', 2); const R3 = rid('5d', 3); const R4 = rid('5d', 4);
 const R5 = rid('5d', 5); const R7 = rid('5d', 7); const R_MISSING = rid('5d', 99);
 // Review cases (2026-11-05): creator removals after a Head Office change, wrong phone clocks, and a
 // second open membership of one group.
 const R8 = rid('5d', 8); const R9 = rid('5d', 9); const R10 = rid('5d', 10); const R11 = rid('5d', 11);
 const R12 = rid('5d', 12); const R13 = rid('5d', 13);
+// Final review round: a removal after a Head Office handover that ended nothing, and a class move
+// just before a leave.
+const R14 = rid('5d', 14); const R15 = rid('5d', 15); const R16 = rid('5d', 16);
+const R15_REENROLMENT = rid('ad', 151); const R12_NUMERACY = rid('ad', 121);
 const V7 = rid('6d', 7);
 const G1 = rid('7d', 1); const G2 = rid('7d', 2); const GB = rid('7d', 3); const GY = rid('7d', 4);
 const G5E = rid('7d', 5); const G5A = rid('7d', 6); const G5N = rid('7d', 7); const G7A = rid('7d', 8);
@@ -538,11 +543,15 @@ INSERT INTO public.academic_years (id, label, starts_on, ends_on, is_active) VAL
 INSERT INTO public.classes (id, school_id, name, grade, academic_year_id, created_by) VALUES
   ('${RK}', '${R_SCHOOL}', 'Restore class K', '1', ${activeYear}, '${RHO}'),
   ('${RKB}', '${R_SCHOOL}', 'Restore class KB', '2', ${activeYear}, '${RHO}'),
-  ('${RK5}', '${R_SCHOOL}', 'Restore class K5 (2028)', '3', '${R_YEAR_2028}', '${RHO}');
+  ('${RK5}', '${R_SCHOOL}', 'Restore class K5 (2028)', '3', '${R_YEAR_2028}', '${RHO}'),
+  ('${RKM}', '${R_SCHOOL}', 'Restore class KM (move target)', '1', ${activeYear}, '${RHO}'),
+  ('${RKA}', '${R_SCHOOL}', 'Restore class KA (move target, archived later)', '1', ${activeYear}, '${RHO}');
 INSERT INTO public.class_ea_assignments (class_id, ea_user_id, programme_id, assigned_at, created_by) VALUES
   ('${RK}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
   ('${RKB}', '${RY}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
-  ('${RK5}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
+  ('${RK5}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${RKM}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${RKA}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
 INSERT INTO public.grouping_versions (id, class_id, academic_year_id, version_number) VALUES
   ('${V7}', '${RK}', ${activeYear}, 1);
 INSERT INTO public.groups (id, name, programme_id, class_id, grouping_version_id, created_by) VALUES
@@ -574,11 +583,13 @@ INSERT INTO public.children (id, first_name, last_name, class_id, created_by) VA
   ('${R3}', 'Restore', 'Three', '${RK}', '${RHO}'), ('${R4}', 'Restore', 'Four', '${RK}', '${RHO}'),
   ('${R5}', 'Restore', 'Five', '${RK}', '${RHO}'), ('${R7}', 'Restore', 'Seven', '${RK}', '${RHO}'),
   ('${R10}', 'Restore', 'Ten', '${RK}', '${RHO}'), ('${R11}', 'Restore', 'Eleven', '${RK}', '${RHO}'),
-  ('${R12}', 'Restore', 'Twelve', '${RK}', '${RHO}'), ('${R13}', 'Restore', 'Thirteen', '${RK}', '${RHO}');
--- X added R8 and R9 in the app, so X may Delete child them (the app allows the creator) even
+  ('${R12}', 'Restore', 'Twelve', '${RK}', '${RHO}'), ('${R13}', 'Restore', 'Thirteen', '${RK}', '${RHO}'),
+  ('${R15}', 'Restore', 'Fifteen', '${RK}', '${RHO}'), ('${R16}', 'Restore', 'Sixteen', '${RK}', '${RHO}');
+-- X added R8, R9 and R14 in the app, so X may Delete child them (the app allows the creator) even
 -- after Head Office has moved or ended X's delivery.
 INSERT INTO public.children (id, first_name, last_name, class_id, created_by) VALUES
-  ('${R8}', 'Restore', 'Eight', '${RK}', '${RX}'), ('${R9}', 'Restore', 'Nine', '${RK}', '${RX}');
+  ('${R8}', 'Restore', 'Eight', '${RK}', '${RX}'), ('${R9}', 'Restore', 'Nine', '${RK}', '${RX}'),
+  ('${R14}', 'Restore', 'Fourteen', '${RK}', '${RX}');
 -- Seeded row_versions above 1 make "restore never writes row_version" observable.
 INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by, row_version)
 SELECT d.id, d.ea, d.child, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}', 3
@@ -589,15 +600,22 @@ FROM (VALUES ('${restoreDet(RX, R1)}'::uuid, '${RX}'::uuid, '${R1}'::uuid), ('${
   ('${restoreDet(RY, R7)}', '${RY}', '${R7}'), ('${restoreDet(RX, R8)}', '${RX}', '${R8}'), ('${restoreDet(RX, R9)}', '${RX}', '${R9}'),
   ('${restoreDet(RX, R10)}', '${RX}', '${R10}'), ('${restoreDet(RX, R11)}', '${RX}', '${R11}'),
   ('${restoreDet(RX, R12)}', '${RX}', '${R12}'), ('${restoreDet(RY, R12)}', '${RY}', '${R12}'),
-  ('${restoreDet(RX, R13)}', '${RX}', '${R13}'), ('${restoreDet(RY, R13)}', '${RY}', '${R13}')) d(id, ea, child);
+  ('${restoreDet(RX, R13)}', '${RX}', '${R13}'), ('${restoreDet(RY, R13)}', '${RY}', '${R13}'),
+  ('${restoreDet(RX, R14)}', '${RX}', '${R14}'), ('${restoreDet(RX, R15)}', '${RX}', '${R15}'),
+  ('${restoreDet(RY, R15)}', '${RY}', '${R15}'), ('${restoreDet(RX, R16)}', '${RX}', '${R16}'),
+  ('${restoreDet(RY, R16)}', '${RY}', '${R16}')) d(id, ea, child);
 INSERT INTO public.child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by, row_version)
 SELECT ('ad000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid, ('5d000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
   ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}', 2
-FROM unnest(ARRAY[1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13]) n;
+FROM unnest(ARRAY[1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]) n;
+-- R12 is also enrolled in numeracy, and that stays open: it does not stand in for the literacy
+-- enrolment the fast-clock chain ends (case 11).
+INSERT INTO public.child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by) VALUES
+  ('${R12_NUMERACY}', '${R12}', ${programme('numeracy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
 INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by)
 SELECT ('bd000000-0000-0000-0000-' || lpad((n * 10)::text, 12, '0'))::uuid, ('5d000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
   '${RK}', ${activeYear}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
-FROM unnest(ARRAY[1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13]) n;
+FROM unnest(ARRAY[1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]) n;
 -- R4's class is taught by Y, so after X leaves, Y is R4's last holder and Y's Delete child archives it.
 INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by) VALUES
   ('${classMembership(4)}', '${R4}', '${RKB}', ${activeYear}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
@@ -979,6 +997,12 @@ COMMIT;`, label);
         assert.match(refused.error?.message ?? '', new RegExp(`refused: ${label}`));
         assert.ok(refused.calls.every(input => !/\bCOMMIT\b/.test(input)));
         refusal = refused.plan.refusals.find(entry => entry.code === label);
+        // The plan's removal and the refusal name the same removal instant.
+        const removal = refused.plan.removals.find(entry => entry.child_id === child);
+        if (refusal?.removed_at) {
+          assert.deepEqual([removal?.removed_at, removal?.removed_until], [refusal.removed_at, refusal.removed_until ?? refusal.removed_at],
+            `${child}: plan.removals and the ${label} refusal disagree on the removal instant`);
+        }
       }
       assert.equal(digest(), before, `${child}: a refused restore changed something`);
       return refusal;
@@ -1055,7 +1079,8 @@ COMMIT;`, label);
     // A co-held child (Y delivers R12): the child's archive becomes a leave, so there is no archive
     // instant to start the window, and the enrolment and class membership the chain ended (for
     // everyone) landed before the delivery row. Restore cannot tell them from separate changes:
-    // refused, rather than reopening the delivery row alone and leaving the child in no class.
+    // refused, rather than reopening the delivery row alone and leaving the child in no class and
+    // out of literacy (its open numeracy enrolment does not count for literacy).
     phoneChain(RX, R12, 12, JSON.parse(sql(`SELECT to_jsonb(now() + interval '2 minutes');`, 'fast-phone-time-12')));
     const r12Removed = ends(R12);
     assert.equal(r12Removed.archived.archived_at, null, 'a leave');
@@ -1065,6 +1090,72 @@ COMMIT;`, label);
       [['child_programme_enrollments', enrolment(12)], ['child_class_memberships', classMembership(12)]]);
     assert.ok(r12Refusal.rows.every(entry => entry.seconds_from_t < 0 && entry.seconds_from_t > -3600));
     pass('restore-refuses-when-an-enrolment-or-class-ended-near-the-removal-but-not-with-it');
+
+    // ---- Case 12: Head Office handed X's delivery of R14 (a child X added, in X's class) to Y.
+    // X's Delete child then ended nothing (a leave, because Y delivers, and R14 is in none of X's
+    // groups), and a removal that ends nothing leaves no trace: the latest end of X's delivery row
+    // is Head Office's. The handover wrote that end and Y's start in one transaction, so they are
+    // equal: refused, naming Y, instead of reopening X's row beside Y's.
+    hoApply(['handover', 'child', '--from', R_EMAIL.X, '--to', R_EMAIL.Y, '--children', R14], 'r14-handover');
+    const r14Handed = ends(R14);
+    assert.equal(r14Handed.rows[restoreDet(RY, R14)].start, r14Handed.rows[restoreDet(RX, R14)].end,
+      "the handover ended X's row and started Y's in one transaction");
+    serverDeleteChild(RX, R14);
+    assert.deepEqual(ends(R14), r14Handed, "X's Delete child ended nothing");
+    const r14Refusal = refusedNoChange(R14, 'ended_by_handover');
+    assert.deepEqual([r14Refusal.id, r14Refusal.delivery_ended_at, r14Refusal.successor_user_id, r14Refusal.successor_email,
+      r14Refusal.successor_name], [restoreDet(RX, R14), r14Handed.rows[restoreDet(RX, R14)].end, RY, R_EMAIL.Y, 'EA Y']);
+    pass('restore-refuses-a-delivery-row-that-head-office-handed-over');
+
+    // ---- Case 13: a class move minutes before a leave. X moves R15 from class K to class KM in the
+    // app (old membership exited, new one added), Head Office replaces its literacy enrolment, and ten
+    // minutes later X's Delete child is a leave (Y delivers). The old membership and enrolment ended
+    // within the hour before X's delivery-row end, where a fast-clock chain on a live child lands,
+    // but the child still has an open literacy enrolment and an open membership in a live class:
+    // notes, and the restore goes ahead.
+    const xMovesClass = (child, n, toClass) => asEa(RX, `UPDATE public.child_class_memberships SET exited_at = now()
+        WHERE id = '${classMembership(n)}';
+      INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by)
+        VALUES ('${classMembership(n, 1)}', '${child}', '${toClass}', ${activeYear}, now(), '${RX}');
+      UPDATE public.children SET class_id = '${toClass}' WHERE id = '${child}';`, `x-moves-${child}`);
+    xMovesClass(R15, 15, RKM);
+    sql(`UPDATE public.child_programme_enrollments SET ended_at = now() WHERE id = '${enrolment(15)}';
+      INSERT INTO public.child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by)
+        VALUES ('${R15_REENROLMENT}', '${R15}', ${programme('literacy')}, now(), '${RHO}');
+      UPDATE public.child_class_memberships SET exited_at = exited_at - interval '10 minutes' WHERE id = '${classMembership(15)}';
+      UPDATE public.child_programme_enrollments SET ended_at = ended_at - interval '10 minutes' WHERE id = '${enrolment(15)}';`,
+    'r15-re-enrolled-ten-minutes-before');
+    serverDeleteChild(RX, R15);
+    const r15Removed = ends(R15);
+    assert.equal(r15Removed.archived.archived_at, null, 'Y delivers R15: a leave');
+    const dry15 = ok(cli(restore(R_EMAIL.X, R15)), 'restore-r15-dry-run');
+    const near15 = dry15.plan.notes.find(note => note.code === 'near_miss_not_reopened');
+    assert.deepEqual(near15?.rows.map(entry => [entry.table, entry.id]).sort(),
+      [['child_class_memberships', classMembership(15)], ['child_programme_enrollments', enrolment(15)]]);
+    assert.ok(near15.rows.every(entry => entry.seconds_from_t < -590 && entry.seconds_from_t > -700), JSON.stringify(near15.rows));
+    const applied15 = ok(cli([...restore(R_EMAIL.X, R15), '--apply']), 'restore-r15');
+    assert.ok(applied15.confirmed);
+    assert.deepEqual(reopened(applied15.applied.actions), [restoreDet(RX, R15)]);
+    const r15Ends = ends(R15);
+    for (const rowId of [classMembership(15), enrolment(15)]) {
+      assert.equal(r15Ends.rows[rowId].end, r15Removed.rows[rowId].end, `${rowId} stays ended`);
+    }
+    for (const rowId of [restoreDet(RX, R15), restoreDet(RY, R15), classMembership(15, 1), R15_REENROLMENT]) {
+      assert.equal(r15Ends.rows[rowId].end, null, `${rowId} open`);
+    }
+    assert.deepEqual(invariantRows(databaseUrl, '', 'invariants-r15').filter(hit => hit.entity_id === R15), []);
+    pass('restore-notes-a-class-move-before-a-leave-and-goes-ahead');
+
+    // R16: the same class move, but the new class has been archived since. Without the exited
+    // membership the restored child would be in no live class: refused.
+    xMovesClass(R16, 16, RKA);
+    sql(`UPDATE public.child_class_memberships SET exited_at = exited_at - interval '10 minutes' WHERE id = '${classMembership(16)}';
+      UPDATE public.classes SET archived_at = now() WHERE id = '${RKA}';`, 'r16-move-target-archived');
+    serverDeleteChild(RX, R16);
+    assert.equal(ends(R16).archived.archived_at, null, 'Y delivers R16: a leave');
+    const r16Refusal = refusedNoChange(R16, 'nearby_end_not_restored');
+    assert.deepEqual(r16Refusal.rows.map(entry => [entry.table, entry.id]), [['child_class_memberships', classMembership(16)]]);
+    pass('restore-refuses-a-class-move-that-leaves-the-child-in-no-live-class');
 
     // ---- Other refusals change nothing and never reach a COMMIT.
     const beforeOther = digest();

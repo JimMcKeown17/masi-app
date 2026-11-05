@@ -127,8 +127,14 @@ it is unset and the EA's delivery row ended at exactly `archived_at`). For a liv
 end of the EA's latest ended `child_ea_assignments` row. The removal must have ended that delivery
 row inside the window: an archive the EA's delivery row did not end, or (live child) a later end of
 a membership in a group the EA held at that moment (or created, with no other holder), is refused
-(`delivery_not_part_of_removal`). That is the app's creator Delete child after Head Office moved or
-ended the EA's delivery, where taking the Head Office end for the removal would undo it. Restore
+(`delivery_not_part_of_removal`; the plan's `removed_at` then shows that later end). That is the
+app's creator Delete child after Head Office moved or ended the EA's delivery, where taking the Head
+Office end for the removal would undo it. A delivery row that ended exactly when another EA's
+`child_ea_assignments` row for the child started is refused as `ended_by_handover`, naming the
+successor: Head Office's handover ends one and inserts the other at one `now()`, and a creator's
+Delete child after it can end nothing, which leaves no trace. A removal that ended nothing after an
+end-delivery cannot be detected; the runbook has the operator compare `removed_at` with the EA's
+account. Restore
 clears, in place, that delivery row, `ended_at`/`exited_at`/`removed_at` on every
 `child_programme_enrollments`, `child_class_memberships` and `child_group_memberships` row of the
 child ended inside the window, and `archived_at`, `archived_by_user_id` and `archive_reason` on the
@@ -141,8 +147,10 @@ membership makes the group's holder a holder of the group's class), rechecks the
 each row only while its end still equals the planned one (otherwise `ho_lifecycle_retry`). It
 refuses another EA's archive, an archived child the EA still holds (the removal is still syncing),
 an EA who never held the child, an enrolment or class membership ended within the hour on the side
-a fast clock spreads the chain but outside the window (`nearby_end_not_restored`; without it the
-child would be in no class), and a reopen that would make two open rows: one of
+a fast clock spreads the chain but outside the window when, after the planned reopens, the child
+would have no open enrolment in that row's programme or no open membership in a live class
+(`nearby_end_not_restored`; otherwise, as for a class move just before the removal, a
+`near_miss_not_reopened` note), and a reopen that would make two open rows: one of
 `idx_child_programme_enrollments_active_unique`, `idx_child_class_memberships_active_unique`,
 `idx_child_group_memberships_active_by_version`, or a second open membership of the same (child,
 group), which no index enforces because groups made in the app have no grouping version (the daily
