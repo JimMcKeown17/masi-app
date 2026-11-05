@@ -13,25 +13,20 @@ import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { colors, spacing, borderRadius } from '../../constants/colors';
 import {
   deriveSyncState,
+  describeNeedsAttentionItem,
   describeReconcileBreakerNote,
   describeSyncState,
   describeWaitingDetail,
   describeCombinedHistoryState,
+  syncItemName,
 } from '../../utils/syncStatusPresenter';
+import { isStaleActorError } from '../../session/staleActor';
 
 import BrandButton from '../../components/common/BrandButton';
+import ConfirmSheet from '../../components/common/ConfirmSheet';
 import SurfaceCard from '../../components/common/SurfaceCard';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { typeRoles } from '../../constants/typography';
-
-const TABLE_DISPLAY_NAMES = {
-  TIME_ENTRIES: 'Time Entries',
-  SESSIONS: 'Sessions',
-  CHILDREN: 'Children',
-  STAFF_CHILDREN: 'Staff Assignments',
-  GROUPS: 'Groups',
-  CHILDREN_GROUPS: 'Group Memberships',
-};
 
 /**
  * Format a timestamp for the "Last Synced" card.
@@ -86,6 +81,7 @@ export default function SyncStatusScreen() {
     waitingCount, needsAttentionCount, authorizeReconcileBreaker,
   } = useOffline();
   const toast = useToast();
+  const [removing, setRemoving] = useState(null);
 
   const needsAttentionItems = syncStatus.needsAttentionItems || [];
   const reconcileBreakerCards = (syncStatus.reconcileBreakerNotes || [])
@@ -101,11 +97,30 @@ export default function SyncStatusScreen() {
 
   const handleRetry = async (table, id) => {
     if (!isOnline) return;
-    const displayName = TABLE_DISPLAY_NAMES[table] || table;
-    toast.show({ message: `Retrying ${displayName}...`, tone: 'neutral', duration: 3000 });
+    toast.show({ message: `Retrying ${syncItemName(table)}...`, tone: 'neutral', duration: 3000 });
     await services.syncEngine.retryFailedItem(table, id);
     await refreshSyncStatus();
     await syncNow({ force: true });
+  };
+
+  // D8: "The office has a copy — remove from this phone". The engine re-checks the delivered
+  // receipt in the same transaction as the removal.
+  const confirmRemove = async () => {
+    const item = removing;
+    setRemoving(null);
+    if (!item) return;
+    try {
+      const { removed } = await services.syncEngine.removeDeliveredItem(item.outboxId);
+      toast.show({
+        message: removed ? 'Removed from this phone' : 'Not removed. The office does not have a copy yet.',
+        tone: 'neutral', duration: 3000,
+      });
+    } catch (error) {
+      if (isStaleActorError(error)) return;
+      console.error('Error removing a delivered item:', error);
+      toast.show({ message: 'Not removed. Try again.', tone: 'neutral', duration: 3000 });
+    }
+    await refreshSyncStatus();
   };
 
   return (
@@ -199,31 +214,59 @@ export default function SyncStatusScreen() {
                 Reconnect to retry these items.
               </Text>
             )}
-            {needsAttentionItems.map((item) => (
-              <SurfaceCard key={`${item.table}_${item.id}`} style={styles.failedItemCard}>
-                <Text variant="bodyLarge" style={styles.failedItemTable}>
-                  {TABLE_DISPLAY_NAMES[item.table] || item.table}
-                </Text>
-                <Text variant="bodySmall" style={styles.failedItemId}>
-                  ID: {item.id.substring(0, 8)}...
-                </Text>
-                <Text variant="bodySmall" style={styles.failedItemReason}>
-                  {item.reason}
-                </Text>
-                <Text variant="bodySmall" style={styles.failedItemTime}>
-                  Failed: {formatSyncTime(item.failedAt)}
-                </Text>
-                <BrandButton
-                  onPress={() => handleRetry(item.table, item.id)}
-                  style={styles.retryButton}
-                  disabled={!isOnline}
-                  variant="secondary" size="md" label="Retry"
-                />
-              </SurfaceCard>
-            ))}
+            {needsAttentionItems.map((item) => {
+              const described = describeNeedsAttentionItem(item, { isOnline });
+              return (
+                <SurfaceCard key={item.outboxId || `${item.table}_${item.id}_${item.operation}`} style={styles.failedItemCard}>
+                  <Text variant="bodyLarge" style={styles.failedItemTable}>
+                    {described.title}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.failedItemReason}>
+                    {described.detail}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.failedItemTime}>
+                    Failed: {formatSyncTime(item.failedAt)}
+                  </Text>
+                  {described.hint ? (
+                    <Text variant="bodySmall" style={styles.failedItemHint}>
+                      {described.hint}
+                    </Text>
+                  ) : null}
+                  {described.canRetry || described.canRemove ? (
+                    <View style={styles.itemActions}>
+                      {described.canRetry ? (
+                        <BrandButton
+                          onPress={() => handleRetry(item.table, item.id)}
+                          style={styles.retryButton}
+                          disabled={!isOnline}
+                          variant="secondary" size="md" label="Retry"
+                        />
+                      ) : null}
+                      {described.canRemove ? (
+                        <BrandButton
+                          onPress={() => setRemoving(item)}
+                          style={styles.retryButton}
+                          accessibilityLabel={described.removeAccessibilityLabel}
+                          variant="secondary" size="md" label={described.removeLabel}
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
+                </SurfaceCard>
+              );
+            })}
           </SurfaceCard>
         )}
       </ScrollView>
+      <ConfirmSheet
+        visible={removing !== null}
+        title="Remove from this phone?"
+        body="The office has a copy of this, so nothing is lost. This phone stops trying to upload it."
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        onConfirm={confirmRemove}
+        onCancel={() => setRemoving(null)}
+      />
     </View>
   );
 }
@@ -328,10 +371,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...typeRoles.textRowTitle,
   },
-  failedItemId: {
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-  },
   failedItemReason: {
     color: colors.error,
     marginTop: spacing.xs,
@@ -339,6 +378,15 @@ const styles = StyleSheet.create({
   failedItemTime: {
     color: colors.textSecondary,
     marginTop: spacing.xs,
+  },
+  failedItemHint: {
+    color: colors.text,
+    marginTop: spacing.xs,
+  },
+  itemActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   retryButton: {
     marginTop: spacing.sm,
