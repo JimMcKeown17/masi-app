@@ -16,9 +16,10 @@
 // channel run now (per platform, the newest update group for this runtime) and refuses unless HEAD
 // contains each one's commit: in its history, or as the same changes (a squash merge), or as the
 // changes of a branch tip that has the commit in its history (a squash merge of a branch phones ran
-// mid-way). Files that never reach phones (tests, scripts, documentation) do not count. So a tree
-// that lacks it (main behind an unmerged branch, 2026-11-05) cannot replace it. A rollback on
-// purpose needs --allow-rollback "why", which goes into the message.
+// mid-way), or, for a merge commit that adds nothing of its own (a release branch that merged a
+// feature branch), as both its parents. Files that never reach phones (tests, scripts,
+// documentation) do not count. So a tree that lacks it (main behind an unmerged branch, 2026-11-05)
+// cannot replace it. A rollback on purpose needs --allow-rollback "why", which goes into the message.
 //
 // Child processes are spawned with argument arrays: the message never passes through a shell.
 const { execFileSync, spawnSync } = require('child_process');
@@ -271,10 +272,11 @@ const TREE_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const MAX_LINE_COMMITS = 200;
 const MAX_BRANCH_TIPS = 20;
 
-// What merging `commit` into `at` would change: { app, other } paths. git merge-tree exits 1 on
+// Where merging `commit` into `at` gives something other than `against`: { app, other } paths. By
+// default `against` is `at`, so this is what the merge would change. git merge-tree exits 1 on
 // conflicts and still prints the merged tree, then the conflicted paths (--name-only); a conflict
 // counts as a change. Writes the merged tree's objects (unreferenced; git gc removes them).
-const mergeChanges = ({ git, at, commit }) => {
+const mergeChanges = ({ git, at, commit, against = at }) => {
   let out;
   let conflicted = false;
   try { out = git(['merge-tree', '--write-tree', '--name-only', '--no-messages', at, commit]); } catch (error) {
@@ -284,7 +286,7 @@ const mergeChanges = ({ git, at, commit }) => {
   }
   const [tree, ...conflicts] = out.split('\n').filter(Boolean);
   if (!TREE_ID.test(tree ?? '')) throw new Error(`git merge-tree printed no tree for ${at} and ${commit}.`);
-  const changed = git(['diff-tree', '-r', '--name-only', '-z', at, tree]).split('\0').filter(Boolean);
+  const changed = git(['diff-tree', '-r', '--name-only', '-z', against, tree]).split('\0').filter(Boolean);
   const paths = [...new Set([...(conflicted ? conflicts : []), ...changed])].sort();
   return { app: paths.filter(file => !OUTSIDE_THE_APP.test(file)), other: paths.filter(file => OUTSIDE_THE_APP.test(file)) };
 };
@@ -349,6 +351,89 @@ const tipsChecked = ({ tips, commit }) => {
     + `(checked ${checked}: ${someOf(tips.checked.map(tip => tip.name))}${rest}).`;
 };
 
+// How many merges deep the merge rule follows: the commit phones run, and its parents.
+const MERGE_DEPTH = 2;
+
+// The commits `commit` merges (its parents, first parent first); one for an ordinary commit.
+const parentsOf = ({ git, commit }) => git(['rev-parse', `${commit}^@`]).split('\n').filter(Boolean);
+
+// How HEAD has the changes of `commit`, which is not in its history. Returns what passed:
+//   { at, other }  its changes, at HEAD or at a commit before it on HEAD's first-parent line;
+//   { at, tip }    the changes of a branch tip that has `commit` in its history;
+//   { merge }      `commit` is a merge that adds nothing of its own, and HEAD has both its parents
+//                  (merge.passed);
+// or { missing, tips, merge }: what merging `commit` into HEAD would change in files that reach
+// phones, the branch tips checked, and, when `commit` is a merge, why the merge rule failed.
+const findChanges = (context, commit, depth) => {
+  const { git, head } = context;
+  const own = findAppCode({ git, commits: [commit], head });
+  if (own.at) return { at: own.at, other: own.other };
+  const tips = branchTipsContaining({ git, commit });
+  const viaTip = findAppCode({ git, commits: tips.checked.map(tip => tip.commit), head });
+  if (viaTip.at) return { at: viaTip.at, tip: tips.checked.find(entry => entry.commit === viaTip.commit) };
+  const merge = checkMerge(context, commit, depth); // defined below; the two call each other
+  return merge?.passed ? { merge } : { missing: own.missing, tips, merge };
+};
+
+// Whether HEAD contains `commit`: in its history ({ history: true }), or as findChanges finds it.
+const findInHead = (context, commit, depth) => (
+  gitAnswers(context.git, ['merge-base', '--is-ancestor', commit, context.head])
+    ? { history: true } : findChanges(context, commit, depth)
+);
+
+// A merge commit's code is its parents' code put together, plus anything the merge changed itself (a
+// conflict resolved by hand, or an "evil" merge's own edit). When git merging the two parents again
+// conflicts in no file that reaches phones, and differs from the merge's tree only in files that never
+// reach phones, the merge added nothing of its own, so HEAD has it when HEAD has both parents. Each
+// parent gets the full check: history, its changes, branch tips, and this rule again for a parent
+// that is itself a merge (up to MERGE_DEPTH merges deep). A release branch that merged a feature
+// branch is the case: phones run the merge (1.5.0+5 runs 1bddda8e), main gets each side as a squash,
+// and the feature's later commits rework lines the merge has, so the merge itself never matches.
+// Returns undefined for a commit that is not a merge; else { parents, found, missing, passed }, or
+// why the rule was not used: `own` (files the merge changed itself), `octopus` (3+ parents), `deep`.
+const checkMerge = (context, commit, depth) => {
+  const { git } = context;
+  const parents = parentsOf({ git, commit });
+  if (parents.length < 2) return undefined;
+  if (depth >= MERGE_DEPTH) return { parents, deep: true };
+  if (parents.length > 2) return { parents, octopus: true };
+  const own = mergeChanges({ git, at: parents[0], commit: parents[1], against: commit });
+  if (own.app.length > 0) return { parents, own: own.app };
+  const found = parents.map(parent => ({ commit: parent, found: findInHead(context, parent, depth + 1) }));
+  const missing = found.filter(parent => parent.found.missing);
+  return { parents, found, missing, passed: missing.length === 0 };
+};
+
+const mergeOf = parents => `a merge of ${parents.map(short).join(' and ')}`;
+// Why HEAD has `commit`, a parent of a merge phones run, in a few words.
+const hasReason = ({ commit, found, head }) => {
+  if (found.history) return `${short(commit)} in its history`;
+  const earlier = found.at && found.at !== head ? `, already in commit ${short(found.at)} before it` : '';
+  if (found.tip) {
+    return `the changes of branch ${found.tip.name} (${short(found.tip.commit)}), which has ${short(commit)} in its history${earlier}`;
+  }
+  if (found.at) return `${short(commit)}'s changes${earlier}`;
+  return `${short(commit)}, ${mergeOf(found.merge.parents)} that adds nothing of its own that reaches phones, through both `
+    + `its parents (${found.merge.found.map(parent => hasReason({ ...parent, head })).join(' and ')})`;
+};
+// Whether a failed merge rule stopped at MERGE_DEPTH somewhere below.
+const stoppedDeep = merge => Boolean(merge?.deep || merge?.missing?.some(parent => stoppedDeep(parent.found.merge)));
+// " It is a merge of A and B …" when the merge rule was tried for the commit phones run and failed, or ''.
+const mergeRefused = (merge) => {
+  if (!merge) return '';
+  if (merge.octopus) return ` It is a merge of ${merge.parents.length} commits; the script checks merges of two only.`;
+  if (merge.deep) return ` It is ${mergeOf(merge.parents)}; the script follows merges at most ${MERGE_DEPTH} deep.`;
+  if (merge.own) {
+    return ` It is ${mergeOf(merge.parents)}, but not a clean one: it has changes of its own in files that reach phones `
+      + `(${someFiles(merge.own)}).`;
+  }
+  const merging = merge.missing.map(parent => `merging ${short(parent.commit)} would change files that reach phones `
+    + `(${someFiles(parent.found.missing)})`).join('; ');
+  return ` It is ${mergeOf(merge.parents)} that adds nothing of its own that reaches phones, but this commit does not have `
+    + `${merge.missing.map(parent => short(parent.commit)).join(' or ')}: ${merging}.`
+    + `${stoppedDeep(merge) ? ` The script follows merges at most ${MERGE_DEPTH} deep.` : ''}`;
+};
+
 // Whether publishing HEAD keeps the code one set of phones runs. Returns what they run (`runs`) and
 // either a pass (`why`, `note`) or a refusal (`refusal`, plus the `rollback` line --allow-rollback
 // prints instead; `final` when --allow-rollback cannot help either).
@@ -400,7 +485,17 @@ const checkRunningUpdate = ({ running, version, channel, head, git, isShallow })
     };
   }
   const notInHistory = `Check passed: commit ${short(commit)} is not in this commit's (${short(head)}) history, but`;
-  const found = findAppCode({ git, commits: [commit], head });
+  // Its changes; else a branch tip's (C's own changes conflict with later work on the same lines, and
+  // a branch tip whose history has C carries that later work too); else, for a merge, its parents.
+  const found = findChanges({ git, head }, commit, 0);
+  if (found.tip) {
+    const branch = `branch ${found.tip.name} (${short(found.tip.commit)}), which has commit ${short(commit)} in its history`;
+    return found.at === head
+      ? { runs, why: `this commit (${short(head)}) already has the changes of ${branch}`,
+        note: `${notInHistory} this commit already has the changes of ${branch} (a squash merge, for example).` }
+      : { runs, why: `commit ${short(found.at)} before this one already had the changes of ${branch}`,
+        note: `${notInHistory} commit ${short(found.at)} before it already had the changes of ${branch} (a squash merge, for example).` };
+  }
   if (found.at === head) {
     return {
       runs,
@@ -416,36 +511,49 @@ const checkRunningUpdate = ({ running, version, channel, head, git, isShallow })
       note: `${notInHistory} commit ${short(found.at)} before it already had its changes (a squash merge, for example).`,
     };
   }
-  // C's own changes conflict with later work on the same lines; a branch tip whose history has C
-  // carries that later work too.
-  const tips = branchTipsContaining({ git, commit });
-  const viaTip = findAppCode({ git, commits: tips.checked.map(tip => tip.commit), head });
-  if (viaTip.at) {
-    const tip = tips.checked.find(entry => entry.commit === viaTip.commit);
-    const branch = `branch ${tip.name} (${short(tip.commit)}), which has commit ${short(commit)} in its history`;
-    return viaTip.at === head
-      ? { runs, why: `this commit (${short(head)}) already has the changes of ${branch}`,
-        note: `${notInHistory} this commit already has the changes of ${branch} (a squash merge, for example).` }
-      : { runs, why: `commit ${short(viaTip.at)} before this one already had the changes of ${branch}`,
-        note: `${notInHistory} commit ${short(viaTip.at)} before it already had the changes of ${branch} (a squash merge, for example).` };
+  if (found.merge?.passed) {
+    const merge = `${mergeOf(found.merge.parents)}, adds nothing of its own that reaches phones`;
+    const reasons = found.merge.found.map(parent => hasReason({ ...parent, head })).join('; ');
+    return {
+      runs,
+      why: `commit ${short(commit)} is ${merge}, and this commit (${short(head)}) has both its parents`,
+      note: `${notInHistory} it is ${merge}, and this commit has both (${reasons}).`,
+    };
   }
   return {
     runs,
     refusal: `${phones}, and this commit (${short(head)}) does not contain it: it is not in its history, and merging it would `
-      + `change files that reach phones (${someFiles(found.missing)}).${tipsChecked({ tips, commit })} `
-      + `Publishing would roll ${who} back to code without it.\n`
+      + `change files that reach phones (${someFiles(found.missing)}).${tipsChecked({ tips: found.tips, commit })}`
+      + `${mergeRefused(found.merge)} Publishing would roll ${who} back to code without it.\n`
       + `Merge the branch that contains ${short(commit)} into this one (git branch -r --contains ${commit} lists it), `
       + 'then publish again. To roll phones back on purpose, add --allow-rollback "why".',
     rollback: `This commit (${short(head)}) does not contain ${short(commit)}, so ${who} go back to code without it.`,
   };
 };
 
+// The check asks git only about commits and refs, which do not change while it runs, so each answer is
+// kept: a commit reached twice (a merge's parent, a branch tip, a commit along a walk, the other
+// platform's update) costs nothing the second time. Failures are kept too: gitAnswers reads exit 1 as "no".
+const answerOnce = (git) => {
+  const answers = new Map();
+  return (args) => {
+    const key = args.join('\0');
+    if (!answers.has(key)) {
+      try { answers.set(key, { output: git(args) }); } catch (error) { answers.set(key, { error }); }
+    }
+    const { output, error } = answers.get(key);
+    if (error) throw error;
+    return output;
+  };
+};
+
 // Publishing HEAD replaces the updates phones run (one per platform). Refuses when HEAD does not
-// contain an update's commit, in its history or as the same changes (a squash merge), unless
-// --allow-rollback gives a reason; refuses --allow-rollback when the publish rolls nothing back, so
-// no update is labelled a rollback by mistake. Returns the lines to print: what phones run now, and
-// the check results.
-const checkPhonesKeepTheirCode = ({ running, version, channel, head, git, allowRollback }) => {
+// contain an update's commit, in its history or as the same changes (a squash merge, a branch tip's,
+// or a clean merge's parents), unless --allow-rollback gives a reason; refuses --allow-rollback when
+// the publish rolls nothing back, so no update is labelled a rollback by mistake. Returns the lines to
+// print: what phones run now, and the check results.
+const checkPhonesKeepTheirCode = ({ running, version, channel, head, git: askGit, allowRollback }) => {
+  const git = answerOnce(askGit);
   let shallow;
   const isShallow = () => {
     if (shallow === undefined) shallow = git(['rev-parse', '--is-shallow-repository']).trim() === 'true';

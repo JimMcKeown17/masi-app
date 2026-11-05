@@ -140,7 +140,12 @@ The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
      same check runs for each branch tip that has C in its history (`git for-each-ref --contains C
      refs/heads refs/remotes`, the newest 20): phones can run a commit mid-way along a branch
      (`1.5.0+4` ran `b759128f`), and that branch's squash merge has the tip's changes, which
-     conflict with C's own on the lines later commits changed. Otherwise publishing is refused. The
+     conflict with C's own on the lines later commits changed. If C is a merge commit (`1.5.0+5`
+     ran `1bddda8e`, a release branch's merge of a feature branch), it also passes when it adds
+     nothing of its own that reaches phones (`git merge-tree` of its two parents conflicts in no such
+     file and matches C's tree in all of them) and HEAD passes this whole check for each parent,
+     following merges at most 2 deep; the refusal then names the parent HEAD lacks. Otherwise
+     publishing is refused. The
      refusal names C, the group and its release (from its `OTA <version>+N:` message), the files the
      merge would change and the branch tips checked, and says to merge the branch that contains C
      first (`git branch -r --contains C` lists it). If this clone does not have C, it says to

@@ -10098,3 +10098,109 @@ the second EA's phone was not opened.
   refuse it. That is the guard working as intended, not a bug.
 
 Docs only: no source, script, test or SQL change, so no suites were run.
+
+### 2026-11-05 — `ota:publish` guard: phones run a merge commit on a release branch (`fix/ota-guard-merge-commits`, work order 12)
+
+Live update `1.5.0+5` (group `3ec327af`) runs `1bddda8e`, a merge commit on
+`release/ota-wrap-up-cards`. Its parents are `513dd664` (the 1.5.0 release line, which main has as
+#167's squash) and `014a069a` (`feat/wrap-up-child-cards`). That branch then got more commits (#169
+head `017c422a`: main merged in, and the "None yet" chip removal, which edits a line of
+`src/components/lessons/WrapUpChildRow.js` that `014a069a` also changed). The orchestrator simulated
+#169's squash onto main (`def0274f`, a `commit-tree` of `017c422a`'s tree on `f4ba06bd`), and the
+guard refused it: "merging it would change files that reach phones (1 file:
+src/components/lessons/WrapUpChildRow.js)". Every check failed. `1bddda8e` is not in the squash's
+history, and merging it conflicts on that line. No first-parent commit has its content. The only refs
+containing it were the release branch, whose tip was `1bddda8e` itself (skipped). Main did have both
+parents' changes, so the refusal was false, and the only way past it was a false `--allow-rollback`
+label.
+
+**The merge rule** (test first). When every check fails for C and C has two parents, HEAD contains C
+when both of these hold:
+1. **C adds nothing of its own.** `git merge-tree --write-tree` of its parents conflicts in no file
+   that reaches phones, and that tree differs from C's only in files that never reach phones
+   (`OUTSIDE_THE_APP`). Conflicts in files that never reach phones are allowed; usually that is the
+   build log. Two kinds of merge are refused as before: an evil merge (its own edit to `src/`), and a
+   merge whose parents conflict in `src/`, because the hand resolution is code of the merge's own.
+2. **HEAD has each parent, by the same full check.** A parent passes at once if it is in HEAD's
+   history. Otherwise it passes on its changes, at HEAD or along the first-parent walk, or on a branch
+   tip's changes, or, if the parent is itself a merge, on this rule again. The rule goes at most 2
+   merges deep (`MERGE_DEPTH`): C and its parents. A merge of three or more commits is refused, and
+   the refusal says why.
+
+The pass line reads: "commit 1bddda8 is not in this commit's (def0274) history, but it is a merge of
+513dd66 and 014a069, adds nothing of its own that reaches phones, and this commit has both (513dd66's
+changes; the changes of branch feat/wrap-up-child-cards (017c422), which has 014a069 in its
+history)." If the rule was tried and failed, the refusal says why:
+- the parent or parents HEAD lacks, with the files that merging each would change;
+- or "not a clean one: it has changes of its own in files that reach phones (…)";
+- and "The script follows merges at most 2 deep." when the cap stopped it.
+
+`--allow-rollback`, shallow clones and unknown commits behave as before.
+
+**No repeated work.** `checkPhonesKeepTheirCode` now wraps git in `answerOnce`, which keeps every
+answer for one check, errors included (so `gitAnswers` still reads exit 1 as "no"). The check asks
+only about commits and refs, which do not change while it runs. So a commit reached a second time
+costs nothing: a merge's parent, a branch tip (such as the release branch whose tip is the merge), a
+commit along a walk, or the other platform's update. A test checks that no git command runs twice on
+the refusal path. Without the cache that path repeats two things, through the feature's branch tips:
+the merge's own `merge-tree` into HEAD, and its walk.
+
+**Real history.**
+- Between the orchestrator's repro and this build, `release/ota-wrap-up-cards` moved to `e312df77`
+  ("Merge #169 head into the release branch so the publish guard finds 1bddda8e after the squash").
+  With that ref, `sim169.cjs` passes the old script too, through the branch-tip rule. On this branch,
+  against the main repo, it PASSED: "…already has the changes of branch release/ota-wrap-up-cards
+  (e312df7), which has commit 1bddda8 in its history (a squash merge, for example)."
+- To run the merge rule on the real commits: a scratch `git clone --mirror --shared` of the main repo,
+  with both release refs put back at `1bddda8e`, as at the repro. The old script (main's `f4ba06bd`)
+  REFUSED with the repro's message. This branch PASSED with the pass line above, in about 1.6 s
+  wall-clock including Node's start-up.
+- Same mirror and branch, against main without #169 (`f4ba06bd`): REFUSED, 1.7 s. The refusal: "It is a
+  merge of 513dd66 and 014a069 that adds nothing of its own that reaches phones, but this commit does
+  not have 014a069: merging 014a069 would change files that reach phones (4 files: …)". Against #165's
+  main (`9f6b0f96`): REFUSED, both parents lacking, 2.8 s.
+- Same mirror, with `feat/wrap-up-child-cards` (local and `origin/`) deleted, as GitHub does when #169
+  merges and a later `git fetch --prune` follows:
+  - release refs at `1bddda8e`: REFUSED again, lacking `014a069`, since the parent's tip check has no
+    ref left (safe);
+  - release refs at `e312df77`: PASSED through the release branch tip.
+
+**Verification (Node 20).**
+- RED: with the tests written and the script unchanged, `npx jest __tests__/otaPublishScript.test.js`
+  failed 6 of 134.
+  - The two pass cases were refused with the defect's own message. One feature: "… would change files
+    that reach phones (1 file: src/feat.js)". Two features merged in turn, so the rule runs again for
+    the inner merge: "(2 files: src/feat.js, src/feat2.js)".
+  - The four refusal cases were refused, but without saying why: an evil merge; parents that conflict
+    in `src/`; main never got the feature; three merges deep.
+- The fake git now answers the parents question (`rev-parse <c>^@`) with one parent, so no fake-git
+  commit is a merge.
+- Mutation checks, each one restored afterwards:
+  - without the cache, the each-question-once test fails;
+  - without the own-changes check, the evil and conflicted merges PASS, so that check alone keeps them
+    refused;
+  - with `MERGE_DEPTH` 3, the three-merge case passes; with 1, the two-merge case is refused.
+- GREEN: 134/134.
+- `npx jest`, first run: 7 tests in 4 suites failed. All were 5 s timeouts or their follow-on errors,
+  in screen and auth suites that do not load the script (`task5AuthRaces`, `LessonScreen`,
+  `AssessmentChildSelectScreen.battery`, `letterOrderAgreement`). The machine's load average was
+  36–43 at the time. Re-run alone, those suites passed 153/153 in 7–10 s each (63–131 s under the
+  load). A full re-run with `--maxWorkers=4` passed 527 suites / 8,578 tests, exit 0. The loaded run
+  counted 8,580 tests; the 2-test difference was not traced.
+- `npx jest -c jest.integration.config.js`: 114 suites / 1,568 tests passed, exit 0.
+- No SQL, sync or RLS change, so no PostgreSQL harness and no contract-map change. There is no lint
+  script, and EAS was not called.
+
+**Still open.**
+- The rule needs a ref to a branch tip for any parent that is not in HEAD's history and whose own
+  changes conflict at HEAD. Today that parent is `014a069a`, and the ref is `feat/wrap-up-child-cards`.
+  Once #169 merges and that branch is deleted and pruned, only the `e312df77` release-branch ref
+  keeps the next publish from main passing. Keep `release/ota-wrap-up-cards` until phones run an
+  update published from main. `git branch <name> <tip>` restores a ref while the commit is still in
+  the clone.
+- The cap. Take a release branch that merged three or more features one after another. If its
+  deepest merge itself needs the rule, it is refused (safe), and the refusal says the cap stopped it.
+- The rule trusts "HEAD has each parent's changes" as far as the existing checks do. Later work on the
+  same lines, found along HEAD's first-parent line, counts as deliberate.
+- Cost: a refusal on real history took 1.7–2.8 s. Each check now holds its git answers in memory
+  until it finishes.
