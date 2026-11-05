@@ -242,6 +242,16 @@ describe('main', () => {
     expect(output).toContain("npx --yes eas-cli@26.0.0 env:exec preview 'npm run sentry:sourcemaps' --non-interactive");
   });
 
+  test.each([
+    ['uncommitted work', { status: ' M app.config.js\n' }, /uncommitted changes/],
+    ['a commit origin does not have', { remoteBranches: '' }, /not on any origin branch/],
+  ])('a dry run makes the same checks as a publish: %s is refused before EAS is asked anything', (_case, gitState, error) => {
+    const d = deps({ git: fakeGit(gitState).git });
+    expect(() => main(['--message', 'x', '--dry-run'], d)).toThrow(error);
+    expect(d.runForOutput).not.toHaveBeenCalled();
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
   test('a dirty tree is refused before EAS is asked anything', () => {
     const d = deps({ git: fakeGit({ status: ' M app.config.js\n' }).git });
     expect(() => main(['--message', 'x'], d)).toThrow(/uncommitted changes/);
