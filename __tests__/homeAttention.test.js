@@ -178,11 +178,16 @@ describe('sync attention once every item is delivered', () => {
     }));
   });
 
+  // The signature is the item's identity and content, never its last refusal time: a forced pass
+  // that re-sends a refused row and is refused again must not bring a dismissed card back.
   test('a dismissed card stays hidden for the same items and returns for a new or changed one', () => {
-    const syncAttention = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [delivered('a')] });
+    const item = (outboxId, failedAt, contentDigest = 'digest-1') => ({ ...delivered(outboxId, failedAt), contentDigest });
+    const syncAttention = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [item('a')] });
     const dismissed = { ...base, needsAttentionCount: 1, syncAttention, syncAttentionDismissed: syncAttention.signature };
     expect(deriveHomeAttentionItems(dismissed)).toEqual([]);
-    const changed = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [delivered('a', '2026-10-15T07:30:00.000Z')] });
+    const refusedAgain = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [item('a', '2026-10-15T07:30:00.000Z')] });
+    expect(deriveHomeAttentionItems({ ...dismissed, syncAttention: refusedAgain })).toEqual([]);
+    const changed = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [item('a', undefined, 'digest-2')] });
     expect(deriveHomeAttentionItems({ ...dismissed, syncAttention: changed })[0]).toMatchObject({ kind: 'sync_attention' });
     const waiting = describeSyncAttention({ needsAttentionCount: 2,
       needsAttentionItems: [delivered('a'), { outboxId: 'b', delivery: 'waiting' }] });

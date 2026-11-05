@@ -9,7 +9,7 @@ import { applyCorrectionAcknowledgement as applySkillCorrectionAcknowledgement }
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
-import { readDeliveredReceipt } from './deliveredReceipt';
+import { currentWireDigest, readDeliveredReceipt } from './deliveredReceipt';
 import { DELIVERED_RECEIPT_PREFIX, deliveredReceiptKey } from '../db/repositories/supportIncidentRepository';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
@@ -2106,6 +2106,8 @@ export const createOutboxSyncEngine = ({
         const { exit, delivery } = await readRefusalExit(db, row, removedChildIds);
         described.push({
           ...item,
+          // Stable across re-sends that are refused again; changes only with the content.
+          contentDigest: row ? currentWireDigest(row) : null,
           delivery,
           clearsItself: exit === 'clears_itself' && delivery !== 'held',
           canRemove: exit === 'ea_removes' && delivery === 'delivered',
@@ -2116,7 +2118,9 @@ export const createOutboxSyncEngine = ({
     } catch (error) {
       if (isStaleActorError(error)) throw error;
       console.warn('Refused-row exits unavailable:', errorMessage(error));
-      return items.map((item) => ({ ...item, delivery: null, clearsItself: false, canRemove: false, canRetry: false }));
+      return items.map((item) => ({
+        ...item, contentDigest: null, delivery: null, clearsItself: false, canRemove: false, canRetry: false,
+      }));
     }
   };
 

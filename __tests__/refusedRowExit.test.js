@@ -286,6 +286,18 @@ test('a forced re-send refused again keeps the exit: the content the office hold
   expect(await engine.removeDeliveredItem(ENTRY_OUTBOX)).toEqual({ removed: true });
 });
 
+// Home's dismissal is keyed by each item's content digest, which a re-refusal does not change.
+test('an item\'s content digest is stable across a forced re-send and follows a content change', async () => {
+  await refuseTimeEntry();
+  const first = (await itemFor(ENTRY_OUTBOX)).contentDigest;
+  expect(first).toEqual(expect.any(String));
+  await engine.syncAll({ force: true });
+  expect((await itemFor(ENTRY_OUTBOX)).contentDigest).toBe(first);
+  await h.withTransaction(txn => txn.runAsync(
+    "update sync_outbox set payload = json_set(payload, '$.sign_in_time', '2026-11-04T06:00:00.000Z') where id = ?", ENTRY_OUTBOX));
+  expect((await itemFor(ENTRY_OUTBOX)).contentDigest).not.toBe(first);
+});
+
 test('a refused child insert keeps the exit across a forced re-send that stamps a new row version', async () => {
   const CHILD_ID = '30000000-0000-4000-8000-000000000001';
   const CHILD_OUTBOX = `children:${CHILD_ID}:insert`;

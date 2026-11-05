@@ -27,7 +27,8 @@ const decode = (value) => {
   try { return JSON.parse(value); } catch { return undefined; }
 };
 
-const currentWireDigest = (row) => {
+// The digest of the row's content as it would be sent now (null when it cannot be built).
+export const currentWireDigest = (row) => {
   try {
     const payload = decode(row.payload);
     if (payload === undefined) return null;

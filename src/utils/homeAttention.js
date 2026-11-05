@@ -41,7 +41,8 @@ const lessonInProgressItem = ({ draftId, childNames, route = 'Lesson' }) => {
 
 // Lifecycle safety O1 (MA-BUG-20261104-011): once the office has a copy of every item that
 // needs attention, nothing is at risk, so the EA may dismiss the card. The signature names the
-// exact items (and their last refusal), so a new or changed item brings the card back.
+// exact items and their content, so a new or changed item brings the card back, and a forced pass
+// that re-sends an item and is refused again (a new refusal time, the same content) does not.
 export const describeSyncAttention = ({
   needsAttentionCount = 0, needsAttentionItems = [], reconcileBreakerNotes = [],
 } = {}) => {
@@ -50,7 +51,7 @@ export const describeSyncAttention = ({
     && (reconcileBreakerNotes || []).length === 0
     && items.length === needsAttentionCount
     && items.every((item) => item.delivery === 'delivered');
-  const signature = items.map((item) => `${item.outboxId}@${item.failedAt ?? ''}`).sort().join('|');
+  const signature = items.map((item) => `${item.outboxId}@${item.contentDigest ?? ''}`).sort().join('|');
   return { dismissible, signature };
 };
 
