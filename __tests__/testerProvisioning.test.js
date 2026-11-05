@@ -141,6 +141,66 @@ describe('SQLite tester provisioning safety', () => {
   });
 });
 
+describe('tester account rollback under ON DELETE RESTRICT', () => {
+  // A lost response can leave the programme assignment written although the insert reported an
+  // error. Since 20261105120000 staff_programme_assignments -> public.users is RESTRICT, so the
+  // rollback deletes the account's own rows, children first, before the auth user.
+  const makeAdmin = () => {
+    const calls = [];
+    const from = (table) => {
+      let op = 'select';
+      const builder = {
+        select: () => builder,
+        in: () => builder,
+        is: () => builder,
+        eq: (column, value) => { calls.push(['eq', table, column, value]); return builder; },
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        upsert: () => Promise.resolve({ error: null }),
+        update: () => { op = 'update'; return builder; },
+        delete: () => { op = 'delete'; calls.push(['delete', table]); return builder; },
+        insert: () => Promise.resolve({ error: { message: 'lost response' } }),
+        then: (resolve) => resolve(op === 'update'
+          ? { data: [{ id: 'new-user' }], error: null }
+          : { data: [], error: null }),
+      };
+      return builder;
+    };
+    return {
+      calls,
+      from,
+      auth: {
+        admin: {
+          listUsers: jest.fn().mockResolvedValue({ data: { users: [] }, error: null }),
+          createUser: jest.fn().mockResolvedValue({ data: { user: { id: 'new-user' } }, error: null }),
+          deleteUser: jest.fn(async () => { calls.push(['deleteUser']); return { error: null }; }),
+        },
+      },
+    };
+  };
+  const lookupMaps = {
+    jobTitlesByCode: new Map([['literacy_coach', { id: 'job' }]]),
+    schoolsByUid: new Map([['school-1', { id: 'school' }]]),
+    programmesByCode: new Map([['literacy', { id: 'programme' }]]),
+  };
+  const row = {
+    email: 'pilot@example.org', password: 'unique-temporary-password', first_name: 'Pilot',
+    last_name: 'Tester', job_title_code: 'literacy_coach', school_uid: 'school-1', programme_code: 'literacy',
+  };
+
+  test('a failed programme assignment removes the assignment and profile before the auth user', async () => {
+    const { processRow } = require('../scripts/createTesters');
+    const admin = makeAdmin();
+    const result = await processRow(admin, row, lookupMaps, 'org-id');
+    expect(result).toEqual(expect.objectContaining({ status: 'error' }));
+    const removals = admin.calls
+      .filter(([op]) => op === 'delete' || op === 'deleteUser')
+      .map(([op, table]) => table || op);
+    expect(removals).toEqual(['staff_programme_assignments', 'users', 'deleteUser']);
+    expect(admin.calls).toContainEqual(['eq', 'staff_programme_assignments', 'user_id', 'new-user']);
+    expect(admin.calls).toContainEqual(['eq', 'users', 'id', 'new-user']);
+  });
+});
+
 describe('tester account creation', () => {
   test('marks new tester accounts as test accounts', async () => {
     const { processRow } = require('../scripts/createTesters');
