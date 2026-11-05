@@ -13,10 +13,41 @@
 //   nobody else holds, per the corrected server rule of 2026-11-05) and archives the child only
 //   when no other EA still holds it;
 // - S1: an EA write never clears or moves an end that is already set;
-// - `idx_child_group_memberships_active_by_version` (23505).
+// - `idx_child_group_memberships_active_by_version` (23505);
+// - server-side ends (the Delete child RPC, Head Office) never change `row_version`: only a phone's
+//   send-time stamp moves it (contract map "Row versions");
+// - the pull: the roster, class and acknowledgment reads the app makes (`get_reconcile_acknowledgments`
+//   per 20261023120000, and PostgREST GETs with embeds, `!inner`, eq/is/in filters, order, limit).
+//   Every pull query scopes itself to the caller's own grants, so the fake applies the query's
+//   filters, not SELECT RLS. Like PostgREST it returns every column, nulls included;
+// - Head Office `restore child` (`restoreChild`, work order 5): reopens in place what one removal
+//   ended, with the same ids, starts and row_version.
 // Every request is recorded in the PostgREST wire shape used by
 // docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/pg-replay.cjs, so G1 can
 // replay a chain into PostgreSQL with the real migrations.
+
+// The nullable columns PostgREST returns as null when the fake stores them unset.
+const NULL_COLUMNS = {
+  children: ['class_id', 'hidden_at', 'archived_at', 'archived_by_user_id', 'archive_reason'],
+  classes: ['archived_at', 'archived_by_user_id', 'archive_reason'],
+  groups: ['archived_at', 'archived_by_user_id', 'archive_reason'],
+  child_ea_assignments: ['unassigned_at', 'handover_reason'],
+  class_ea_assignments: ['unassigned_at', 'handover_reason'],
+  group_ea_assignments: ['unassigned_at', 'handover_reason'],
+  child_programme_enrollments: ['ended_at'],
+  child_class_memberships: ['exited_at'],
+  child_group_memberships: ['removed_at', 'grouping_version_id'],
+  staff_programme_assignments: ['ended_at'],
+};
+// PostgREST resource embedding along the foreign keys the pull queries use.
+const EMBEDS = {
+  child_ea_assignments: { children: { one: 'child_id' } },
+  child_class_memberships: { classes: { one: 'class_id' }, academic_years: { one: 'academic_year_id' } },
+  class_ea_assignments: { classes: { one: 'class_id' } },
+  children: { child_ea_assignments: { many: 'child_id' }, child_programme_enrollments: { many: 'child_id' } },
+  groups: { group_ea_assignments: { many: 'group_id' } },
+  classes: { class_ea_assignments: { many: 'class_id' } },
+};
 
 const END_COLUMNS = {
   child_ea_assignments: 'unassigned_at',
@@ -187,9 +218,10 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
     return { status: 200, body: [{ id }], rowsAffected: 1 };
   };
 
+  // A server-side end (SECURITY DEFINER) leaves row_version alone, as 20261105120300 does.
   const endRow = (table, row, at) => {
     const column = END_COLUMNS[table];
-    if (row[column] == null) t(table).set(row.id, { ...row, [column]: at, row_version: (row.row_version || 1) + 1 });
+    if (row[column] == null) t(table).set(row.id, { ...row, [column]: at });
   };
 
   // S3: actor-scoped Delete child. Never a hard delete; always true when authorized.
@@ -222,7 +254,6 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
       if (child.archived_at == null) {
         t('children').set(childId, {
           ...t('children').get(childId), archived_at: at, archived_by_user_id: actor, archive_reason: 'removed_by_ea',
-          row_version: (child.row_version || 1) + 1,
         });
       }
     }
@@ -271,6 +302,7 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
       return { status: 200, body: 'inserted' };
     }
     if (fn === 'delete_child_if_no_history') return deleteChild(args.p_child_id);
+    if (fn === 'get_reconcile_acknowledgments') return { status: 200, body: reconcileAcknowledgments() };
     if (fn === 'report_mobile_support_incident_v2' || fn === 'report_mobile_support_incident') {
       t('mobile_support_incidents').set(String(t('mobile_support_incidents').size + 1), { ...args });
       return { status: 200, body: { status: 'inserted' } };
@@ -278,19 +310,168 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
     return { status: 404, body: { code: 'PGRST202', message: `rpc ${fn} not modelled` } };
   };
 
+  // private.get_reconcile_acknowledgments (20261023120000): one snapshot of the caller's grants.
+  const reconcileAcknowledgments = () => {
+    const programme = all('staff_programme_assignments')
+      .filter(s => s.user_id === actor && s.ended_at == null)
+      .sort((a, b) => String(b.assigned_at).localeCompare(String(a.assigned_at)) || String(b.id).localeCompare(String(a.id)))[0];
+    const programmeId = programme?.programme_id ?? null;
+    const sorted = values => [...new Set(values)].sort();
+    const childAssignments = all('child_ea_assignments').filter(r => r.user_id === actor && r.unassigned_at == null);
+    const assignedChildIds = new Set(childAssignments.map(r => r.child_id));
+    const openEnrollments = all('child_programme_enrollments')
+      .filter(r => r.programme_id === programmeId && r.ended_at == null && assignedChildIds.has(r.child_id));
+    const visibleChildIds = new Set(openEnrollments.map(r => r.child_id));
+    const classAssignments = all('class_ea_assignments')
+      .filter(r => r.ea_user_id === actor && r.programme_id === programmeId && r.unassigned_at == null);
+    const classIds = new Set(classAssignments.map(r => r.class_id));
+    const groupAssignments = all('group_ea_assignments').filter(r => r.ea_user_id === actor
+      && r.programme_id === programmeId && r.unassigned_at == null && t('groups').get(r.group_id)?.programme_id === programmeId);
+    const groupIds = new Set(groupAssignments.map(r => r.group_id));
+    const openClassMemberships = all('child_class_memberships').filter(r => r.exited_at == null);
+    return {
+      schema_version: 1, complete: true, user_id: actor, generated_at: now(), active_programme_id: programmeId,
+      child_ea_assignment_ids: sorted(childAssignments.map(r => r.id)),
+      assigned_child_ids: sorted(assignedChildIds),
+      visible_child_ids: sorted(visibleChildIds),
+      child_programme_enrollment_ids: sorted(openEnrollments.map(r => r.id)),
+      child_class_membership_ids: sorted(openClassMemberships.filter(r => visibleChildIds.has(r.child_id)).map(r => r.id)),
+      class_ea_assignment_ids: sorted(classAssignments.map(r => r.id)),
+      class_ids: sorted(classIds),
+      roster_class_ids: sorted(classIds),
+      roster_membership_ids: sorted(openClassMemberships.filter(r => classIds.has(r.class_id)).map(r => r.id)),
+      group_ea_assignment_ids: sorted(groupAssignments.map(r => r.id)),
+      group_ids: sorted(groupIds),
+      child_group_membership_ids: sorted(all('child_group_memberships')
+        .filter(r => r.removed_at == null && groupIds.has(r.group_id)).map(r => r.id)),
+    };
+  };
+
+  // A PostgREST GET: `select` with one level of embeds (`name(*)`, `name!inner(cols)`), eq / is.null /
+  // in filters on the table or an embed (`embed.column`), order and limit. Anything else is a 500,
+  // so an unmodelled query fails loudly instead of returning a plausible empty result.
+  const splitTopLevel = (text) => {
+    const parts = [];
+    let depth = 0;
+    let current = '';
+    for (const char of text) {
+      if (char === '(') depth += 1;
+      if (char === ')') depth -= 1;
+      if (char === ',' && depth === 0) { parts.push(current); current = ''; } else current += char;
+    }
+    if (current) parts.push(current);
+    return parts;
+  };
+  const fullRow = (table, row) => ({
+    ...Object.fromEntries((NULL_COLUMNS[table] || []).map(column => [column, null])), ...row,
+  });
+  const project = (table, row, columns) => (columns.includes('*') ? fullRow(table, row)
+    : Object.fromEntries(columns.map(column => [column, row[column] ?? null])));
+  const matches = (row, filter) => {
+    if (filter === 'is.null') return row != null && row.value == null;
+    const value = row?.value;
+    if (filter.startsWith('eq.')) return value != null && String(value) === filter.slice(3);
+    if (filter.startsWith('in.(') && filter.endsWith(')')) {
+      return filter.slice(4, -1).split(',').map(item => item.replace(/^"|"$/g, '')).includes(String(value));
+    }
+    throw new Error(`filter ${filter} not modelled`);
+  };
   const select = (table, params) => {
-    const filters = [...params.entries()].filter(([key]) => !['select', 'limit', 'order'].includes(key));
-    let matched = all(table).filter(row => filters.every(([column, filter]) => {
-      if (filter === 'is.null') return row[column] == null;
-      if (filter.startsWith('eq.')) return String(row[column]) === filter.slice(3);
-      return true;
-    }));
-    const limit = Number(params.get('limit'));
-    if (limit > 0) matched = matched.slice(0, limit);
-    const columns = params.get('select');
-    const body = !columns || columns === '*' ? matched
-      : matched.map(row => Object.fromEntries(columns.split(',').map(column => [column, row[column] ?? null])));
-    return { status: 200, body };
+    try {
+      const items = splitTopLevel(params.get('select') || '*');
+      const columns = items.filter(item => !item.includes('('));
+      const embeds = items.filter(item => item.includes('(')).map((item) => {
+        const [, name, inner, cols] = item.match(/^([a-z_]+)(!inner)?\((.*)\)$/) || [];
+        const relation = EMBEDS[table]?.[name];
+        if (!relation) throw new Error(`embed ${item} on ${table} not modelled`);
+        return { name, inner: Boolean(inner), columns: cols.split(','), relation, filters: [] };
+      });
+      const filters = [];
+      for (const [key, filter] of params.entries()) {
+        if (['select', 'limit', 'order', 'offset'].includes(key)) continue;
+        const [first, rest] = key.includes('.') ? key.split('.') : [null, key];
+        const embed = first ? embeds.find(item => item.name === first) : null;
+        if (first && !embed) throw new Error(`filter ${key} not modelled`);
+        (embed ? embed.filters : filters).push([rest, filter]);
+      }
+      const passes = (row, list) => list.every(([column, filter]) => matches({ value: row[column] }, filter));
+      let result = [];
+      for (const row of all(table)) {
+        if (!passes(row, filters)) continue;
+        const out = project(table, row, columns.length ? columns : ['*']);
+        let keep = true;
+        for (const embed of embeds) {
+          if (embed.relation.one) {
+            const parent = t(embed.name).get(row[embed.relation.one]);
+            const value = parent && passes(parent, embed.filters) ? project(embed.name, parent, embed.columns) : null;
+            if (embed.inner && !value) keep = false;
+            out[embed.name] = value;
+          } else {
+            const related = all(embed.name).filter(other => other[embed.relation.many] === row.id && passes(other, embed.filters))
+              .map(other => project(embed.name, other, embed.columns));
+            if (embed.inner && related.length === 0) keep = false;
+            out[embed.name] = related;
+          }
+        }
+        if (keep) result.push(out);
+      }
+      const order = params.get('order');
+      if (order) {
+        const [column, direction] = order.split('.');
+        result.sort((a, b) => String(a[column] ?? '').localeCompare(String(b[column] ?? '')) * (direction === 'desc' ? -1 : 1));
+      }
+      const limit = Number(params.get('limit'));
+      if (limit > 0) result = result.slice(0, limit);
+      return { status: 200, body: result };
+    } catch (error) {
+      return { status: 500, body: { code: 'NOT_MODELLED', message: error.message } };
+    }
+  };
+
+  // Head Office `restore child` (work order 5, `scripts/ho-lifecycle.cjs` in the HO branch): undoes
+  // one EA's Delete child in place. T is the removal instant: the child's archived_at when this
+  // EA archived it, otherwise the end of their latest ended direct assignment. It reopens their own
+  // assignment and every enrollment, class and group membership of the child that ended at exactly
+  // T (skipping a membership whose class or group is archived now), and un-archives a child archived
+  // at T. Ids, starts and row_version stay as they are; updated_at moves (the server trigger).
+  const restoreChild = ({ eaUserId, childId }) => {
+    const child = t('children').get(childId);
+    if (!child) throw new Error('child_not_found');
+    const own = all('child_ea_assignments').filter(r => r.child_id === childId && r.user_id === eaUserId);
+    if (own.length === 0) throw new Error('never_held');
+    if (child.archived_at == null && own.some(r => r.unassigned_at == null)) return { outcome: 'already_active' };
+    let removedAt;
+    if (child.archived_at != null) {
+      removedAt = child.archived_at;
+      const ownEndedThen = own.some(r => r.unassigned_at === removedAt);
+      if (!(child.archived_by_user_id === eaUserId || (child.archived_by_user_id == null && ownEndedThen))) {
+        throw new Error('archived_by_another_ea');
+      }
+    } else {
+      removedAt = own.map(r => r.unassigned_at).filter(Boolean).sort().pop();
+    }
+    const at = now();
+    const reopen = (table, row) => {
+      t(table).set(row.id, { ...row, [END_COLUMNS[table]]: null, ...(table === 'child_ea_assignments' ? { handover_reason: null } : {}),
+        updated_at: at });
+    };
+    const assignment = own.find(r => r.unassigned_at == null)
+      || [...own].sort((a, b) => String(a.unassigned_at).localeCompare(String(b.unassigned_at))).pop();
+    if (assignment.unassigned_at != null) reopen('child_ea_assignments', assignment);
+    const skipped = [];
+    const parentArchived = { child_class_memberships: ['classes', 'class_id'], child_group_memberships: ['groups', 'group_id'] };
+    for (const table of ['child_programme_enrollments', 'child_class_memberships', 'child_group_memberships']) {
+      for (const row of all(table)) {
+        if (row.child_id !== childId || row[END_COLUMNS[table]] !== removedAt) continue;
+        const [parentTable, parentColumn] = parentArchived[table] || [];
+        if (parentTable && t(parentTable).get(row[parentColumn])?.archived_at != null) { skipped.push(row.id); continue; }
+        reopen(table, row);
+      }
+    }
+    if (child.archived_at != null) {
+      t('children').set(childId, { ...child, archived_at: null, archived_by_user_id: null, archive_reason: null, updated_at: at });
+    }
+    return { outcome: 'restored', removedAt, skipped };
   };
 
   const fetchImpl = async (input, init = {}) => {
@@ -344,6 +525,6 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
 
   return {
     fetchImpl, rows, t, all, log, seed, snapshot, summary, state,
-    writeForChild, heldEver, otherActiveHolder,
+    writeForChild, heldEver, otherActiveHolder, restoreChild,
   };
 };
