@@ -1,12 +1,13 @@
 import { useActiveProgrammeSubject } from '../../hooks/useActiveProgrammeSubject';
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Platform, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform, TouchableOpacity } from 'react-native';
 import KeyboardAvoidingView from '../../components/common/KeyboardAvoidingView';
 import { Text } from 'react-native-paper';
 import { colors, spacing, borderRadius, tints } from '../../constants/colors';
 import BrandButton from '../../components/common/BrandButton';
 import SurfaceCard from '../../components/common/SurfaceCard';
+import ConfirmSheet from '../../components/common/ConfirmSheet';
 import TextField from '../../components/common/TextField';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
 import { useToast } from '../../context/ToastContext';
@@ -45,6 +46,7 @@ export default function EditChildScreen({ route, navigation }) {
   const [groupPickerVisible, setGroupPickerVisible] = useState(false);
   const [classPickerVisible, setClassPickerVisible] = useState(false);
   const [readingLevelPickerVisible, setReadingLevelPickerVisible] = useState(false);
+  const [deleteSheetVisible, setDeleteSheetVisible] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   const [errors, setErrors] = useState({});
@@ -147,26 +149,16 @@ export default function EditChildScreen({ route, navigation }) {
     }
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Child',
-      'Are you sure you want to remove this child?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await deleteChild(childId);
-            if (result.success) {
-              navigation.goBack();
-            } else {
-              toast.show({ message: 'Error deleting child', tone: 'error', duration: 3000 });
-            }
-          },
-        },
-      ]
-    );
+  // Delete child (plan O2 item 2): saved work still uploads, and the server decides whether the
+  // child also leaves the class (only when no other EA teaches them). Draft copy for Jim's pass.
+  const confirmDelete = async () => {
+    setDeleteSheetVisible(false);
+    const result = await deleteChild(childId);
+    if (result.success) {
+      navigation.goBack();
+    } else {
+      toast.show({ message: 'Error deleting child', tone: 'error', duration: 3000 });
+    }
   };
 
   if (!child) {
@@ -305,7 +297,7 @@ export default function EditChildScreen({ route, navigation }) {
 
         {/* Delete Button */}
         <BrandButton
-          onPress={handleDelete}
+          onPress={() => setDeleteSheetVisible(true)}
           style={styles.deleteButton}
           icon="trash-outline"
           variant="destructiveQuiet" size="lg" label="Delete child"
@@ -341,6 +333,17 @@ export default function EditChildScreen({ route, navigation }) {
         onSelect={handleClassSelect}
         emptyMessage="No classes available. Create a class first."
         maxHeight="60%"
+      />
+
+      <ConfirmSheet
+        visible={deleteSheetVisible}
+        title={`Remove ${child.first_name}?`}
+        body={`Lessons and ticks you saved will still upload. If no other EA teaches ${child.first_name}, ${child.first_name} also leaves the class.`
+          + `\n\nIf ${child.first_name} can read now, use Remove from group instead.`}
+        confirmLabel="Remove child"
+        cancelLabel="Keep child"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteSheetVisible(false)}
       />
 
       {!isMaths && <SelectSheet

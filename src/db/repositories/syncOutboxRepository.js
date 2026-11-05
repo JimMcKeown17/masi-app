@@ -120,9 +120,13 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     if (!tableName || !recordId) return false;
     const db = await resolveDatabase(database);
     // "Still owed" means the outbox row has not been acknowledged. Terminal rows do not count.
+    // Only the parent's own insert or update is evidence that it is still awaiting the server
+    // (plan O2 item 2, review round 4): a waiting children hard_delete is not, or a permanently
+    // refused relationship INSERT would retry forever instead of reaching O1's exit.
     const row = await db.getFirstAsync(`
       select id from sync_outbox
       where table_name = ? and record_id = ?
+        and operation in ('insert', 'update')
         and status in ('pending', 'failed', 'in_flight')
       limit 1
     `, tableName, recordId);

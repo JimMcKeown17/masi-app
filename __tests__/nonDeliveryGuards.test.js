@@ -46,9 +46,9 @@ beforeEach(async () => {
 });
 afterEach(async () => { jest.restoreAllMocks(); await db.closeAsync(); });
 
-test('archiveChild refuses a class-only child without changing any domain or outbox row', async () => {
+test('removeChild refuses a class-only child without changing any domain or outbox row', async () => {
   const before = await snapshot();
-  await expect(children.archiveChild('control', { actorUserId: 'user-1' }))
+  await expect(children.removeChild('control'))
     .rejects.toMatchObject({ code: 'NOT_DELIVERY_CHILD' });
   expect(await snapshot()).toEqual(before);
 });
@@ -99,7 +99,7 @@ test.each(['class-only', 'creator-only', 'other-ea', 'ended-assignment'])(
 );
 
 const childWrites = {
-  archiveChild: options => children.archiveChild('control', options),
+  removeChild: options => children.removeChild('control', options),
   deleteIfNoHistory: options => children.deleteIfNoHistory('control', options),
   updateChild: options => children.updateChild('control', { first_name: 'Changed' }, options),
 };
@@ -119,7 +119,7 @@ test.each(Object.keys(childWrites).flatMap(name => ['delivery', 'creator'].map(s
     await db.withExclusiveTransactionAsync(async transaction => {
       expect(await childWrites[name]({ transaction, actorUserId: 'unrelated-ea' })).toBe(true);
     });
-    if (name === 'deleteIfNoHistory') {
+    if (name === 'deleteIfNoHistory' || name === 'removeChild') {
       expect(await db.getFirstAsync("select * from children where id = 'control'")).toBeNull();
       expect(await db.getFirstAsync("select operation from sync_outbox where record_id = 'control'"))
         .toEqual({ operation: 'hard_delete' });
@@ -127,7 +127,7 @@ test.each(Object.keys(childWrites).flatMap(name => ['delivery', 'creator'].map(s
       expect(await db.getFirstAsync("select sync_status from children where id = 'control'"))
         .toEqual({ sync_status: 'pending' });
       expect(await db.getFirstAsync("select operation from sync_outbox where record_id = 'control'"))
-        .toEqual({ operation: name === 'archiveChild' ? 'archive' : 'update' });
+        .toEqual({ operation: 'update' });
     }
   }
 );
@@ -147,7 +147,7 @@ test('the guard reads delivery authority inside the write transaction and a refu
   const before = await snapshot();
   await expect(db.withExclusiveTransactionAsync(async transaction => {
     await transaction.runAsync("update child_ea_assignments set unassigned_at = '2026-10-23' where user_id = 'user-1'");
-    await children.archiveChild('control', { transaction });
+    await children.removeChild('control', { transaction });
   })).rejects.toMatchObject({ code: 'NOT_DELIVERY_CHILD' });
   expect(await snapshot()).toEqual(before);
 });

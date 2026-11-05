@@ -467,7 +467,7 @@ export const persistPreloadedChildData = async ({
   if (scopes.groups.ok) await repositories.groups.saveServerGroupRows(scopes.groups.rows);
   await save('groupEaAssignments', repositories.groupEaAssignments.saveServerRows, scopes.groupEaAssignments.rows,
     canReconcile ? { acknowledgedGroupIds: ack.groupIds, userId, programmeId: activeProgrammeId } : null);
-  await save('childrenGroups', repositories.groups.saveServerChildrenGroupRows, scopes.childrenGroups.rows,
+  await save('childrenGroups', repositories.groups.saveServerChildrenGroupRows, kept('childrenGroups'),
     canReconcile ? { acknowledgedIds: ack.childGroupMembershipIds, acknowledgedGroupIds: ack.groupIds } : null);
   await persistClassRoster({ scope: scopes.classRoster, repositories, deletedChildIds: deleted });
   reconciles.push(...await reconcilePulledClassMemberships({ pulled, repositories, pulledAt, authorizedBreakerScopes }));

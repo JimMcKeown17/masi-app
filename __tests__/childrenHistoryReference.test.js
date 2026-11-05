@@ -58,7 +58,7 @@ describe('history reference children', () => {
     const attempts = {
       save: () => repository.save({ id: 'child-ref', first_name: 'X', last_name: 'Y' }, { actorUserId: 'user-1' }),
       updateChild: () => repository.updateChild('child-ref', { first_name: 'X' }, { actorUserId: 'user-1' }),
-      archiveChild: () => repository.archiveChild('child-ref', { actorUserId: 'user-1', archiveReason: 'left_school' }),
+      removeChild: () => repository.removeChild('child-ref'),
       deleteIfNoHistory: () => repository.deleteIfNoHistory('child-ref'),
     };
     for (const [name, attempt] of Object.entries(attempts)) {

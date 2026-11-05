@@ -360,6 +360,19 @@ describe('SQLite sync outbox repository', () => {
     test('false for missing args', async () => {
       expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: null })).toBe(false);
     });
+
+    // Plan O2 item 2 (review round 4): a waiting Delete child is not evidence that the child is
+    // awaiting creation; only the parent's own owed insert or update is, including while it backs off.
+    test('a pending children hard_delete is not parent evidence; an owed insert or update still is', async () => {
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-4', operation: 'hard_delete', payload: { id: 'child-4' } });
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'child-4' })).toBe(false);
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-4', operation: 'update', payload: { id: 'child-4' } });
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'child-4' })).toBe(true);
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-5', operation: 'insert', payload: { id: 'child-5' } });
+      await outbox.enqueue({ tableName: 'children', recordId: 'child-5', operation: 'hard_delete', payload: { id: 'child-5' } });
+      await outbox.markRetriableFailure('children:child-5:insert', { errorMessage: 'offline', nextRetryAt: '2099-01-01T00:00:00.000Z' });
+      expect(await outbox.hasPendingRecord({ tableName: 'children', recordId: 'child-5' })).toBe(true);
+    });
   });
 
   test('getPendingHardDeleteIds returns active hard-deletes only for the requested actor', async () => {

@@ -60,6 +60,12 @@ describe('row versions at upload claim', () => {
   const enqueue = (operation, payload = childPayload(), tableName = 'children', id) => outbox.enqueue({
     tableName, recordId: payload.id, operation, payload, ...(id ? { id } : {}),
   });
+  // A children archive as queued by a pre-OTA build (1.5.0's archiveChild). Delete child no longer
+  // produces one (plan O2), but installed phones may still hold one, and the engine still sends it.
+  const queueLegacyChildArchive = async (archivedAt) => {
+    await db.runAsync("update children set archived_at = ?, sync_status = 'pending' where id = ?", archivedAt, CHILD_ID);
+    await enqueue('archive', { id: CHILD_ID, archived_at: archivedAt });
+  };
   const makeEngine = (supabaseClient, repository = outbox) => createOutboxSyncEngine({
     database: db, supabaseClient, outboxRepository: repository,
     enqueueRequest: task => task(), getAuthSession: liveTestSession,
@@ -276,7 +282,7 @@ describe('row versions at upload claim', () => {
         await seedChild(SIBLING_ID);
         await enqueue('insert', childPayload(SIBLING_ID));
       } else if (lifecycle) {
-        await children.archiveChild(CHILD_ID, { archivedAt: ARCHIVED_AT });
+        await queueLegacyChildArchive(ARCHIVED_AT);
         slotId = (await outbox.getReadyRecords())[0].id;
       } else {
         await children.updateChild(CHILD_ID, { first_name: 'Claimed' });
@@ -284,7 +290,7 @@ describe('row versions at upload claim', () => {
       }
       const replace = jest.fn(async () => {
         if (lifecycle) {
-          await children.archiveChild(CHILD_ID, { archivedAt: REPLACEMENT_ARCHIVED_AT });
+          await queueLegacyChildArchive(REPLACEMENT_ARCHIVED_AT);
           if (fallback) {
             // The outstanding INSERT also gets a new lifecycle snapshot before acknowledgement.
             await children.saveChildRecord({ ...childPayload(), archived_at: REPLACEMENT_ARCHIVED_AT });

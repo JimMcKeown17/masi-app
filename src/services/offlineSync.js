@@ -1503,7 +1503,20 @@ export const createOutboxSyncEngine = ({
     const fieldResolversByOutboxId = new Map();
     const blockedSubjectIndexes = new Map();
 
+    // Plan O2 item 2 ("a children hard_delete is never a parent", review rounds 3-4). A Delete
+    // child waiting on its gate is a waiting destructive operation, not a missing or failed FK
+    // parent. Registering it would skip every relationship INSERT and history row for the child,
+    // forever, while it waits for exactly those rows. This one exclusion covers every entry point
+    // (dependency skip, failure, batch deferral) and the archive subject index built from the map.
+    const isChildHardDelete = (record) => (
+      record.operation === 'hard_delete' && normalizeTableName(record.table_name) === 'children'
+    );
+    // The child's own relationship family the deletion waits for (findBlockingDependency).
+    const CHILD_RELATIONSHIP_INSERT_TABLES = [
+      'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships', 'child_group_memberships',
+    ];
     const rememberBlockedRecord = (record) => {
+      if (isChildHardDelete(record)) return;
       const tableKey = normalizeTableName(record.table_name);
       if (!failedRecordsByTable.has(tableKey)) {
         failedRecordsByTable.set(tableKey, new Map());
@@ -1548,12 +1561,23 @@ export const createOutboxSyncEngine = ({
       if (record.operation === 'hard_delete' && tableNameForRecord === 'children') {
         // Deletion retained a possibly-committed INSERT. Do not let deletion
         // finish before its retry, including a terminal insert retried manually.
+        // Plan O2 item 2: the deletion also waits for the child's own relationship INSERTs, in any
+        // status, so they land open with the authority the rest of the family and the queued
+        // history need, and the server's actor-scoped removal then ends them. History never waits
+        // here. A terminal relationship INSERT releases the deletion when it leaves the outbox
+        // through O1's receipt-gated exit. The waiting deletion is never a parent: see
+        // isChildHardDelete above.
         const resolvedDatabase = await resolveDatabase(database);
         const retainedInsert = await resolvedDatabase.getFirstAsync(`
           select id from sync_outbox
-          where table_name = 'children' and record_id = ? and operation = 'insert'
+          where operation = 'insert'
+            and (
+              (table_name = 'children' and record_id = ?)
+              or (table_name in (${CHILD_RELATIONSHIP_INSERT_TABLES.map(() => '?').join(', ')})
+                and json_extract(payload, '$.child_id') = ?)
+            )
           limit 1
-        `, record.record_id);
+        `, record.record_id, ...CHILD_RELATIONSHIP_INSERT_TABLES, record.record_id);
         if (retainedInsert) return { tableName: tableNameForRecord, recordId: record.record_id };
       }
       // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
@@ -1697,6 +1721,21 @@ export const createOutboxSyncEngine = ({
       const filteredRecords = tableName
         ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
         : readyRecords;
+
+      // Plan O2 item 2: a genuinely unacknowledged child INSERT keeps its blocker role while it
+      // backs off. The blocker map is otherwise built only from rows this pass selects, and an
+      // ordinary pass does not select a backed-off row, so its family would be sent ahead of the
+      // child. Register every owed child INSERT this pass will not send. Its evidence role needs no
+      // help: hasPendingRecord counts it in any unacknowledged status.
+      const selectedIds = new Set(filteredRecords.map((record) => record.id));
+      const owedChildInserts = await (await resolveDatabase(database)).getAllAsync(`
+        select id, table_name, record_id, operation from sync_outbox
+        where table_name = 'children' and operation = 'insert'
+          and status in ('pending', 'failed', 'in_flight') and owner_user_id = ?
+      `, passUserId);
+      for (const owed of owedChildInserts) {
+        if (!selectedIds.has(owed.id)) rememberBlockedRecord(owed);
+      }
 
       for (let index = 0; index < filteredRecords.length; index += 1) {
         const outboxRecord = filteredRecords[index];

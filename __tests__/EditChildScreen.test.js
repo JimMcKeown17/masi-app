@@ -280,17 +280,33 @@ test('validation exposes an alert and the field error name', () => {
   expect(mockUpdateChild).not.toHaveBeenCalled();
 });
 
-test('Delete child keeps the confirmation and deletes only after confirmation', async () => {
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+// Plan O2 item 2: Delete child asks in a bottom sheet, in plain words, what happens. Saved work
+// still uploads; leaving the class for everyone is the server's decision (sole holder only).
+test('Delete child asks in a sheet in plain words and removes only after confirmation', async () => {
+  const alert = jest.spyOn(Alert, 'alert');
   mockDeleteChild.mockResolvedValueOnce({ success: true });
   const screen = renderScreen();
   fireEvent.press(screen.getByRole('button', { name: 'Delete child' }));
   expect(mockDeleteChild).not.toHaveBeenCalled();
-  expect(alert).toHaveBeenCalledWith('Delete Child', 'Are you sure you want to remove this child?', expect.any(Array));
-  await alert.mock.calls[0][2].find(action => action.text === 'Delete').onPress();
-  expect(mockDeleteChild).toHaveBeenCalledWith('child-1');
+  expect(alert).not.toHaveBeenCalled();
+  expect(screen.getByRole('header', { name: 'Remove Amahle?' })).toBeTruthy();
+  expect(screen.getByText(
+    'Lessons and ticks you saved will still upload. If no other EA teaches Amahle, Amahle also leaves the class.'
+    + '\n\nIf Amahle can read now, use Remove from group instead.'
+  )).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Remove child' }));
+  await waitFor(() => expect(mockDeleteChild).toHaveBeenCalledWith('child-1'));
   expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
   alert.mockRestore();
+});
+
+test('Keep child closes the Delete child sheet without removing anything', () => {
+  const screen = renderScreen();
+  fireEvent.press(screen.getByRole('button', { name: 'Delete child' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Keep child' }));
+  expect(screen.queryByRole('header', { name: 'Remove Amahle?' })).toBeNull();
+  expect(mockDeleteChild).not.toHaveBeenCalled();
+  expect(mockNavigationGoBack).not.toHaveBeenCalled();
 });
 
 test('leaves the page title to the navigator', () => {
