@@ -842,8 +842,9 @@ COMMIT;`, label);
     phoneArchive(RX, 'child_programme_enrollments', enrolment(3), { ended_at: t3, row_version: 3 });
     phoneArchive(RX, 'child_class_memberships', classMembership(3), { exited_at: t3, row_version: 2 });
     phoneArchive(RX, 'child_group_memberships', groupMembership(3, 1), { removed_at: t3, row_version: 2 });
-    // One request in the chain landed with a fast phone clock: the end guard clamps it to the
-    // server's now, so it is not at T (a near miss, listed and left ended).
+    // One group membership ends after the removal, outside its window (here a 2099 time the end
+    // guard clamps to the server's now): a near miss, listed and left ended. Case 11 models a real
+    // fast phone clock, where the whole chain is clamped.
     phoneArchive(RX, 'child_group_memberships', groupMembership(3, 2), { removed_at: '2099-01-01T00:00:00+00:00', row_version: 2 });
     phoneArchive(RX, 'child_ea_assignments', restoreDet(RX, R3), { unassigned_at: t3, row_version: 4 });
     const r3Removed = ends(R3);
@@ -1001,6 +1002,69 @@ COMMIT;`, label);
     assert.deepEqual([r9Refusal.id, r9Refusal.delivery_ended_at, r9Refusal.removed_at],
       [restoreDet(RX, R9), r9Removed.rows[restoreDet(RX, R9)].end, r9Removed.archived.archived_at]);
     pass('restore-refuses-a-removal-that-did-not-end-the-eas-delivery');
+
+    // ---- Case 11: 1.5.0 archiveChild chains from a phone whose clock is ahead. The phone stamps
+    // one time Tp on every request, in its push order (child 2, enrolment 3, class 4, group 5,
+    // delivery 7), and the end guard keeps least(Tp, now()) as each lands.
+    const phoneChain = (actor, child, n, tp, between = () => {}) => {
+      phoneArchive(actor, 'children', child, { archived_at: tp, row_version: 2 });
+      between();
+      phoneArchive(actor, 'child_programme_enrollments', enrolment(n), { ended_at: tp, row_version: 3 });
+      phoneArchive(actor, 'child_class_memberships', classMembership(n), { exited_at: tp, row_version: 2 });
+      phoneArchive(actor, 'child_group_memberships', groupMembership(n, 1), { removed_at: tp, row_version: 2 });
+      phoneArchive(actor, 'child_ea_assignments', restoreDet(actor, child), { unassigned_at: tp, row_version: 4 });
+    };
+    const chainRows = n => [restoreDet(RX, rid('5d', n)), enrolment(n), classMembership(n), groupMembership(n, 1)];
+    const restoresWholeChain = (child, n, label) => {
+      const applied = ok(cli([...restore(R_EMAIL.X, child), '--apply']), label);
+      assert.ok(applied.confirmed);
+      assert.deepEqual(reopened(applied.applied.actions), chainRows(n).sort());
+      assert.ok(applied.applied.actions.some(action => action.action === 'unarchive'));
+      assert.deepEqual(applied.applied.refusals, []);
+      const after = ends(child);
+      assert.equal(after.archived.archived_at, null);
+      for (const rowId of chainRows(n)) assert.equal(after.rows[rowId].end, null, `${rowId} reopened`);
+      assert.deepEqual(invariantRows(databaseUrl, '', `invariants-${label}`).filter(hit => hit.entity_id === child), [],
+        'the restored child is in a live class again');
+      return applied;
+    };
+    // Two minutes ahead: every request is clamped, so the chain ends at five different instants,
+    // the child's archive first and the EA's delivery row last.
+    phoneChain(RX, R10, 10, JSON.parse(sql(`SELECT to_jsonb(now() + interval '2 minutes');`, 'fast-phone-time')));
+    const r10Removed = ends(R10);
+    const r10Chain = [r10Removed.archived.archived_at, ...chainRows(10).slice(1).map(rowId => r10Removed.rows[rowId].end),
+      r10Removed.rows[restoreDet(RX, R10)].end];
+    assert.equal(new Set(r10Chain).size, 5, 'each request landed at its own instant');
+    assert.deepEqual([...r10Chain].sort(), r10Chain, 'in push order');
+    const applied10 = restoresWholeChain(R10, 10, 'restore-r10-fast-clock');
+    const spread = applied10.applied.notes.find(note => note.code === 'removal_spread');
+    assert.deepEqual([spread?.from, spread?.to], [r10Chain[0], r10Chain[4]]);
+    pass('restore-after-a-fast-clock-1-5-0-archive-reopens-the-whole-chain');
+
+    // Slightly ahead: only the child's archive lands before Tp; the other rows end at Tp exactly.
+    const tp11 = JSON.parse(sql(`SELECT to_jsonb(now() + interval '2 seconds');`, 'slightly-fast-phone-time'));
+    phoneChain(RX, R11, 11, tp11, () => {
+      for (let attempt = 0; attempt < 60 && sql(`SELECT now() > '${tp11}'::timestamptz;`, 'wait-for-tp') !== 't'; attempt += 1) sleep(100);
+    });
+    const r11Removed = ends(R11);
+    assert.ok(r11Removed.archived.archived_at < tp11, 'the archive was clamped');
+    for (const rowId of chainRows(11)) assert.equal(r11Removed.rows[rowId].end, tp11, `${rowId} kept the phone time`);
+    restoresWholeChain(R11, 11, 'restore-r11-slightly-fast-clock');
+    pass('restore-after-a-slightly-fast-clock-reopens-the-rows-ended-after-the-archive');
+
+    // A co-held child (Y delivers R12): the child's archive becomes a leave, so there is no archive
+    // instant to start the window, and the enrolment and class membership the chain ended (for
+    // everyone) landed before the delivery row. Restore cannot tell them from separate changes:
+    // refused, rather than reopening the delivery row alone and leaving the child in no class.
+    phoneChain(RX, R12, 12, JSON.parse(sql(`SELECT to_jsonb(now() + interval '2 minutes');`, 'fast-phone-time-12')));
+    const r12Removed = ends(R12);
+    assert.equal(r12Removed.archived.archived_at, null, 'a leave');
+    assert.ok(r12Removed.rows[enrolment(12)].end && r12Removed.rows[classMembership(12)].end);
+    const r12Refusal = refusedNoChange(R12, 'nearby_end_not_restored');
+    assert.deepEqual(r12Refusal.rows.map(entry => [entry.table, entry.id]),
+      [['child_programme_enrollments', enrolment(12)], ['child_class_memberships', classMembership(12)]]);
+    assert.ok(r12Refusal.rows.every(entry => entry.seconds_from_t < 0 && entry.seconds_from_t > -3600));
+    pass('restore-refuses-when-an-enrolment-or-class-ended-near-the-removal-but-not-with-it');
 
     // ---- Other refusals change nothing and never reach a COMMIT.
     const beforeOther = digest();
