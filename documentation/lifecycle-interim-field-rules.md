@@ -22,12 +22,13 @@ Until your coordinator tells you your app has the update:
 
 1. **Before you change who teaches a child, class or group, end an EA's delivery, or switch an EA's
    programme**, the EA's phone must have uploaded everything:
-   1. the EA opens the app on Wi-Fi;
-   2. Sync status reads "All saved and synced";
-   3. the EA taps Profile → Support tools → Send diagnostics;
-   4. support confirms the receipt shows **0 waiting**, and that every "needs attention" item has its
-      own receipt on the server (`npm run bugs:incidents`);
-   5. then make the change: end the old row before adding the new one, never set an end before its
+   1. the EA opens the app on Wi-Fi and lets it finish syncing;
+   2. the EA taps Profile → Support tools → Send diagnostics;
+   3. support confirms the receipt shows **0 waiting**, and that every "needs attention" item appears
+      in that EA's receipts on the server (`npm run bugs:incidents`). A "needs attention" banner on
+      the phone is fine when this holds. Do **not** wait for "All saved and synced": a refused item
+      keeps the banner until the app update, and waiting for it would block you for weeks;
+   4. then make the change: end the old row before adding the new one, never set an end before its
       start, and never bump `row_version` on an end.
 
    *Lifted when the "held on the day" server rule is live and verified (plan step R1).* After that,

@@ -37,8 +37,8 @@ a Delete child after an offline lesson uploads the session with zero attendees a
    shape. 1.5.0 retries unknown codes forever and treats 23505 as terminal. A CI gate enforces this.
 5. **Every non-success has exactly one exit, and nothing leaves a phone before the office holds its
    copy.** Refused lifecycle and edit rows resolve to server truth. Refused history stays replayable,
-   so a server fix heals it on routine Sync now. A row leaves the phone only after its `upload_terminal`
-   receipt is delivered.
+   so a server fix heals it on routine Sync now. A row leaves the phone only after the server holds a
+   delivered `upload_terminal` receipt of its exact current revision, untruncated (O1 item 2).
 6. **Remove more than we add** (~9 added, ~25 removed), and verify at real seams, then in the field.
 
 ## Decisions (Jim, 2026-11-04: all recommendations accepted)
@@ -76,6 +76,44 @@ a Delete child after an offline lesson uploads the session with zero attendees a
 - The daily check adds "live groups whose class is archived". The live-schema preflight is done (below).
 - Cut for November: O1's full plain-words family grouping. Ship the display-name fix plus the exit;
   grouping comes later.
+
+## Corrections adopted from the Codex adversarial review, round 1 (gpt-6-astra, 2026-11-05)
+
+Verdict: needs-attention (4 high, 3 medium). It confirmed three pieces are sound:
+- S4 distinguishes sessions' DO NOTHING uploads from attendees' merge upserts.
+- S1's `current_user` test separates direct EA writes from SECURITY DEFINER execution.
+- S3's no-hard-delete boolean contract preserves the 1.5.0 interface.
+
+Each finding and its resolution:
+
+1. **[high] A sent receipt did not prove the office holds the complete current payload.** Envelopes over
+   56 KB truncate the wire payload, and a later refused edit can share an already-sent repeat key.
+   **Adopted:** the exact-revision gate in O1 item 2.
+2. **[high] S1 cannot acknowledge rows that existing UPDATE policies hide.** RLS USING filters before
+   the trigger runs, so the class-only and ended-group exits in L1 still return 0 rows.
+   - **Adopted:** the plan no longer claims those acks. On embedded 1.5.0 they stay
+     `ARCHIVE_NOT_APPLIED`, and O1 clears them under the same receipt rule.
+   - **Declined:** a "former holder" no-op UPDATE arm. It would copy nine tables' authority predicates
+     into a second form, and it needs SELECT visibility too. The O1/O2 OTA, a gate before real
+     lessons, closes this on every pilot phone.
+3. **[high] The programme helper's `day <= today` bound would refuse fast-clock uploads 1.5.0 lands
+   today.** **Adopted:** an open programme assignment is accepted with no date bound, as now. Only
+   the historical arm is bounded (S2 item 3).
+4. **[high] Locking the child row does not serialize Head Office grants that reach the child through a
+   class or group.** **Adopted:** one lock order, children → classes → groups (ids ascending). Every
+   EA archive decision (S1 children/classes, S3) and every H1 grant change takes it, and the holder
+   check re-runs after the locks are held.
+5. **[medium] O2's unsent relationship INSERTs could re-create grants after removal.** **Adopted:**
+   removal writes the end into every still-owed relationship INSERT payload, like `updateChild`
+   already does (O2 item 2).
+6. **[medium] Handover to a former holder repeats the deterministic-id no-op.** **Adopted:** handover
+   reopens an existing successor row in place (H1).
+7. **[medium] The rule sheet still required "All saved and synced", which a Needs attention item
+   blocks.** **Adopted:** the condition is now "0 waiting, and every needs-attention item appears in
+   the EA's receipts".
+8. **Next steps.** The frozen 1.5.0 corpus is validated against the `f002e08` producer, not
+   regenerated from current code; the OTA has its own expectations. Existing never-held and
+   non-overlapping-interval denial cases stay.
 
 ## Live staging preflight (P0, done 2026-11-05 ~01:10Z, read-only)
 
@@ -124,17 +162,24 @@ Additive, idempotent SQL. Never `RAISE` a new SQLSTATE from a path a 1.5.0 reque
   Generate it in a throwaway `git worktree` at `f002e08` (Node 20). Commit the generator and the
   fixture under `scripts/fixtures/lifecycle-compat/`. The harness fails when any 1.5.0 request's
   disposition gets worse: synced→terminal, or any→retry-forever (unknown code).
-- **Wire corpus:** commit the recorded wire requests from
-  `docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/wire-*.json` (and the S/L
-  scenario SQL as cases). Add a real-SQLite jest integration test that regenerates the C1 and E2 wire
-  sequences through the production repositories and sync engine (as `reproClientArchiveChain` did) and
-  fails if they differ from the committed corpus. That ties the corpus to the engine.
+- **Wire corpus (frozen 1.5.0 producer):**
+  - Commit the recorded wire requests from
+    `docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/wire-*.json`, plus the S/L
+    scenario SQL as cases.
+  - Validate the corpus **once** against the 1.5.0 producer: re-run the C1/C2/C3 chain in a
+    throwaway `f002e08` worktree (Node 20) and confirm the same request sequence. Record any
+    difference, which is expected only where f002e08 has no `skill_mastery`.
+  - Commit the corpus as frozen. No test ties it to the current engine, because the OTA
+    deliberately changes these requests. OTA behaviour has its own tests (O1, O2, G1).
 - **Post-fix expectations (red before S1–S4):**
   - **History lands:** S1, S1b, S2, S3, S7, C1, C2, C3a–c (attendees and mastery). S4, S4b, S5b:
     session, run and assessment land after a programme switch, and mastery is stamped with the held
     programme. S5: the attendee replay acks. S6b: lands (D2).
   - **Ends stay put:**
-    - L1a/L1b: a redundant exit returns 1 row and Head Office's end is unchanged.
+    - L1 cases where the EA still reaches the row: a redundant exit returns 1 row and Head
+      Office's end is unchanged. Cases where RLS USING hides the row (L1 class-only and
+      group-only paths, ended class or group assignment) still return **0 rows**. Assert that
+      as the documented embedded-1.5.0 residual (review finding 2), not as a fix.
     - L2a: no overwrite. L2b and L2d: restore/un-end return 1 row as no-ops, and
       `current_user_can_write_for_child` stays false.
     - L3: no 23514 for EA or Head Office ends.
@@ -151,6 +196,15 @@ Additive, idempotent SQL. Never `RAISE` a new SQLSTATE from a path a 1.5.0 reque
   - **Other:**
     - The Head Office group handover (fresh-id successor row) converges for a 1.5.0 bare-id archive.
     - Trigger order is pinned (guard after `_enforce_row_version` and `_prevent_identity_change`).
+  - **Compatibility and safety cases from review round 1:**
+    - `class-current-future-preserved` stays green, and new cases cover a session first-send and
+      replay, an assessment and a Battery Run dated in the phone's future, all under an open
+      programme assignment. They must still land.
+    - The existing never-held-child and non-overlapping-interval denial cases stay denied.
+    - Two overlapping-transaction cases, using two concurrent psql sessions and a held lock:
+      - S3 Delete child against an H1 class or group handover granting a new holder;
+      - a class archive against a new class holder.
+      Each must end with the new holder keeping the child or class.
 - **Two catalog assertions:** no authenticated DELETE grant or policy on any public table; no
   `ON DELETE CASCADE` from `users`/`children`/`classes`/`groups` into history or authority-evidence
   tables (allowlist: `auth.users→public.users`, `sessions→session_attendees`, and
@@ -231,6 +285,24 @@ DEFINER, `set search_path = ''`, EXECUTE granted to authenticated. Shared with S
 **"Caller currently holds"**: children via `current_user_can_write_for_child`; classes and groups via
 an active assignment row.
 
+**Lock protocol** (review finding 4). `other_active_holder` takes `p_lock boolean`. With `p_lock`, it
+first locks with `FOR UPDATE`, ids ascending:
+- for children: the rows of the classes and groups the child has open memberships in (the child row
+  is already locked by the UPDATE or by S3);
+- for classes: the class row, already locked by the UPDATE.
+
+It then evaluates the predicate. Under READ COMMITTED each query sees what committed before it, so
+the check after the locks is current. The global order is **children → classes → groups**. S1's
+archive rule (2c) and S3 call it with `p_lock = true`, and H1 takes the same locks in the same order
+before inserting or reopening any assignment. A deadlock (40P01) is only a retry for 1.5.0 (an unknown
+code retries) and the consistent order should prevent it; T1 pins the order.
+
+**Residual from review finding 2.** Rows that the existing UPDATE policies hide still return 0 rows:
+for example a class-only or group-only membership exit after Head Office removed that path, or after
+the EA's class or group assignment ended. RLS filters them before the trigger runs, so they stay
+`ARCHIVE_NOT_APPLIED` on embedded 1.5.0, and O1 clears them. This plan adds no "former holder" UPDATE
+arm.
+
 Accepted residuals, recorded in ADR-0014:
 - Starts stay EA-writable through merge-upsert. This is bounded, because held-at-time intersects with
   immutable assignment starts.
@@ -256,9 +328,12 @@ These are pure relaxations: the same SQLSTATEs and result shapes.
      `20260521142324` version is superseded.
    - Leave the RESTRICTIVE held-group policies (`20261021140000`) unchanged.
 3. **Programme as-of (D7).** New `private.user_held_programme_on(p_programme_id uuid, p_day date)`:
-   SECURITY DEFINER, EXECUTE granted to authenticated. True for an open
-   `staff_programme_assignments` row of `auth.uid()`, or one whose interval covers the SAST day, with
-   `p_day <= SAST today`. Use it in place of "ended_at is null" in:
+   SECURITY DEFINER, EXECUTE granted to authenticated. True when either:
+   - `auth.uid()` has an **open** `staff_programme_assignments` row for the programme, with **no date
+     bound**: exactly today's rule, so a fast-clock phone keeps landing (review finding 3); or
+   - an ended row's interval covers the SAST day and `p_day <= SAST today`.
+
+   Use it in place of "ended_at is null" in:
    - `sessions_insert_active_programme` (`session_date`);
    - `submit_assessment` (`assessment_date`);
    - `save_battery_run` (SAST date of `started_at`).
@@ -280,7 +355,9 @@ Rewrite `private.delete_child_if_no_history` (`20260712202409`). The public sign
 `public.delete_child_if_no_history(uuid) → boolean` stays byte-identical, and there is **no hard-delete
 branch**:
 - A missing child → `true`.
-- Otherwise lock the child row `FOR UPDATE`.
+- Otherwise lock the child row `FOR UPDATE`, then call `other_active_holder('children', id, caller,
+  p_lock => true)`, which locks the child's classes and groups in the global order (see S1). Every
+  decision below uses state read after those locks.
 - If the caller neither holds the child now nor created it:
   - if the caller ever held a direct assignment, or the child is already archived → `true` with no
     change;
@@ -339,9 +416,16 @@ branch**:
 - Off-boarding: Send diagnostics → 0 waiting and every needs-attention row has a receipt →
   `ea:suspend` → hand over.
 - Reopen = clear the end in place on the deterministic row.
-- Child and class handover = end, then insert the successor's deterministic row. A **group** handover
-  inserts the successor's `group_ea_assignments` row with a fresh id: id = f(group_id) and
-  `ea_user_id` is immutable.
+- Child and class handover, in one transaction (review finding 6):
+  1. take the locks in the global order (children → classes → groups);
+  2. end the predecessor;
+  3. if the successor's deterministic row **already exists** (a former holder), reopen it in place by
+     clearing its end, keeping its immutable identity and start, and print the gap;
+  4. otherwise insert the successor's deterministic row;
+  5. read back both rows.
+- A **group** handover inserts the successor's `group_ea_assignments` row with a fresh id, because
+  id = f(group_id) and `ea_user_id` is immutable. The same lock-and-read-back steps apply.
+- Tests: A→B→A child and class handovers, a group handover, and a retry after a lost response.
 - No reopen for a phone with refused archive receipts until O1 (B3).
 
 **`scripts/ho-lifecycle.cjs`**, in the `ea-access.cjs` pattern:
@@ -367,9 +451,25 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
      inserts, history RPCs) and for children `hard_delete`;
    - never re-send terminal archive, restore or update rows (this ends the MV001 override, D6);
    - stop counting them as FK blockers.
-2. **Leaving the phone:** a terminal row is deleted only once its `upload_terminal` receipt is
-   `sent` (the support_incident_queue row for its repeat key). The check and the delete run in one
-   SQLite transaction.
+2. **Leaving the phone: the exact-revision delivered-receipt rule** (review finding 1). A terminal
+   outbox row R may leave the phone only when its `upload_terminal` incident row in
+   `support_incident_queue` meets all of these:
+   - (a) `status = 'sent'` and `has_unsent_changes = 0`, so the stored `payload` is exactly what the
+     server accepted;
+   - (b) that payload names R: same outbox id, `outboxUpdatedAt` equal to R's current `updated_at`,
+     and a `wirePayload` deep-equal to `buildSyncPayload` of R's current row;
+   - (c) `boundedEnvelope` of that envelope returns it **uncut**: no `*Truncated` markers, no
+     `wirePayloadError`, not `TOO_LARGE`.
+
+   The check and the delete run in one SQLite transaction. If any condition fails, the row stays and
+   the card says what to do. Typically: "Connect to the internet so the office gets a copy." For an
+   oversized row: "Send diagnostics, then contact support."
+
+   No new table or column is needed. Tests:
+   - an oversized payload (no exit);
+   - a second refused edit reusing an already-sent repeat key (no exit until re-sent);
+   - a payload changed after send (no exit);
+   - a happy path (exit, then gone).
    - Lifecycle and edit refusals then clear automatically, and the pull converges them.
    - History rows offer the EA the exit: "The office has a copy — remove from this phone"
      (`syncOutboxRepository.deleteRecord`). Before delivery the screen says "Connect to the internet
@@ -398,6 +498,13 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
      purged with no op.
    - A child with local history is archived locally, and **only this EA's own** relationship rows end
      locally, with no per-relationship archive rows.
+   - **Every still-owed relationship INSERT** for those rows (in `sync_outbox` and not yet
+     acknowledged) gets the end written into its payload, as `updateChild` does at
+     `childrenRepository.js:575-608` (review finding 5). They then land already ended, in any order
+     relative to the RPC, and keep the interval evidence that queued history needs.
+   - Test: an all-offline chain (create child → record a lesson and a tick → Delete child → sync,
+     including a failed first pass). Assert that all history is delivered and that no active grant or
+     membership for the child survives on the server.
    - Keep the retained-insert gate and the pending-hard-delete pull filter.
    - Confirm copy: "Remove Thandi? Lessons and ticks you saved will still upload. If no other EA
      teaches Thandi, Thandi also leaves the class."
