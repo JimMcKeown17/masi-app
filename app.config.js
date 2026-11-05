@@ -38,19 +38,15 @@ module.exports = () => {
       version: '1.5.0',
       orientation: 'portrait',
       scheme: 'masi-app',
-      icon: './assets/masi-mobile-icon.png',
+      // Icon, adaptive foreground and splash PNGs are rendered from one mark geometry by
+      // scripts/render-app-icons.cjs; __tests__/appIcon.test.js keeps them in step.
+      icon: './assets/app-icon/icon.png',
       userInterfaceStyle: 'light',
       newArchEnabled: true,
-      splash: {
-        image: './assets/splash-icon.png',
-        resizeMode: 'contain',
-        backgroundColor: '#ffffff',
-      },
       ios: {
         // iOS needs full-bleed, opaque artwork: it applies its own rounded mask and fills any
-        // transparency with white. The shared icon has the logo inset for Android's adaptive-icon
-        // safe zone, which on iOS rendered as a small square inside a white tile.
-        icon: './assets/icon-ios.png',
+        // transparency with white. Android uses the inset adaptive foreground below instead.
+        icon: './assets/app-icon/icon.png',
         supportsTablet: false,
         bundleIdentifier: 'org.masinyusane.masi',
         infoPlist: {
@@ -62,8 +58,11 @@ module.exports = () => {
       android: {
         allowBackup: false,
         adaptiveIcon: {
-          foregroundImage: './assets/masi-mobile-icon.png',
-          backgroundColor: '#ffffff',
+          // White mark on transparent over brand red (colors.red600). The same layer doubles as
+          // the Android 13+ themed-icon monochrome image.
+          foregroundImage: './assets/app-icon/android-foreground.png',
+          monochromeImage: './assets/app-icon/android-foreground.png',
+          backgroundColor: '#C81F3E',
         },
         edgeToEdgeEnabled: true,
         package: 'org.masinyusane.masi',
@@ -74,6 +73,16 @@ module.exports = () => {
       },
       plugins: [
         './plugins/withNoBackupDataExtraction',
+        [
+          // White mark on brand red (colors.red600), so cold start runs straight into red Login.
+          'expo-splash-screen',
+          {
+            image: './assets/app-icon/splash.png',
+            imageWidth: 200,
+            resizeMode: 'contain',
+            backgroundColor: '#C81F3E',
+          },
+        ],
         'expo-sqlite',
         [
           'expo-location',

@@ -370,6 +370,24 @@ sets `title: ''`, shows “Check your email” as the sole heading, and uses `po
 cannot reopen Reset. Recovery and Reset's native D10 gate are tracked in
 [#78](https://github.com/JimMcKeown17/masi-app/issues/78).
 
+### App icon and splash
+
+The icon is the white Masinyusane mark on `red600` (direction A of the 2026-11-05 icon
+exploration), the same pairing as the Login lockup. All icon files come from one traced mark
+geometry in `scripts/lib/appIcon.cjs`; run `node scripts/render-app-icons.cjs` after changing it,
+and `__tests__/appIcon.test.js` fails if a committed PNG drifts from the geometry.
+
+| File (`assets/app-icon/`) | Used for | Rule |
+|---|---|---|
+| `icon.png` | Expo `icon` and `ios.icon` | 1024 px, full-bleed, opaque (iOS paints transparency white) |
+| `android-foreground.png` | `adaptiveIcon.foregroundImage` and `monochromeImage`, over `#C81F3E` | Mark inside the 66dp-of-108dp safe circle |
+| `splash.png` | `expo-splash-screen` image, over `#C81F3E` | Mark inside the circle Android 12+ crops the splash icon to |
+| `play-store.png` | Play Console store listing icon (uploaded by hand) | 512 px, full-bleed, opaque |
+| `masi-mark.svg` | Vector master for designers and future exports | Same geometry, white on transparent |
+
+`assets/favicon.png` (Expo web) is rendered by the same script. Icon and splash changes are
+native: they reach phones only in a new store build, never through an OTA update.
+
 ### Surfaces, rows and supporting text
 
 | Primitive and props | When and how to use it |
