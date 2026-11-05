@@ -8906,3 +8906,39 @@ tests. Final: unit 519 suites / 8,232 tests passed (`npx jest`); integration 111
   in addition to the forced pass, the claim, Retry and the `markReady` paths. An unmarked 42501 on a
   refused archive or edit therefore clears like a marked one. A `classes` hard_delete (no producer)
   is no longer healed.
+
+### 2026-11-05 — Combined lifecycle OTA: review fixes (`feat/lifecycle-ota`)
+
+An independent adversarial review of the merged O1 + O2 OTA found one high regression from O1 and
+medium/low items. Each fix is test-first on real SQLite; reviewer repros zzUnitX7, zzReviewX2,
+X2b and X4 are ported as regression tests.
+
+- **HIGH — an edit or archive cleared ahead of its refused insert.** A child INSERT refused 23503,
+  then a rename: the update was refused as not applied, cleared under the receipt rule, and a later
+  Sync now landed the INSERT with the old name, overwriting the local row too. An UPDATE-by-id edit
+  or lifecycle row now waits while its own insert is queued in any status; waiting behind a refused
+  insert it is neither a blocker nor FK evidence, and never leaves through the exit (`held`). The
+  insert landing releases it (sent next; the insert's acknowledgement never overwrites it), or the
+  insert leaving through its exit does (sent, refused, clears). A not-applied edit sent ahead of its
+  insert before this fix is re-queued when the insert lands. Child edit, group archive and
+  class-membership exit variants (`refusedInsertOrdering.test.js`).
+- **MEDIUM — a Delete child held forever by a refused relationship INSERT.** The deletion now
+  waits only for this EA's owed relationship INSERTs. A removed child's refused relationship INSERT
+  is never resendable (forced pass, claim, Retry, heal, `requeueTerminalRows`, reference-id
+  repair), blocks nothing, and clears under the receipt rule, or stays a support case (X4: the
+  removal now completes and nothing is left waiting).
+- **Fake server (item 3).** `lifecycleServer.js` models the corrected S3 rule: memberships end in
+  groups the caller holds, or created and nobody else holds; it also models a group INSERT. X2/X2b
+  ported; all O2 tests pass against it. X2b deviation: with a co-held child the deleting EA still
+  reaches the child through their class assignment (D3 "leave" ends only the caller's own grants),
+  so the port asserts no direct or group path rather than `writeForChild === false`.
+- **LOW.** Home's dismissal signature is outbox id + content digest, not `failedAt`. Retry of a
+  children `hard_delete` no longer marks the child pending. Receipts meet a jsonb-text bound
+  (`jsonbTextBytes` ≤64,000) as well as the compact 56,000: measured on a disposable PostgreSQL
+  17.10, the estimator matched `octet_length(...::jsonb::text)` exactly on every sample, with worst
+  structural growth 1.5x (single-digit arrays: 10,001 compact → 15,000) and far more for exponent
+  numbers (154 → 836 for a sample with `5e-324`). A refused `time_entries` update (clock-out) is
+  resendable history with the EA exit and never clears itself.
+
+**Verification (Node 20).** `npx jest`: 522 suites / 8,285 tests passed. `npx jest -c
+jest.integration.config.js`: 113 suites / 1,554 tests passed. Container `wo4-jsonb-pg` removed.

@@ -420,10 +420,15 @@ history-checked RPC. Queued child updates/lifecycle
 operations and writes for the removed active relationships are superseded in the same SQLite
 transaction as local deletion and RPC enqueue. A retained child INSERT stays queued; hard-delete
 waits until it is acknowledged, even if it later backs off or becomes terminal and needs manual
-retry. The `hard_delete` also waits while any INSERT for the child's own `child_ea_assignments`,
-`child_programme_enrollments`, `child_class_memberships` or `child_group_memberships` (matched by
-the payload `child_id`) is still in the outbox, in any status; a terminal one releases it when it
-leaves through O1's receipt-gated exit. History never waits. A waiting children `hard_delete` is
+retry. The `hard_delete` also waits while this EA's owed (`pending`/`failed`/`in_flight`) INSERT
+for the child's own `child_ea_assignments`, `child_programme_enrollments`,
+`child_class_memberships` or `child_group_memberships` (matched by the payload `child_id`) is in
+the outbox. A refused (terminal) one does not hold it (combined-OTA review, 2026-11-05): once the
+child's removal is queued or done (a children `hard_delete` row, or the local child archived as
+`removed_by_ea`), such an INSERT is never sent again by any path (`RESENDABLE_REFUSAL_SQL` and
+`isResendableRefusalHere`), so it cannot land after the removal and re-create a grant; it blocks
+nothing and clears under the delivered-receipt rule like a refused lifecycle row, or stays visible
+as a support case if its receipt can never prove delivery. History never waits. A waiting children `hard_delete` is
 never a parent (review rounds 3-4): `rememberBlockedRecord` never registers it, so no dependency
 skip, failure, batch deferral or archive subject index treats the child as blocked, and
 `hasPendingRecord` counts only a parent's owed `insert` or `update` as FK retry evidence. A
@@ -481,7 +486,7 @@ group's sessions in that pass; their retry counters do not advance. A session wi
 does not wait for an unrelated failed group, whether or not it has a class. The group's own
 class dependency and the assessment/battery-run clauses are unchanged.
 
-Same-record gates apply before the relationship graph. An acknowledged edit waits while its own insert is owed, and every lifecycle row (`archive` or `restore`, for every table) does the same because a lifecycle UPDATE can acknowledge only a row that exists. A terminal insert does not block. A lifecycle row also waits while a different lifecycle operation for the same record is in flight; when that older request settles unsuccessfully, the single-record failure finalizer supersedes it instead of retaining a retry that could reverse the newer intent. Lifecycle rows are never batched, so batch finalizers are deliberately unchanged.
+Same-record gates apply before the relationship graph. An acknowledged edit waits while its own insert is in the outbox, and every lifecycle row (`archive` or `restore`, for every table) does the same because a lifecycle UPDATE can acknowledge only a row that exists. The wait holds for an insert in any status, refused included (combined-OTA review, 2026-11-05): sent ahead of a refused insert, the edit was refused as not applied, cleared, and the insert could later land with the old content. Waiting behind a refused insert, the edit is neither an in-pass blocker nor FK retry evidence, and it never leaves through the receipt exit (`delivery: 'held'`). It is released when the insert lands (the insert's acknowledgement never overwrites it, since it is still queued) or leaves through its exit (the edit is then sent, refused as not applied, and clears normally). A not-applied edit, archive or restore that a phone sent ahead of its insert before this rule is re-queued when the insert lands. A lifecycle row also waits while a different lifecycle operation for the same record is in flight; when that older request settles unsuccessfully, the single-record failure finalizer supersedes it instead of retaining a retry that could reverse the newer intent. Lifecycle rows are never batched, so batch finalizers are deliberately unchanged.
 
 ### Failed-batch work budget
 
@@ -2005,8 +2010,10 @@ runtimeVersion 1.5.0: no SQLite migration, table, column or outbox op type.
 
 **Forced passes.** Sync now, Retry, pull-to-refresh and sign-out ignore backoff for owed rows and
 re-send a terminal row only when `isResendableRefusal` holds: every `insert` (an upsert or
-insert-or-ignore), the `battery_runs`, `letter_mastery` and `skill_mastery` RPC `update`s, and the
-children `hard_delete`. `getReadyRecords({ includeTerminal })`, the claim and `retryFailedItem`
+insert-or-ignore), the `battery_runs`, `letter_mastery` and `skill_mastery` RPC `update`s, the
+`time_entries` update (a clock-out is EA-recorded history, sent as an idempotent UPDATE by id;
+2026-11-05), and the children `hard_delete`; but never a refused relationship INSERT of a child
+whose removal is queued or done (`isResendableRefusalHere`, `RESENDABLE_REFUSAL_SQL`). `getReadyRecords({ includeTerminal })`, the claim and `retryFailedItem`
 all apply it, so a refused archive, restore or edit can never be claimed again. Every other retry
 entry point keeps the same rule: the Item 9 auth-restore heal (`requeueTerminalRlsFailures`,
 `requeueTerminalRows`), the reference-id repair (`retargetOutboxPayloadReferences` leaves a refused
@@ -2061,15 +2068,19 @@ delivery block cannot re-bound it uncut. The check and the delete share one SQLi
 
 **Exits.** After every pass's receipt drain, `resolveDeliveredRefusals` deletes refused archives,
 restores and edits (`ARCHIVE_NOT_APPLIED`, `RESTORE_NOT_APPLIED`, `MV001`, `UPDATE_NOT_APPLIED`,
-or `42501`, marked or not) whose rule holds: the server wins and the receipt keeps the EA's intent. The
+or `42501`, marked or not), and refused relationship INSERTs of a child this EA removed, whose rule
+holds: the server wins and the receipt keeps the EA's intent. None of them leaves while its own
+insert is still queued (`held`; see the same-record gate). The
 domain row keeps `sync_status = 'terminal'`, so any later pull converges it whatever its version.
 Every other refusal (history, the children `hard_delete`, other codes) waits for the EA's "The office
 has a copy — remove from this phone"
 (`removeDeliveredItem` → `syncOutboxRepository.deleteRecord`), which removes only the stuck
 upload; the local record stays. A `FOREIGN_OWNER` quarantine never leaves.
-`getSyncStatus().needsAttentionItems` carries `outboxId`, `delivery` (`delivered` / `waiting` /
-`support`), `clearsItself`, `canRemove` and `canRetry`; Sync status words them and Home's card can
-be dismissed once every item is `delivered`.
+`getSyncStatus().needsAttentionItems` carries `outboxId`, `contentDigest`, `delivery`
+(`delivered` / `waiting` / `support` / `held`), `clearsItself`, `canRemove` and `canRetry`; Sync
+status words them and Home's card can be dismissed once every item is `delivered`. The dismissal
+is keyed by outbox id plus content digest, so a forced re-send refused again does not bring it
+back. Retry of a children `hard_delete` re-queues only its outbox row (no domain reset).
 
 **Known limits.** A refused row whose content changes after its receipt was sent (a new local
 edit queued into the same slot) waits for the next receipt send (the observer's daily re-send of a
@@ -2364,7 +2375,10 @@ DML/read; authenticated EXECUTE only on both RPCs, with explicit revokes against
 permissive default ACLs. Both migrations use session SET/RESET timeouts.
 
 Phone compact `JSON.stringify(envelope)`, including delivery, is ≤56,000 UTF-8
-bytes (R-O7), server `octet_length(p_envelope::text)` ≤65,536. Truncate wirePayload
+bytes (R-O7), server `octet_length(p_envelope::text)` ≤65,536. Since 2026-11-05 the phone
+also bounds that jsonb text itself (`jsonbTextBytes` ≤64,000; it adds a space after every
+separator and prints numbers in plain notation, up to 1.5x for single-digit arrays; it matched
+PostgreSQL 17.10 exactly), so a separator-dense copy is cut instead of rejected. Truncate wirePayload
 first (retain keys/ids), then stack/componentStack, then sampleLastErrors. Sibling
 `<field>Truncated:true` and `<field>OriginalBytes:n` markers are required. Still
 oversized: reject locally as TOO_LARGE without request. There is no 8 KB v2 cap,

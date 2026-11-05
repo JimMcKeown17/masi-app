@@ -413,7 +413,7 @@ The single object that represents who is working on this phone right now: the EA
 _Avoid_: "the database" or "the current user" as ambient globals — every consumer is handed a handle.
 
 **Unsent**:
-An outbox row whose status is `pending`, `failed`, `in_flight`, or `terminal`. `terminal` (refused, shown as **needs attention**) counts because the server does not have that work. A forced pass (Sync now, pull to refresh, sign-out) re-sends refused history so a server fix can heal it, but never a refused archive, restore or edit. A refused row leaves the phone only once the office holds a delivered receipt of its exact current content: refused archives, restores and edits then clear by themselves, and refused history offers the EA "The office has a copy — remove from this phone" (ADR-0014).
+An outbox row whose status is `pending`, `failed`, `in_flight`, or `terminal`. `terminal` (refused, shown as **needs attention**) counts because the server does not have that work. A forced pass (Sync now, pull to refresh, sign-out) re-sends refused history so a server fix can heal it, but never a refused archive, restore or edit. A refused row leaves the phone only once the office holds a delivered receipt of its exact current content: refused archives, restores and edits then clear by themselves, and refused history offers the EA "The office has a copy — remove from this phone" (ADR-0014). An edit or archive waits while its record's own first upload is still on the phone, refused or not, so that upload can never land later over it.
 
 **Left-behind work**:
 Unsent rows in one EA's file while a different EA is signed in on the same phone. They stay in that EA's file, untouched, until that EA signs in again; another EA never uploads them.
