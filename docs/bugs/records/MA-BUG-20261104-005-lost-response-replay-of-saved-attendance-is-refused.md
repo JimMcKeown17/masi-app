@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 80
 confidence_basis: "Controlled Postgres 17 scenario S5 replays 1.5.0's attendee merge upsert for a row the server already holds and gets 42501 once access has ended, while the session, run, assessment and tick replays are acknowledged; variants without RETURNING and with insert-or-ignore are refused identically, which isolates the INSERT policy check. The real lost-response path through the sync engine was not executed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T09:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-04T19:51:09Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -163,6 +163,7 @@ Approved by Jim on 2026-11-04.
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
 | 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | Server batch applied to staging `segygjzpujphwvrubusm` at 15:39 UTC from `feat/lifecycle-safety-server` 09fb332a (PR #161; before/after checks in its build log, b15fb722). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 

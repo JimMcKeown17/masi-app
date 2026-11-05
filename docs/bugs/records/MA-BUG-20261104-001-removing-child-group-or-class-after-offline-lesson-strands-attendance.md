@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Controlled reproductions in disposable PostgreSQL 17 (S1 refused, S1-control with history first lands everything) and in real SQLite through the production repositories and sync engine, whose recorded wire requests were replayed into the same Postgres with identical outcomes; the approved fix itself is not yet tested."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T09:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-04T19:50:52Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -172,6 +172,7 @@ Approved by Jim on 2026-11-04. Plan steps:
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153, #156; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server, feat/lifecycle-ota-removal |
 | 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green; feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | Server batch applied to staging `segygjzpujphwvrubusm` at 15:39 UTC from `feat/lifecycle-safety-server` 09fb332a (PR #161; before/after checks in its build log, b15fb722); app update published to channel `preview`, runtime 1.5.0, update group `8addaae6` from `feat/lifecycle-ota` fd053cfc (PR #163). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 
