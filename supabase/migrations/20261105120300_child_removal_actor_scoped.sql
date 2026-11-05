@@ -55,13 +55,30 @@ begin
   set unassigned_at = pg_catalog.now()
   where child_id = p_child_id and user_id = v_actor and unassigned_at is null;
 
+  -- Memberships in groups the caller holds, and in groups the caller created that no other EA
+  -- holds (review follow-up 4): the caller's group assignment INSERT may not have landed yet, and
+  -- a membership in a created group is accepted through the creator arm. Upload order stays an
+  -- optimisation.
   update public.child_group_memberships m
   set removed_at = pg_catalog.now()
   where m.child_id = p_child_id
     and m.removed_at is null
-    and exists (
-      select 1 from public.group_ea_assignments g
-      where g.group_id = m.group_id and g.ea_user_id = v_actor and g.unassigned_at is null
+    and (
+      exists (
+        select 1 from public.group_ea_assignments g
+        where g.group_id = m.group_id and g.ea_user_id = v_actor and g.unassigned_at is null
+      )
+      or (
+        exists (
+          select 1 from public.groups gr
+          where gr.id = m.group_id and gr.created_by = v_actor
+        )
+        and not exists (
+          select 1 from public.group_ea_assignments g
+          where g.group_id = m.group_id and g.ea_user_id is distinct from v_actor
+            and g.unassigned_at is null
+        )
+      )
     );
   -- When child_group_memberships.removal_reason exists (CONTEXT.md, ADR-0005), stamp it here.
 

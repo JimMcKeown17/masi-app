@@ -833,6 +833,22 @@ const buildCases = ({ literacyId, numeracyId }) => {
     asEA(EA_A, 'delete_child_if_no_history', rpcDeleteChild(C), value(true)),
     check('C live, class membership open', `SELECT (SELECT archived_at IS NULL FROM public.children WHERE id = '${C}') AS live, (SELECT exited_at IS NULL FROM public.child_class_memberships WHERE id = '${CCM_C}') AS class_open`, [{ live: true, class_open: true }]),
   ]);
+  // ===== Review follow-up 4: Delete child before the EA's own group assignment INSERT landed.
+  const createdUnheldGroup = (label) => hoSeed(label, [
+    `INSERT INTO public.groups (id, name, programme_id, created_by) VALUES ('${uid('fa', 40)}', 'EA A new group', ${LIT}, '${EA_A}') RETURNING id`,
+    `INSERT INTO public.child_group_memberships (id, child_id, group_id, joined_at, created_by) VALUES ('${uid('fc', 40)}', '${H}', '${uid('fa', 40)}', '${GRANT_START}', '${EA_A}') RETURNING id`,
+  ]);
+  add('E2.created_unheld_group_sole_holder', 'T1 delete child (review follow-up 4a)', "EA_A's group assignment INSERT has not landed; the sole holder's Delete child ends H's membership in that group and archives H", [
+    ...createdUnheldGroup('ho.EA_A created group, membership only'),
+    asEA(EA_A, 'delete_child_if_no_history', rpcDeleteChild(H), value(true)),
+    check('membership ended, H archived', `SELECT (SELECT removed_at IS NOT NULL FROM public.child_group_memberships WHERE id = '${uid('fc', 40)}') AS membership_ended, (SELECT archived_at IS NOT NULL FROM public.children WHERE id = '${H}') AS archived`, [{ membership_ended: true, archived: true }]),
+  ]);
+  add('E2.created_unheld_group_co_held', 'T1 delete child (review follow-up 4b)', "Same, but EA_B delivers to H: EA_A leaves, including H's membership in EA_A's own unheld group", [
+    ...createdUnheldGroup('ho.EA_A created group, membership only'),
+    asHO('ho.EA_B delivers H', `INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by) VALUES ('${uid('f6', 41)}', '${EA_B}', '${H}', '${HO}') RETURNING id`, rows(1)),
+    asEA(EA_A, 'delete_child_if_no_history', rpcDeleteChild(H), value(true)),
+    check('EA_A left completely; H live for EA_B', `SELECT (SELECT removed_at IS NOT NULL FROM public.child_group_memberships WHERE id = '${uid('fc', 40)}') AS membership_ended, (SELECT archived_at IS NULL FROM public.children WHERE id = '${H}') AS live, (SELECT unassigned_at IS NOT NULL FROM public.child_ea_assignments WHERE id = '${CA_H}') AS a_left, (SELECT unassigned_at IS NULL FROM public.child_ea_assignments WHERE id = '${uid('f6', 41)}') AS b_holds`, [{ membership_ended: true, live: true, a_left: true, b_holds: true }]),
+  ]);
   add('E2.no_history_control', 'T1 delete child (B1)', 'Delete child with no history: true and archived, never hard-deleted', [
     asEA(EA_A, 'delete_child_if_no_history', rpcDeleteChild(F), value(true)),
     check('row kept and archived', `SELECT count(*) AS rows, bool_and(archived_at IS NOT NULL) AS archived FROM public.children WHERE id = '${F}'`, [{ rows: 1, archived: true }]),
