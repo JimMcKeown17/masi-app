@@ -395,6 +395,33 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Resume')).toBeTruthy();
     expect(report).not.toHaveBeenCalled();
   });
+  // Lifecycle safety O1 (MA-BUG-20261104-011): once the office has a copy of every item, the card can go.
+  test('the sync card can be dismissed once the office has a copy of every item, and stays dismissed', async () => {
+    const items = [{ outboxId: 'sessions:s-1:insert', failedAt: '2026-10-15T07:00:00.000Z', delivery: 'delivered' }];
+    mockUseOffline.mockReturnValue({ needsAttentionCount: 1, syncStatus: { needsAttentionItems: items } });
+    const store = getDefaultTestHandle().services.homeAttention;
+    const dismiss = jest.spyOn(store, 'dismissSyncAttention');
+    const screen = renderHome();
+    expect(await screen.findByText('The office has a copy')).toBeTruthy();
+    await act(async () => { fireEvent.press(screen.getByLabelText('Dismiss: 1 item needs attention')); });
+    expect(screen.queryByText('1 item needs attention')).toBeNull();
+    expect(dismiss).toHaveBeenCalledWith('sessions:s-1:insert@2026-10-15T07:00:00.000Z');
+    // A later visit reads the dismissal back for the same items.
+    screen.unmount();
+    const again = renderHome();
+    await again.findByText('2 of 3 sessions today');
+    expect(again.queryByText('1 item needs attention')).toBeNull();
+  });
+
+  test('the sync card cannot be dismissed while an item waits for its office copy', async () => {
+    mockUseOffline.mockReturnValue({ needsAttentionCount: 1, syncStatus: { needsAttentionItems: [
+      { outboxId: 'sessions:s-1:insert', failedAt: '2026-10-15T07:00:00.000Z', delivery: 'waiting' },
+    ] } });
+    const screen = renderHome();
+    expect(await screen.findByText('Open sync status to sort it out')).toBeTruthy();
+    expect(screen.queryByLabelText('Dismiss: 1 item needs attention')).toBeNull();
+  });
+
   test('the sync card still navigates with no params', async () => {
     mockGetActiveDraft.mockResolvedValue(lessonDraft);
     mockUseOffline.mockReturnValue({ needsAttentionCount: 2 });

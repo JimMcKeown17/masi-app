@@ -1,5 +1,7 @@
 // __tests__/homeAttention.test.js
-import { deriveHomeAttentionItems, lessonInProgressFromDraft, MAX_ATTENTION_ITEMS } from '../src/utils/homeAttention';
+import {
+  deriveHomeAttentionItems, describeSyncAttention, lessonInProgressFromDraft, MAX_ATTENTION_ITEMS,
+} from '../src/utils/homeAttention';
 
 const NOW = new Date('2026-10-15T08:00:00.000Z'); // Thu 15 Oct, 10:00 SAST
 
@@ -149,4 +151,42 @@ test.each([['numeracy', 'NumeracyLesson'], ['literacy', 'Lesson']])(
 
 test('a lesson in progress with a missing route defaults to Lesson', () => {
   expect(deriveHomeAttentionItems({ ...base, lessonInProgress: lesson })[0].route).toBe('Lesson');
+});
+
+// Lifecycle safety O1 item 3 (MA-BUG-20261104-011): the Home card can be dismissed once the office
+// has a copy of every item that needs attention. A new or changed item brings it back.
+describe('sync attention once every item is delivered', () => {
+  const delivered = (outboxId, failedAt = '2026-10-15T07:00:00.000Z') => ({ outboxId, failedAt, delivery: 'delivered' });
+
+  test('dismissible only when every item has its office copy and nothing else needs attention', () => {
+    const items = [delivered('a'), delivered('b')];
+    expect(describeSyncAttention({ needsAttentionCount: 2, needsAttentionItems: items })).toMatchObject({ dismissible: true });
+    expect(describeSyncAttention({ needsAttentionCount: 2, needsAttentionItems: [delivered('a'), { outboxId: 'b', delivery: 'waiting' }] }))
+      .toMatchObject({ dismissible: false });
+    // A roster-change note also counts as attention and cannot be dismissed here.
+    expect(describeSyncAttention({ needsAttentionCount: 3, needsAttentionItems: items, reconcileBreakerNotes: [{ scope: 's' }] }))
+      .toMatchObject({ dismissible: false });
+    expect(describeSyncAttention({ needsAttentionCount: 0, needsAttentionItems: [] })).toMatchObject({ dismissible: false });
+  });
+
+  test('a dismissible card says the office has a copy and offers dismiss', () => {
+    const syncAttention = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [delivered('a')] });
+    expect(deriveHomeAttentionItems({ ...base, needsAttentionCount: 1, syncAttention })[0]).toEqual(expect.objectContaining({
+      kind: 'sync_attention', title: '1 item needs attention', subtitle: 'The office has a copy',
+      accessibilityLabel: '1 item needs attention. The office has a copy', dismissible: true,
+      signature: syncAttention.signature,
+    }));
+  });
+
+  test('a dismissed card stays hidden for the same items and returns for a new or changed one', () => {
+    const syncAttention = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [delivered('a')] });
+    const dismissed = { ...base, needsAttentionCount: 1, syncAttention, syncAttentionDismissed: syncAttention.signature };
+    expect(deriveHomeAttentionItems(dismissed)).toEqual([]);
+    const changed = describeSyncAttention({ needsAttentionCount: 1, needsAttentionItems: [delivered('a', '2026-10-15T07:30:00.000Z')] });
+    expect(deriveHomeAttentionItems({ ...dismissed, syncAttention: changed })[0]).toMatchObject({ kind: 'sync_attention' });
+    const waiting = describeSyncAttention({ needsAttentionCount: 2,
+      needsAttentionItems: [delivered('a'), { outboxId: 'b', delivery: 'waiting' }] });
+    expect(deriveHomeAttentionItems({ ...dismissed, needsAttentionCount: 2, syncAttention: waiting })[0])
+      .toMatchObject({ kind: 'sync_attention', dismissible: false });
+  });
 });
