@@ -895,14 +895,42 @@ const NOT_APPLIED_CODES = "('UPDATE_NOT_APPLIED', 'ARCHIVE_NOT_APPLIED', 'RESTOR
 // When a Delete child is acknowledged, its child's refused relationship INSERTs (this EA's) are
 // stamped REMOVED_WITH_CHILD in the same transaction, so they stay unsendable after the hard_delete
 // row is gone, whatever a later pull writes to the child (second review, 2026-11-05).
+// Their local rows end in the same transaction (Head Office restore, work order 6). removeChild
+// left them open only so they could upload open; refused and never sent again, nothing on the
+// server backs them, and no pull or reconcile ever ends a row that is not synced. Left open, a
+// child Head Office later restores would show this EA a membership or grant the server never
+// accepted. Ending changes only the local row: the outbox payload, and so the delivered-receipt
+// exit, is untouched, and a server row under the same id still replaces it on the next pull.
 const stampRefusalsRemovedWithChild = async (txn, outboxRecord, tableName) => {
   if (outboxRecord.operation !== 'hard_delete' || tableName !== 'children') return;
-  await txn.runAsync(`
-    update sync_outbox set error_code = '${REMOVED_WITH_CHILD}', updated_at = ?
-    where status = 'terminal' and operation = 'insert' and owner_user_id = ?
+  const at = timestamp();
+  const refusedFamily = `status = 'terminal' and operation = 'insert' and owner_user_id = ?
       and table_name in (${CHILD_RELATIONSHIP_TABLES.map(() => '?').join(', ')})
-      and json_extract(payload, '$.child_id') = ?
-  `, timestamp(), outboxRecord.owner_user_id, ...CHILD_RELATIONSHIP_TABLES, outboxRecord.record_id);
+      and json_extract(payload, '$.child_id') = ?`;
+  const familyParams = [outboxRecord.owner_user_id, ...CHILD_RELATIONSHIP_TABLES, outboxRecord.record_id];
+  const refused = await txn.getAllAsync(`select table_name, record_id from sync_outbox where ${refusedFamily}`, ...familyParams);
+  await txn.runAsync(`update sync_outbox set error_code = '${REMOVED_WITH_CHILD}', updated_at = ? where ${refusedFamily}`,
+    at, ...familyParams);
+  for (const row of refused) {
+    const endColumn = quoteIdentifier(ARCHIVE_SERVER_COLUMNS[row.table_name][0]);
+    await txn.runAsync(`update ${quoteIdentifier(row.table_name)} set ${endColumn} = ?, updated_at = ?
+      where id = ? and ${endColumn} is null`, at, at, row.record_id);
+  }
+};
+
+// A Delete child acknowledged as the child's last outbox row settles a local child row left
+// pending (Head Office restore, work order 6). An INSERT or edit of the child acknowledged while
+// the removal still waited leaves the row pending (hasRemainingOutbox), and a hard_delete
+// acknowledgement never touched it, so the row stayed pending with nothing queued: every pull then
+// refused the server's copy (pending-local-wins), and a child Head Office restored never came back.
+// Nothing is owed for it any more, so it is synced and the next pull may replace it.
+const settleRemovedChildRow = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'hard_delete' || tableName !== 'children') return;
+  const remaining = await txn.getFirstAsync(
+    'select id from sync_outbox where table_name = ? and record_id = ? limit 1', tableName, outboxRecord.record_id);
+  if (remaining) return;
+  await txn.runAsync(`update children set sync_status = 'synced', last_sync_error = null, updated_at = ?
+    where id = ? and sync_status in ('pending', 'failed')`, timestamp(), outboxRecord.record_id);
 };
 
 const releaseRefusalsAfterOwnInsert = async (txn, outboxRecord, tableName) => {
@@ -946,6 +974,7 @@ const finalizeSuccess = async ({
   }
 
   await stampRefusalsRemovedWithChild(txn, outboxRecord, tableName);
+  await settleRemovedChildRow(txn, outboxRecord, tableName);
   if (outboxRecord.operation !== 'hard_delete') {
     await releaseRefusalsAfterOwnInsert(txn, outboxRecord, tableName);
     const hasRemainingOutbox = await txn.getFirstAsync(`
