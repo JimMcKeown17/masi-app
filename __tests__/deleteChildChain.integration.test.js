@@ -491,3 +491,83 @@ test.each([
     ...(shape.otherEaNumeracy ? [`child_programme_enrollments:${NUMERACY}`] : []),
   ].sort());
 });
+
+// Reviewer repros zzReviewX2 / X2b: a flaky upload of the EA's own group assignment lets the
+// removal land before the EA holds the group on the server. The server ends memberships in groups
+// the caller holds, or created and nobody else holds (the corrected S3 rule the fake models), so
+// no membership survives for the removed child either way.
+const G2 = 'a0000000-0000-4000-8000-0000000000aa';
+const M2 = 'cb000000-0000-4000-8000-0000000000aa';
+const flakyGroupAssignment = () => {
+  let failed = false;
+  server.state.refuse = ({ method, target }) => {
+    if (method === 'POST' && target === 'group_ea_assignments' && !failed) {
+      failed = true;
+      return { status: 503, code: 'PGRST000', message: 'upstream timeout' };
+    }
+    return null;
+  };
+};
+
+test('Delete child landing before the EA\'s new group assignment still ends the child\'s membership in that group', async () => {
+  await seedBoth(baseRows());
+  await repos.groups.saveGroup({ id: G2, name: 'New group', programme_id: PROG, class_id: CLASS, created_by: USER, synced: false });
+  tick();
+  await repos.children.save({ id: C, first_name: 'Thandi', last_name: 'Mokoena', class_id: CLASS, created_by: USER, synced: false }, { actorUserId: USER });
+  tick();
+  await repos.groups.addChildToGroup({ id: M2, child_id: C, group_id: G2, created_by: USER, synced: false });
+  tick();
+  expect(await repos.children.removeChild(C)).toBe(true);
+  tick();
+  flakyGroupAssignment();
+  await sync();
+  await sync();
+  elapseBackoff();
+  await sync();
+  expect(await outbox()).toEqual([]);
+  expect(server.t('children').get(C).archived_at).toBeTruthy();
+  expect(server.all('child_group_memberships').filter(row => row.child_id === C && row.removed_at == null)).toEqual([]);
+  expect(server.writeForChild(C)).toBe(false);
+  // The EA still holds the group they created.
+  expect(server.all('group_ea_assignments').filter(row => row.group_id === G2 && row.unassigned_at == null))
+    .toEqual([expect.objectContaining({ ea_user_id: USER })]);
+});
+
+test('for a co-held child, Delete child landing before the EA\'s new group assignment leaves no group path for the EA', async () => {
+  await seedBoth([...baseRows(), ...serverChildRows(C, { otherEaNumeracy: true })]);
+  await repos.groups.saveGroup({ id: G2, name: 'New group', programme_id: PROG, class_id: CLASS, created_by: USER, synced: false });
+  tick();
+  await repos.groups.addChildToGroup({ id: M2, child_id: C, group_id: G2, created_by: USER, synced: false });
+  tick();
+  await recordLesson(C);
+  tick();
+  expect(await repos.children.removeChild(C)).toBe(true);
+  tick();
+  flakyGroupAssignment();
+  await sync();
+  await sync();
+  elapseBackoff();
+  await sync();
+  expect(await outbox()).toEqual([]);
+  // Another EA still teaches the child, so the child stays; this EA's direct and group paths end.
+  expect(server.t('children').get(C).archived_at).toBeUndefined();
+  expect(server.all('child_group_memberships').filter(row => row.child_id === C && row.removed_at == null)).toEqual([]);
+  expect(server.all('child_ea_assignments').filter(row => row.child_id === C && row.unassigned_at == null))
+    .toEqual([expect.objectContaining({ user_id: OTHER_EA })]);
+});
+
+test('Delete child leaves the child in a group this EA created but another EA now holds', async () => {
+  const handedOver = groupEaAssignmentDomainId({ groupId: GROUP });
+  await seedBoth([...baseRows(), ...serverChildRows(C, { otherEaNumeracy: true }),
+    ['child_group_memberships', { id: MEMBERSHIP, child_id: C, group_id: GROUP, joined_at: T_SEED, created_by: USER }]]);
+  // Head Office handed this EA's group to another EA: this EA's assignment ended, a successor holds it.
+  server.t('group_ea_assignments').set(handedOver, { ...server.t('group_ea_assignments').get(handedOver), unassigned_at: '2026-10-20T08:00:00.000Z' });
+  server.seed('group_ea_assignments', { id: 'ge-successor', group_id: GROUP, ea_user_id: OTHER_EA, programme_id: PROG,
+    assigned_at: '2026-10-20T08:00:00.000Z', created_by: HO });
+  expect(await repos.children.removeChild(C)).toBe(true);
+  await sync();
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> ok`,
+  ]);
+  expect(server.t('child_group_memberships').get(MEMBERSHIP).removed_at).toBeUndefined();
+});

@@ -9,8 +9,9 @@
 // - S2: history (attendees, mastery, Battery Runs, assessments) lands when the EA held a grant on
 //   the day. All test activity happens on one day, so "held on the day" is "held at any time";
 // - S3: `delete_child_if_no_history` never hard-deletes, always returns true, ends only the
-//   caller's grants (direct assignment, memberships in groups the caller holds) and archives the
-//   child only when no other EA still holds it;
+//   caller's grants (direct assignment, and memberships in groups the caller holds, or created and
+//   nobody else holds, per the corrected server rule of 2026-11-05) and archives the child only
+//   when no other EA still holds it;
 // - S1: an EA write never clears or moves an end that is already set;
 // - `idx_child_group_memberships_active_by_version` (23505).
 // Every request is recorded in the PostgREST wire shape used by
@@ -117,6 +118,8 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
       case 'class_ea_assignments':
       case 'group_ea_assignments':
         return row.ea_user_id === actor ? null : rlsError(table);
+      case 'groups':
+        return row.created_by === actor ? null : rlsError(table);
       case 'sessions':
         if (row.user_id !== actor || !openProgramme(row.programme_id)) return rlsError(table);
         if (row.group_id != null && !heldGroup(row.group_id)) return rlsError(table);
@@ -202,8 +205,16 @@ export const createLifecycleServer = ({ actor, now = () => new Date().toISOStrin
     for (const row of all('child_ea_assignments')) {
       if (row.child_id === childId && row.user_id === actor) endRow('child_ea_assignments', row, at);
     }
+    // Memberships in groups the caller holds, or created and nobody else holds. A group the EA
+    // created offline is ended even when the RPC lands before the EA's own assignment INSERT.
+    const holdsGroup = (groupId) => all('group_ea_assignments')
+      .some(r => r.group_id === groupId && r.ea_user_id === actor && r.unassigned_at == null);
+    const othersHoldGroup = (groupId) => all('group_ea_assignments')
+      .some(r => r.group_id === groupId && r.ea_user_id !== actor && r.unassigned_at == null);
+    const endsMembership = (groupId) => holdsGroup(groupId)
+      || (t('groups').get(groupId)?.created_by === actor && !othersHoldGroup(groupId));
     for (const row of all('child_group_memberships')) {
-      if (row.child_id === childId && writeForGroup(row.group_id)) endRow('child_group_memberships', row, at);
+      if (row.child_id === childId && endsMembership(row.group_id)) endRow('child_group_memberships', row, at);
     }
     if (!otherActiveHolder(childId)) {
       for (const row of all('child_programme_enrollments')) if (row.child_id === childId) endRow('child_programme_enrollments', row, at);
