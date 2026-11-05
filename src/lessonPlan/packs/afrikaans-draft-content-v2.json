@@ -1,0 +1,3355 @@
+{
+ "id": "afrikaans-draft-content-v2",
+ "language": "afrikaans",
+ "channel": "release",
+ "letter_order": "afrikaans-order-2026-10-23",
+ "generated_from": {
+  "repo": "early-reader-books",
+  "commit": "76e58461ca035efddb1c9b1f6fb6f00bd663cf49",
+  "note": "DRAFT for team testing (Jim, 2026-11-05): candidate words and books, not yet signed off by native speakers",
+  "from_preview": {
+   "file": "afrikaans-candidates-preview-v1.json",
+   "sha256": "76d4aec38b0bd8748bd9bdfd9e9aaa0df3bbaae3c3671d0c4086977cbe800ba7"
+  },
+  "curation": {
+   "words_per_step": 25,
+   "rule": "per step, the best-ranked words no reviewer flagged as junk or another language, plus every word the books use",
+   "kept": 534,
+   "dropped_flagged": 15,
+   "dropped_beyond_cap": 2475
+  }
+ },
+ "sound_inventory": [
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "aa",
+  "ie",
+  "ee",
+  "oo",
+  "oe",
+  "ui",
+  "ng",
+  "ou",
+  "ei",
+  "eu",
+  "uu",
+  "ê"
+ ],
+ "letter_steps": [
+  {
+   "step": 1,
+   "new_letters": [
+    "a",
+    "e",
+    "k",
+    "n"
+   ],
+   "size_exception": "step 1 teaches four letters so children can read words from the first session",
+   "blends": [
+    "na",
+    "ka",
+    "ke",
+    "ne"
+   ],
+   "words": [
+    "nek",
+    "ken",
+    "ka-ke",
+    "e-ne",
+    "ek-ke",
+    "knak"
+   ],
+   "readers": []
+  },
+  {
+   "step": 2,
+   "new_letters": [
+    "o",
+    "s"
+   ],
+   "blends": [
+    "se",
+    "so",
+    "ko",
+    "no",
+    "sa"
+   ],
+   "words": [
+    "kon",
+    "kos",
+    "sak",
+    "ses",
+    "sak-ke",
+    "nes",
+    "kans",
+    "son-ne",
+    "sa-ke",
+    "skok",
+    "snak",
+    "kok-ke"
+   ],
+   "readers": []
+  },
+  {
+   "step": 3,
+   "new_letters": [
+    "p",
+    "t"
+   ],
+   "blends": [
+    "pa",
+    "te",
+    "pe",
+    "po",
+    "ta",
+    "to"
+   ],
+   "words": [
+    "net",
+    "tot",
+    "stok",
+    "tak",
+    "kop",
+    "pap",
+    "stap",
+    "stok-ke",
+    "nat",
+    "pa-pa",
+    "stop",
+    "skop"
+   ],
+   "readers": []
+  },
+  {
+   "step": 4,
+   "new_letters": [
+    "d",
+    "l"
+   ],
+   "blends": [
+    "la",
+    "da",
+    "de",
+    "do",
+    "le",
+    "lo"
+   ],
+   "words": [
+    "dat",
+    "sal",
+    "lank",
+    "el-ke",
+    "so-dat",
+    "dans",
+    "dan",
+    "tot-dat",
+    "plan",
+    "al-les",
+    "klap",
+    "tan-de"
+   ],
+   "readers": []
+  },
+  {
+   "step": 5,
+   "new_letters": [
+    "r",
+    "h"
+   ],
+   "blends": [
+    "ha",
+    "he",
+    "ho",
+    "ra",
+    "re",
+    "ro"
+   ],
+   "words": [
+    "an-der",
+    "help",
+    "on-der",
+    "son-der",
+    "ha-re",
+    "he-le",
+    "don-ker",
+    "trek",
+    "sterk",
+    "dra",
+    "kort",
+    "na-der"
+   ],
+   "readers": []
+  },
+  {
+   "step": 6,
+   "new_letters": [
+    "i",
+    "m"
+   ],
+   "blends": [
+    "ma",
+    "di",
+    "hi",
+    "ki",
+    "li",
+    "me",
+    "mi",
+    "mo",
+    "ni",
+    "pi",
+    "ri",
+    "si"
+   ],
+   "words": [
+    "met",
+    "hom",
+    "kom",
+    "men-se",
+    "al-mal",
+    "om-dat",
+    "dink",
+    "kin-ders",
+    "klim",
+    "stem",
+    "spe-si-a-le",
+    "niks"
+   ],
+   "readers": []
+  },
+  {
+   "step": 7,
+   "new_letters": [
+    "g",
+    "y"
+   ],
+   "blends": [
+    "dy",
+    "hy",
+    "ly",
+    "my",
+    "ry",
+    "sy",
+    "ga",
+    "ge",
+    "gi",
+    "go",
+    "gy",
+    "ky"
+   ],
+   "words": [
+    "dag",
+    "kry",
+    "kyk",
+    "nog",
+    "ge-kom",
+    "glim-lag",
+    "ge-sit",
+    "gras",
+    "ge-kry",
+    "reg",
+    "ag-ter",
+    "dog-ter"
+   ],
+   "readers": []
+  },
+  {
+   "step": 8,
+   "new_letters": [
+    "v",
+    "w"
+   ],
+   "blends": [
+    "vy",
+    "wa",
+    "wy",
+    "va",
+    "ve",
+    "vi",
+    "vo",
+    "we",
+    "wi",
+    "wo"
+   ],
+   "words": [
+    "vir",
+    "van",
+    "wat",
+    "vra",
+    "ge-vra",
+    "weg",
+    "wil",
+    "vin-nig",
+    "ter-wyl",
+    "ver-tel",
+    "vol-gen-de",
+    "warm"
+   ],
+   "readers": []
+  },
+  {
+   "step": 9,
+   "new_letters": [
+    "b",
+    "u"
+   ],
+   "blends": [
+    "bo",
+    "by",
+    "ba",
+    "be",
+    "bi",
+    "bu",
+    "du",
+    "gu",
+    "hu",
+    "ku",
+    "lu",
+    "mu"
+   ],
+   "words": [
+    "hul-le",
+    "be-gin",
+    "te-rug",
+    "bly",
+    "nu-we",
+    "vrug-te",
+    "lug",
+    "ge-luk-kig",
+    "rug",
+    "be-sig",
+    "ver-by",
+    "be-ne"
+   ],
+   "readers": []
+  },
+  {
+   "step": 10,
+   "new_letters": [
+    "f",
+    "j"
+   ],
+   "blends": [
+    "ja",
+    "jy",
+    "fa",
+    "fe",
+    "fi",
+    "fo",
+    "fu",
+    "fy",
+    "je",
+    "ji",
+    "jo",
+    "ju"
+   ],
+   "words": [
+    "jul-le",
+    "o-li-fant",
+    "ons-self",
+    "jak-kals",
+    "selfs",
+    "hom-self",
+    "wolf",
+    "vyf",
+    "blaf",
+    "va-naf",
+    "jam-mer",
+    "lyf"
+   ],
+   "readers": []
+  },
+  {
+   "step": 11,
+   "new_letters": [
+    "c",
+    "z"
+   ],
+   "blends": [
+    "ca",
+    "ce",
+    "ci",
+    "co",
+    "cu",
+    "cy",
+    "za",
+    "ze",
+    "zi",
+    "zo",
+    "zu",
+    "zy"
+   ],
+   "words": [],
+   "readers": []
+  },
+  {
+   "step": 12,
+   "new_letters": [
+    "q",
+    "x"
+   ],
+   "blends": [
+    "xa",
+    "xe",
+    "xi",
+    "xo",
+    "xu",
+    "xy"
+   ],
+   "words": [
+    "ta-xi"
+   ],
+   "readers": []
+  }
+ ],
+ "sound_steps": [
+  {
+   "step": 13,
+   "new_sounds": [
+    "aa"
+   ],
+   "words": [
+    "haar",
+    "gaan",
+    "maar",
+    "aan",
+    "daar",
+    "saam",
+    "maak",
+    "laat",
+    "waar",
+    "ge-maak",
+    "slaap",
+    "ge-gaan"
+   ],
+   "readers": []
+  },
+  {
+   "step": 14,
+   "new_sounds": [
+    "ie"
+   ],
+   "words": [
+    "bai-e",
+    "sien",
+    "hier-die",
+    "die-re",
+    "daar-die",
+    "vrien-de",
+    "dorpie",
+    "ge-sien",
+    "hier",
+    "wie",
+    "a-pie",
+    "as-se-blief"
+   ],
+   "readers": []
+  },
+  {
+   "step": 15,
+   "new_sounds": [
+    "ee"
+   ],
+   "words": [
+    "een",
+    "eet",
+    "weer",
+    "meer",
+    "gee",
+    "ge-gee",
+    "wees",
+    "leeu",
+    "weet",
+    "speel",
+    "een-dag",
+    "twee"
+   ],
+   "readers": []
+  },
+  {
+   "step": 16,
+   "new_sounds": [
+    "oo"
+   ],
+   "words": [
+    "groot",
+    "oor",
+    "ook",
+    "loop",
+    "soos",
+    "hard-loop",
+    "hoor",
+    "rooi",
+    "mooi",
+    "hoog",
+    "ge-loop",
+    "ge-hard-loop"
+   ],
+   "readers": []
+  },
+  {
+   "step": 17,
+   "new_sounds": [
+    "oe"
+   ],
+   "words": [
+    "toe",
+    "hoe",
+    "moet",
+    "doen",
+    "soek",
+    "roep",
+    "hoe-kom",
+    "goeie",
+    "ge-roep",
+    "ont-moet",
+    "see-koei",
+    "koek"
+   ],
+   "readers": []
+  },
+  {
+   "step": 18,
+   "new_sounds": [
+    "ui"
+   ],
+   "words": [
+    "uit",
+    "uil",
+    "huil",
+    "ge-luis-ter",
+    "bui-te",
+    "kruip",
+    "ge-bruik",
+    "luis-ter",
+    "kui-er",
+    "ge-huil",
+    "lui",
+    "duif"
+   ],
+   "readers": []
+  },
+  {
+   "step": 19,
+   "new_sounds": [
+    "ng"
+   ],
+   "words": [
+    "sing",
+    "ko-ning",
+    "bang",
+    "ge-sing",
+    "bring",
+    "slang",
+    "spring",
+    "vang",
+    "jong",
+    "lang",
+    "langs",
+    "hon-ger"
+   ],
+   "readers": []
+  },
+  {
+   "step": 20,
+   "new_sounds": [
+    "ou"
+   ],
+   "words": [
+    "jou",
+    "hou",
+    "vrou",
+    "nou",
+    "wou",
+    "ou",
+    "ou-ma",
+    "ou-ers",
+    "juf-frou",
+    "sou",
+    "ge-hou",
+    "gou"
+   ],
+   "readers": []
+  },
+  {
+   "step": 21,
+   "new_sounds": [
+    "ei"
+   ],
+   "words": [
+    "klein",
+    "mei-sie",
+    "vleis",
+    "uit-ein-de-lik",
+    "reis",
+    "mei-sies",
+    "vei-lig",
+    "al-bei",
+    "eie",
+    "ein-de",
+    "pa-leis",
+    "eiers"
+   ],
+   "readers": []
+  },
+  {
+   "step": 22,
+   "new_sounds": [
+    "eu"
+   ],
+   "words": [
+    "seun",
+    "reus",
+    "seuns",
+    "ge-beur",
+    "neus",
+    "heu-wel",
+    "kleu-re",
+    "beurt",
+    "kleur",
+    "klein-seun",
+    "reu-se",
+    "heu-wels"
+   ],
+   "readers": []
+  },
+  {
+   "step": 23,
+   "new_sounds": [
+    "uu"
+   ],
+   "words": [
+    "vuur",
+    "weg-ge-stuur",
+    "ge-stuur",
+    "vuur-maak-hout",
+    "uur",
+    "suur",
+    "nuuskie-rig",
+    "stuur",
+    "nuus",
+    "na-tuur-lik",
+    "duur",
+    "nuut"
+   ],
+   "readers": []
+  },
+  {
+   "step": 24,
+   "new_sounds": [
+    "ê"
+   ],
+   "words": [
+    "ge-sê",
+    "sê",
+    "hê",
+    "lê",
+    "vêr",
+    "nê-rens",
+    "bê-re",
+    "ge-lê",
+    "ge-bê-re",
+    "po-pu-lêrs-te",
+    "voor-lê"
+   ],
+   "readers": []
+  }
+ ],
+ "readers": {},
+ "word_bank": [
+  {
+   "text": "ek",
+   "syllables": "ek",
+   "step": 1
+  },
+  {
+   "text": "ekke",
+   "syllables": "ek-ke",
+   "step": 1
+  },
+  {
+   "text": "en",
+   "syllables": "en",
+   "step": 1
+  },
+  {
+   "text": "ene",
+   "syllables": "e-ne",
+   "step": 1
+  },
+  {
+   "text": "kake",
+   "syllables": "ka-ke",
+   "step": 1
+  },
+  {
+   "text": "kan",
+   "syllables": "kan",
+   "step": 1
+  },
+  {
+   "text": "ken",
+   "syllables": "ken",
+   "step": 1
+  },
+  {
+   "text": "knak",
+   "syllables": "knak",
+   "step": 1
+  },
+  {
+   "text": "na",
+   "syllables": "na",
+   "step": 1
+  },
+  {
+   "text": "nek",
+   "syllables": "nek",
+   "step": 1
+  },
+  {
+   "text": "as",
+   "syllables": "as",
+   "step": 2
+  },
+  {
+   "text": "asse",
+   "syllables": "as-se",
+   "step": 2
+  },
+  {
+   "text": "kano",
+   "syllables": "ka-no",
+   "step": 2
+  },
+  {
+   "text": "kans",
+   "syllables": "kans",
+   "step": 2
+  },
+  {
+   "text": "kas",
+   "syllables": "kas",
+   "step": 2
+  },
+  {
+   "text": "kok",
+   "syllables": "kok",
+   "step": 2
+  },
+  {
+   "text": "kokke",
+   "syllables": "kok-ke",
+   "step": 2
+  },
+  {
+   "text": "kon",
+   "syllables": "kon",
+   "step": 2
+  },
+  {
+   "text": "kos",
+   "syllables": "kos",
+   "step": 2
+  },
+  {
+   "text": "nes",
+   "syllables": "nes",
+   "step": 2
+  },
+  {
+   "text": "non",
+   "syllables": "non",
+   "step": 2
+  },
+  {
+   "text": "ons",
+   "syllables": "ons",
+   "step": 2
+  },
+  {
+   "text": "os",
+   "syllables": "os",
+   "step": 2
+  },
+  {
+   "text": "sae",
+   "syllables": "sa-e",
+   "step": 2
+  },
+  {
+   "text": "sak",
+   "syllables": "sak",
+   "step": 2
+  },
+  {
+   "text": "sake",
+   "syllables": "sa-ke",
+   "step": 2
+  },
+  {
+   "text": "sakke",
+   "syllables": "sak-ke",
+   "step": 2
+  },
+  {
+   "text": "se",
+   "syllables": "se",
+   "step": 2
+  },
+  {
+   "text": "ses",
+   "syllables": "ses",
+   "step": 2
+  },
+  {
+   "text": "skok",
+   "syllables": "skok",
+   "step": 2
+  },
+  {
+   "text": "snak",
+   "syllables": "snak",
+   "step": 2
+  },
+  {
+   "text": "so",
+   "syllables": "so",
+   "step": 2
+  },
+  {
+   "text": "sok",
+   "syllables": "sok",
+   "step": 2
+  },
+  {
+   "text": "son",
+   "syllables": "son",
+   "step": 2
+  },
+  {
+   "text": "sonne",
+   "syllables": "son-ne",
+   "step": 2
+  },
+  {
+   "text": "ete",
+   "syllables": "e-te",
+   "step": 3
+  },
+  {
+   "text": "kant",
+   "syllables": "kant",
+   "step": 3
+  },
+  {
+   "text": "kat",
+   "syllables": "kat",
+   "step": 3
+  },
+  {
+   "text": "kop",
+   "syllables": "kop",
+   "step": 3
+  },
+  {
+   "text": "koppe",
+   "syllables": "kop-pe",
+   "step": 3
+  },
+  {
+   "text": "nat",
+   "syllables": "nat",
+   "step": 3
+  },
+  {
+   "text": "net",
+   "syllables": "net",
+   "step": 3
+  },
+  {
+   "text": "nette",
+   "syllables": "net-te",
+   "step": 3
+  },
+  {
+   "text": "op",
+   "syllables": "op",
+   "step": 3
+  },
+  {
+   "text": "pa",
+   "syllables": "pa",
+   "step": 3
+  },
+  {
+   "text": "pak",
+   "syllables": "pak",
+   "step": 3
+  },
+  {
+   "text": "pap",
+   "syllables": "pap",
+   "step": 3
+  },
+  {
+   "text": "papa",
+   "syllables": "pa-pa",
+   "step": 3
+  },
+  {
+   "text": "pappa",
+   "syllables": "pap-pa",
+   "step": 3
+  },
+  {
+   "text": "pot",
+   "syllables": "pot",
+   "step": 3
+  },
+  {
+   "text": "skop",
+   "syllables": "skop",
+   "step": 3
+  },
+  {
+   "text": "stap",
+   "syllables": "stap",
+   "step": 3
+  },
+  {
+   "text": "stok",
+   "syllables": "stok",
+   "step": 3
+  },
+  {
+   "text": "stokke",
+   "syllables": "stok-ke",
+   "step": 3
+  },
+  {
+   "text": "stop",
+   "syllables": "stop",
+   "step": 3
+  },
+  {
+   "text": "tak",
+   "syllables": "tak",
+   "step": 3
+  },
+  {
+   "text": "takke",
+   "syllables": "tak-ke",
+   "step": 3
+  },
+  {
+   "text": "te",
+   "syllables": "te",
+   "step": 3
+  },
+  {
+   "text": "teken",
+   "syllables": "te-ken",
+   "step": 3
+  },
+  {
+   "text": "tot",
+   "syllables": "tot",
+   "step": 3
+  },
+  {
+   "text": "al",
+   "syllables": "al",
+   "step": 4
+  },
+  {
+   "text": "alle",
+   "syllables": "al-le",
+   "step": 4
+  },
+  {
+   "text": "alles",
+   "syllables": "al-les",
+   "step": 4
+  },
+  {
+   "text": "dae",
+   "syllables": "da-e",
+   "step": 4
+  },
+  {
+   "text": "dak",
+   "syllables": "dak",
+   "step": 4
+  },
+  {
+   "text": "dalk",
+   "syllables": "dalk",
+   "step": 4
+  },
+  {
+   "text": "dan",
+   "syllables": "dan",
+   "step": 4
+  },
+  {
+   "text": "dans",
+   "syllables": "dans",
+   "step": 4
+  },
+  {
+   "text": "dat",
+   "syllables": "dat",
+   "step": 4
+  },
+  {
+   "text": "dop",
+   "syllables": "dop",
+   "step": 4
+  },
+  {
+   "text": "elke",
+   "syllables": "el-ke",
+   "step": 4
+  },
+  {
+   "text": "kla",
+   "syllables": "kla",
+   "step": 4
+  },
+  {
+   "text": "klap",
+   "syllables": "klap",
+   "step": 4
+  },
+  {
+   "text": "klas",
+   "syllables": "klas",
+   "step": 4
+  },
+  {
+   "text": "lank",
+   "syllables": "lank",
+   "step": 4
+  },
+  {
+   "text": "los",
+   "syllables": "los",
+   "step": 4
+  },
+  {
+   "text": "nadat",
+   "syllables": "na-dat",
+   "step": 4
+  },
+  {
+   "text": "plan",
+   "syllables": "plan",
+   "step": 4
+  },
+  {
+   "text": "plek",
+   "syllables": "plek",
+   "step": 4
+  },
+  {
+   "text": "sal",
+   "syllables": "sal",
+   "step": 4
+  },
+  {
+   "text": "slak",
+   "syllables": "slak",
+   "step": 4
+  },
+  {
+   "text": "sodat",
+   "syllables": "so-dat",
+   "step": 4
+  },
+  {
+   "text": "tande",
+   "syllables": "tan-de",
+   "step": 4
+  },
+  {
+   "text": "tel",
+   "syllables": "tel",
+   "step": 4
+  },
+  {
+   "text": "totdat",
+   "syllables": "tot-dat",
+   "step": 4
+  },
+  {
+   "text": "ander",
+   "syllables": "an-der",
+   "step": 5
+  },
+  {
+   "text": "anders",
+   "syllables": "an-ders",
+   "step": 5
+  },
+  {
+   "text": "donker",
+   "syllables": "don-ker",
+   "step": 5
+  },
+  {
+   "text": "dorp",
+   "syllables": "dorp",
+   "step": 5
+  },
+  {
+   "text": "dra",
+   "syllables": "dra",
+   "step": 5
+  },
+  {
+   "text": "hande",
+   "syllables": "han-de",
+   "step": 5
+  },
+  {
+   "text": "hare",
+   "syllables": "ha-re",
+   "step": 5
+  },
+  {
+   "text": "hart",
+   "syllables": "hart",
+   "step": 5
+  },
+  {
+   "text": "hele",
+   "syllables": "he-le",
+   "step": 5
+  },
+  {
+   "text": "help",
+   "syllables": "help",
+   "step": 5
+  },
+  {
+   "text": "hen",
+   "syllables": "hen",
+   "step": 5
+  },
+  {
+   "text": "het",
+   "syllables": "het",
+   "step": 5
+  },
+  {
+   "text": "klere",
+   "syllables": "kle-re",
+   "step": 5
+  },
+  {
+   "text": "kort",
+   "syllables": "kort",
+   "step": 5
+  },
+  {
+   "text": "krale",
+   "syllables": "kra-le",
+   "step": 5
+  },
+  {
+   "text": "later",
+   "syllables": "la-ter",
+   "step": 5
+  },
+  {
+   "text": "nader",
+   "syllables": "na-der",
+   "step": 5
+  },
+  {
+   "text": "onder",
+   "syllables": "on-der",
+   "step": 5
+  },
+  {
+   "text": "ore",
+   "syllables": "o-re",
+   "step": 5
+  },
+  {
+   "text": "skerp",
+   "syllables": "skerp",
+   "step": 5
+  },
+  {
+   "text": "sokker",
+   "syllables": "sok-ker",
+   "step": 5
+  },
+  {
+   "text": "sonder",
+   "syllables": "son-der",
+   "step": 5
+  },
+  {
+   "text": "sterk",
+   "syllables": "sterk",
+   "step": 5
+  },
+  {
+   "text": "stert",
+   "syllables": "stert",
+   "step": 5
+  },
+  {
+   "text": "trek",
+   "syllables": "trek",
+   "step": 5
+  },
+  {
+   "text": "almal",
+   "syllables": "al-mal",
+   "step": 6
+  },
+  {
+   "text": "arme",
+   "syllables": "ar-me",
+   "step": 6
+  },
+  {
+   "text": "dink",
+   "syllables": "dink",
+   "step": 6
+  },
+  {
+   "text": "dit",
+   "syllables": "dit",
+   "step": 6
+  },
+  {
+   "text": "drink",
+   "syllables": "drink",
+   "step": 6
+  },
+  {
+   "text": "hom",
+   "syllables": "hom",
+   "step": 6
+  },
+  {
+   "text": "in",
+   "syllables": "in",
+   "step": 6
+  },
+  {
+   "text": "is",
+   "syllables": "is",
+   "step": 6
+  },
+  {
+   "text": "kinders",
+   "syllables": "kin-ders",
+   "step": 6
+  },
+  {
+   "text": "klim",
+   "syllables": "klim",
+   "step": 6
+  },
+  {
+   "text": "kom",
+   "syllables": "kom",
+   "step": 6
+  },
+  {
+   "text": "krokodil",
+   "syllables": "kro-ko-dil",
+   "step": 6
+  },
+  {
+   "text": "ma",
+   "syllables": "ma",
+   "step": 6
+  },
+  {
+   "text": "mamma",
+   "syllables": "mam-ma",
+   "step": 6
+  },
+  {
+   "text": "man",
+   "syllables": "man",
+   "step": 6
+  },
+  {
+   "text": "melk",
+   "syllables": "melk",
+   "step": 6
+  },
+  {
+   "text": "mense",
+   "syllables": "men-se",
+   "step": 6
+  },
+  {
+   "text": "met",
+   "syllables": "met",
+   "step": 6
+  },
+  {
+   "text": "niks",
+   "syllables": "niks",
+   "step": 6
+  },
+  {
+   "text": "om",
+   "syllables": "om",
+   "step": 6
+  },
+  {
+   "text": "omdat",
+   "syllables": "om-dat",
+   "step": 6
+  },
+  {
+   "text": "sit",
+   "syllables": "sit",
+   "step": 6
+  },
+  {
+   "text": "slim",
+   "syllables": "slim",
+   "step": 6
+  },
+  {
+   "text": "spesiale",
+   "syllables": "spe-si-a-le",
+   "step": 6
+  },
+  {
+   "text": "stem",
+   "syllables": "stem",
+   "step": 6
+  },
+  {
+   "text": "agter",
+   "syllables": "ag-ter",
+   "step": 7
+  },
+  {
+   "text": "dag",
+   "syllables": "dag",
+   "step": 7
+  },
+  {
+   "text": "dogter",
+   "syllables": "dog-ter",
+   "step": 7
+  },
+  {
+   "text": "enige",
+   "syllables": "e-ni-ge",
+   "step": 7
+  },
+  {
+   "text": "gat",
+   "syllables": "gat",
+   "step": 7
+  },
+  {
+   "text": "gehelp",
+   "syllables": "ge-help",
+   "step": 7
+  },
+  {
+   "text": "gekom",
+   "syllables": "ge-kom",
+   "step": 7
+  },
+  {
+   "text": "gekry",
+   "syllables": "ge-kry",
+   "step": 7
+  },
+  {
+   "text": "gesit",
+   "syllables": "ge-sit",
+   "step": 7
+  },
+  {
+   "text": "geskenk",
+   "syllables": "ge-skenk",
+   "step": 7
+  },
+  {
+   "text": "gestap",
+   "syllables": "ge-stap",
+   "step": 7
+  },
+  {
+   "text": "glimlag",
+   "syllables": "glim-lag",
+   "step": 7
+  },
+  {
+   "text": "gras",
+   "syllables": "gras",
+   "step": 7
+  },
+  {
+   "text": "gryp",
+   "syllables": "gryp",
+   "step": 7
+  },
+  {
+   "text": "hy",
+   "syllables": "hy",
+   "step": 7
+  },
+  {
+   "text": "kry",
+   "syllables": "kry",
+   "step": 7
+  },
+  {
+   "text": "kyk",
+   "syllables": "kyk",
+   "step": 7
+  },
+  {
+   "text": "lag",
+   "syllables": "lag",
+   "step": 7
+  },
+  {
+   "text": "lig",
+   "syllables": "lig",
+   "step": 7
+  },
+  {
+   "text": "lyk",
+   "syllables": "lyk",
+   "step": 7
+  },
+  {
+   "text": "my",
+   "syllables": "my",
+   "step": 7
+  },
+  {
+   "text": "myne",
+   "syllables": "my-ne",
+   "step": 7
+  },
+  {
+   "text": "nog",
+   "syllables": "nog",
+   "step": 7
+  },
+  {
+   "text": "reg",
+   "syllables": "reg",
+   "step": 7
+  },
+  {
+   "text": "sy",
+   "syllables": "sy",
+   "step": 7
+  },
+  {
+   "text": "gevat",
+   "syllables": "ge-vat",
+   "step": 8
+  },
+  {
+   "text": "gevra",
+   "syllables": "ge-vra",
+   "step": 8
+  },
+  {
+   "text": "swem",
+   "syllables": "swem",
+   "step": 8
+  },
+  {
+   "text": "terwyl",
+   "syllables": "ter-wyl",
+   "step": 8
+  },
+  {
+   "text": "val",
+   "syllables": "val",
+   "step": 8
+  },
+  {
+   "text": "van",
+   "syllables": "van",
+   "step": 8
+  },
+  {
+   "text": "vas",
+   "syllables": "vas",
+   "step": 8
+  },
+  {
+   "text": "vat",
+   "syllables": "vat",
+   "step": 8
+  },
+  {
+   "text": "verder",
+   "syllables": "ver-der",
+   "step": 8
+  },
+  {
+   "text": "vertel",
+   "syllables": "ver-tel",
+   "step": 8
+  },
+  {
+   "text": "vinnig",
+   "syllables": "vin-nig",
+   "step": 8
+  },
+  {
+   "text": "vir",
+   "syllables": "vir",
+   "step": 8
+  },
+  {
+   "text": "vol",
+   "syllables": "vol",
+   "step": 8
+  },
+  {
+   "text": "volgende",
+   "syllables": "vol-gen-de",
+   "step": 8
+  },
+  {
+   "text": "vra",
+   "syllables": "vra",
+   "step": 8
+  },
+  {
+   "text": "wag",
+   "syllables": "wag",
+   "step": 8
+  },
+  {
+   "text": "wakker",
+   "syllables": "wak-ker",
+   "step": 8
+  },
+  {
+   "text": "want",
+   "syllables": "want",
+   "step": 8
+  },
+  {
+   "text": "warm",
+   "syllables": "warm",
+   "step": 8
+  },
+  {
+   "text": "was",
+   "syllables": "was",
+   "step": 8
+  },
+  {
+   "text": "wat",
+   "syllables": "wat",
+   "step": 8
+  },
+  {
+   "text": "water",
+   "syllables": "wa-ter",
+   "step": 8
+  },
+  {
+   "text": "weg",
+   "syllables": "weg",
+   "step": 8
+  },
+  {
+   "text": "werk",
+   "syllables": "werk",
+   "step": 8
+  },
+  {
+   "text": "wil",
+   "syllables": "wil",
+   "step": 8
+  },
+  {
+   "text": "baba",
+   "syllables": "ba-ba",
+   "step": 9
+  },
+  {
+   "text": "bal",
+   "syllables": "bal",
+   "step": 9
+  },
+  {
+   "text": "begin",
+   "syllables": "be-gin",
+   "step": 9
+  },
+  {
+   "text": "bene",
+   "syllables": "be-ne",
+   "step": 9
+  },
+  {
+   "text": "besig",
+   "syllables": "be-sig",
+   "step": 9
+  },
+  {
+   "text": "binne",
+   "syllables": "bin-ne",
+   "step": 9
+  },
+  {
+   "text": "bly",
+   "syllables": "bly",
+   "step": 9
+  },
+  {
+   "text": "bo",
+   "syllables": "bo",
+   "step": 9
+  },
+  {
+   "text": "bok",
+   "syllables": "bok",
+   "step": 9
+  },
+  {
+   "text": "bome",
+   "syllables": "bo-me",
+   "step": 9
+  },
+  {
+   "text": "bos",
+   "syllables": "bos",
+   "step": 9
+  },
+  {
+   "text": "bus",
+   "syllables": "bus",
+   "step": 9
+  },
+  {
+   "text": "by",
+   "syllables": "by",
+   "step": 9
+  },
+  {
+   "text": "gelukkig",
+   "syllables": "ge-luk-kig",
+   "step": 9
+  },
+  {
+   "text": "hul",
+   "syllables": "hul",
+   "step": 9
+  },
+  {
+   "text": "hulle",
+   "syllables": "hul-le",
+   "step": 9
+  },
+  {
+   "text": "kombers",
+   "syllables": "kom-bers",
+   "step": 9
+  },
+  {
+   "text": "lug",
+   "syllables": "lug",
+   "step": 9
+  },
+  {
+   "text": "naby",
+   "syllables": "na-by",
+   "step": 9
+  },
+  {
+   "text": "nuwe",
+   "syllables": "nu-we",
+   "step": 9
+  },
+  {
+   "text": "rug",
+   "syllables": "rug",
+   "step": 9
+  },
+  {
+   "text": "suster",
+   "syllables": "sus-ter",
+   "step": 9
+  },
+  {
+   "text": "terug",
+   "syllables": "te-rug",
+   "step": 9
+  },
+  {
+   "text": "verby",
+   "syllables": "ver-by",
+   "step": 9
+  },
+  {
+   "text": "vrugte",
+   "syllables": "vrug-te",
+   "step": 9
+  },
+  {
+   "text": "af",
+   "syllables": "af",
+   "step": 10
+  },
+  {
+   "text": "blaf",
+   "syllables": "blaf",
+   "step": 10
+  },
+  {
+   "text": "fyn",
+   "syllables": "fyn",
+   "step": 10
+  },
+  {
+   "text": "gevryf",
+   "syllables": "ge-vryf",
+   "step": 10
+  },
+  {
+   "text": "homself",
+   "syllables": "hom-self",
+   "step": 10
+  },
+  {
+   "text": "ja",
+   "syllables": "ja",
+   "step": 10
+  },
+  {
+   "text": "jakkals",
+   "syllables": "jak-kals",
+   "step": 10
+  },
+  {
+   "text": "jammer",
+   "syllables": "jam-mer",
+   "step": 10
+  },
+  {
+   "text": "jare",
+   "syllables": "ja-re",
+   "step": 10
+  },
+  {
+   "text": "jonk",
+   "syllables": "jonk",
+   "step": 10
+  },
+  {
+   "text": "julle",
+   "syllables": "jul-le",
+   "step": 10
+  },
+  {
+   "text": "jy",
+   "syllables": "jy",
+   "step": 10
+  },
+  {
+   "text": "lyf",
+   "syllables": "lyf",
+   "step": 10
+  },
+  {
+   "text": "of",
+   "syllables": "of",
+   "step": 10
+  },
+  {
+   "text": "olifant",
+   "syllables": "o-li-fant",
+   "step": 10
+  },
+  {
+   "text": "onsself",
+   "syllables": "ons-self",
+   "step": 10
+  },
+  {
+   "text": "oranje",
+   "syllables": "o-ran-je",
+   "step": 10
+  },
+  {
+   "text": "self",
+   "syllables": "self",
+   "step": 10
+  },
+  {
+   "text": "selfs",
+   "syllables": "selfs",
+   "step": 10
+  },
+  {
+   "text": "skryf",
+   "syllables": "skryf",
+   "step": 10
+  },
+  {
+   "text": "stof",
+   "syllables": "stof",
+   "step": 10
+  },
+  {
+   "text": "styf",
+   "syllables": "styf",
+   "step": 10
+  },
+  {
+   "text": "vanaf",
+   "syllables": "va-naf",
+   "step": 10
+  },
+  {
+   "text": "vyf",
+   "syllables": "vyf",
+   "step": 10
+  },
+  {
+   "text": "wolf",
+   "syllables": "wolf",
+   "step": 10
+  },
+  {
+   "text": "taxi",
+   "syllables": "ta-xi",
+   "step": 12
+  },
+  {
+   "text": "aan",
+   "syllables": "aan",
+   "step": 13
+  },
+  {
+   "text": "aarde",
+   "syllables": "aarde",
+   "step": 13
+  },
+  {
+   "text": "daar",
+   "syllables": "daar",
+   "step": 13
+  },
+  {
+   "text": "daarvan",
+   "syllables": "daar-van",
+   "step": 13
+  },
+  {
+   "text": "gaan",
+   "syllables": "gaan",
+   "step": 13
+  },
+  {
+   "text": "gegaan",
+   "syllables": "ge-gaan",
+   "step": 13
+  },
+  {
+   "text": "gemaak",
+   "syllables": "ge-maak",
+   "step": 13
+  },
+  {
+   "text": "graag",
+   "syllables": "graag",
+   "step": 13
+  },
+  {
+   "text": "haal",
+   "syllables": "haal",
+   "step": 13
+  },
+  {
+   "text": "haan",
+   "syllables": "haan",
+   "step": 13
+  },
+  {
+   "text": "haar",
+   "syllables": "haar",
+   "step": 13
+  },
+  {
+   "text": "haas",
+   "syllables": "haas",
+   "step": 13
+  },
+  {
+   "text": "kraai",
+   "syllables": "kraai",
+   "step": 13
+  },
+  {
+   "text": "laat",
+   "syllables": "laat",
+   "step": 13
+  },
+  {
+   "text": "maak",
+   "syllables": "maak",
+   "step": 13
+  },
+  {
+   "text": "maar",
+   "syllables": "maar",
+   "step": 13
+  },
+  {
+   "text": "mekaar",
+   "syllables": "me-kaar",
+   "step": 13
+  },
+  {
+   "text": "naam",
+   "syllables": "naam",
+   "step": 13
+  },
+  {
+   "text": "paar",
+   "syllables": "paar",
+   "step": 13
+  },
+  {
+   "text": "praat",
+   "syllables": "praat",
+   "step": 13
+  },
+  {
+   "text": "saam",
+   "syllables": "saam",
+   "step": 13
+  },
+  {
+   "text": "slaap",
+   "syllables": "slaap",
+   "step": 13
+  },
+  {
+   "text": "staan",
+   "syllables": "staan",
+   "step": 13
+  },
+  {
+   "text": "swaai",
+   "syllables": "swaai",
+   "step": 13
+  },
+  {
+   "text": "waar",
+   "syllables": "waar",
+   "step": 13
+  },
+  {
+   "text": "apie",
+   "syllables": "a-pie",
+   "step": 14
+  },
+  {
+   "text": "asseblief",
+   "syllables": "as-se-blief",
+   "step": 14
+  },
+  {
+   "text": "baie",
+   "syllables": "bai-e",
+   "step": 14
+  },
+  {
+   "text": "daardie",
+   "syllables": "daar-die",
+   "step": 14
+  },
+  {
+   "text": "die",
+   "syllables": "die",
+   "step": 14
+  },
+  {
+   "text": "diere",
+   "syllables": "die-re",
+   "step": 14
+  },
+  {
+   "text": "donkie",
+   "syllables": "don-kie",
+   "step": 14
+  },
+  {
+   "text": "dorpie",
+   "syllables": "dorpie",
+   "step": 14
+  },
+  {
+   "text": "drie",
+   "syllables": "drie",
+   "step": 14
+  },
+  {
+   "text": "gesien",
+   "syllables": "ge-sien",
+   "step": 14
+  },
+  {
+   "text": "hasie",
+   "syllables": "ha-sie",
+   "step": 14
+  },
+  {
+   "text": "hier",
+   "syllables": "hier",
+   "step": 14
+  },
+  {
+   "text": "hierdie",
+   "syllables": "hier-die",
+   "step": 14
+  },
+  {
+   "text": "iets",
+   "syllables": "iets",
+   "step": 14
+  },
+  {
+   "text": "lief",
+   "syllables": "lief",
+   "step": 14
+  },
+  {
+   "text": "nie",
+   "syllables": "nie",
+   "step": 14
+  },
+  {
+   "text": "rivier",
+   "syllables": "ri-vier",
+   "step": 14
+  },
+  {
+   "text": "sien",
+   "syllables": "sien",
+   "step": 14
+  },
+  {
+   "text": "storie",
+   "syllables": "sto-rie",
+   "step": 14
+  },
+  {
+   "text": "stories",
+   "syllables": "sto-ries",
+   "step": 14
+  },
+  {
+   "text": "tannie",
+   "syllables": "tan-nie",
+   "step": 14
+  },
+  {
+   "text": "vlieg",
+   "syllables": "vlieg",
+   "step": 14
+  },
+  {
+   "text": "vriende",
+   "syllables": "vrien-de",
+   "step": 14
+  },
+  {
+   "text": "wie",
+   "syllables": "wie",
+   "step": 14
+  },
+  {
+   "text": "wurmpie",
+   "syllables": "wurm-pie",
+   "step": 14
+  },
+  {
+   "text": "alleen",
+   "syllables": "al-leen",
+   "step": 15
+  },
+  {
+   "text": "een",
+   "syllables": "een",
+   "step": 15
+  },
+  {
+   "text": "eendag",
+   "syllables": "een-dag",
+   "step": 15
+  },
+  {
+   "text": "eerste",
+   "syllables": "eers-te",
+   "step": 15
+  },
+  {
+   "text": "eet",
+   "syllables": "eet",
+   "step": 15
+  },
+  {
+   "text": "gebreek",
+   "syllables": "ge-breek",
+   "step": 15
+  },
+  {
+   "text": "gee",
+   "syllables": "gee",
+   "step": 15
+  },
+  {
+   "text": "geen",
+   "syllables": "geen",
+   "step": 15
+  },
+  {
+   "text": "gegee",
+   "syllables": "ge-gee",
+   "step": 15
+  },
+  {
+   "text": "keer",
+   "syllables": "keer",
+   "step": 15
+  },
+  {
+   "text": "leer",
+   "syllables": "leer",
+   "step": 15
+  },
+  {
+   "text": "lees",
+   "syllables": "lees",
+   "step": 15
+  },
+  {
+   "text": "leeu",
+   "syllables": "leeu",
+   "step": 15
+  },
+  {
+   "text": "meer",
+   "syllables": "meer",
+   "step": 15
+  },
+  {
+   "text": "nee",
+   "syllables": "nee",
+   "step": 15
+  },
+  {
+   "text": "neem",
+   "syllables": "neem",
+   "step": 15
+  },
+  {
+   "text": "probeer",
+   "syllables": "pro-beer",
+   "step": 15
+  },
+  {
+   "text": "skree",
+   "syllables": "skree",
+   "step": 15
+  },
+  {
+   "text": "speel",
+   "syllables": "speel",
+   "step": 15
+  },
+  {
+   "text": "teen",
+   "syllables": "teen",
+   "step": 15
+  },
+  {
+   "text": "twee",
+   "syllables": "twee",
+   "step": 15
+  },
+  {
+   "text": "wanneer",
+   "syllables": "wan-neer",
+   "step": 15
+  },
+  {
+   "text": "weer",
+   "syllables": "weer",
+   "step": 15
+  },
+  {
+   "text": "wees",
+   "syllables": "wees",
+   "step": 15
+  },
+  {
+   "text": "weet",
+   "syllables": "weet",
+   "step": 15
+  },
+  {
+   "text": "boom",
+   "syllables": "boom",
+   "step": 16
+  },
+  {
+   "text": "boot",
+   "syllables": "boot",
+   "step": 16
+  },
+  {
+   "text": "gehardloop",
+   "syllables": "ge-hard-loop",
+   "step": 16
+  },
+  {
+   "text": "gehoor",
+   "syllables": "ge-hoor",
+   "step": 16
+  },
+  {
+   "text": "geloop",
+   "syllables": "ge-loop",
+   "step": 16
+  },
+  {
+   "text": "gewoon",
+   "syllables": "ge-woon",
+   "step": 16
+  },
+  {
+   "text": "gooi",
+   "syllables": "gooi",
+   "step": 16
+  },
+  {
+   "text": "groot",
+   "syllables": "groot",
+   "step": 16
+  },
+  {
+   "text": "hardloop",
+   "syllables": "hard-loop",
+   "step": 16
+  },
+  {
+   "text": "hoog",
+   "syllables": "hoog",
+   "step": 16
+  },
+  {
+   "text": "hoor",
+   "syllables": "hoor",
+   "step": 16
+  },
+  {
+   "text": "koop",
+   "syllables": "koop",
+   "step": 16
+  },
+  {
+   "text": "loop",
+   "syllables": "loop",
+   "step": 16
+  },
+  {
+   "text": "mooi",
+   "syllables": "mooi",
+   "step": 16
+  },
+  {
+   "text": "nooit",
+   "syllables": "nooit",
+   "step": 16
+  },
+  {
+   "text": "ook",
+   "syllables": "ook",
+   "step": 16
+  },
+  {
+   "text": "oom",
+   "syllables": "oom",
+   "step": 16
+  },
+  {
+   "text": "oor",
+   "syllables": "oor",
+   "step": 16
+  },
+  {
+   "text": "rooi",
+   "syllables": "rooi",
+   "step": 16
+  },
+  {
+   "text": "skool",
+   "syllables": "skool",
+   "step": 16
+  },
+  {
+   "text": "soos",
+   "syllables": "soos",
+   "step": 16
+  },
+  {
+   "text": "verkoop",
+   "syllables": "ver-koop",
+   "step": 16
+  },
+  {
+   "text": "verloor",
+   "syllables": "ver-loor",
+   "step": 16
+  },
+  {
+   "text": "voor",
+   "syllables": "voor",
+   "step": 16
+  },
+  {
+   "text": "weggehardloop",
+   "syllables": "weg-ge-hard-loop",
+   "step": 16
+  },
+  {
+   "text": "boer",
+   "syllables": "boer",
+   "step": 17
+  },
+  {
+   "text": "doen",
+   "syllables": "doen",
+   "step": 17
+  },
+  {
+   "text": "gedoen",
+   "syllables": "ge-doen",
+   "step": 17
+  },
+  {
+   "text": "genoeg",
+   "syllables": "ge-noeg",
+   "step": 17
+  },
+  {
+   "text": "genoem",
+   "syllables": "ge-noem",
+   "step": 17
+  },
+  {
+   "text": "geroep",
+   "syllables": "ge-roep",
+   "step": 17
+  },
+  {
+   "text": "goeie",
+   "syllables": "goeie",
+   "step": 17
+  },
+  {
+   "text": "groen",
+   "syllables": "groen",
+   "step": 17
+  },
+  {
+   "text": "groente",
+   "syllables": "groen-te",
+   "step": 17
+  },
+  {
+   "text": "hoe",
+   "syllables": "hoe",
+   "step": 17
+  },
+  {
+   "text": "hoekom",
+   "syllables": "hoe-kom",
+   "step": 17
+  },
+  {
+   "text": "hoender",
+   "syllables": "hoen-der",
+   "step": 17
+  },
+  {
+   "text": "koei",
+   "syllables": "koei",
+   "step": 17
+  },
+  {
+   "text": "koeie",
+   "syllables": "koeie",
+   "step": 17
+  },
+  {
+   "text": "koek",
+   "syllables": "koek",
+   "step": 17
+  },
+  {
+   "text": "moeg",
+   "syllables": "moeg",
+   "step": 17
+  },
+  {
+   "text": "moenie",
+   "syllables": "moe-nie",
+   "step": 17
+  },
+  {
+   "text": "moes",
+   "syllables": "moes",
+   "step": 17
+  },
+  {
+   "text": "moet",
+   "syllables": "moet",
+   "step": 17
+  },
+  {
+   "text": "ontmoet",
+   "syllables": "ont-moet",
+   "step": 17
+  },
+  {
+   "text": "roep",
+   "syllables": "roep",
+   "step": 17
+  },
+  {
+   "text": "seekoei",
+   "syllables": "see-koei",
+   "step": 17
+  },
+  {
+   "text": "soek",
+   "syllables": "soek",
+   "step": 17
+  },
+  {
+   "text": "toe",
+   "syllables": "toe",
+   "step": 17
+  },
+  {
+   "text": "voel",
+   "syllables": "voel",
+   "step": 17
+  },
+  {
+   "text": "buite",
+   "syllables": "bui-te",
+   "step": 18
+  },
+  {
+   "text": "buitekant",
+   "syllables": "bui-te-kant",
+   "step": 18
+  },
+  {
+   "text": "druiwe",
+   "syllables": "drui-we",
+   "step": 18
+  },
+  {
+   "text": "duif",
+   "syllables": "duif",
+   "step": 18
+  },
+  {
+   "text": "gebruik",
+   "syllables": "ge-bruik",
+   "step": 18
+  },
+  {
+   "text": "gehuil",
+   "syllables": "ge-huil",
+   "step": 18
+  },
+  {
+   "text": "geluister",
+   "syllables": "ge-luis-ter",
+   "step": 18
+  },
+  {
+   "text": "huil",
+   "syllables": "huil",
+   "step": 18
+  },
+  {
+   "text": "huis",
+   "syllables": "huis",
+   "step": 18
+  },
+  {
+   "text": "huise",
+   "syllables": "hui-se",
+   "step": 18
+  },
+  {
+   "text": "huiswerk",
+   "syllables": "huis-werk",
+   "step": 18
+  },
+  {
+   "text": "kruip",
+   "syllables": "kruip",
+   "step": 18
+  },
+  {
+   "text": "kuier",
+   "syllables": "kui-er",
+   "step": 18
+  },
+  {
+   "text": "lui",
+   "syllables": "lui",
+   "step": 18
+  },
+  {
+   "text": "luister",
+   "syllables": "luis-ter",
+   "step": 18
+  },
+  {
+   "text": "reguit",
+   "syllables": "reg-uit",
+   "step": 18
+  },
+  {
+   "text": "ruil",
+   "syllables": "ruil",
+   "step": 18
+  },
+  {
+   "text": "suiker",
+   "syllables": "sui-ker",
+   "step": 18
+  },
+  {
+   "text": "tuin",
+   "syllables": "tuin",
+   "step": 18
+  },
+  {
+   "text": "tuis",
+   "syllables": "tuis",
+   "step": 18
+  },
+  {
+   "text": "uil",
+   "syllables": "uil",
+   "step": 18
+  },
+  {
+   "text": "uit",
+   "syllables": "uit",
+   "step": 18
+  },
+  {
+   "text": "uitgekom",
+   "syllables": "uit-ge-kom",
+   "step": 18
+  },
+  {
+   "text": "verduidelik",
+   "syllables": "verdui-de-lik",
+   "step": 18
+  },
+  {
+   "text": "volstruis",
+   "syllables": "vol-struis",
+   "step": 18
+  },
+  {
+   "text": "aangekom",
+   "syllables": "aan-ge-kom",
+   "step": 19
+  },
+  {
+   "text": "bang",
+   "syllables": "bang",
+   "step": 19
+  },
+  {
+   "text": "bring",
+   "syllables": "bring",
+   "step": 19
+  },
+  {
+   "text": "ding",
+   "syllables": "ding",
+   "step": 19
+  },
+  {
+   "text": "dinge",
+   "syllables": "din-ge",
+   "step": 19
+  },
+  {
+   "text": "gebring",
+   "syllables": "ge-bring",
+   "step": 19
+  },
+  {
+   "text": "gehang",
+   "syllables": "ge-hang",
+   "step": 19
+  },
+  {
+   "text": "gesing",
+   "syllables": "ge-sing",
+   "step": 19
+  },
+  {
+   "text": "gespring",
+   "syllables": "ge-spring",
+   "step": 19
+  },
+  {
+   "text": "gevang",
+   "syllables": "ge-vang",
+   "step": 19
+  },
+  {
+   "text": "gunsteling",
+   "syllables": "guns-te-ling",
+   "step": 19
+  },
+  {
+   "text": "honger",
+   "syllables": "hon-ger",
+   "step": 19
+  },
+  {
+   "text": "horings",
+   "syllables": "ho-rings",
+   "step": 19
+  },
+  {
+   "text": "jong",
+   "syllables": "jong",
+   "step": 19
+  },
+  {
+   "text": "koning",
+   "syllables": "ko-ning",
+   "step": 19
+  },
+  {
+   "text": "lang",
+   "syllables": "lang",
+   "step": 19
+  },
+  {
+   "text": "langer",
+   "syllables": "lan-ger",
+   "step": 19
+  },
+  {
+   "text": "langs",
+   "syllables": "langs",
+   "step": 19
+  },
+  {
+   "text": "ongelukkig",
+   "syllables": "on-ge-luk-kig",
+   "step": 19
+  },
+  {
+   "text": "sing",
+   "syllables": "sing",
+   "step": 19
+  },
+  {
+   "text": "slang",
+   "syllables": "slang",
+   "step": 19
+  },
+  {
+   "text": "slange",
+   "syllables": "slan-ge",
+   "step": 19
+  },
+  {
+   "text": "spring",
+   "syllables": "spring",
+   "step": 19
+  },
+  {
+   "text": "springbok",
+   "syllables": "spring-bok",
+   "step": 19
+  },
+  {
+   "text": "vang",
+   "syllables": "vang",
+   "step": 19
+  },
+  {
+   "text": "aanhou",
+   "syllables": "aan-hou",
+   "step": 20
+  },
+  {
+   "text": "blou",
+   "syllables": "blou",
+   "step": 20
+  },
+  {
+   "text": "bou",
+   "syllables": "bou",
+   "step": 20
+  },
+  {
+   "text": "gehou",
+   "syllables": "ge-hou",
+   "step": 20
+  },
+  {
+   "text": "gou",
+   "syllables": "gou",
+   "step": 20
+  },
+  {
+   "text": "goue",
+   "syllables": "gou-e",
+   "step": 20
+  },
+  {
+   "text": "hou",
+   "syllables": "hou",
+   "step": 20
+  },
+  {
+   "text": "hout",
+   "syllables": "hout",
+   "step": 20
+  },
+  {
+   "text": "jou",
+   "syllables": "jou",
+   "step": 20
+  },
+  {
+   "text": "joune",
+   "syllables": "jou-ne",
+   "step": 20
+  },
+  {
+   "text": "juffrou",
+   "syllables": "juf-frou",
+   "step": 20
+  },
+  {
+   "text": "mevrou",
+   "syllables": "me-vrou",
+   "step": 20
+  },
+  {
+   "text": "nou",
+   "syllables": "nou",
+   "step": 20
+  },
+  {
+   "text": "onthou",
+   "syllables": "ont-hou",
+   "step": 20
+  },
+  {
+   "text": "ou",
+   "syllables": "ou",
+   "step": 20
+  },
+  {
+   "text": "ouers",
+   "syllables": "ou-ers",
+   "step": 20
+  },
+  {
+   "text": "ouma",
+   "syllables": "ou-ma",
+   "step": 20
+  },
+  {
+   "text": "oupa",
+   "syllables": "ou-pa",
+   "step": 20
+  },
+  {
+   "text": "sou",
+   "syllables": "sou",
+   "step": 20
+  },
+  {
+   "text": "tou",
+   "syllables": "tou",
+   "step": 20
+  },
+  {
+   "text": "toue",
+   "syllables": "tou-e",
+   "step": 20
+  },
+  {
+   "text": "troue",
+   "syllables": "trou-e",
+   "step": 20
+  },
+  {
+   "text": "vrou",
+   "syllables": "vrou",
+   "step": 20
+  },
+  {
+   "text": "vroue",
+   "syllables": "vrou-e",
+   "step": 20
+  },
+  {
+   "text": "wou",
+   "syllables": "wou",
+   "step": 20
+  },
+  {
+   "text": "albei",
+   "syllables": "al-bei",
+   "step": 21
+  },
+  {
+   "text": "baklei",
+   "syllables": "ba-klei",
+   "step": 21
+  },
+  {
+   "text": "bereik",
+   "syllables": "be-reik",
+   "step": 21
+  },
+  {
+   "text": "eie",
+   "syllables": "eie",
+   "step": 21
+  },
+  {
+   "text": "eier",
+   "syllables": "eier",
+   "step": 21
+  },
+  {
+   "text": "eiers",
+   "syllables": "eiers",
+   "step": 21
+  },
+  {
+   "text": "einde",
+   "syllables": "ein-de",
+   "step": 21
+  },
+  {
+   "text": "geheim",
+   "syllables": "ge-heim",
+   "step": 21
+  },
+  {
+   "text": "geheime",
+   "syllables": "ge-hei-me",
+   "step": 21
+  },
+  {
+   "text": "heining",
+   "syllables": "hei-ning",
+   "step": 21
+  },
+  {
+   "text": "klein",
+   "syllables": "klein",
+   "step": 21
+  },
+  {
+   "text": "kleine",
+   "syllables": "klei-ne",
+   "step": 21
+  },
+  {
+   "text": "kleiner",
+   "syllables": "klei-ner",
+   "step": 21
+  },
+  {
+   "text": "kleinkinders",
+   "syllables": "klein-kin-ders",
+   "step": 21
+  },
+  {
+   "text": "kleinste",
+   "syllables": "kleins-te",
+   "step": 21
+  },
+  {
+   "text": "meisie",
+   "syllables": "mei-sie",
+   "step": 21
+  },
+  {
+   "text": "meisies",
+   "syllables": "mei-sies",
+   "step": 21
+  },
+  {
+   "text": "paleis",
+   "syllables": "pa-leis",
+   "step": 21
+  },
+  {
+   "text": "piepklein",
+   "syllables": "piep-klein",
+   "step": 21
+  },
+  {
+   "text": "reis",
+   "syllables": "reis",
+   "step": 21
+  },
+  {
+   "text": "trein",
+   "syllables": "trein",
+   "step": 21
+  },
+  {
+   "text": "uiteindelik",
+   "syllables": "uit-ein-de-lik",
+   "step": 21
+  },
+  {
+   "text": "veilig",
+   "syllables": "vei-lig",
+   "step": 21
+  },
+  {
+   "text": "veilige",
+   "syllables": "vei-li-ge",
+   "step": 21
+  },
+  {
+   "text": "vleis",
+   "syllables": "vleis",
+   "step": 21
+  },
+  {
+   "text": "beurt",
+   "syllables": "beurt",
+   "step": 22
+  },
+  {
+   "text": "deur",
+   "syllables": "deur",
+   "step": 22
+  },
+  {
+   "text": "deurmekaar",
+   "syllables": "deur-me-kaar",
+   "step": 22
+  },
+  {
+   "text": "dwarsdeur",
+   "syllables": "dwars-deur",
+   "step": 22
+  },
+  {
+   "text": "gebeur",
+   "syllables": "ge-beur",
+   "step": 22
+  },
+  {
+   "text": "geskeur",
+   "syllables": "ge-skeur",
+   "step": 22
+  },
+  {
+   "text": "geur",
+   "syllables": "geur",
+   "step": 22
+  },
+  {
+   "text": "heup",
+   "syllables": "heup",
+   "step": 22
+  },
+  {
+   "text": "heuwel",
+   "syllables": "heu-wel",
+   "step": 22
+  },
+  {
+   "text": "heuwels",
+   "syllables": "heu-wels",
+   "step": 22
+  },
+  {
+   "text": "kleinseun",
+   "syllables": "klein-seun",
+   "step": 22
+  },
+  {
+   "text": "kleur",
+   "syllables": "kleur",
+   "step": 22
+  },
+  {
+   "text": "kleure",
+   "syllables": "kleu-re",
+   "step": 22
+  },
+  {
+   "text": "kleurvolle",
+   "syllables": "kleur-vol-le",
+   "step": 22
+  },
+  {
+   "text": "neus",
+   "syllables": "neus",
+   "step": 22
+  },
+  {
+   "text": "onderdeur",
+   "syllables": "on-der-deur",
+   "step": 22
+  },
+  {
+   "text": "reuk",
+   "syllables": "reuk",
+   "step": 22
+  },
+  {
+   "text": "reus",
+   "syllables": "reus",
+   "step": 22
+  },
+  {
+   "text": "reuse",
+   "syllables": "reu-se",
+   "step": 22
+  },
+  {
+   "text": "seun",
+   "syllables": "seun",
+   "step": 22
+  },
+  {
+   "text": "seuns",
+   "syllables": "seuns",
+   "step": 22
+  },
+  {
+   "text": "sleutel",
+   "syllables": "sleu-tel",
+   "step": 22
+  },
+  {
+   "text": "teleurstelling",
+   "syllables": "te-le-ur-stel-ling",
+   "step": 22
+  },
+  {
+   "text": "velkleur",
+   "syllables": "vel-kleur",
+   "step": 22
+  },
+  {
+   "text": "vreugde",
+   "syllables": "vreug-de",
+   "step": 22
+  },
+  {
+   "text": "bestuurder",
+   "syllables": "be-stuur-der",
+   "step": 23
+  },
+  {
+   "text": "busbestuurder",
+   "syllables": "bus-bestuur-der",
+   "step": 23
+  },
+  {
+   "text": "buur",
+   "syllables": "buur",
+   "step": 23
+  },
+  {
+   "text": "buurman",
+   "syllables": "buur-man",
+   "step": 23
+  },
+  {
+   "text": "buurt",
+   "syllables": "buurt",
+   "step": 23
+  },
+  {
+   "text": "buurvrou",
+   "syllables": "buur-vrou",
+   "step": 23
+  },
+  {
+   "text": "duur",
+   "syllables": "duur",
+   "step": 23
+  },
+  {
+   "text": "gestuur",
+   "syllables": "ge-stuur",
+   "step": 23
+  },
+  {
+   "text": "huur",
+   "syllables": "huur",
+   "step": 23
+  },
+  {
+   "text": "huurmotor",
+   "syllables": "huur-mo-tor",
+   "step": 23
+  },
+  {
+   "text": "instituut",
+   "syllables": "in-sti-tuut",
+   "step": 23
+  },
+  {
+   "text": "kultuur",
+   "syllables": "kul-tuur",
+   "step": 23
+  },
+  {
+   "text": "muur",
+   "syllables": "muur",
+   "step": 23
+  },
+  {
+   "text": "natuurlik",
+   "syllables": "na-tuur-lik",
+   "step": 23
+  },
+  {
+   "text": "nuus",
+   "syllables": "nuus",
+   "step": 23
+  },
+  {
+   "text": "nuuskierig",
+   "syllables": "nuuskie-rig",
+   "step": 23
+  },
+  {
+   "text": "nuut",
+   "syllables": "nuut",
+   "step": 23
+  },
+  {
+   "text": "puur",
+   "syllables": "puur",
+   "step": 23
+  },
+  {
+   "text": "stuur",
+   "syllables": "stuur",
+   "step": 23
+  },
+  {
+   "text": "suur",
+   "syllables": "suur",
+   "step": 23
+  },
+  {
+   "text": "tuur",
+   "syllables": "tuur",
+   "step": 23
+  },
+  {
+   "text": "uur",
+   "syllables": "uur",
+   "step": 23
+  },
+  {
+   "text": "vuur",
+   "syllables": "vuur",
+   "step": 23
+  },
+  {
+   "text": "vuurmaakhout",
+   "syllables": "vuur-maak-hout",
+   "step": 23
+  },
+  {
+   "text": "weggestuur",
+   "syllables": "weg-ge-stuur",
+   "step": 23
+  },
+  {
+   "text": "afhê",
+   "syllables": "af-hê",
+   "step": 24
+  },
+  {
+   "text": "aflê",
+   "syllables": "af-lê",
+   "step": 24
+  },
+  {
+   "text": "afsê",
+   "syllables": "af-sê",
+   "step": 24
+  },
+  {
+   "text": "blêr",
+   "syllables": "blêr",
+   "step": 24
+  },
+  {
+   "text": "byhê",
+   "syllables": "by-hê",
+   "step": 24
+  },
+  {
+   "text": "bêre",
+   "syllables": "bê-re",
+   "step": 24
+  },
+  {
+   "text": "gebêre",
+   "syllables": "ge-bê-re",
+   "step": 24
+  },
+  {
+   "text": "gelê",
+   "syllables": "ge-lê",
+   "step": 24
+  },
+  {
+   "text": "gesê",
+   "syllables": "ge-sê",
+   "step": 24
+  },
+  {
+   "text": "hê",
+   "syllables": "hê",
+   "step": 24
+  },
+  {
+   "text": "inhê",
+   "syllables": "in-hê",
+   "step": 24
+  },
+  {
+   "text": "lê",
+   "syllables": "lê",
+   "step": 24
+  },
+  {
+   "text": "lêer",
+   "syllables": "lê-er",
+   "step": 24
+  },
+  {
+   "text": "nasê",
+   "syllables": "na-sê",
+   "step": 24
+  },
+  {
+   "text": "nêrens",
+   "syllables": "nê-rens",
+   "step": 24
+  },
+  {
+   "text": "omhê",
+   "syllables": "om-hê",
+   "step": 24
+  },
+  {
+   "text": "ophê",
+   "syllables": "op-hê",
+   "step": 24
+  },
+  {
+   "text": "opsê",
+   "syllables": "op-sê",
+   "step": 24
+  },
+  {
+   "text": "populêrste",
+   "syllables": "po-pu-lêrs-te",
+   "step": 24
+  },
+  {
+   "text": "skêr",
+   "syllables": "skêr",
+   "step": 24
+  },
+  {
+   "text": "sê",
+   "syllables": "sê",
+   "step": 24
+  },
+  {
+   "text": "voorlê",
+   "syllables": "voor-lê",
+   "step": 24
+  },
+  {
+   "text": "vêr",
+   "syllables": "vêr",
+   "step": 24
+  }
+ ],
+ "reader_details": {}
+}

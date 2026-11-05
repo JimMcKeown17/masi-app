@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
-verification_state: LOCAL_TESTED
+delivery_state: RELEASED
+verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 95
 confidence_basis: The values come from a hand-written JSON file unchanged since the SQLite cutover, and EAS remote versioning never writes versionCode into the Expo config the export reads. Tests reproduced the null build, the 'unknown' commit and the frozen label, then the derived values.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T09:57:55Z
+updated_at_utc: 2026-11-05T15:33:41Z
 first_observed_at: 2026-10-30T16:45:07Z
 last_observed_at: 2026-10-30T16:57:44Z
 
@@ -152,7 +152,7 @@ Use installed native build on the matching platform with config fallback, extra.
 - [x] A03s check (2026-10-31): build number and label from the installed binary; commit pending the next EAS build.
 
 - [x] Unit test that the export uses the native build number.
-- [ ] Check a bundle from the next build.
+- [x] Check a bundle from the next build (2026-11-05: receipts `cdb020e4` iOS 28, `90a17f75` Android 58).
 
 ## Timeline
 
@@ -162,6 +162,8 @@ Use installed native build on the matching platform with config fallback, extra.
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep; source traced |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #127; RED → GREEN evidence in build log; device checks pending |
 | 2026-10-31T09:57:55Z | Claude | Partly device-checked | Profile reads "1.5.0 (Build 1)" and diagnostics receipt `6049e8f2` carries `releaseLabel` "1.5.0 (1)", `buildNumber` 1 (the debug APK is versionCode 1). `gitCommit` was still "unknown": this debug APK has no dev client, so expo-constants reads the `assets/app.config` embedded at build time (built before this fix; verified by unzipping the APK), while Metro's manifest does carry the SHA. EAS embeds the config on the build server with `EAS_BUILD_GIT_COMMIT_HASH`; check on the next build |
+| 2026-11-05T15:33:41Z | Claude | Released | In the 1.5.0 pilot builds iOS 28 / Android 58, built from `8b79eae5` on 2026-11-03 and submitted to TestFlight and Play internal testing; they contain #128 (`a9458ac`). Android 58 installed on the A03s from Play 2026-11-05 (versionCode 58) |
+| 2026-11-05T15:33:41Z | Claude | Device-verified on real builds | Diagnostics receipts `cdb020e4` (iPhone 17, iOS 26.6.2, build 28) and `90a17f75` (A03s, build 58) carry `build` 28/58, `releaseLabel` "1.5.0 (28)" / "1.5.0 (58)" and `gitCommit` `8b79eae58699b4d591043368eb4e537868a6e048`, the commit the builds were made from |
 
 ## Open questions
 

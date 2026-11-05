@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: DEVICE_VERIFIED
 
 root_cause_confidence_pct: 95
 confidence_basis: Hosted receipt shows only "stale_version"; the server raises MV001 with a detail carrying both versions, and offlineSync.errorMessage reads only error.message. A test that runs the real MV001 error shape through the sync engine with real SQLite stored only the message before the fix and the detail after it.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-10-31T09:57:55Z
+updated_at_utc: 2026-11-05T15:33:41Z
 first_observed_at: 2026-10-30T16:57:26Z
 last_observed_at: 2026-10-30T16:57:26Z
 
@@ -161,6 +161,7 @@ Added a dedicated recordedFailure formatter; preserve message plus nonempty deta
 | 2026-10-30T23:30:00Z | Claude | Report recorded | First registry sweep; source traced |
 | 2026-10-31T02:06:37Z | Codex | Fixed in code; locally tested | Issue #126; RED → GREEN evidence in build log; device checks pending |
 | 2026-10-31T09:57:55Z | Claude | Device-verified: gate 5 repeated | Offline age edit of test child `83f09838…` against a server copy raised to `row_version` 10; receipt `d96747fb` (`ut:0123d1be`) lastError: "… stale_version \| details: children id=83f09838-… incoming row_version=3 stored row_version=10"; A03s `.kbtest` debug build on Metro from `fix/first-sweep-small-bugs` `2fa92cf`, default text size |
+| 2026-11-05T15:33:41Z | Claude | Released | In the 1.5.0 pilot builds iOS 28 / Android 58, built from `8b79eae5` on 2026-11-03 and submitted to TestFlight and Play internal testing; they contain #128 (`a9458ac`). Android 58 installed on the A03s from Play 2026-11-05 (versionCode 58) |
 
 ## Open questions
 
