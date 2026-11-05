@@ -583,6 +583,33 @@ test('Delete child leaves the child in a group this EA created but another EA no
   expect(server.t('child_group_memberships').get(MEMBERSHIP).removed_at).toBeUndefined();
 });
 
+// The phone's clock ran ahead when the EA's assignment and group membership were made and
+// acknowledged, then network time corrected it. Delete child ends this EA's own rows locally; an
+// end before the row's start would fail the phone's end-not-before-start rule and refuse the whole
+// Delete child. Each end is bounded by its start, as the server guard's rule 1 does.
+test('Delete child on a phone whose clock ran ahead when the child\'s own rows were made: the child leaves at once and the removal lands', async () => {
+  const ahead = new Date(Date.now() + 6 * 3600 * 1000).toISOString();
+  const ownAssignment = childEaAssignmentDomainId({ userId: USER, childId: C });
+  await seedBoth([...baseRows(), ...serverChildRows(C).map(([table, row, where]) => [table,
+    table === 'child_ea_assignments' ? { ...row, assigned_at: ahead } : row, where]),
+  ['child_group_memberships', { id: MEMBERSHIP, child_id: C, group_id: GROUP, joined_at: ahead, created_by: USER }]]);
+  await recordLesson(C);
+  tick();
+
+  expect(await repos.children.removeChild(C)).toBe(true);
+  expect(await read('select archive_reason from children where id = ?', C)).toEqual([{ archive_reason: 'removed_by_ea' }]);
+  expect(await read('select unassigned_at from child_ea_assignments where id = ?', ownAssignment)).toEqual([{ unassigned_at: ahead }]);
+  expect(await read('select removed_at from child_group_memberships where id = ?', MEMBERSHIP)).toEqual([{ removed_at: ahead }]);
+  tick();
+  await sync();
+  elapseBackoff();
+  await sync();
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> ok`,
+  ]);
+  expect(await outbox()).toEqual([]);
+});
+
 // Second review (reviewer repro zzR2R1): the "removed" mark must survive a pull. For a co-held
 // child the server keeps the child live after this EA leaves, so a roster pull rewrites the local
 // child without any removal mark. The mark lives in the outbox instead: when the Delete child is

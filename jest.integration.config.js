@@ -94,6 +94,7 @@ module.exports = {
     '<rootDir>/__tests__/ChildrenContextPendingDelete.integration.test.js',
     '<rootDir>/__tests__/deleteChildChain.integration.test.js',
     '<rootDir>/__tests__/groupMembershipReAdd.integration.test.js',
+    '<rootDir>/__tests__/headOfficeRestore.integration.test.js',
     '<rootDir>/__tests__/ChildrenContextPull.integration.test.js',
     '<rootDir>/__tests__/ClassesContextPull.integration.test.js',
     '<rootDir>/__tests__/ClassesContext.plan5.test.js',

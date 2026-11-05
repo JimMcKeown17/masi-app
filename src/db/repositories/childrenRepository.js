@@ -1003,6 +1003,9 @@ export const createChildrenRepository = ({ database } = {}) => {
   //   the family and the queued history need, and the hard_delete waits for it
   //   (offlineSync findBlockingDependency). Ending it here would also drop it as local grant
   //   evidence while history for this child is still owed.
+  // - An end never precedes its row's start (the local CHECKs; the server guard's rule 1, end :=
+  //   greatest(end, start)): a row made while the phone's clock ran ahead would otherwise refuse
+  //   the whole Delete child until real time caught up.
   const removeChild = async (childId, {
     removedAt = new Date().toISOString(),
     transaction,
@@ -1022,12 +1025,12 @@ export const createChildrenRepository = ({ database } = {}) => {
       where o.table_name = '${tableName}' and o.record_id = ${tableName}.id and o.operation = 'insert'
     )`;
     await txn.runAsync(`
-      update child_ea_assignments set unassigned_at = ?, updated_at = ?
+      update child_ea_assignments set unassigned_at = max(?, assigned_at), updated_at = ?
       where child_id = ? and user_id = ? and unassigned_at is null
         and ${insertNotQueued('child_ea_assignments')}
     `, removedAt, removedAt, childId, actor);
     await txn.runAsync(`
-      update child_group_memberships set removed_at = ?, updated_at = ?
+      update child_group_memberships set removed_at = max(?, joined_at), updated_at = ?
       where child_id = ? and removed_at is null
         and group_id in (
           select group_id from group_ea_assignments where ea_user_id = ? and unassigned_at is null

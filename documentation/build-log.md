@@ -9097,3 +9097,104 @@ Office scripts do with `--apply`. A run is a dry run unless `--publish` is given
 unknown argument, and the `npm_config_dryrun` typo case published. Green: 58/58. DEPLOYMENT.md,
 CONTEXT.md and the `releaseMetadata.js` comment now say that only updates of this code published
 without the script show `1.5.0+?`; older bundles show the old footer.
+### 2026-11-05 — Lifecycle OTA: a child Head Office restores comes back on the phone (`feat/lifecycle-ota`, work order 6)
+
+Head Office is getting `restore child` (work order 5, HO branch): it reopens in place, with the same
+ids, starts and `row_version`, exactly what one Delete child ended. Before this OTA goes to every
+pilot phone we proved, through the real code paths, that the phone converges on its next normal
+pull with no help from the EA. New `__tests__/headOfficeRestore.integration.test.js`: real handle,
+real SQLite, real repositories, `lessonSave`, sync engine and the handle's pull services
+(`pullRoster`, `pullClasses`) over real supabase-js. `test-support/lifecycleServer.js` now answers
+the pull (`get_reconcile_acknowledgments` per `20261023120000`, and PostgREST GETs with embeds,
+`!inner`, eq/is/in filters, order and limit; every column returned, nulls included; an unmodelled
+query is a 500, never a plausible empty result), leaves `row_version` alone on server-side ends (as
+`20261105120300` does; it used to bump it), and has `restoreChild`, mirroring the work order 5 design.
+
+- **Passed first time:** a sole holder's child with local history (archived on the phone) and
+  without (deleted outright), and a co-held child this EA left (class-path and other-programme
+  co-holder): back in My Children with class and group, writable (an edit and a new lesson upload),
+  history still on the phone, the other EA's rows untouched. The pull reads full scope (no cursor),
+  so an in-place reopen without a version bump is seen; equal versions apply.
+- **Bug 1 (fixed): a refused relationship INSERT left a ghost row.** A membership INSERT refused
+  before the removal and stamped `REMOVED_WITH_CHILD` was never re-sent and blocked nothing, but its
+  local row stayed open (removeChild leaves rows with a queued INSERT open, and no pull or reconcile
+  ends a row that is not synced). After a restore the phone showed the child in a group the server
+  never held, even after the refused row left. RED: `expect(await groupsOf(C)).toEqual([])` received
+  `[GROUP]`. Fix: the `hard_delete` acknowledgement that stamps those rows also ends their local
+  rows (`stampRefusalsRemovedWithChild`); the outbox payload, and so the receipt digest, is unchanged.
+- **Bug 2 (fixed): a child added offline and deleted before its first upload never came back.**
+  Its INSERT was acknowledged while the removal waited, which leaves the row `pending`
+  (`hasRemainingOutbox`); the `hard_delete` acknowledgement never touched it, so the row stayed
+  `pending` with nothing queued and every pull refused the server's copy (pending-local-wins). RED:
+  after restore and pull, the local child still had `archived_at` and `archive_reason:
+  'removed_by_ea'`. Fix: `settleRemovedChildRow` sets such a row `synced` when the acknowledged
+  `hard_delete` was the child's last outbox row (same class as `beeea645`).
+- **Not supported, observed (throwaway probe, not committed):** a restore while the phone's
+  `hard_delete` is still queued. Lost response: the pull filter keeps the child hidden, and the
+  retried RPC removes it again at a new instant, undoing the restore. Never sent: the restore is
+  `already_active` and the later upload removes the child. Either way Head Office restores again
+  once the EA's receipt shows nothing waiting.
+- **1.5.0 (`f002e08`, read-only):** the pull code is the same; both Delete child paths converge
+  after an acknowledged removal, with two limits recorded in the contract map: a fast phone clock
+  splits a 1.5.0 archive chain across instants, and a 1.5.0 forced pass replays refused archives
+  (B3), so restore on a 1.5.0 phone needs the same precondition as a Head Office reopen.
+- Docs: contract map, Delete child paragraph (stamp ends local rows; settle rule) and new
+  "Head Office restore convergence" under Pull Persistence & Reconcile.
+- Verification (Node 20): `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js`
+  6/6 passed (the two bug tests RED before their fixes); `npx jest` 523 suites / 8,299 tests passed;
+  `npx jest -c jest.integration.config.js` 114 suites / 1,561 tests passed. No SQL or PostgreSQL
+  harness changed (client and fake server only); `npm run lint` does not exist.
+
+#### Review fixes (2026-11-05, same branch)
+
+An independent review of the work order 6 commits found one medium and three low defects. Each
+was reproduced in the repo's own suites first; the fixes keep to the Delete child and restore code.
+
+- **Medium (fixed, `e149a250`): a phone clock that ran ahead wedged the Delete child
+  acknowledgement and re-removed a restored child.** `stampRefusalsRemovedWithChild` ended each
+  refused relationship row at the acknowledgement time. A membership made while the clock ran ahead
+  starts after that, so the end failed the local CHECK `removed_at >= joined_at`, rolled back all of
+  `finalizeSuccess`, left the `hard_delete` `failed`, and re-sent `delete_child_if_no_history` on
+  every pass, so a child Head Office restored meanwhile was removed again. RED (new test in
+  `headOfficeRestore.integration.test.js`): three RPC calls, and the outbox showed `children
+  hard_delete failed SQLITE_CONSTRAINT_CHECK`. Fix: the end is the later of the acknowledgement time
+  and the row's start, the same as the server guard's rule 1 (`end := greatest(end, start)`). GREEN:
+  one RPC, the membership ends at its own start, and the restore sticks across later passes.
+- **Same cause, one step earlier (fixed, `9107d37c`):** `removeChild` ended this EA's assignment
+  and held-group memberships at the tap time, so the same clock skew refused the whole Delete child
+  (`CHECK constraint failed: unassigned_at is null or unassigned_at >= assigned_at`). It now uses the
+  same bound. New `deleteChildChain.integration.test.js` test: RED, then GREEN.
+- **Low (fixed, `941f53c2`):**
+  - New test for the commonest `settleRemovedChildRow` trigger: a Delete child request that fails
+    once on the network. Mutation-checked: removing the settle step, or narrowing it to `pending`
+    rows, fails this test, and no other test catches the narrowing.
+  - The fake `restoreChild` now follows RESTORE_BODY: its checks in order with their codes
+    (`removal_not_finished` while the child is archived but the EA still holds it;
+    `ea_never_held_child`), its choice of delivery row (open, then the app's deterministic id, then
+    latest ended), and `handover_reason` left alone. Each part failed against the old fake.
+  - Test claims corrected:
+    - A child added offline gets its ticks back through the mastery history walk, not the restore
+      pull. The test now asserts the server keeps the tick.
+    - The co-held test's check on the other EA is labelled as a premise check on the fake.
+    - The fake returns nulls only for the columns listed in `NULL_COLUMNS`.
+- **Noticed, not fixed (pre-existing on main, outside this slice):** the phone's other local end
+  writes are not bounded by the row's start either. These are pull reconcile at `pulledAt`
+  (`childrenRepository.js:163`, `:229`, `:284`, `classesRepository.js:270`, `groupsRepository.js:173`,
+  and others), Remove from group, and the class and group archive flows. Probe (throwaway, not
+  committed): an assignment whose start is 6h ahead and which Head Office ended. The pull logs
+  `Pulled child_ea_assignments batch transaction failed; retrying rows without reconcile: CHECK
+  constraint failed`, reports `reconcileCompleted: false`, and the assignment stays open on the
+  phone until real time passes its start. The same assignment without the skew ends normally. This
+  is the phone-side companion of MA-BUG-20261104-007, which guard rule 1 fixed on the server; it
+  needs its own record or an addendum to 007.
+- Docs: the contract map's Delete child paragraph (both start bounds; the settle trigger now
+  includes a failed request) and "Head Office restore convergence" (the fake's fidelity and what
+  it leaves out).
+- Verification (Node 20):
+  - `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js
+    __tests__/deleteChildChain.integration.test.js __tests__/groupMembershipReAdd.integration.test.js`:
+    24/24.
+  - `npx jest`: 523 suites / 8,303 tests passed.
+  - `npx jest -c jest.integration.config.js`: 114 suites / 1,565 tests passed.
+  - No SQL changed, and the wire is unchanged (the `deleteChildChain` wire fixture still matches),
+    so no PostgreSQL harness applies. `npm run lint` does not exist.
