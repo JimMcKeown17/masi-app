@@ -458,10 +458,14 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     return rows.map(toFailedItem);
   };
 
-  // Preserve the public count shape while sharing the file-wide unsent definition.
+  // Preserve the public count shape while sharing the file-wide unsent definition. needsAttention
+  // is the refused (terminal) share of the same rows: the sign-out sheet promises an upload only
+  // for the rest (MA-BUG-20261104-020).
   const countUnsent = async () => {
-    const { total, byTable } = await readUnsentSummary(await resolveDatabase(database));
-    return { total, byTable };
+    const db = await resolveDatabase(database);
+    const { total, byTable } = await readUnsentSummary(db);
+    const refused = await db.getFirstAsync("select count(*) as count from sync_outbox where status = 'terminal'");
+    return { total, byTable, needsAttention: refused?.count ?? 0 };
   };
 
   const getSyncStatus = async () => {

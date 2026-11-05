@@ -10,6 +10,7 @@ export const UNSENT_CHECK_FAILED = "Couldn't check for work that hasn't uploaded
 export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, isOnline, syncNow }) {
   const [step, setStep] = useState(null);
   const [unsentCount, setUnsentCount] = useState(0);
+  const [needsAttentionCount, setNeedsAttentionCount] = useState(0);
   const [busy, setBusy] = useState(null);
   const [message, setMessage] = useState(null);
   const attempt = useRef(0);
@@ -29,8 +30,9 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
   const goToUnsent = useCallback(async (mine) => {
     setBusyState('checking');
     let total;
+    let needsAttention;
     try {
-      ({ total } = await countUnsent());
+      ({ total, needsAttention = 0 } = await countUnsent());
     } catch (error) {
       if (!isLive(mine)) return;
       setBusyState(null);
@@ -45,6 +47,7 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
     setBusyState(null);
     if (total === 0) { await finish(mine); return; }
     setUnsentCount(total);
+    setNeedsAttentionCount(Math.min(needsAttention, total));
     setMessage(null);
     setStep('unsent');
   }, [countUnsent, finish]);
@@ -99,7 +102,7 @@ export function useSignOutFlow({ signOut, countUnsent, isClockedIn, clockOut, is
   }, []);
 
   return {
-    step, unsentCount, busy, message,
+    step, unsentCount, needsAttentionCount, busy, message,
     start, clockOutNow, stayClockedIn, tryUploadNow, recheck, signOutAnyway, cancel,
   };
 }
