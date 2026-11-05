@@ -5665,6 +5665,13 @@ in the tile row. JS only; no data or save change.
 | --- | --- | --- | --- |
 | 2026-11-05 | RED: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/LessonWrapUpScreen.test.js __tests__/NumeracyWrapUpScreen.test.js` with the updated tests | RED: 6 failed, 39 passed (45) | Failures are the new heading, card, rows, "None yet" and Number tracker row. |
 | 2026-11-05 | GREEN: same command after `WrapUpChildCard` / `WrapUpTrackerRow` | PASS: 45/45 | Mockup said "Reading Tracker"; built as "Reading level" because CONTEXT.md makes that the term and the row opens the level picker. Note copy dropped the letters ("Tap a letter if the child knows it…") because "Tap k u if … knows it" misreads with several letters. |
+| 2026-11-05 | Full unit gate: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent` | First run: 4 failed in `LessonWrapUp.save` and `letterOrderAgreement` (they read the letter order from the old "Who knows s a n d…" heading). Both already check the tile order, so the heading lines now assert the new heading. Rerun PASS: **518 suites / 8,286 tests** | |
+| 2026-11-05 | Integration gate: `npm run test:integration` | PASS: **111 suites / 1,533 tests** | |
+| 2026-11-05 | Release tree `release/ota-wrap-up-cards` = `origin/feat/app-release-card` `513dd664` (contains live `b759128f`) + `014a069a`, merge `1bddda8e`; the five Wrap up suites | PASS: 70/70 (an earlier 7-fail run was CPU contention with the full gate; each suite passes alone) | Built on the stack, not main, because main lacked the live 1.5.0+4 code; coordinated with the lifecycle session. |
+| 2026-11-05 | `npm run ota:publish -- --message "Wrap up: one card per child, matching tracker rows"` (dry run), then `--publish` | PASS: guard saw phones on 1.5.0+4 (`dd1ef964`, `b759128f`) in HEAD's history. Published **1.5.0+5** on `preview`, group `3ec327af-f25e-417d-bc7a-80acc934c0e0`, android + ios, runtime 1.5.0; Sentry maps uploaded | 1bddda8e is now the live commit: main cannot publish until it contains #169. |
+| 2026-11-05 | Galaxy A03s, Android build 58, density 320 (360 dp, as found), default text; account Test (Literacy) | PASS: two cold starts → Profile App release 1.5.0+5, source `1bddda8`. Wrap up for a 3-child group with o, k ticked: heading and note, one card per child, avatar/tiles/row labels on one 16 dp edge, None yet chip centred on 48 dp tiles, full-width hairlines, Letter tracker 8/26 and Reading level rows identical in height and type; both rows open their sheets; None yet selected state correct | Recorded without clocking in; nothing saved; draft discarded afterwards. Numeracy Wrap up not device-checked (no numeracy EA signed in on the A03); covered by its suites. |
+| 2026-11-05 | "None yet" removed (Jim: it made little sense). RED: `npx jest` on LessonWrapUpScreen, lessonDraftState, lessonRecord | RED: 5 failed / 65; GREEN after removal: 104/104 across those plus lessonDraftController, LessonWrapUp.save, letterOrderAgreement | `tracker_check` had no reader anywhere (app, backend, both dashboards); numeracy dropped the same chip 2026-10-31. Key kept, now `marked` or null; an older draft's `noOneNew` is ignored. |
+| 2026-11-05 | After merging `origin/main` `f4ba06bd` (#163, #167): full unit and integration gates | PASS: **527 suites / 8,573 tests**; integration **114 / 1,568** | An earlier integration run was stopped because the merge landed mid-run. |
 
 ## Decision Register
 
@@ -10060,3 +10067,55 @@ commits reworked `src/` lines changed by the commit phones run (safe; `git branc
 restores the ref while the commit is still in the clone). On a refusal, the check runs up to 20
 `merge-tree`s at HEAD plus a first-parent walk per tip. Each walk is short when the tip has merged
 main recently (148–453 ms on the real history).
+
+### 2026-11-05 — Lifecycle stack merged to main; post-merge audit; Jim's offline lesson + Delete child check (`feat/app-release-card`, work order 11)
+
+**Merges (squash).** #160 `3458adc9` (bug records and the plan), #161 `f0a34da3` (server batch),
+#162 `58414b60` (Head Office lifecycle script with `restore child`, daily invariant check), #163
+`ccd064a1` (lifecycle app update). #167 (App release card, `ota:publish` with the rollback guard)
+and #168 (bug records) merge next. Trees compared with `git rev-parse <sha>^{tree}` against each
+PR's head (`gh pr view N --json headRefOid,mergeCommit`): the #161, #162 and #163 squashes equal the
+PR heads CI passed on. #160's does not: its CI ran 15:44–16:01 UTC, before #165 merged (17:55),
+and the squash landed on main `9f6b0f96`. Its tree equals `git merge-tree --write-tree 9f6b0f96
+<head>` (no conflict), and #160 changed only `docs/` and `documentation/`.
+
+**Post-merge audit** (read-only, 7 agents). No file that reaches the app bundle differs between
+`b759128f` (what `1.5.0+4` runs) and the merged tree: only `package.json` scripts entries, docs,
+tests, `scripts/` and `supabase/` differ. So the merge needs no new update. The doc drifts it found
+are fixed in this commit: contract map (R1 applied), interim rules (a concrete app-update test and a
+dated status line), runbook (rule 1's lift now links to the interim rules), DEPLOYMENT (bundles
+without the card; JS-only changes ship with `ota:publish`), CONTEXT (App release footer wording;
+`ho:restore`), ADR-0014 (`restore child` row), documentation README (interim rules row), ROADMAP
+(lifecycle gate item; the OTA wrapper item narrowed to what `ota:publish` does not do yet), and a
+status note at the top of the plan. Left alone (optional): escaping `|` inside register table rows.
+
+**The app-update test.** A phone has the lifecycle app update when Profile → App release shows
+Release `1.5.0+4` or later and its Send diagnostics receipt has `observed.update.otaRelease` ≥ 4.
+That field is set in `src/utils/runtimeDiagnostics.js` from `buildReleaseIdentity`
+(`src/utils/releaseMetadata.js`), and the receipt's `observed` column stores that snapshot. Group
+`9542a163` (a bare `eas update`, counted as 3) and `1.5.0+1` (`8addaae6`) carry none:
+`git show <commit>:src/utils/runtimeDiagnostics.js` has no `otaRelease` at `fd053cfc`, `9f6b0f96`
+or `8b79eae5`. Live since about 19:55 UTC: `1.5.0+5`, group `3ec327af` from `1bddda8e` (this
+branch at `513dd664` plus the Wrap up child-cards redesign, #169, not yet on main), published by
+another session with `ota:publish`; the guard passed against `1.5.0+4`.
+
+**Jim's device check** (iPhone, build 28 on `1.5.0+4`, staging). An offline lesson with a child in
+a class two test EA accounts both hold, then Delete child. On the server: the lesson, its
+attendance and 2 letter ticks were written 18:44:00–01 UTC; at 18:44:19.719975 UTC the server ended
+only that EA's direct assignment and group membership, in one transaction. The child stayed live
+(the other EA holds it through the class), its class membership and enrollment stayed open, and no
+incident receipts arrived after. Not covered: removing a group or class after an offline lesson;
+the second EA's phone was not opened.
+
+**Open.**
+- #157: the two-phone check on installed 1.5.0.
+- #158: the app update device gate and per-phone uptake. Plan step G1.1 (re-freeze the T1
+  disposition fixture for the update commit; replay the all-offline Delete child chain's wire
+  requests into Postgres with the server batch) was not done before the update went live.
+- #159: field verification during the retest.
+- The fix decision for MA-BUG-20261105-003, and the first live `--apply` of the Head Office
+  script (Jim).
+- #167 and #168 merge. Main must take #169 before the next publish from main, or the guard will
+  refuse it. That is the guard working as intended, not a bug.
+
+Docs only: no source, script, test or SQL change, so no suites were run.

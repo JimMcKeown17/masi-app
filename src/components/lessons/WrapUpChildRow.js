@@ -4,11 +4,10 @@ import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 import { countMastered } from '../../utils/masteryState';
 import LetterToggleTile from '../sessions/LetterToggleTile';
-import ToggleChip from '../common/ToggleChip';
 import WrapUpChildCard, { WrapUpTrackerRow } from './WrapUpChildCard';
 
 export default function WrapUpChildRow({ child, letters, trackerLetters, authority, mastery, changes,
-  readingLevel, noOneNew, onLetter, onNoOneNew, onOpenTracker, onOpenLevel }) {
+  readingLevel, onLetter, onOpenTracker, onOpenLevel }) {
   const assessmentMastered = mastery?.assessmentMastered ?? new Set();
   const taughtLetters = new Set(mastery?.taughtRecords.map(row => row.letter) ?? []);
   const count = trackerLetters ? countMastered({ assessmentMastered, taughtLetters,
@@ -34,14 +33,11 @@ export default function WrapUpChildRow({ child, letters, trackerLetters, authori
           tone={locked ? 'locked' : added ? 'taughtNew' : known ? 'taught' : 'rest'}
           disabled={locked || !mastery} accessibilityLabel={`${letter}, ${description}`}
           accessibilityState={{ selected: locked || known }} onPress={() => onLetter(letter)} />;
-      })}
-        <ToggleChip selected={!!noOneNew} label="None yet"
-          accessibilityLabel={`${name}, none of these yet`} onPress={onNoOneNew} />
-      </View> : null
+      })}</View> : null
       : <Text style={styles.note}>Letters can't be updated for this child</Text>}
   </WrapUpChildCard>;
 }
 const styles = StyleSheet.create({
   note: { ...typeRoles.textNote, color: colors.textSecondary },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

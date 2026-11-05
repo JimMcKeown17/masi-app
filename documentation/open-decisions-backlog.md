@@ -12,7 +12,7 @@ Decision Register. Jim's final wording/decision pass covers: **P1** standard pic
 **P2** separate Wrap up screen; **P3** first-change/Wrap-up draft creation; **P4** leave-and-keep
 warning with separate Discard (Jim's 2026-10-22 instruction); **P5** Home Resume without clock-in;
 **P6** explicit missing-language choice and isiZulu manual capture; **P7** ungrouped-only group
-creation/placement; **P8** per-child No one new yet, aggregated tracker check; **P9** last-seen
+creation/placement; **P8** per-child No one new yet, aggregated tracker check (answer removed 2026-11-05; `tracker_check` is now marked or null); **P9** last-seen
 labels; **P10** old form retired; **P11** letters-only release packs and preview-content device
 coverage; **P12** completion gains language code, blend/book receipt deferred. The build log
 links each decision to source. These are implemented calls, not twelve unbuilt features.

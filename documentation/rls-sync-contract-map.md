@@ -299,7 +299,8 @@ Decision record: [ADR-0014](../docs/adr/0014-history-authorized-by-what-was-held
 Plan: [`2026-11-04-lifecycle-safety.md`](../docs/superpowers/plans/2026-11-04-lifecycle-safety.md).
 Migrations: `20261105120000_remove_destructive_capabilities`, `20261105120100_lifecycle_end_guard`,
 `20261105120200_held_at_time_history_authority`, `20261105120300_child_removal_actor_scoped`.
-Not yet applied to `masi-app-sqlite`; staging apply and the two-phone gate are step R1.
+Applied to `masi-app-sqlite` on 2026-11-05 (step R1; build log, "Lifecycle safety server batch
+applied to staging"). The two-phone check on installed 1.5.0 (#157) is still open.
 
 **Absorb, don't refuse.** A migration reaches every installed 1.5.0 phone at once. A server
 change may only relax a rule, or turn a refusal into an answer the 1.5.0 client (`f002e08`)

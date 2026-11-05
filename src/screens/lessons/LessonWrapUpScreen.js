@@ -210,10 +210,9 @@ export default function LessonWrapUpScreen({ navigation, route }) {
       {draft && metadata ? ids.map(id => metadata.children[id] ? <WrapUpChildRow key={id}
         child={metadata.children[id]} letters={letters} trackerLetters={trackerLetters}
         authority={metadata.authority[id] ?? {}} mastery={metadata.mastery[id]}
-        changes={draft.tracker_changes[id] ?? {}} noOneNew={draft.ticks.noOneNew?.includes(id)}
+        changes={draft.tracker_changes[id] ?? {}}
         readingLevel={draft.reading_level_changes[id] ?? metadata.children[id].reading_level}
         onLetter={letter => edit(toggleMark, id, letter, { mastered: true, languageCode, madeAt: new Date().toISOString() })}
-        onNoOneNew={() => edit(transitions.toggleNoOneNew, id)}
         onOpenTracker={() => setTrackerId(id)} onOpenLevel={() => setLevelId(id)} /> : null) : null}
       {draft ? <>
         <TextField onFocus={() => setNotesFocused(true)} onBlur={() => setNotesFocused(false)} label="Notes (optional)" value={draft.notes ?? ''} multiline

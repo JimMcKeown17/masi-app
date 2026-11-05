@@ -43,6 +43,7 @@ For status questions, do not infer progress from a plan:
 | [`egra_letter_sets.md`](./egra_letter_sets.md) | Human-readable EGRA letter-set reference |
 | [`field-app-capability-ledger.md`](./field-app-capability-ledger.md) | Maintained capability, evidence-level, known-limit, and next-verifier ledger |
 | [`field-app-portfolio-invariants.md`](./field-app-portfolio-invariants.md) | Maintained cross-app safety, evidence, and package-graduation contract |
+| [`lifecycle-interim-field-rules.md`](./lifecycle-interim-field-rules.md) | Interim EA, Head Office and support rules for removing children, classes and groups during the November 2026 retest, with what lifts each |
 | [`sqlite-staging-setup.md`](./sqlite-staging-setup.md) | Current SQLite-backend CLI and environment runbook |
 | [`sqlite-refactor-log.md`](./sqlite-refactor-log.md) | Compatibility redirect for historical links; new entries belong in the build log |
 

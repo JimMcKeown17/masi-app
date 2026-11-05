@@ -9,7 +9,7 @@ test('newLessonDraftInput starts with the group context and no edits', () => {
     programmeId: 'fallback', classId: 'class-1', languageCode: 'en', packId: 'pack', lessonDate: '2026-10-19' })).toEqual({
     group_id: 'g', programme_id: 'own', class_id: 'class-1', language_code: 'en', pack_id: 'pack', lesson_date: '2026-10-19',
     attendance: { childIds: ['c1', 'c2'], absentChildIds: [], addedChildIds: [] },
-    plan: null, plan_fixed_at: null, ticks: { letters: [], blends: [], books: [], noOneNew: [], blendTierShown: null },
+    plan: null, plan_fixed_at: null, ticks: { letters: [], blends: [], books: [], blendTierShown: null },
     tracker_changes: {}, reading_level_changes: {}, notes: null,
   });
   expect(state.newLessonDraftInput({ group: { id: 'g' }, members: [], programmeId: 'fallback',
@@ -64,14 +64,10 @@ test('an undone mark is gone: the sheet\'s map without it replaces the stored on
   const cleared = after(undone, state.setTrackerChanges, 'c1', {});
   expect(cleared.tracker_changes).not.toHaveProperty('c1');
 });
-test('an empty map leaves No one new yet as it was', () => {
-  const none = after(draft({ tracker_changes: {} }), state.toggleNoOneNew, 'c1');
-  expect(after(none, state.setTrackerChanges, 'c1', {}).ticks.noOneNew).toEqual(['c1']);
-});
-test('toggleNoOneNew toggles per child', () => {
-  const row = after(draft(), state.toggleNoOneNew, 'c1');
-  expect(row.ticks.noOneNew).toEqual(['c1']);
-  expect(state.toggleNoOneNew(row, 'c1').ticks.noOneNew).toEqual([]);
+test('there is no None yet transition, and tracker changes leave the ticks alone', () => {
+  expect(state).not.toHaveProperty('toggleNoOneNew');
+  const row = draft();
+  expect(state.setTrackerChanges(row, 'c1', { a: row.tracker_changes.c1.a })).not.toHaveProperty('ticks');
 });
 test('setReadingLevel stores only a chosen change', () => {
   expect(state.setReadingLevel(draft(), 'c2', 'Word Reading', 'Letter Knowledge').reading_level_changes).toEqual({
@@ -85,13 +81,13 @@ test('setNotes stores the text', () => {
   expect(state.setNotes(draft(), 'Notes')).toEqual({ notes: 'Notes' });
 });
 test('clearChildChanges clears only the selected child', () => {
-  const row = draft({ ticks: { ...draft().ticks, noOneNew: ['c1', 'c2'] }, tracker_changes: {
+  const row = draft({ tracker_changes: {
     ...draft().tracker_changes, c2: draft().tracker_changes.c1,
   } });
   const result = after(row, state.clearChildChanges, 'c1');
   expect(result.tracker_changes).toEqual({ c2: row.tracker_changes.c2 });
   expect(result.reading_level_changes).toEqual({});
-  expect(result.ticks.noOneNew).toEqual(['c2']);
+  expect(state.clearChildChanges(row, 'c1')).not.toHaveProperty('ticks');
 });
 test('chooseClass stores class, language, pack and plan together', () => {
   expect(state.chooseClass(draft(), { classId: 'c', languageCode: 'xh', packId: 'p', plan: { next: true } })).toEqual({
@@ -123,16 +119,6 @@ test('marking a child absent never changes membership or added children', () => 
   expect(Object.keys(patch)).toEqual(['attendance']);
   expect(patch.attendance.childIds).toEqual(row.attendance.childIds);
   expect(patch.attendance.addedChildIds).toEqual(['c3']);
-});
-test("No one new yet clears that child's marks for today's letters, and a later mark clears No one new yet", () => {
-  const row = draft({ tracker_changes: { c1: {
-    ...draft().tracker_changes.c1, z: { mastered: false, languageCode: 'en', madeAt: MON },
-  } } });
-  const none = after(row, state.toggleNoOneNew, 'c1');
-  expect(none.tracker_changes.c1).toEqual({ z: row.tracker_changes.c1.z });
-  expect(none.ticks.noOneNew).toEqual(['c1']);
-  const marked = after(none, state.setTrackerChanges, 'c1', row.tracker_changes.c1);
-  expect(marked.ticks.noOneNew).toEqual([]);
 });
 test('choosing the current level removes the reading-level change', () => {
   expect(state.setReadingLevel(draft(), 'c1', 'Letter Knowledge', 'Letter Knowledge').reading_level_changes).toEqual({});

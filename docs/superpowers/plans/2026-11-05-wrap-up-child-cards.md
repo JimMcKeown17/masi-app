@@ -64,3 +64,12 @@ Each child is a white card (`SurfaceCard` look: surface, `tints.rule` border, ra
 6. **Device check (A03s, default text size)**: two cold starts to take the update, Profile shows
    the new update; open a lesson's Wrap up for TestB's group and check cards, rows, chip and
    heading pixel by pixel; leave without saving (staging now holds EA retest data).
+
+## Update 2026-11-05: "None yet" removed
+
+Jim: the chip made little sense. Nothing read its answer (`tracker_check: 'none'` had no reader in
+the app, backend or dashboards), and the numeracy Wrap up had already dropped the same chip and
+field for that reason (2026-10-31). Removed: the chip, `toggleNoOneNew`, `ticks.noOneNew`. Kept:
+`activities.lesson.tracker_check`, now `'marked'` or `null`; an older draft's leftover
+`noOneNew` is ignored. A bolder "only tap what the child knows" warning is being mocked up
+(canvas row W1–W4) and lands in the same OTA.

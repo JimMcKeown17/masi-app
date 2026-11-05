@@ -50,12 +50,12 @@ test('cross-screen edits persist in order', async () => {
   await controller.ensureDraft();
   const held = await holdDraftWrite();
   const first = tick('a');
-  const second = controller.apply(state.toggleNoOneNew, 'c1');
+  const second = controller.apply(state.setNotes, 'Read well');
   const third = tick('m');
   await held.entered;
   held.release();
   await Promise.all([first, second, third]);
-  expect((await stored()).ticks).toMatchObject({ letters: ['a', 'm'], noOneNew: ['c1'] });
+  expect(await stored()).toMatchObject({ ticks: { letters: ['a', 'm'] }, notes: 'Read well' });
 });
 test('a second screen opening the draft while a write is held attaches and sees the pending edits', async () => {
   await start();
