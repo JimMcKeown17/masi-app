@@ -1,0 +1,11 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends assignment with row_version 5', $dml$UPDATE public.child_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02', row_version = '5' WHERE id = '0988d63d-a3ce-5ea8-9f06-6a21d0a828e5' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A archive row_version 2', $dml$UPDATE public.child_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-10-30 07:00:00+02', row_version = '2' WHERE id = '0988d63d-a3ce-5ea8-9f06-6a21d0a828e5' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('final', 'public.child_ea_assignments', '0988d63d-a3ce-5ea8-9f06-6a21d0a828e5', ARRAY['unassigned_at', 'row_version']);
+ROLLBACK;

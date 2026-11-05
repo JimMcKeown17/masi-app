@@ -1,0 +1,10 @@
+BEGIN;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('insert class_ea KA', $dml$INSERT INTO public.class_ea_assignments (id, class_id, ea_user_id, programme_id, assigned_at, created_by) VALUES ('f7d4c787-0457-5e47-a121-0056036ab0f5', '4a000000-0000-0000-0000-000000000002', '1a000000-0000-0000-0000-000000000002', (SELECT id FROM public.programmes WHERE code = 'literacy'), TIMESTAMPTZ '2026-10-01 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+SELECT harness.try_dml('archive', $dml$UPDATE public.class_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-10-15 08:00:00+02', handover_reason = NULL, row_version = '2' WHERE id = 'f7d4c787-0457-5e47-a121-0056036ab0f5' RETURNING id$dml$);
+SELECT harness.try_dml('re-assign insert-or-ignore same id', $dml$INSERT INTO public.class_ea_assignments (id, class_id, ea_user_id, programme_id, assigned_at, created_by) VALUES ('f7d4c787-0457-5e47-a121-0056036ab0f5', '4a000000-0000-0000-0000-000000000002', '1a000000-0000-0000-0000-000000000002', (SELECT id FROM public.programmes WHERE code = 'literacy'), TIMESTAMPTZ '2026-11-04 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('server row', 'public.class_ea_assignments', 'f7d4c787-0457-5e47-a121-0056036ab0f5', ARRAY['assigned_at', 'unassigned_at', 'row_version']);
+ROLLBACK;

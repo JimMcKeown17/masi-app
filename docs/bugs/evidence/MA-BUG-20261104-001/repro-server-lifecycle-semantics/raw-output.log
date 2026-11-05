@@ -1,0 +1,348 @@
+### L1.class_membership.direct_path — HO exits C_DIRECT from class K, then EA_A queued exit (EA_A still has direct assignment)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.class_membership.direct_path.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO exits membership (no row_version)", "returned": [{"id": "9a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive exit", "returned": [{"id": "9a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"id": "9a000000-0000-0000-0000-000000000001", "row": {"exited_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "final row", "table": "public.child_class_memberships"}
+
+
+### L1.class_membership.class_only_path — HO exits C_CLASSONLY from class K (EA_A reaches child only through K), then EA_A queued exit
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.class_membership.class_only_path.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO exits membership", "returned": [{"id": "9a000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive exit", "returned": [], "rows_affected": 0}
+{"id": "9a000000-0000-0000-0000-000000000002", "row": {"exited_at": "2026-11-03T07:00:00+00:00", "row_version": 1}, "step": "final row", "table": "public.child_class_memberships"}
+
+
+### L1.group_membership.direct_path — HO removes C_DIRECT from group G, then EA_A queued removal (EA_A has direct assignment + active group assignment)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.group_membership.direct_path.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO removes membership", "returned": [{"id": "9b000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive removal", "returned": [{"id": "9b000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"id": "9b000000-0000-0000-0000-000000000001", "row": {"removed_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "final row", "table": "public.child_group_memberships"}
+
+
+### L1.group_membership.group_only_path — HO removes C_GROUPONLY from group G (EA_A reaches child only through G), then EA_A queued removal
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.group_membership.group_only_path.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO removes membership", "returned": [{"id": "9b000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive removal", "returned": [], "rows_affected": 0}
+{"id": "9b000000-0000-0000-0000-000000000002", "row": {"removed_at": "2026-11-03T07:00:00+00:00", "row_version": 1}, "step": "final row", "table": "public.child_group_memberships"}
+
+
+### L1.enrollment.direct_path — HO ends C_DIRECT literacy enrolment, then EA_A queued enrolment archive
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.enrollment.direct_path.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends enrolment", "returned": [{"id": "a346575c-8206-5f67-97fa-8bd426dfee99"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive", "returned": [{"id": "a346575c-8206-5f67-97fa-8bd426dfee99"}], "rows_affected": 1}
+{"id": "a346575c-8206-5f67-97fa-8bd426dfee99", "row": {"ended_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "final row", "table": "public.child_programme_enrollments"}
+
+
+### L1.enrollment.class_only_path — HO ends C_CLASSONLY enrolment (class path still active), then EA_A queued enrolment archive
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.enrollment.class_only_path.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends enrolment", "returned": [{"id": "e960924b-4786-577a-8df0-12f787c9cb02"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive", "returned": [{"id": "e960924b-4786-577a-8df0-12f787c9cb02"}], "rows_affected": 1}
+{"id": "e960924b-4786-577a-8df0-12f787c9cb02", "row": {"ended_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "final row", "table": "public.child_programme_enrollments"}
+
+
+### L1.direct_assignment — HO ends EA_A direct assignment to C_DIRECT, then EA_A queued child_ea_assignments archive
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.direct_assignment.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends direct assignment", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5", "row": {"row_version": 2, "unassigned_at": "2026-11-02T08:00:00+00:00"}, "step": "final row", "table": "public.child_ea_assignments"}
+
+
+### L1.group_assignment_ended.membership_removal — HO ends EA_A group G assignment only; EA_A queued removal of C_DIRECT (still directly assigned) from G
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.group_assignment_ended.membership_removal.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends group G assignment", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued removal C_DIRECT from G", "returned": [], "rows_affected": 0}
+{"id": "9b000000-0000-0000-0000-000000000001", "row": {"removed_at": null, "row_version": 1}, "step": "final row", "table": "public.child_group_memberships"}
+
+
+### L1.class_assignment_ended.membership_exit — HO ends EA_A class K assignment only; EA_A queued exits for C_DIRECT (direct) and C_CLASSONLY (class path only)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.class_assignment_ended.membership_exit.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends class K assignment", "returned": [{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued exit C_DIRECT from K", "returned": [{"id": "9a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued exit C_CLASSONLY from K", "returned": [], "rows_affected": 0}
+{"id": "9a000000-0000-0000-0000-000000000001", "row": {"exited_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "C_DIRECT membership", "table": "public.child_class_memberships"}
+{"id": "9a000000-0000-0000-0000-000000000002", "row": {"exited_at": null, "row_version": 1}, "step": "C_CLASSONLY membership", "table": "public.child_class_memberships"}
+
+
+### L1.composite.archiveChild_after_HO_removed_all_paths — HO ends EA_A direct + class K + group G assignments; then EA_A phone archiveChild queue for C_DIRECT drains in push order
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L1.composite.archiveChild_after_HO_removed_all_paths.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends direct assignment", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends class K assignment", "returned": [{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends group G assignment", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends group GV_G1 assignment", "returned": [{"id": "6a4bd5e1-97cf-55c9-ae14-05ad17a7b024"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "2 children archive", "returned": [], "rows_affected": 0}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "3 enrolment archive", "returned": [], "rows_affected": 0}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "4 class membership exit", "returned": [], "rows_affected": 0}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "5 group membership G removal", "returned": [], "rows_affected": 0}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "5 group membership GV_G1 removal", "returned": [], "rows_affected": 0}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "7 child_ea_assignments archive", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"id": "5a000000-0000-0000-0000-000000000001", "row": {"archived_at": null, "row_version": 1}, "step": "children", "table": "public.children"}
+{"id": "a346575c-8206-5f67-97fa-8bd426dfee99", "row": {"ended_at": null}, "step": "enrolment", "table": "public.child_programme_enrollments"}
+{"id": "9a000000-0000-0000-0000-000000000001", "row": {"exited_at": null}, "step": "class membership", "table": "public.child_class_memberships"}
+{"id": "9b000000-0000-0000-0000-000000000001", "row": {"removed_at": null}, "step": "group membership G", "table": "public.child_group_memberships"}
+{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5", "row": {"row_version": 2, "unassigned_at": "2026-11-02T08:00:00+00:00"}, "step": "child_ea", "table": "public.child_ea_assignments"}
+
+[stderr]
+NOTICE:  identifier "masi-history-rls-L1.composite.archiveChild_after_HO_removed_all_paths" will be truncated to "masi-history-rls-L1.composite.archiveChild_after_HO_removed_all"
+
+
+### L2.child_ea.HO_no_version — HO ends EA_A child assignment without row_version; EA_A archive arrives later with a different unassigned_at
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.child_ea.HO_no_version.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends assignment (row_version omitted => stays 1)", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5", "row": {"row_version": 1, "unassigned_at": "2026-11-03T07:00:00+00:00"}, "step": "after HO", "table": "public.child_ea_assignments"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A later-arriving archive with a different unassigned_at, row_version 2", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5", "row": {"row_version": 2, "unassigned_at": "2026-10-30T05:00:00+00:00"}, "step": "final", "table": "public.child_ea_assignments"}
+
+
+### L2.class_ea.HO_no_version — HO ends EA_A class K assignment without row_version; EA_A archive arrives later
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.class_ea.HO_no_version.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends assignment (row_version omitted => stays 1)", "returned": [{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0"}], "rows_affected": 1}
+{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0", "row": {"row_version": 1, "unassigned_at": "2026-11-03T07:00:00+00:00", "handover_reason": "HO handover"}, "step": "after HO", "table": "public.class_ea_assignments"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A later-arriving archive with a different unassigned_at, row_version 2", "returned": [{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0"}], "rows_affected": 1}
+{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0", "row": {"row_version": 2, "unassigned_at": "2026-10-30T05:00:00+00:00", "handover_reason": null}, "step": "final", "table": "public.class_ea_assignments"}
+
+
+### L2.group_ea.HO_no_version — HO ends EA_A group G assignment without row_version; EA_A archive arrives later
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.group_ea.HO_no_version.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends assignment (row_version omitted => stays 1)", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"id": "c189a976-3679-542d-966d-c9e28c04112e", "row": {"row_version": 1, "unassigned_at": "2026-11-03T07:00:00+00:00", "handover_reason": "HO handover"}, "step": "after HO", "table": "public.group_ea_assignments"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A later-arriving archive with a different unassigned_at, row_version 2", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"id": "c189a976-3679-542d-966d-c9e28c04112e", "row": {"row_version": 2, "unassigned_at": "2026-10-30T05:00:00+00:00", "handover_reason": null}, "step": "final", "table": "public.group_ea_assignments"}
+
+
+### L2.group_ea.restore_after_HO_end — HO ends EA_A group G assignment; EA_A phone restore (groupsRepository.js:149-153: unassigned_at null, handover_reason null)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.group_ea.restore_after_HO_end.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends group assignment", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A write_for_child(C_GROUPONLY) before restore", "returned": [{"can_write": false}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A restore", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A write_for_child(C_GROUPONLY) after restore", "returned": [{"can_write": true}], "rows_affected": 1}
+{"id": "c189a976-3679-542d-966d-c9e28c04112e", "row": {"row_version": 2, "unassigned_at": null, "handover_reason": null}, "step": "final", "table": "public.group_ea_assignments"}
+
+
+### L2.group_ea.restore_after_HO_handover_to_EA_B — HO ends EA_A group G assignment and gives G to EA_B; EA_A phone restore arrives
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.group_ea.restore_after_HO_handover_to_EA_B.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends EA_A group assignment", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO inserts EA_B active assignment (random id)", "returned": [{"id": "8b000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "EA_A restore", "table": "group_ea_assignments", "detail": null, "message": "duplicate key value violates unique constraint \"idx_group_ea_assignments_active_unique\"", "sqlstate": "23505", "constraint": "idx_group_ea_assignments_active_unique"}
+{"id": "c189a976-3679-542d-966d-c9e28c04112e", "row": {"row_version": 1, "unassigned_at": "2026-11-03T07:00:00+00:00", "handover_reason": "HO handover"}, "step": "final EA_A row", "table": "public.group_ea_assignments"}
+
+
+### L2.child_ea.HO_bumps_version — HO ends child assignment AND bumps row_version to 5; EA_A archive arrives with row_version 2
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.child_ea.HO_bumps_version.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends assignment with row_version 5", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "EA_A archive row_version 2", "table": null, "detail": "child_ea_assignments id=0988d63d-a3ce-5ea8-9f06-6a21d0a828e5 incoming row_version=2 stored row_version=5", "message": "stale_version", "sqlstate": "MV001", "constraint": null}
+{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5", "row": {"row_version": 5, "unassigned_at": "2026-11-03T07:00:00+00:00"}, "step": "final", "table": "public.child_ea_assignments"}
+
+
+### L2.group_ea.restore_HO_bumps_version — HO ends group assignment with row_version 5; EA_A restore with row_version 2
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.group_ea.restore_HO_bumps_version.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends group assignment with row_version 5", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "EA_A restore row_version 2", "table": null, "detail": "group_ea_assignments id=c189a976-3679-542d-966d-c9e28c04112e incoming row_version=2 stored row_version=5", "message": "stale_version", "sqlstate": "MV001", "constraint": null}
+{"id": "c189a976-3679-542d-966d-c9e28c04112e", "row": {"row_version": 5, "unassigned_at": "2026-11-03T07:00:00+00:00"}, "step": "final", "table": "public.group_ea_assignments"}
+
+
+### L2.children.HO_unarchive_then_EA_archive — HO archived then un-archived children C_EA (EA-created) and C_DIRECT (HO-created, EA_A direct); EA_A queued archives arrive afterwards
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.children.HO_unarchive_then_EA_archive.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO un-archives C_EA after an earlier archive", "returned": [{"id": "5a000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO un-archives C_DIRECT", "returned": [{"id": "5a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive C_EA", "returned": [{"id": "5a000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A queued archive C_DIRECT", "returned": [{"id": "5a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"id": "5a000000-0000-0000-0000-000000000004", "row": {"archived_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "C_EA", "table": "public.children"}
+{"id": "5a000000-0000-0000-0000-000000000001", "row": {"archived_at": "2026-11-02T08:00:00+00:00", "row_version": 2}, "step": "C_DIRECT", "table": "public.children"}
+
+
+### L2.raw_capability.child_and_class_restore — Server capability only (no phone producer found): EA_A sets unassigned_at NULL on child/class assignments HO ended
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L2.raw_capability.child_and_class_restore.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends child assignment", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends class assignment", "returned": [{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A un-ends child assignment", "returned": [{"id": "0988d63d-a3ce-5ea8-9f06-6a21d0a828e5"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A un-ends class assignment", "returned": [{"id": "b593ffec-8582-5ad8-bec1-d586fdbe10a0"}], "rows_affected": 1}
+
+
+### L3.clock_skew — Rows created with a phone clock 2 days fast, then ended with a corrected clock (now())
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L3.clock_skew.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert child_ea (insert-or-ignore) assigned_at +2d", "returned": [{"id": "64868c8c-21ac-52ba-9473-b6d2f23abe2c"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert enrolment (merge upsert) enrolled_at +2d", "returned": [{"id": "146425f6-01d7-5d5c-8d1e-733fbd4b4e92"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert class_ea KA (insert-or-ignore) assigned_at +2d", "returned": [{"id": "f7d4c787-0457-5e47-a121-0056036ab0f5"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert class membership C_EA2->KA (merge upsert) enrolled_at +2d", "returned": [{"id": "9a000000-0000-0000-0000-000000000009"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert group GA (merge upsert)", "returned": [{"id": "7a000000-0000-0000-0000-000000000009"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert group_ea GA (insert-or-ignore) assigned_at +2d", "returned": [{"id": "14e0e832-09eb-591b-bd2c-73669c5a22c4"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert group membership C_EA2->GA (merge upsert) joined_at +2d", "returned": [{"id": "9b000000-0000-0000-0000-000000000009"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "archive enrolment ended_at now()", "table": "child_programme_enrollments", "detail": null, "message": "new row for relation \"child_programme_enrollments\" violates check constraint \"child_programme_enrollment_dates_chk\"", "sqlstate": "23514", "constraint": "child_programme_enrollment_dates_chk"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "archive class membership exited_at now()", "table": "child_class_memberships", "detail": null, "message": "new row for relation \"child_class_memberships\" violates check constraint \"child_class_membership_dates_chk\"", "sqlstate": "23514", "constraint": "child_class_membership_dates_chk"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "archive group membership removed_at now()", "table": "child_group_memberships", "detail": null, "message": "new row for relation \"child_group_memberships\" violates check constraint \"child_group_membership_dates_chk\"", "sqlstate": "23514", "constraint": "child_group_membership_dates_chk"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "archive group_ea unassigned_at now()", "table": "group_ea_assignments", "detail": null, "message": "new row for relation \"group_ea_assignments\" violates check constraint \"group_ea_assignments_dates_chk\"", "sqlstate": "23514", "constraint": "group_ea_assignments_dates_chk"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "archive class_ea unassigned_at now()", "table": "class_ea_assignments", "detail": null, "message": "new row for relation \"class_ea_assignments\" violates check constraint \"class_ea_assignments_dates_chk\"", "sqlstate": "23514", "constraint": "class_ea_assignments_dates_chk"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "archive child_ea unassigned_at now()", "table": "child_ea_assignments", "detail": null, "message": "new row for relation \"child_ea_assignments\" violates check constraint \"child_ea_assignment_dates_chk\"", "sqlstate": "23514", "constraint": "child_ea_assignment_dates_chk"}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": false, "step": "HO (superuser) also tries to end child_ea at now()", "table": "child_ea_assignments", "detail": "Failing row contains (64868c8c-21ac-52ba-9473-b6d2f23abe2c, 1a000000-0000-0000-0000-000000000002, 5a000000-0000-0000-0000-000000000006, 2026-11-06 19:49:54.75856+00, 2026-11-04 19:49:54.75856+00, 1a000000-0000-0000-0000-000000000002, 2026-11-04 19:49:54.75856+00, 2026-11-04 19:49:54.75856+00, 1).", "message": "new row for relation \"child_ea_assignments\" violates check constraint \"child_ea_assignment_dates_chk\"", "sqlstate": "23514", "constraint": "child_ea_assignment_dates_chk"}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends child_ea at now()+3d (only a time after assigned_at passes)", "returned": [{"id": "64868c8c-21ac-52ba-9473-b6d2f23abe2c"}], "rows_affected": 1}
+
+
+### L4.catalog_archived_at_readers — Catalog: which live functions / policies / triggers reference archived_at or hidden_at after all migrations
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L4.catalog_archived_at_readers.sql
+{"step": "functions referencing archived_at or hidden_at", "result": [{"fn": "public.masi_reporting_accounts_v1", "reads_hidden_at": false, "reads_archived_at": true}, {"fn": "public.masi_reporting_assessments_v1", "reads_hidden_at": false, "reads_archived_at": true}, {"fn": "public.masi_reporting_ea_detail_v1", "reads_hidden_at": false, "reads_archived_at": true}, {"fn": "public.masi_reporting_roster_v1", "reads_hidden_at": false, "reads_archived_at": true}]}
+{"step": "policies referencing archived_at or hidden_at", "result": [{"cmd": "SELECT", "tablename": "teachers", "policyname": "teachers_read"}]}
+
+
+### L4.archived_class — HO archives class K (archived_at set); EA_A then writes into it
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L4.archived_class.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO archives class K", "returned": [{"id": "4a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A class membership C_FREE->K (merge upsert)", "returned": [{"id": "9a000000-0000-0000-0000-000000000020"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A session for class K (insert-or-ignore)", "returned": [{"id": "86000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A group in class K (merge upsert)", "returned": [{"id": "7a000000-0000-0000-0000-000000000020"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A child in class K (merge upsert)", "returned": [{"id": "5a000000-0000-0000-0000-000000000020"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A edits archived class K name (UPDATE by id)", "returned": [{"id": "4a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000003"}, "ok": true, "step": "EA_B class_ea_assignment into archived K (insert-or-ignore)", "returned": [{"id": "622c4d00-7c02-538b-9c10-576eacb1c6ab"}], "rows_affected": 1}
+
+
+### L4.archived_group — HO archives group G (EA_A still holds an active group assignment); EA_A then writes into it
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L4.archived_group.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO archives group G", "returned": [{"id": "7a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A group membership C_FREE->G (merge upsert)", "returned": [{"id": "9b000000-0000-0000-0000-000000000020"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A session for group G (insert-or-ignore)", "returned": [{"id": "86000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A attendee C_FREE in that session with group G (merge upsert)", "returned": [{"id": "96000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+
+
+### L4.archived_group_after_EA_assignment_ended — HO archives group G AND ends EA_A group assignment (the phone archiveGroup end state); EA_A late writes
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L4.archived_group_after_EA_assignment_ended.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO archives group G", "returned": [{"id": "7a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends EA_A group G assignment", "returned": [{"id": "c189a976-3679-542d-966d-c9e28c04112e"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "EA_A group membership C_FREE->G (merge upsert)", "table": null, "detail": null, "message": "new row violates row-level security policy for table \"child_group_memberships\"", "sqlstate": "42501", "constraint": null}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A session for group G (insert-or-ignore)", "returned": [{"id": "86000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A attendee C_FREE (direct) with group G", "returned": [{"id": "96000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "EA_A attendee C_GROUPONLY (group-only child) with group G", "table": null, "detail": null, "message": "new row violates row-level security policy for table \"session_attendees\"", "sqlstate": "42501", "constraint": null}
+
+
+### L5.readd_same_group_before_removal — M1 (C_DIRECT in seeded GV_G1, version GV) active; EA_A re-add M2 (new id, same child+group+version) lands BEFORE M1 removal
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L5.readd_same_group_before_removal.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "M2 insert (merge upsert) while M1 active", "table": "child_group_memberships", "detail": null, "message": "duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\"", "sqlstate": "23505", "constraint": "idx_child_group_memberships_active_by_version"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "M1 removal (archive UPDATE)", "returned": [{"id": "9b000000-0000-0000-0000-000000000003"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "M2 retry after M1 removal", "returned": [{"id": "9b000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+
+
+### L5.move_to_sibling_group_before_removal — M1 active in GV_G1; EA_A adds C_DIRECT to sibling seeded GV_G2 (same version) before M1 removal lands
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L5.move_to_sibling_group_before_removal.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "M2 insert into GV_G2 while M1 active", "table": "child_group_memberships", "detail": null, "message": "duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\"", "sqlstate": "23505", "constraint": "idx_child_group_memberships_active_by_version"}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "M1 removal", "returned": [{"id": "9b000000-0000-0000-0000-000000000003"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "M2 retry", "returned": [{"id": "9b000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+
+
+### L5.reverse_order_removal_first — M1 removal lands first, then M2 insert (same child+group+version)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L5.reverse_order_removal_first.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "M1 removal", "returned": [{"id": "9b000000-0000-0000-0000-000000000003"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "M2 insert", "returned": [{"id": "9b000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+
+
+### L5.unversioned_group_duplicate_active — Unversioned group G (grouping_version_id NULL): C_DIRECT already active in G; EA_A adds a second active membership (new id)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L5.unversioned_group_duplicate_active.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "second active membership same child+group", "returned": [{"id": "9b000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+{"step": "active memberships for C_DIRECT in G", "result": [{"id": "9b000000-0000-0000-0000-000000000001", "removed_at": null}, {"id": "9b000000-0000-0000-0000-000000000004", "removed_at": null}]}
+
+
+### L5.HO_seeded_handover_vs_phone — HO itself moves C_DIRECT from GV_G1 to GV_G2 (insert first, then end) as a seed script might
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L5.HO_seeded_handover_vs_phone.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": false, "step": "HO inserts new membership in GV_G2 first", "table": "child_group_memberships", "detail": "Key (child_id, grouping_version_id)=(5a000000-0000-0000-0000-000000000001, 6a000000-0000-0000-0000-000000000001) already exists.", "message": "duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\"", "sqlstate": "23505", "constraint": "idx_child_group_memberships_active_by_version"}
+
+
+### L6.fk_inventory — Every FK whose parent is auth.users/public.users/children/classes/groups (+ sessions/assessments/battery_runs chains), with ON DELETE action
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.fk_inventory.sql
+{"step": "fk inventory", "result": [{"parent": "auth.users", "conname": "ea_access_events_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "private.ea_access_events"}, {"parent": "auth.users", "conname": "history_pull_rollout_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "private.history_pull_rollout"}, {"parent": "auth.users", "conname": "battery_runs_user_id_fkey", "on_delete": "RESTRICT", "fk_columns": "user_id", "child_table": "public.battery_runs"}, {"parent": "auth.users", "conname": "letter_mastery_changed_by_fkey", "on_delete": "RESTRICT", "fk_columns": "changed_by", "child_table": "public.letter_mastery"}, {"parent": "auth.users", "conname": "letter_mastery_corrections_changed_by_fkey", "on_delete": "RESTRICT", "fk_columns": "changed_by", "child_table": "public.letter_mastery_corrections"}, {"parent": "auth.users", "conname": "mobile_support_incidents_reporter_id_fkey", "on_delete": "CASCADE", "fk_columns": "reporter_id", "child_table": "public.mobile_support_incidents"}, {"parent": "auth.users", "conname": "skill_mastery_changed_by_fkey", "on_delete": "RESTRICT", "fk_columns": "changed_by", "child_table": "public.skill_mastery"}, {"parent": "auth.users", "conname": "skill_mastery_corrections_changed_by_fkey", "on_delete": "RESTRICT", "fk_columns": "changed_by", "child_table": "public.skill_mastery_corrections"}, {"parent": "auth.users", "conname": "users_id_fkey", "on_delete": "CASCADE", "fk_columns": "id", "child_table": "public.users"}, {"parent": "public.assessments", "conname": "assessment_items_assessment_id_fkey", "on_delete": "CASCADE", "fk_columns": "assessment_id", "child_table": "public.assessment_items"}, {"parent": "public.battery_runs", "conname": "assessments_battery_run_id_fkey", "on_delete": "RESTRICT", "fk_columns": "battery_run_id", "child_table": "public.assessments"}, {"parent": "public.children", "conname": "assessments_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.assessments"}, {"parent": "public.children", "conname": "battery_runs_child_id_fkey", "on_delete": "RESTRICT", "fk_columns": "child_id", "child_table": "public.battery_runs"}, {"parent": "public.children", "conname": "child_class_memberships_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.child_class_memberships"}, {"parent": "public.children", "conname": "child_ea_assignments_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.child_ea_assignments"}, {"parent": "public.children", "conname": "child_group_memberships_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.child_group_memberships"}, {"parent": "public.children", "conname": "child_programme_enrollments_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.child_programme_enrollments"}, {"parent": "public.children", "conname": "letter_mastery_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.letter_mastery"}, {"parent": "public.children", "conname": "letter_mastery_corrections_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.letter_mastery_corrections"}, {"parent": "public.children", "conname": "session_attendees_child_id_fkey", "on_delete": "CASCADE", "fk_columns": "child_id", "child_table": "public.session_attendees"}, {"parent": "public.children", "conname": "skill_mastery_child_id_fkey", "on_delete": "RESTRICT", "fk_columns": "child_id", "child_table": "public.skill_mastery"}, {"parent": "public.children", "conname": "skill_mastery_corrections_child_id_fkey", "on_delete": "RESTRICT", "fk_columns": "child_id", "child_table": "public.skill_mastery_corrections"}, {"parent": "public.classes", "conname": "battery_runs_class_id_fkey", "on_delete": "RESTRICT", "fk_columns": "class_id", "child_table": "public.battery_runs"}, {"parent": "public.classes", "conname": "child_class_memberships_class_id_fkey", "on_delete": "RESTRICT", "fk_columns": "class_id", "child_table": "public.child_class_memberships"}, {"parent": "public.classes", "conname": "children_class_id_fkey", "on_delete": "SET NULL", "fk_columns": "class_id", "child_table": "public.children"}, {"parent": "public.classes", "conname": "class_ea_assignments_class_id_fkey", "on_delete": "CASCADE", "fk_columns": "class_id", "child_table": "public.class_ea_assignments"}, {"parent": "public.classes", "conname": "class_grouping_state_class_id_fkey", "on_delete": "CASCADE", "fk_columns": "class_id", "child_table": "public.class_grouping_state"}, {"parent": "public.classes", "conname": "grouping_versions_class_id_fkey", "on_delete": "CASCADE", "fk_columns": "class_id", "child_table": "public.grouping_versions"}, {"parent": "public.classes", "conname": "groups_class_id_fkey", "on_delete": "SET NULL", "fk_columns": "class_id", "child_table": "public.groups"}, {"parent": "public.classes", "conname": "sessions_class_id_fkey", "on_delete": "SET NULL", "fk_columns": "class_id", "child_table": "public.sessions"}, {"parent": "public.grouping_versions", "conname": "child_group_memberships_grouping_version_id_fkey", "on_delete": "RESTRICT", "fk_columns": "grouping_version_id", "child_table": "public.child_group_memberships"}, {"parent": "public.grouping_versions", "conname": "class_grouping_state_active_grouping_version_id_fkey", "on_delete": "SET NULL", "fk_columns": "active_grouping_version_id", "child_table": "public.class_grouping_state"}, {"parent": "public.grouping_versions", "conname": "groups_grouping_version_id_fkey", "on_delete": "RESTRICT", "fk_columns": "grouping_version_id", "child_table": "public.groups"}, {"parent": "public.groups", "conname": "child_group_memberships_group_id_fkey", "on_delete": "CASCADE", "fk_columns": "group_id", "child_table": "public.child_group_memberships"}, {"parent": "public.groups", "conname": "group_ea_assignments_group_id_fkey", "on_delete": "CASCADE", "fk_columns": "group_id", "child_table": "public.group_ea_assignments"}, {"parent": "public.groups", "conname": "session_attendees_group_id_fkey", "on_delete": "SET NULL", "fk_columns": "group_id", "child_table": "public.session_attendees"}, {"parent": "public.groups", "conname": "sessions_group_id_fkey", "on_delete": "SET NULL", "fk_columns": "group_id", "child_table": "public.sessions"}, {"parent": "public.sessions", "conname": "session_attendees_session_id_fkey", "on_delete": "CASCADE", "fk_columns": "session_id", "child_table": "public.session_attendees"}, {"parent": "public.users", "conname": "assessments_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "public.assessments"}, {"parent": "public.users", "conname": "child_class_memberships_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.child_class_memberships"}, {"parent": "public.users", "conname": "child_ea_assignments_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.child_ea_assignments"}, {"parent": "public.users", "conname": "child_ea_assignments_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "public.child_ea_assignments"}, {"parent": "public.users", "conname": "child_group_memberships_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.child_group_memberships"}, {"parent": "public.users", "conname": "child_programme_enrollments_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.child_programme_enrollments"}, {"parent": "public.users", "conname": "children_archived_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "archived_by_user_id", "child_table": "public.children"}, {"parent": "public.users", "conname": "children_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.children"}, {"parent": "public.users", "conname": "class_ea_assignments_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.class_ea_assignments"}, {"parent": "public.users", "conname": "class_ea_assignments_ea_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "ea_user_id", "child_table": "public.class_ea_assignments"}, {"parent": "public.users", "conname": "class_grouping_state_class_list_completed_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "class_list_completed_by_user_id", "child_table": "public.class_grouping_state"}, {"parent": "public.users", "conname": "class_grouping_state_class_list_reopened_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "class_list_reopened_by_user_id", "child_table": "public.class_grouping_state"}, {"parent": "public.users", "conname": "classes_archived_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "archived_by_user_id", "child_table": "public.classes"}, {"parent": "public.users", "conname": "classes_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.classes"}, {"parent": "public.users", "conname": "group_ea_assignments_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.group_ea_assignments"}, {"parent": "public.users", "conname": "group_ea_assignments_ea_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "ea_user_id", "child_table": "public.group_ea_assignments"}, {"parent": "public.users", "conname": "grouping_versions_accepted_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "accepted_by_user_id", "child_table": "public.grouping_versions"}, {"parent": "public.users", "conname": "grouping_versions_archived_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "archived_by_user_id", "child_table": "public.grouping_versions"}, {"parent": "public.users", "conname": "grouping_versions_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.grouping_versions"}, {"parent": "public.users", "conname": "groups_archived_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "archived_by_user_id", "child_table": "public.groups"}, {"parent": "public.users", "conname": "groups_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.groups"}, {"parent": "public.users", "conname": "sessions_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "public.sessions"}, {"parent": "public.users", "conname": "staff_programme_assignments_created_by_fkey", "on_delete": "SET NULL", "fk_columns": "created_by", "child_table": "public.staff_programme_assignments"}, {"parent": "public.users", "conname": "staff_programme_assignments_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "public.staff_programme_assignments"}, {"parent": "public.users", "conname": "teachers_archived_by_user_id_fkey", "on_delete": "SET NULL", "fk_columns": "archived_by_user_id", "child_table": "public.teachers"}, {"parent": "public.users", "conname": "time_entries_user_id_fkey", "on_delete": "CASCADE", "fk_columns": "user_id", "child_table": "public.time_entries"}]}
+{"step": "authenticated DELETE grants", "result": [{"table_name": "child_class_memberships"}, {"table_name": "child_group_memberships"}, {"table_name": "child_programme_enrollments"}, {"table_name": "class_grouping_state"}, {"table_name": "classes"}, {"table_name": "grouping_versions"}, {"table_name": "session_attendees"}, {"table_name": "sessions"}, {"table_name": "time_entries"}]}
+{"step": "DELETE policies", "result": [{"qual": "(( SELECT private.current_user_can_write_for_child(child_class_memberships.child_id) AS current_user_can_write_for_child) AND ( SELECT private.current_user_can_access_class(child_class_memberships.class_id) AS current_user_can_access_class))", "tablename": "child_class_memberships", "policyname": "child_class_memberships_delete_write_child_class"}, {"qual": "(( SELECT private.current_user_can_write_for_child(child_group_memberships.child_id) AS current_user_can_write_for_child) AND ( SELECT private.current_user_can_write_for_group(child_group_memberships.group_id) AS current_user_can_write_for_group))", "tablename": "child_group_memberships", "policyname": "child_group_memberships_delete_created_by"}, {"qual": "( SELECT private.current_user_can_write_for_child(child_programme_enrollments.child_id) AS current_user_can_write_for_child)", "tablename": "child_programme_enrollments", "policyname": "child_programme_enrollments_delete_active_assignment"}, {"qual": "( SELECT private.current_user_can_write_for_class(class_grouping_state.class_id) AS current_user_can_write_for_class)", "tablename": "class_grouping_state", "policyname": "class_grouping_state_delete_write_class"}, {"qual": "( SELECT private.current_user_can_write_for_class(classes.id) AS current_user_can_write_for_class)", "tablename": "classes", "policyname": "classes_delete_assigned_ea"}, {"qual": "( SELECT private.current_user_can_write_for_class(grouping_versions.class_id) AS current_user_can_write_for_class)", "tablename": "grouping_versions", "policyname": "grouping_versions_delete_write_class"}, {"qual": "(( SELECT private.can_modify_session_attendee(session_attendees.session_id, session_attendees.child_id) AS can_modify_session_attendee) AND ( SELECT private.current_user_can_write_for_child(session_attendees.child_id) AS current_user_can_write_for_child))", "tablename": "session_attendees", "policyname": "session_attendees_delete_own_session_active_assignment"}, {"qual": "((user_id = ( SELECT auth.uid() AS uid)) AND ( SELECT private.has_active_session_attendee_assignment(sessions.id) AS has_active_session_attendee_assignment))", "tablename": "sessions", "policyname": "sessions_delete_active_assignment_after_attendee"}, {"qual": "(user_id = ( SELECT auth.uid() AS uid))", "tablename": "time_entries", "policyname": "time_entries_delete_own"}]}
+
+
+### L6.delete_auth_user_with_letter_mastery — Delete auth.users row (auth.admin.deleteUser) for an EA with sessions, attendees, assessments, letter_mastery, assignments, time entries
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.delete_auth_user_with_letter_mastery.sql
+{"step": "before", "result": [{"sessions": 1, "attendees": 1, "assessments": 1, "public_users": 1, "time_entries": 1, "letter_mastery": 1, "assessment_items": 1, "ea_created_child": 1, "child_ea_assignments": 2, "class_ea_assignments": 1, "group_ea_assignments": 1, "ea_created_child_created_by": "1a000000-0000-0000-0000-000000000004", "staff_programme_assignments": 1}]}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": false, "step": "DELETE auth.users", "table": "letter_mastery", "detail": "Key (id)=(1a000000-0000-0000-0000-000000000004) is still referenced from table \"letter_mastery\".", "message": "update or delete on table \"users\" violates foreign key constraint \"letter_mastery_changed_by_fkey\" on table \"letter_mastery\"", "sqlstate": "23503", "constraint": "letter_mastery_changed_by_fkey"}
+{"step": "after", "result": [{"sessions": 1, "attendees": 1, "assessments": 1, "public_users": 1, "time_entries": 1, "letter_mastery": 1, "assessment_items": 1, "ea_created_child": 1, "child_ea_assignments": 2, "class_ea_assignments": 1, "group_ea_assignments": 1, "ea_created_child_created_by": "1a000000-0000-0000-0000-000000000004", "staff_programme_assignments": 1}]}
+
+
+### L6.delete_auth_user_without_mastery — Same EA but no letter_mastery/skill_mastery/battery_runs
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.delete_auth_user_without_mastery.sql
+{"step": "before", "result": [{"sessions": 1, "attendees": 1, "assessments": 1, "public_users": 1, "time_entries": 1, "letter_mastery": 0, "assessment_items": 1, "ea_created_child": 1, "child_ea_assignments": 2, "class_ea_assignments": 1, "group_ea_assignments": 1, "ea_created_child_created_by": "1a000000-0000-0000-0000-000000000004", "staff_programme_assignments": 1}]}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "DELETE auth.users", "returned": [{"id": "1a000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+{"step": "after", "result": [{"sessions": 0, "attendees": 0, "assessments": 0, "public_users": 0, "time_entries": 0, "letter_mastery": 0, "assessment_items": 0, "ea_created_child": 1, "child_ea_assignments": 0, "class_ea_assignments": 0, "group_ea_assignments": 0, "ea_created_child_created_by": null, "staff_programme_assignments": 0}]}
+
+
+### L6.delete_public_users_row_with_mastery — Delete only the public.users profile row (e.g. Studio) for an EA that has letter_mastery
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.delete_public_users_row_with_mastery.sql
+{"step": "before", "result": [{"sessions": 1, "attendees": 1, "assessments": 1, "public_users": 1, "time_entries": 1, "letter_mastery": 1, "assessment_items": 1, "ea_created_child": 1, "child_ea_assignments": 2, "class_ea_assignments": 1, "group_ea_assignments": 1, "ea_created_child_created_by": "1a000000-0000-0000-0000-000000000004", "staff_programme_assignments": 1}]}
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "DELETE public.users", "returned": [{"id": "1a000000-0000-0000-0000-000000000004"}], "rows_affected": 1}
+{"step": "after", "result": [{"sessions": 0, "attendees": 0, "assessments": 0, "public_users": 0, "time_entries": 0, "letter_mastery": 1, "assessment_items": 0, "ea_created_child": 1, "child_ea_assignments": 0, "class_ea_assignments": 0, "group_ea_assignments": 0, "ea_created_child_created_by": null, "staff_programme_assignments": 0}]}
+
+
+### L6.EA_hard_delete_own_class — EA_A (authenticated) hard-DELETEs its own class KA that has a class assignment, a group, a child and a session
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.EA_hard_delete_own_class.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A DELETE classes KA", "returned": [{"id": "4a000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"id": "4a000000-0000-0000-0000-000000000002", "row": null, "step": "class KA", "table": "public.classes"}
+{"id": "f7d4c787-0457-5e47-a121-0056036ab0f5", "row": null, "step": "class assignment KA", "table": "public.class_ea_assignments"}
+{"id": "7a000000-0000-0000-0000-000000000040", "row": {"class_id": null}, "step": "group in KA", "table": "public.groups"}
+{"id": "5a000000-0000-0000-0000-000000000004", "row": {"class_id": null}, "step": "child C_EA (was class KA)", "table": "public.children"}
+{"id": "86a00000-0000-0000-0000-000000000001", "row": {"class_id": null}, "step": "session in KA", "table": "public.sessions"}
+
+
+### L6.EA_hard_delete_HO_class_with_memberships — EA_A hard-DELETEs HO class K (EA_A holds an active class assignment; K has child_class_memberships)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.EA_hard_delete_HO_class_with_memberships.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "EA_A DELETE classes K", "table": "child_class_memberships", "detail": "Key is still referenced from table \"child_class_memberships\".", "message": "update or delete on table \"classes\" violates foreign key constraint \"child_class_memberships_class_id_fkey\" on table \"child_class_memberships\"", "sqlstate": "23503", "constraint": "child_class_memberships_class_id_fkey"}
+
+
+### L6.EA_hard_delete_HO_class_without_memberships — EA_A hard-DELETEs HO class K2 (EA_A assigned; no memberships; one session)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.EA_hard_delete_HO_class_without_memberships.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "EA_A DELETE classes K2", "returned": [{"id": "4a000000-0000-0000-0000-000000000003"}], "rows_affected": 1}
+{"id": "4a000000-0000-0000-0000-000000000003", "row": null, "step": "class K2", "table": "public.classes"}
+{"id": "72337903-fac1-5804-b901-a37df11604f3", "row": null, "step": "EA_A class assignment K2 (held-grant evidence)", "table": "public.class_ea_assignments"}
+{"id": "86a00000-0000-0000-0000-000000000002", "row": {"class_id": null}, "step": "session for K2", "table": "public.sessions"}
+
+
+### L6.EA_hard_delete_rows — EA_A hard-DELETE attempts on membership, enrolment, assignment and group rows
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.EA_hard_delete_rows.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "DELETE child_group_memberships C_DIRECT->G", "returned": [{"id": "9b000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "DELETE child_class_memberships C_DIRECT->K", "returned": [{"id": "9a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "DELETE child_programme_enrollments C_DIRECT", "returned": [{"id": "a346575c-8206-5f67-97fa-8bd426dfee99"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "DELETE child_class_memberships C_CLASSONLY->K", "returned": [{"id": "9a000000-0000-0000-0000-000000000002"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "DELETE child_ea_assignments (own)", "table": null, "detail": null, "message": "permission denied for table child_ea_assignments", "sqlstate": "42501", "constraint": null}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "DELETE class_ea_assignments (own)", "table": null, "detail": null, "message": "permission denied for table class_ea_assignments", "sqlstate": "42501", "constraint": null}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "DELETE group_ea_assignments (own)", "table": null, "detail": null, "message": "permission denied for table group_ea_assignments", "sqlstate": "42501", "constraint": null}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": false, "step": "DELETE groups G", "table": null, "detail": null, "message": "permission denied for table groups", "sqlstate": "42501", "constraint": null}
+{"id": "9b000000-0000-0000-0000-000000000001", "row": null, "step": "CGM_DIRECT_G after", "table": "public.child_group_memberships"}
+{"id": "9a000000-0000-0000-0000-000000000001", "row": null, "step": "CCM_DIRECT after", "table": "public.child_class_memberships"}
+{"id": "a346575c-8206-5f67-97fa-8bd426dfee99", "row": null, "step": "CPE_DIRECT after", "table": "public.child_programme_enrollments"}
+
+
+### L6.HO_delete_group_with_session — HO (superuser) deletes group G that a session references (sessions.group_id ON DELETE SET NULL vs identity trigger)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.HO_delete_group_with_session.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": false, "step": "HO DELETE groups G", "table": null, "detail": null, "message": "sessions programme_id and group_id cannot be changed after insert", "sqlstate": "23514", "constraint": null}
+
+
+### L6.HO_delete_child — HO (superuser) deletes child C_DIRECT outright (bypassing delete_child_if_no_history)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L6.HO_delete_child.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO DELETE children C_DIRECT", "returned": [{"id": "5a000000-0000-0000-0000-000000000001"}], "rows_affected": 1}
+{"id": "96a00000-0000-0000-0000-000000000004", "row": null, "step": "attendee after", "table": "public.session_attendees"}
+{"id": "86a00000-0000-0000-0000-000000000004", "row": {"id": "86a00000-0000-0000-0000-000000000004"}, "step": "session after", "table": "public.sessions"}
+
+
+### L7.child_ea_reassign_after_end — EA_A creates assignment for C_L7 (fixed id f(EA_A,C_L7)), ends it, then re-sends the insert-or-ignore
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L7.child_ea_reassign_after_end.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert (insert-or-ignore) first time", "returned": [{"id": "75ef5e60-8ebf-5380-97f9-2d0af1d91184"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "archive", "returned": [{"id": "75ef5e60-8ebf-5380-97f9-2d0af1d91184"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "re-assign: same fixed id insert-or-ignore (new assigned_at, no unassigned_at)", "returned": [], "rows_affected": 0}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "batched form of the same insert (multi-row VALUES, ignore duplicates)", "returned": [{"id": "64868c8c-21ac-52ba-9473-b6d2f23abe2c"}], "rows_affected": 1}
+{"id": "75ef5e60-8ebf-5380-97f9-2d0af1d91184", "row": {"assigned_at": "2026-10-01T06:00:00+00:00", "row_version": 2, "unassigned_at": "2026-10-15T06:00:00+00:00"}, "step": "server row after re-assign", "table": "public.child_ea_assignments"}
+{"step": "active assignments EA_A->C_L7", "result": []}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "contrast: a different id for the same pair would be accepted", "returned": [{"id": "65000000-0000-0000-0000-000000000077"}], "rows_affected": 1}
+
+
+### L7.class_ea_reassign_after_end — Same for class_ea_assignments fixed id f(KA, EA_A, literacy)
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L7.class_ea_reassign_after_end.sql
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "insert class_ea KA", "returned": [{"id": "f7d4c787-0457-5e47-a121-0056036ab0f5"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "archive", "returned": [{"id": "f7d4c787-0457-5e47-a121-0056036ab0f5"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "re-assign insert-or-ignore same id", "returned": [], "rows_affected": 0}
+{"id": "f7d4c787-0457-5e47-a121-0056036ab0f5", "row": {"assigned_at": "2026-10-01T06:00:00+00:00", "row_version": 2, "unassigned_at": "2026-10-15T06:00:00+00:00"}, "step": "server row", "table": "public.class_ea_assignments"}
+
+
+### L7.HO_ended_then_phone_resends_insert — HO ended EA_A direct assignment to C_EA (EA-created child); phone later re-sends its (lost-ack) insert for the same pair
+$ psql -X -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -Atq <db> -f sql/L7.HO_ended_then_phone_resends_insert.sql
+{"as": {"role": "postgres", "jwt_sub": null}, "ok": true, "step": "HO ends", "returned": [{"id": "b20d56d9-e39a-56bf-9d92-5afc2cc1d9ad"}], "rows_affected": 1}
+{"as": {"role": "authenticated", "jwt_sub": "1a000000-0000-0000-0000-000000000002"}, "ok": true, "step": "phone insert-or-ignore replay", "returned": [], "rows_affected": 0}
+{"id": "b20d56d9-e39a-56bf-9d92-5afc2cc1d9ad", "row": {"unassigned_at": "2026-11-03T07:00:00+00:00"}, "step": "server row", "table": "public.child_ea_assignments"}
+

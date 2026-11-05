@@ -1,0 +1,265 @@
+loaded 41 canonical migrations from /Users/jimmckeown/Development/masi-app/supabase/migrations (first 20260521115412_masi_clean_base_schema.sql, last 20261101120000_skill_mastery_current_state.sql)
+server_version 17.10
+literacy programme id=d9c713c1-02bd-48ad-b6ed-202b92400d0c; uuid v5 cross-check vs Masi uuid package OK (75ef5e60-8ebf-5380-97f9-2d0af1d91184)
+
+== L1.class_membership.direct_path: HO exits C_DIRECT from class K, then EA_A queued exit (EA_A still has direct assignment)
+  - HO exits membership (no row_version) [postgres]: OK rows=1
+  - EA_A queued archive exit [authenticated 02]: OK rows=1
+  * final row: {"exited_at":"2026-11-02T08:00:00+00:00","row_version":2}
+
+== L1.class_membership.class_only_path: HO exits C_CLASSONLY from class K (EA_A reaches child only through K), then EA_A queued exit
+  - HO exits membership [postgres]: OK rows=1
+  - EA_A queued archive exit [authenticated 02]: OK rows=0
+  * final row: {"exited_at":"2026-11-03T07:00:00+00:00","row_version":1}
+
+== L1.group_membership.direct_path: HO removes C_DIRECT from group G, then EA_A queued removal (EA_A has direct assignment + active group assignment)
+  - HO removes membership [postgres]: OK rows=1
+  - EA_A queued archive removal [authenticated 02]: OK rows=1
+  * final row: {"removed_at":"2026-11-02T08:00:00+00:00","row_version":2}
+
+== L1.group_membership.group_only_path: HO removes C_GROUPONLY from group G (EA_A reaches child only through G), then EA_A queued removal
+  - HO removes membership [postgres]: OK rows=1
+  - EA_A queued archive removal [authenticated 02]: OK rows=0
+  * final row: {"removed_at":"2026-11-03T07:00:00+00:00","row_version":1}
+
+== L1.enrollment.direct_path: HO ends C_DIRECT literacy enrolment, then EA_A queued enrolment archive
+  - HO ends enrolment [postgres]: OK rows=1
+  - EA_A queued archive [authenticated 02]: OK rows=1
+  * final row: {"ended_at":"2026-11-02T08:00:00+00:00","row_version":2}
+
+== L1.enrollment.class_only_path: HO ends C_CLASSONLY enrolment (class path still active), then EA_A queued enrolment archive
+  - HO ends enrolment [postgres]: OK rows=1
+  - EA_A queued archive [authenticated 02]: OK rows=1
+  * final row: {"ended_at":"2026-11-02T08:00:00+00:00","row_version":2}
+
+== L1.direct_assignment: HO ends EA_A direct assignment to C_DIRECT, then EA_A queued child_ea_assignments archive
+  - HO ends direct assignment [postgres]: OK rows=1
+  - EA_A queued archive [authenticated 02]: OK rows=1
+  * final row: {"row_version":2,"unassigned_at":"2026-11-02T08:00:00+00:00"}
+
+== L1.group_assignment_ended.membership_removal: HO ends EA_A group G assignment only; EA_A queued removal of C_DIRECT (still directly assigned) from G
+  - HO ends group G assignment [postgres]: OK rows=1
+  - EA_A queued removal C_DIRECT from G [authenticated 02]: OK rows=0
+  * final row: {"removed_at":null,"row_version":1}
+
+== L1.class_assignment_ended.membership_exit: HO ends EA_A class K assignment only; EA_A queued exits for C_DIRECT (direct) and C_CLASSONLY (class path only)
+  - HO ends class K assignment [postgres]: OK rows=1
+  - EA_A queued exit C_DIRECT from K [authenticated 02]: OK rows=1
+  - EA_A queued exit C_CLASSONLY from K [authenticated 02]: OK rows=0
+  * C_DIRECT membership: {"exited_at":"2026-11-02T08:00:00+00:00","row_version":2}
+  * C_CLASSONLY membership: {"exited_at":null,"row_version":1}
+
+== L1.composite.archiveChild_after_HO_removed_all_paths: HO ends EA_A direct + class K + group G assignments; then EA_A phone archiveChild queue for C_DIRECT drains in push order
+  - HO ends direct assignment [postgres]: OK rows=1
+  - HO ends class K assignment [postgres]: OK rows=1
+  - HO ends group G assignment [postgres]: OK rows=1
+  - HO ends group GV_G1 assignment [postgres]: OK rows=1
+  - 2 children archive [authenticated 02]: OK rows=0
+  - 3 enrolment archive [authenticated 02]: OK rows=0
+  - 4 class membership exit [authenticated 02]: OK rows=0
+  - 5 group membership G removal [authenticated 02]: OK rows=0
+  - 5 group membership GV_G1 removal [authenticated 02]: OK rows=0
+  - 7 child_ea_assignments archive [authenticated 02]: OK rows=1
+  * children: {"archived_at":null,"row_version":1}
+  * enrolment: {"ended_at":null}
+  * class membership: {"exited_at":null}
+  * group membership G: {"removed_at":null}
+  * child_ea: {"row_version":2,"unassigned_at":"2026-11-02T08:00:00+00:00"}
+
+== L2.child_ea.HO_no_version: HO ends EA_A child assignment without row_version; EA_A archive arrives later with a different unassigned_at
+  - HO ends assignment (row_version omitted => stays 1) [postgres]: OK rows=1
+  * after HO: {"row_version":1,"unassigned_at":"2026-11-03T07:00:00+00:00"}
+  - EA_A later-arriving archive with a different unassigned_at, row_version 2 [authenticated 02]: OK rows=1
+  * final: {"row_version":2,"unassigned_at":"2026-10-30T05:00:00+00:00"}
+
+== L2.class_ea.HO_no_version: HO ends EA_A class K assignment without row_version; EA_A archive arrives later
+  - HO ends assignment (row_version omitted => stays 1) [postgres]: OK rows=1
+  * after HO: {"row_version":1,"unassigned_at":"2026-11-03T07:00:00+00:00","handover_reason":"HO handover"}
+  - EA_A later-arriving archive with a different unassigned_at, row_version 2 [authenticated 02]: OK rows=1
+  * final: {"row_version":2,"unassigned_at":"2026-10-30T05:00:00+00:00","handover_reason":null}
+
+== L2.group_ea.HO_no_version: HO ends EA_A group G assignment without row_version; EA_A archive arrives later
+  - HO ends assignment (row_version omitted => stays 1) [postgres]: OK rows=1
+  * after HO: {"row_version":1,"unassigned_at":"2026-11-03T07:00:00+00:00","handover_reason":"HO handover"}
+  - EA_A later-arriving archive with a different unassigned_at, row_version 2 [authenticated 02]: OK rows=1
+  * final: {"row_version":2,"unassigned_at":"2026-10-30T05:00:00+00:00","handover_reason":null}
+
+== L2.group_ea.restore_after_HO_end: HO ends EA_A group G assignment; EA_A phone restore (groupsRepository.js:149-153: unassigned_at null, handover_reason null)
+  - HO ends group assignment [postgres]: OK rows=1
+  - EA_A write_for_child(C_GROUPONLY) before restore [authenticated 02]: OK rows=1
+  - EA_A restore [authenticated 02]: OK rows=1
+  - EA_A write_for_child(C_GROUPONLY) after restore [authenticated 02]: OK rows=1
+  * final: {"row_version":2,"unassigned_at":null,"handover_reason":null}
+
+== L2.group_ea.restore_after_HO_handover_to_EA_B: HO ends EA_A group G assignment and gives G to EA_B; EA_A phone restore arrives
+  - HO ends EA_A group assignment [postgres]: OK rows=1
+  - HO inserts EA_B active assignment (random id) [postgres]: OK rows=1
+  - EA_A restore [authenticated 02]: ERR 23505 duplicate key value violates unique constraint "idx_group_ea_assignments_active_unique" (constraint idx_group_ea_assignments_active_unique)
+  * final EA_A row: {"row_version":1,"unassigned_at":"2026-11-03T07:00:00+00:00","handover_reason":"HO handover"}
+
+== L2.child_ea.HO_bumps_version: HO ends child assignment AND bumps row_version to 5; EA_A archive arrives with row_version 2
+  - HO ends assignment with row_version 5 [postgres]: OK rows=1
+  - EA_A archive row_version 2 [authenticated 02]: ERR MV001 stale_version | child_ea_assignments id=0988d63d-a3ce-5ea8-9f06-6a21d0a828e5 incoming row_version=2 stored row_version=5
+  * final: {"row_version":5,"unassigned_at":"2026-11-03T07:00:00+00:00"}
+
+== L2.group_ea.restore_HO_bumps_version: HO ends group assignment with row_version 5; EA_A restore with row_version 2
+  - HO ends group assignment with row_version 5 [postgres]: OK rows=1
+  - EA_A restore row_version 2 [authenticated 02]: ERR MV001 stale_version | group_ea_assignments id=c189a976-3679-542d-966d-c9e28c04112e incoming row_version=2 stored row_version=5
+  * final: {"row_version":5,"unassigned_at":"2026-11-03T07:00:00+00:00"}
+
+== L2.children.HO_unarchive_then_EA_archive: HO archived then un-archived children C_EA (EA-created) and C_DIRECT (HO-created, EA_A direct); EA_A queued archives arrive afterwards
+  - HO un-archives C_EA after an earlier archive [postgres]: OK rows=1
+  - HO un-archives C_DIRECT [postgres]: OK rows=1
+  - EA_A queued archive C_EA [authenticated 02]: OK rows=1
+  - EA_A queued archive C_DIRECT [authenticated 02]: OK rows=1
+  * C_EA: {"archived_at":"2026-11-02T08:00:00+00:00","row_version":2}
+  * C_DIRECT: {"archived_at":"2026-11-02T08:00:00+00:00","row_version":2}
+
+== L2.raw_capability.child_and_class_restore: Server capability only (no phone producer found): EA_A sets unassigned_at NULL on child/class assignments HO ended
+  - HO ends child assignment [postgres]: OK rows=1
+  - HO ends class assignment [postgres]: OK rows=1
+  - EA_A un-ends child assignment [authenticated 02]: OK rows=1
+  - EA_A un-ends class assignment [authenticated 02]: OK rows=1
+
+== L3.clock_skew: Rows created with a phone clock 2 days fast, then ended with a corrected clock (now())
+  - insert child_ea (insert-or-ignore) assigned_at +2d [authenticated 02]: OK rows=1
+  - insert enrolment (merge upsert) enrolled_at +2d [authenticated 02]: OK rows=1
+  - insert class_ea KA (insert-or-ignore) assigned_at +2d [authenticated 02]: OK rows=1
+  - insert class membership C_EA2->KA (merge upsert) enrolled_at +2d [authenticated 02]: OK rows=1
+  - insert group GA (merge upsert) [authenticated 02]: OK rows=1
+  - insert group_ea GA (insert-or-ignore) assigned_at +2d [authenticated 02]: OK rows=1
+  - insert group membership C_EA2->GA (merge upsert) joined_at +2d [authenticated 02]: OK rows=1
+  - archive enrolment ended_at now() [authenticated 02]: ERR 23514 new row for relation "child_programme_enrollments" violates check constraint "child_programme_enrollment_dates_chk" (constraint child_programme_enrollment_dates_chk)
+  - archive class membership exited_at now() [authenticated 02]: ERR 23514 new row for relation "child_class_memberships" violates check constraint "child_class_membership_dates_chk" (constraint child_class_membership_dates_chk)
+  - archive group membership removed_at now() [authenticated 02]: ERR 23514 new row for relation "child_group_memberships" violates check constraint "child_group_membership_dates_chk" (constraint child_group_membership_dates_chk)
+  - archive group_ea unassigned_at now() [authenticated 02]: ERR 23514 new row for relation "group_ea_assignments" violates check constraint "group_ea_assignments_dates_chk" (constraint group_ea_assignments_dates_chk)
+  - archive class_ea unassigned_at now() [authenticated 02]: ERR 23514 new row for relation "class_ea_assignments" violates check constraint "class_ea_assignments_dates_chk" (constraint class_ea_assignments_dates_chk)
+  - archive child_ea unassigned_at now() [authenticated 02]: ERR 23514 new row for relation "child_ea_assignments" violates check constraint "child_ea_assignment_dates_chk" (constraint child_ea_assignment_dates_chk)
+  - HO (superuser) also tries to end child_ea at now() [postgres]: ERR 23514 new row for relation "child_ea_assignments" violates check constraint "child_ea_assignment_dates_chk" (constraint child_ea_assignment_dates_chk) | Failing row contains (64868c8c-21ac-52ba-9473-b6d2f23abe2c, 1a000000-0000-0000-0000-000000000002, 5a000000-0000-0000-0000-000000000006, 2026-11-06 19:49:54.75856+00, 2026-11-04 19:49:54.75856+00, 1a000000-0000-0000-0000-000000000002, 2026-11-04 19:49:54.75856+00, 2026-11-04 19:49:54.75856+00, 1).
+  - HO ends child_ea at now()+3d (only a time after assigned_at passes) [postgres]: OK rows=1
+
+== L4.catalog_archived_at_readers: Catalog: which live functions / policies / triggers reference archived_at or hidden_at after all migrations
+  * functions referencing archived_at or hidden_at: [{"fn":"public.masi_reporting_accounts_v1","reads_hidden_at":false,"reads_archived_at":true},{"fn":"public.masi_reporting_assessments_v1","reads_hidden_at":false,"reads_archived_at":true},{"fn":"public.masi_reporting_ea_detail_v1","reads_hidden_at":false,"reads_archived_at":true},{"fn":"public.masi_reporting_roster_v1","reads_hidden_at":false,"reads_archived_at":true}]
+  * policies referencing archived_at or hidden_at: [{"cmd":"SELECT","tablename":"teachers","policyname":"teachers_read"}]
+
+== L4.archived_class: HO archives class K (archived_at set); EA_A then writes into it
+  - HO archives class K [postgres]: OK rows=1
+  - EA_A class membership C_FREE->K (merge upsert) [authenticated 02]: OK rows=1
+  - EA_A session for class K (insert-or-ignore) [authenticated 02]: OK rows=1
+  - EA_A group in class K (merge upsert) [authenticated 02]: OK rows=1
+  - EA_A child in class K (merge upsert) [authenticated 02]: OK rows=1
+  - EA_A edits archived class K name (UPDATE by id) [authenticated 02]: OK rows=1
+  - EA_B class_ea_assignment into archived K (insert-or-ignore) [authenticated 03]: OK rows=1
+
+== L4.archived_group: HO archives group G (EA_A still holds an active group assignment); EA_A then writes into it
+  - HO archives group G [postgres]: OK rows=1
+  - EA_A group membership C_FREE->G (merge upsert) [authenticated 02]: OK rows=1
+  - EA_A session for group G (insert-or-ignore) [authenticated 02]: OK rows=1
+  - EA_A attendee C_FREE in that session with group G (merge upsert) [authenticated 02]: OK rows=1
+
+== L4.archived_group_after_EA_assignment_ended: HO archives group G AND ends EA_A group assignment (the phone archiveGroup end state); EA_A late writes
+  - HO archives group G [postgres]: OK rows=1
+  - HO ends EA_A group G assignment [postgres]: OK rows=1
+  - EA_A group membership C_FREE->G (merge upsert) [authenticated 02]: ERR 42501 new row violates row-level security policy for table "child_group_memberships"
+  - EA_A session for group G (insert-or-ignore) [authenticated 02]: OK rows=1
+  - EA_A attendee C_FREE (direct) with group G [authenticated 02]: OK rows=1
+  - EA_A attendee C_GROUPONLY (group-only child) with group G [authenticated 02]: ERR 42501 new row violates row-level security policy for table "session_attendees"
+
+== L5.readd_same_group_before_removal: M1 (C_DIRECT in seeded GV_G1, version GV) active; EA_A re-add M2 (new id, same child+group+version) lands BEFORE M1 removal
+  - M2 insert (merge upsert) while M1 active [authenticated 02]: ERR 23505 duplicate key value violates unique constraint "idx_child_group_memberships_active_by_version" (constraint idx_child_group_memberships_active_by_version)
+  - M1 removal (archive UPDATE) [authenticated 02]: OK rows=1
+  - M2 retry after M1 removal [authenticated 02]: OK rows=1
+
+== L5.move_to_sibling_group_before_removal: M1 active in GV_G1; EA_A adds C_DIRECT to sibling seeded GV_G2 (same version) before M1 removal lands
+  - M2 insert into GV_G2 while M1 active [authenticated 02]: ERR 23505 duplicate key value violates unique constraint "idx_child_group_memberships_active_by_version" (constraint idx_child_group_memberships_active_by_version)
+  - M1 removal [authenticated 02]: OK rows=1
+  - M2 retry [authenticated 02]: OK rows=1
+
+== L5.reverse_order_removal_first: M1 removal lands first, then M2 insert (same child+group+version)
+  - M1 removal [authenticated 02]: OK rows=1
+  - M2 insert [authenticated 02]: OK rows=1
+
+== L5.unversioned_group_duplicate_active: Unversioned group G (grouping_version_id NULL): C_DIRECT already active in G; EA_A adds a second active membership (new id)
+  - second active membership same child+group [authenticated 02]: OK rows=1
+  * active memberships for C_DIRECT in G: [{"id":"9b000000-0000-0000-0000-000000000001","removed_at":null},{"id":"9b000000-0000-0000-0000-000000000004","removed_at":null}]
+
+== L5.HO_seeded_handover_vs_phone: HO itself moves C_DIRECT from GV_G1 to GV_G2 (insert first, then end) as a seed script might
+  - HO inserts new membership in GV_G2 first [postgres]: ERR 23505 duplicate key value violates unique constraint "idx_child_group_memberships_active_by_version" (constraint idx_child_group_memberships_active_by_version) | Key (child_id, grouping_version_id)=(5a000000-0000-0000-0000-000000000001, 6a000000-0000-0000-0000-000000000001) already exists.
+
+== L6.fk_inventory: Every FK whose parent is auth.users/public.users/children/classes/groups (+ sessions/assessments/battery_runs chains), with ON DELETE action
+  * fk inventory: [{"parent":"auth.users","conname":"ea_access_events_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"private.ea_access_events"},{"parent":"auth.users","conname":"history_pull_rollout_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"private.history_pull_rollout"},{"parent":"auth.users","conname":"battery_runs_user_id_fkey","on_delete":"RESTRICT","fk_columns":"user_id","child_table":"public.battery_runs"},{"parent":"auth.users","conname":"letter_mastery_changed_by_fkey","on_delete":"RESTRICT","fk_columns":"changed_by","child_table":"public.letter_mastery"},{"parent":"auth.users","conname":"letter_mastery_corrections_changed_by_fkey","on_delete":"RESTRICT","fk_columns":"changed_by","child_table":"public.letter_mastery_corrections"},{"parent":"auth.users","conname":"mobile_support_incidents_reporter_id_fkey","on_delete":"CASCADE","fk_columns":"reporter_id","child_table":"public.mobile_support_incidents"},{"parent":"auth.users","conname":"skill_mastery_changed_by_fkey","on_delete":"RESTRICT","fk_columns":"changed_by","child_table":"public.skill_mastery"},{"parent":"auth.users","conname":"skill_mastery_corrections_changed_by_fkey","on_delete":"RESTRICT","fk_columns":"changed_by","child_table":"public.skill_mastery_corrections"},{"parent":"auth.users","conname":"users_id_fkey","on_delete":"CASCADE","fk_columns":"id","child_table":"public.users"},{"parent":"public.assessments","conname":"assessment_items_assessment_id_fkey","on_delete":"CASCADE","fk_columns":"assessment_id","child_table":"public.assessment_items"},{"parent":"public.battery_runs","conname":"assessments_battery_run_id_fkey","on_delete":"RESTRICT","fk_columns":"battery_run_id","child_table":"public.assessments"},{"parent":"public.children","conname":"assessments_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.assessments"},{"parent":"public.children","conname":"battery_runs_child_id_fkey","on_delete":"RESTRICT","fk_columns":"child_id","child_table":"public.battery_runs"},{"parent":"public.children","conname":"child_class_memberships_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.child_class_memberships"},{"parent":"public.children","conname":"child_ea_assignments_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.child_ea_assignments"},{"parent":"public.children","conname":"child_group_memberships_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.child_group_memberships"},{"parent":"public.children","conname":"child_programme_enrollments_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.child_programme_enrollments"},{"parent":"public.children","conname":"letter_mastery_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.letter_mastery"},{"parent":"public.children","conname":"letter_mastery_corrections_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.letter_mastery_corrections"},{"parent":"public.children","conname":"session_attendees_child_id_fkey","on_delete":"CASCADE","fk_columns":"child_id","child_table":"public.session_attendees"},{"parent":"public.children","conname":"skill_mastery_child_id_fkey","on_delete":"RESTRICT","fk_columns":"child_id","child_table":"public.skill_mastery"},{"parent":"public.children","conname":"skill_mastery_corrections_child_id_fkey","on_delete":"RESTRICT","fk_columns":"child_id","child_table":"public.skill_mastery_corrections"},{"parent":"public.classes","conname":"battery_runs_class_id_fkey","on_delete":"RESTRICT","fk_columns":"class_id","child_table":"public.battery_runs"},{"parent":"public.classes","conname":"child_class_memberships_class_id_fkey","on_delete":"RESTRICT","fk_columns":"class_id","child_table":"public.child_class_memberships"},{"parent":"public.classes","conname":"children_class_id_fkey","on_delete":"SET NULL","fk_columns":"class_id","child_table":"public.children"},{"parent":"public.classes","conname":"class_ea_assignments_class_id_fkey","on_delete":"CASCADE","fk_columns":"class_id","child_table":"public.class_ea_assignments"},{"parent":"public.classes","conname":"class_grouping_state_class_id_fkey","on_delete":"CASCADE","fk_columns":"class_id","child_table":"public.class_grouping_state"},{"parent":"public.classes","conname":"grouping_versions_class_id_fkey","on_delete":"CASCADE","fk_columns":"class_id","child_table":"public.grouping_versions"},{"parent":"public.classes","conname":"groups_class_id_fkey","on_delete":"SET NULL","fk_columns":"class_id","child_table":"public.groups"},{"parent":"public.classes","conname":"sessions_class_id_fkey","on_delete":"SET NULL","fk_columns":"class_id","child_table":"public.sessions"},{"parent":"public.grouping_versions","conname":"child_group_memberships_grouping_version_id_fkey","on_delete":"RESTRICT","fk_columns":"grouping_version_id","child_table":"public.child_group_memberships"},{"parent":"public.grouping_versions","conname":"class_grouping_state_active_grouping_version_id_fkey","on_delete":"SET NULL","fk_columns":"active_grouping_version_id","child_table":"public.class_grouping_state"},{"parent":"public.grouping_versions","conname":"groups_grouping_version_id_fkey","on_delete":"RESTRICT","fk_columns":"grouping_version_id","child_table":"public.groups"},{"parent":"public.groups","conname":"child_group_memberships_group_id_fkey","on_delete":"CASCADE","fk_columns":"group_id","child_table":"public.child_group_memberships"},{"parent":"public.groups","conname":"group_ea_assignments_group_id_fkey","on_delete":"CASCADE","fk_columns":"group_id","child_table":"public.group_ea_assignments"},{"parent":"public.groups","conname":"session_attendees_group_id_fkey","on_delete":"SET NULL","fk_columns":"group_id","child_table":"public.session_attendees"},{"parent":"public.groups","conname":"sessions_group_id_fkey","on_delete":"SET NULL","fk_columns":"group_id","child_table":"public.sessions"},{"parent":"public.sessions","conname":"session_attendees_session_id_fkey","on_delete":"CASCADE","fk_columns":"session_id","child_table":"public.session_attendees"},{"parent":"public.users","conname":"assessments_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"public.assessments"},{"parent":"public.users","conname":"child_class_memberships_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.child_class_memberships"},{"parent":"public.users","conname":"child_ea_assignments_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.child_ea_assignments"},{"parent":"public.users","conname":"child_ea_assignments_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"public.child_ea_assignments"},{"parent":"public.users","conname":"child_group_memberships_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.child_group_memberships"},{"parent":"public.users","conname":"child_programme_enrollments_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.child_programme_enrollments"},{"parent":"public.users","conname":"children_archived_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"archived_by_user_id","child_table":"public.children"},{"parent":"public.users","conname":"children_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.children"},{"parent":"public.users","conname":"class_ea_assignments_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.class_ea_assignments"},{"parent":"public.users","conname":"class_ea_assignments_ea_user_id_fkey","on_delete":"CASCADE","fk_columns":"ea_user_id","child_table":"public.class_ea_assignments"},{"parent":"public.users","conname":"class_grouping_state_class_list_completed_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"class_list_completed_by_user_id","child_table":"public.class_grouping_state"},{"parent":"public.users","conname":"class_grouping_state_class_list_reopened_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"class_list_reopened_by_user_id","child_table":"public.class_grouping_state"},{"parent":"public.users","conname":"classes_archived_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"archived_by_user_id","child_table":"public.classes"},{"parent":"public.users","conname":"classes_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.classes"},{"parent":"public.users","conname":"group_ea_assignments_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.group_ea_assignments"},{"parent":"public.users","conname":"group_ea_assignments_ea_user_id_fkey","on_delete":"CASCADE","fk_columns":"ea_user_id","child_table":"public.group_ea_assignments"},{"parent":"public.users","conname":"grouping_versions_accepted_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"accepted_by_user_id","child_table":"public.grouping_versions"},{"parent":"public.users","conname":"grouping_versions_archived_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"archived_by_user_id","child_table":"public.grouping_versions"},{"parent":"public.users","conname":"grouping_versions_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.grouping_versions"},{"parent":"public.users","conname":"groups_archived_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"archived_by_user_id","child_table":"public.groups"},{"parent":"public.users","conname":"groups_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.groups"},{"parent":"public.users","conname":"sessions_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"public.sessions"},{"parent":"public.users","conname":"staff_programme_assignments_created_by_fkey","on_delete":"SET NULL","fk_columns":"created_by","child_table":"public.staff_programme_assignments"},{"parent":"public.users","conname":"staff_programme_assignments_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"public.staff_programme_assignments"},{"parent":"public.users","conname":"teachers_archived_by_user_id_fkey","on_delete":"SET NULL","fk_columns":"archived_by_user_id","child_table":"public.teachers"},{"parent":"public.users","conname":"time_entries_user_id_fkey","on_delete":"CASCADE","fk_columns":"user_id","child_table":"public.time_entries"}]
+  * authenticated DELETE grants: [{"table_name":"child_class_memberships"},{"table_name":"child_group_memberships"},{"table_name":"child_programme_enrollments"},{"table_name":"class_grouping_state"},{"table_name":"classes"},{"table_name":"grouping_versions"},{"table_name":"session_attendees"},{"table_name":"sessions"},{"table_name":"time_entries"}]
+  * DELETE policies: [{"qual":"(( SELECT private.current_user_can_write_for_child(child_class_memberships.child_id) AS current_user_can_write_for_child) AND ( SELECT private.current_user_can_access_class(child_class_memberships.class_id) AS current_user_can_access_class))","tablename":"child_class_memberships","policyname":"child_class_memberships_delete_write_child_class"},{"qual":"(( SELECT private.current_user_can_write_for_child(child_group_memberships.child_id) AS current_user_can_write_for_child) AND ( SELECT private.current_user_can_write_for_group(child_group_memberships.group_id) AS current_user_can_write_for_group))","tablename":"child_group_memberships","policyname":"child_group_memberships_delete_created_by"},{"qual":"( SELECT private.current_user_can_write_for_child(child_programme_enrollments.child_id) AS current_user_can_write_for_child)","tablename":"child_programme_enrollments","policyname":"child_programme_enrollments_delete_active_assignment"},{"qual":"( SELECT private.current_user_can_write_for_class(class_grouping_state.class_id) AS current_user_can_write_for_class)","tablename":"class_grouping_state","policyname":"class_grouping_state_delete_write_class"},{"qual":"( SELECT private.current_user_can_write_for_class(classes.id) AS current_user_can_write_for_class)","tablename":"classes","policyname":"classes_delete_assigned_ea"},{"qual":"( SELECT private.current_user_can_write_for_class(grouping_versions.class_id) AS current_user_can_write_for_class)","tablename":"grouping_versions","policyname":"grouping_versions_delete_write_class"},{"qual":"(( SELECT private.can_modify_session_attendee(session_attendees.session_id, session_attendees.child_id) AS can_modify_session_attendee) AND ( SELECT private.current_user_can_write_for_child(session_attendees.child_id) AS current_user_can_write_for_child))","tablename":"session_attendees","policyname":"session_attendees_delete_own_session_active_assignment"},{"qual":"((user_id = ( SELECT auth.uid() AS uid)) AND ( SELECT private.has_active_session_attendee_assignment(sessions.id) AS has_active_session_attendee_assignment))","tablename":"sessions","policyname":"sessions_delete_active_assignment_after_attendee"},{"qual":"(user_id = ( SELECT auth.uid() AS uid))","tablename":"time_entries","policyname":"time_entries_delete_own"}]
+
+== L6.delete_auth_user_with_letter_mastery: Delete auth.users row (auth.admin.deleteUser) for an EA with sessions, attendees, assessments, letter_mastery, assignments, time entries
+  * before: [{"sessions":1,"attendees":1,"assessments":1,"public_users":1,"time_entries":1,"letter_mastery":1,"assessment_items":1,"ea_created_child":1,"child_ea_assignments":2,"class_ea_assignments":1,"group_ea_assignments":1,"ea_created_child_created_by":"1a000000-0000-0000-0000-000000000004","staff_programme_assignments":1}]
+  - DELETE auth.users [postgres]: ERR 23503 update or delete on table "users" violates foreign key constraint "letter_mastery_changed_by_fkey" on table "letter_mastery" (constraint letter_mastery_changed_by_fkey) | Key (id)=(1a000000-0000-0000-0000-000000000004) is still referenced from table "letter_mastery".
+  * after: [{"sessions":1,"attendees":1,"assessments":1,"public_users":1,"time_entries":1,"letter_mastery":1,"assessment_items":1,"ea_created_child":1,"child_ea_assignments":2,"class_ea_assignments":1,"group_ea_assignments":1,"ea_created_child_created_by":"1a000000-0000-0000-0000-000000000004","staff_programme_assignments":1}]
+
+== L6.delete_auth_user_without_mastery: Same EA but no letter_mastery/skill_mastery/battery_runs
+  * before: [{"sessions":1,"attendees":1,"assessments":1,"public_users":1,"time_entries":1,"letter_mastery":0,"assessment_items":1,"ea_created_child":1,"child_ea_assignments":2,"class_ea_assignments":1,"group_ea_assignments":1,"ea_created_child_created_by":"1a000000-0000-0000-0000-000000000004","staff_programme_assignments":1}]
+  - DELETE auth.users [postgres]: OK rows=1
+  * after: [{"sessions":0,"attendees":0,"assessments":0,"public_users":0,"time_entries":0,"letter_mastery":0,"assessment_items":0,"ea_created_child":1,"child_ea_assignments":0,"class_ea_assignments":0,"group_ea_assignments":0,"ea_created_child_created_by":null,"staff_programme_assignments":0}]
+
+== L6.delete_public_users_row_with_mastery: Delete only the public.users profile row (e.g. Studio) for an EA that has letter_mastery
+  * before: [{"sessions":1,"attendees":1,"assessments":1,"public_users":1,"time_entries":1,"letter_mastery":1,"assessment_items":1,"ea_created_child":1,"child_ea_assignments":2,"class_ea_assignments":1,"group_ea_assignments":1,"ea_created_child_created_by":"1a000000-0000-0000-0000-000000000004","staff_programme_assignments":1}]
+  - DELETE public.users [postgres]: OK rows=1
+  * after: [{"sessions":0,"attendees":0,"assessments":0,"public_users":0,"time_entries":0,"letter_mastery":1,"assessment_items":0,"ea_created_child":1,"child_ea_assignments":0,"class_ea_assignments":0,"group_ea_assignments":0,"ea_created_child_created_by":null,"staff_programme_assignments":0}]
+
+== L6.EA_hard_delete_own_class: EA_A (authenticated) hard-DELETEs its own class KA that has a class assignment, a group, a child and a session
+  - EA_A DELETE classes KA [authenticated 02]: OK rows=1
+  * class KA: null
+  * class assignment KA: null
+  * group in KA: {"class_id":null}
+  * child C_EA (was class KA): {"class_id":null}
+  * session in KA: {"class_id":null}
+
+== L6.EA_hard_delete_HO_class_with_memberships: EA_A hard-DELETEs HO class K (EA_A holds an active class assignment; K has child_class_memberships)
+  - EA_A DELETE classes K [authenticated 02]: ERR 23503 update or delete on table "classes" violates foreign key constraint "child_class_memberships_class_id_fkey" on table "child_class_memberships" (constraint child_class_memberships_class_id_fkey) | Key is still referenced from table "child_class_memberships".
+
+== L6.EA_hard_delete_HO_class_without_memberships: EA_A hard-DELETEs HO class K2 (EA_A assigned; no memberships; one session)
+  - EA_A DELETE classes K2 [authenticated 02]: OK rows=1
+  * class K2: null
+  * EA_A class assignment K2 (held-grant evidence): null
+  * session for K2: {"class_id":null}
+
+== L6.EA_hard_delete_rows: EA_A hard-DELETE attempts on membership, enrolment, assignment and group rows
+  - DELETE child_group_memberships C_DIRECT->G [authenticated 02]: OK rows=1
+  - DELETE child_class_memberships C_DIRECT->K [authenticated 02]: OK rows=1
+  - DELETE child_programme_enrollments C_DIRECT [authenticated 02]: OK rows=1
+  - DELETE child_class_memberships C_CLASSONLY->K [authenticated 02]: OK rows=1
+  - DELETE child_ea_assignments (own) [authenticated 02]: ERR 42501 permission denied for table child_ea_assignments
+  - DELETE class_ea_assignments (own) [authenticated 02]: ERR 42501 permission denied for table class_ea_assignments
+  - DELETE group_ea_assignments (own) [authenticated 02]: ERR 42501 permission denied for table group_ea_assignments
+  - DELETE groups G [authenticated 02]: ERR 42501 permission denied for table groups
+  * CGM_DIRECT_G after: null
+  * CCM_DIRECT after: null
+  * CPE_DIRECT after: null
+
+== L6.HO_delete_group_with_session: HO (superuser) deletes group G that a session references (sessions.group_id ON DELETE SET NULL vs identity trigger)
+  - HO DELETE groups G [postgres]: ERR 23514 sessions programme_id and group_id cannot be changed after insert
+
+== L6.HO_delete_child: HO (superuser) deletes child C_DIRECT outright (bypassing delete_child_if_no_history)
+  - HO DELETE children C_DIRECT [postgres]: OK rows=1
+  * attendee after: null
+  * session after: {"id":"86a00000-0000-0000-0000-000000000004"}
+
+== L7.child_ea_reassign_after_end: EA_A creates assignment for C_L7 (fixed id f(EA_A,C_L7)), ends it, then re-sends the insert-or-ignore
+  - insert (insert-or-ignore) first time [authenticated 02]: OK rows=1
+  - archive [authenticated 02]: OK rows=1
+  - re-assign: same fixed id insert-or-ignore (new assigned_at, no unassigned_at) [authenticated 02]: OK rows=0
+  - batched form of the same insert (multi-row VALUES, ignore duplicates) [authenticated 02]: OK rows=1
+  * server row after re-assign: {"assigned_at":"2026-10-01T06:00:00+00:00","row_version":2,"unassigned_at":"2026-10-15T06:00:00+00:00"}
+  * active assignments EA_A->C_L7: []
+  - contrast: a different id for the same pair would be accepted [authenticated 02]: OK rows=1
+
+== L7.class_ea_reassign_after_end: Same for class_ea_assignments fixed id f(KA, EA_A, literacy)
+  - insert class_ea KA [authenticated 02]: OK rows=1
+  - archive [authenticated 02]: OK rows=1
+  - re-assign insert-or-ignore same id [authenticated 02]: OK rows=0
+  * server row: {"assigned_at":"2026-10-01T06:00:00+00:00","row_version":2,"unassigned_at":"2026-10-15T06:00:00+00:00"}
+
+== L7.HO_ended_then_phone_resends_insert: HO ended EA_A direct assignment to C_EA (EA-created child); phone later re-sends its (lost-ack) insert for the same pair
+  - HO ends [postgres]: OK rows=1
+  - phone insert-or-ignore replay [authenticated 02]: OK rows=0
+  * server row: {"unassigned_at":"2026-11-03T07:00:00+00:00"}

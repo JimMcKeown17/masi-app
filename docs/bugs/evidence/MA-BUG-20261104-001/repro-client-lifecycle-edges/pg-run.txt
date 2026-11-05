@@ -1,0 +1,44 @@
+loaded 41 migrations (last: 20261101120000_skill_mastery_current_state.sql)
+PASS E1a-class-archive-zero-rows-then-children-edit-and-own-assignment
+  observed=["classes:rows=0","class-visible:true","pull-join:86000000-0000-0000-0000-000000000001|true","children:rows=1","child_class_memberships:rows=1","class_ea_assignments:rows=1"]
+  expected=["classes:rows=0","class-visible:true","pull-join:86000000-0000-0000-0000-000000000001|true","children:rows=1","child_class_memberships:rows=1","class_ea_assignments:rows=1"]
+PASS E1c-child-archive-cascade-after-ho-end
+  observed=["children:rows=0","child_programme_enrollments:rows=0","child_class_memberships:rows=0","child_ea_assignments:rows=1","active-direct-for-pull:0","child-visible:true"]
+  expected=["children:rows=0","child_programme_enrollments:rows=0","child_class_memberships:rows=0","child_ea_assignments:rows=1","active-direct-for-pull:0","child-visible:true"]
+PASS E1a-replay-class-archive-after-reassign
+  observed=["classes:rows=1","ea-b-still-assigned:true"]
+  expected=["classes:rows=1","ea-b-still-assigned:true"]
+PASS E1c-replay-child-archive-after-reassign
+  observed=["children:rows=1","child_programme_enrollments:rows=1","child_class_memberships:rows=1","own-direct-still-active:true"]
+  expected=["children:rows=1","child_programme_enrollments:rows=1","child_class_memberships:rows=1","own-direct-still-active:true"]
+PASS E2-delete-child-if-no-history-returns-false
+  observed=["rpc:false","child-still-there:1","pull-scope-active-assignment:1"]
+  expected=["rpc:false","child-still-there:1","pull-scope-active-assignment:1"]
+PASS E2-control-no-history-deletes
+  observed=["rpc:true","child-still-there:0"]
+  expected=["rpc:true","child-still-there:0"]
+PASS E3a-holds-class-exit-after-assignment-end
+  observed=["child_programme_enrollments:rows=1","child_ea_assignments:rows=1","child_class_memberships:rows=1"]
+  expected=["child_programme_enrollments:rows=1","child_ea_assignments:rows=1","child_class_memberships:rows=1"]
+PASS E3b-no-class-exit-after-assignment-end-zero-rows
+  observed=["child_programme_enrollments:rows=1","child_ea_assignments:rows=1","child_class_memberships:rows=0","membership-still-active:true"]
+  expected=["child_programme_enrollments:rows=1","child_ea_assignments:rows=1","child_class_memberships:rows=0","membership-still-active:true"]
+PASS E3b-control-exit-before-assignment-end-lands
+  observed=["child_class_memberships:rows=1","child_ea_assignments:rows=1"]
+  expected=["child_class_memberships:rows=1","child_ea_assignments:rows=1"]
+PASS E4-pass1-m1-lands-active
+  observed=["m1:true"]
+  expected=["m1:true"]
+PASS E4-pass1-m2-23505-while-m1-active
+  observed={"status":1,"sqlstate":"23505","message":"duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\"","stdout":""}
+PASS E4-pass2-m1-archive-then-forced-m2-lands
+  observed=["child_group_memberships:rows=1","99000000-0000-0000-0000-000000000001:false","99000000-0000-0000-0000-000000000002:true"]
+  expected=["child_group_memberships:rows=1","99000000-0000-0000-0000-000000000001:false","99000000-0000-0000-0000-000000000002:true"]
+PASS E5-co-ea-archive-and-ea-b-view
+  observed=["classes:rows=1","children:rows=1","child_class_memberships:rows=1","class_ea_assignments:rows=1","b-roster-pull:37000000-0000-0000-0000-000000000004|archived=true","b-child7-membership-active:true","b-child7-assignment-active:true","classes:rows=1"]
+  expected=["classes:rows=1","children:rows=1","child_class_memberships:rows=1","class_ea_assignments:rows=1","b-roster-pull:37000000-0000-0000-0000-000000000004|archived=true","b-child7-membership-active:true","b-child7-assignment-active:true","classes:rows=1"]
+PASS E6-no-class
+  observed=["children:rows=1","child_class_memberships:rows=1","assignment-active:true","enrollment-active:true","open-class-memberships:0"]
+  expected=["children:rows=1","child_class_memberships:rows=1","assignment-active:true","enrollment-active:true","open-class-memberships:0"]
+
+14/14 cases matched expectations

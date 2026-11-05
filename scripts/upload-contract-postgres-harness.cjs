@@ -305,10 +305,12 @@ const runRowVersionCases = (databaseUrl) => {
       state: 'archived_at IS NOT NULL', expected: 't',
     },
     {
+      // D5 (lifecycle safety, 20261105120100): an EA never un-archives. The restore is still a
+      // version-checked, one-row acknowledged UPDATE, but the guard keeps the stored archive.
       label: 'groups-restore', table: 'groups', id: ACTIVE_GROUP,
       setup: `UPDATE public.groups SET row_version = 3, archived_at = now() WHERE id = '${ACTIVE_GROUP}';`,
       write: (version) => updateByIdSql('groups', `archived_at = NULL${versionPatch(version)}`, ACTIVE_GROUP),
-      state: 'archived_at IS NULL', expected: 't',
+      state: 'archived_at IS NOT NULL', expected: 't',
     },
     {
       label: 'child-assignment-archive', table: 'child_ea_assignments', id: CHILD_ASSIGNMENT,
@@ -390,6 +392,11 @@ const runRowVersionCases = (databaseUrl) => {
     BEGIN;
     ${childSeed}
     UPDATE public.groups SET row_version = 3 WHERE id IN ('${GROUP}', '${ACTIVE_GROUP}');
+    -- Since 20261105120000 a class's assignment and grouping evidence is ON DELETE RESTRICT;
+    -- remove it explicitly so the delete exercises only the SET NULL actions under test.
+    DELETE FROM public.class_ea_assignments WHERE class_id = '${CLASS}';
+    DELETE FROM public.class_grouping_state WHERE class_id = '${CLASS}';
+    DELETE FROM public.grouping_versions WHERE class_id = '${CLASS}';
     DELETE FROM public.classes WHERE id = '${CLASS}' RETURNING id;
     SELECT row_version, class_id IS NULL FROM public.children WHERE id = '${CHILD}';
     SELECT row_version, class_id IS NULL FROM public.groups WHERE id IN ('${GROUP}', '${ACTIVE_GROUP}') ORDER BY id;

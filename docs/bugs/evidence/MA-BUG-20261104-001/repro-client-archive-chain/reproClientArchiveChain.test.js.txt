@@ -1,0 +1,642 @@
+// THROWAWAY REPRO (repro-client-archive-chain). Not for commit.
+// Real signed-in EA handle + real better-sqlite3 + real lessonSave / childrenRepository /
+// production handle.services.syncEngine. Only the network is fake: a fetch-level PostgREST
+// stand-in (real supabase-js runs on top of it) that applies the migration-file RLS rules
+// relevant to this chain and RECORDS every request in order.
+global.__MASI_NO_DEFAULT_HANDLE__ = true;
+jest.mock('expo-updates', () => ({ channel: null }));
+jest.mock('expo-file-system/next', () => ({ Paths: { availableDiskSpace: 123, totalDiskSpace: 456 } }));
+jest.mock('@react-native-community/netinfo', () => ({
+  fetch: jest.fn(async () => ({ type: 'wifi', isConnected: true, isInternetReachable: true })),
+  addEventListener: jest.fn(() => () => {}),
+}));
+
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import {
+  requestOpen, resetHandleRegistryForTests, setLatestAuthSession, getLatestAuthSession,
+} from '../src/session/signedInHandle';
+import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdapter';
+import { lessonDraftInput, MON, WED } from '../test-support/lessonSaveFixtures';
+import { saveLesson } from '../src/services/lessonSave';
+import { buildSessionTypeFields } from '../src/utils/sessionTypeResolver';
+import {
+  childEaAssignmentDomainId, groupEaAssignmentDomainId, classEaAssignmentDomainId,
+  childProgrammeEnrollmentDomainId,
+} from '../src/db/repositories/domainRepositoryUtils';
+import { deriveSyncState, describeSyncState } from '../src/utils/syncStatusPresenter';
+import { deriveHomeAttentionItems } from '../src/utils/homeAttention';
+import { _testEvidenceMaps } from '../src/services/offlineSync';
+
+const REPORT_DIR = process.env.REPRO_REPORT_DIR
+  || '/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-client-archive-chain';
+const report = {};
+
+const USER = '11111111-1111-4111-8111-111111111111';
+const HO = '99999999-9999-4999-8999-999999999999';
+const SCHOOL = 'a0000000-0000-4000-8000-000000000001';
+const PROG = 'a0000000-0000-4000-8000-000000000002';
+const YEAR = 'a0000000-0000-4000-8000-000000000003';
+const CLASS = 'a0000000-0000-4000-8000-000000000004';
+const GROUP = 'a0000000-0000-4000-8000-000000000005';
+const SPA = 'a0000000-0000-4000-8000-000000000006';
+const kid = (n) => `c0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const C = kid(1); // the child the EA deletes / Head Office removes
+const D = kid(2); // healthy co-attendee
+const E = (i) => kid(100 + i); // healthy children for C4
+const T_SEED = '2026-01-15T00:00:00.000Z';
+
+// ---------------------------------------------------------------- fake PostgREST
+const createFakePostgrest = ({ actor }) => {
+  const rows = {};
+  const t = (name) => { if (!rows[name]) rows[name] = new Map(); return rows[name]; };
+  const all = (name) => [...t(name).values()];
+  const log = [];
+  const receipts = new Map();
+
+  const writeForChild = (childId) => (
+    all('child_ea_assignments').some(r => r.child_id === childId && r.user_id === actor && r.unassigned_at == null)
+    || all('class_ea_assignments').some(cls => cls.ea_user_id === actor && cls.unassigned_at == null
+      && all('child_class_memberships').some(m => m.class_id === cls.class_id && m.child_id === childId && m.exited_at == null))
+    || all('group_ea_assignments').some(g => g.ea_user_id === actor && g.unassigned_at == null
+      && all('child_group_memberships').some(m => m.group_id === g.group_id && m.child_id === childId && m.removed_at == null))
+  );
+  const deliversToChild = (childId) => all('child_ea_assignments')
+    .some(r => r.child_id === childId && r.user_id === actor && r.unassigned_at == null);
+  const writeForGroup = (groupId) => t('groups').get(groupId)?.created_by === actor
+    || all('group_ea_assignments').some(r => r.group_id === groupId && r.ea_user_id === actor && r.unassigned_at == null);
+  const writeForClass = (classId) => t('classes').get(classId)?.created_by === actor
+    || all('class_ea_assignments').some(r => r.class_id === classId && r.ea_user_id === actor && r.unassigned_at == null);
+  const accessClass = (classId) => {
+    const c = t('classes').get(classId);
+    if (!c) return false;
+    return c.created_by === actor
+      || all('staff_programme_assignments').some(s => s.user_id === actor && s.school_id === c.school_id && s.ended_at == null)
+      || all('class_ea_assignments').some(r => r.class_id === classId && r.ea_user_id === actor);
+  };
+  const heldGroup = (groupId, programmeId) => t('groups').get(groupId)?.programme_id === programmeId
+    && all('group_ea_assignments').some(r => r.group_id === groupId && r.ea_user_id === actor);
+  const openProgramme = (programmeId) => all('staff_programme_assignments')
+    .some(s => s.user_id === actor && s.programme_id === programmeId && s.ended_at == null);
+
+  const rls = (table, kind = '') => ({
+    status: 403,
+    body: { code: '42501', details: null, hint: null,
+      message: `new row violates row-level security policy${kind} for table "${table}"` },
+  });
+
+  // INSERT WITH CHECK, per migration files (see report notes for file:line).
+  const insertCheck = (table, row) => {
+    if (table === 'sessions') {
+      if (row.user_id !== actor || !openProgramme(row.programme_id)) return rls(table);
+      const state = row.state ?? 'completed';
+      if (state !== 'completed') return rls(table);
+      if (row.group_id != null && !heldGroup(row.group_id, row.programme_id)) return rls(table);
+      return null;
+    }
+    if (table === 'session_attendees') {
+      const session = t('sessions').get(row.session_id);
+      if (!session || session.user_id !== actor) return rls(table);
+      if (!writeForChild(row.child_id)) return rls(table);
+      if (row.group_id != null && !heldGroup(row.group_id, session.programme_id)) return rls(table);
+      return null;
+    }
+    return { status: 500, body: { code: 'NOT_MODELLED', message: `insert into ${table} not modelled` } };
+  };
+  // UPDATE USING (old row) and WITH CHECK (new row); helpers read the pre-statement snapshot.
+  const updatePolicy = (table, row) => {
+    switch (table) {
+      case 'children': return row.created_by === actor || writeForChild(row.id);
+      case 'child_programme_enrollments': return writeForChild(row.child_id);
+      case 'child_class_memberships': return writeForChild(row.child_id) && accessClass(row.class_id);
+      case 'child_group_memberships': return writeForChild(row.child_id) && writeForGroup(row.group_id);
+      case 'child_ea_assignments': return row.user_id === actor;
+      case 'class_ea_assignments':
+      case 'group_ea_assignments': return row.ea_user_id === actor;
+      case 'groups': return writeForGroup(row.id);
+      case 'classes': return writeForClass(row.id);
+      default: return null;
+    }
+  };
+
+  const flags = { attendeesDown: false };
+  const upsert = (table, body, prefer) => {
+    if (table === 'session_attendees' && flags.attendeesDown) {
+      return { status: 503, body: { message: 'upstream request timeout' }, rowsAffected: 0 };
+    }
+    const proposed = Array.isArray(body) ? body : [body];
+    const ignore = prefer.includes('resolution=ignore-duplicates');
+    for (const row of proposed) {
+      const error = insertCheck(table, row);
+      if (error) return { ...error, rowsAffected: 0, firstFailingId: row.id };
+    }
+    for (const row of proposed) {
+      if (ignore && t(table).has(row.id)) continue;
+      t(table).set(row.id, { ...t(table).get(row.id), ...row });
+    }
+    return { status: 201, body: undefined, rowsAffected: proposed.length };
+  };
+
+  const patch = (table, body, params) => {
+    const idFilter = params.get('id') || '';
+    const id = idFilter.replace(/^eq\./, '');
+    const row = t(table).get(id);
+    const using = row ? updatePolicy(table, row) : false;
+    if (using === null) return { status: 500, body: { code: 'NOT_MODELLED', message: `update ${table} not modelled` } };
+    if (!row || !using) return { status: 200, body: [], rowsAffected: 0 };
+    if (body.row_version != null && row.row_version != null && body.row_version < row.row_version) {
+      return { status: 400, body: { code: 'MV001', message: 'stale_version', details: null, hint: null }, rowsAffected: 0 };
+    }
+    const next = { ...row, ...body };
+    if (!updatePolicy(table, next)) return { ...rls(table, ' (USING expression)'), rowsAffected: 0 };
+    t(table).set(id, next);
+    return { status: 200, body: [{ id }], rowsAffected: 1 };
+  };
+
+  const rpc = (fn, args) => {
+    if (fn === 'set_letter_mastery' || fn === 'set_skill_mastery') {
+      const existing = receipts.get(args.p_correction_id);
+      if (!existing) {
+        if (!deliversToChild(args.p_child_id)) {
+          return { status: 403, body: { code: '42501', details: null, hint: null, message: 'Active child delivery assignment required' } };
+        }
+        receipts.set(args.p_correction_id, { ...args, fn });
+        const key = fn === 'set_letter_mastery'
+          ? `${args.p_child_id}:${args.p_letter}:${args.p_language}` : `${args.p_child_id}:${args.p_step_key}`;
+        t(fn === 'set_letter_mastery' ? 'letter_mastery' : 'skill_mastery').set(key, {
+          child_id: args.p_child_id, confirmed: args.p_confirmed, changed_at: args.p_changed_at,
+          correction_id: args.p_correction_id, changed_by: actor,
+        });
+      }
+      return { status: 200, body: [{ outcome: 'applied', confirmed: args.p_confirmed, changed_at: args.p_changed_at,
+        correction_id: args.p_correction_id, changed_by: actor }] };
+    }
+    if (fn === 'report_mobile_support_incident_v2') {
+      t('mobile_support_incidents').set(String(t('mobile_support_incidents').size + 1), args.p_envelope);
+      return { status: 200, body: { status: 'inserted' } };
+    }
+    return { status: 404, body: { code: 'PGRST202', message: `rpc ${fn} not modelled` } };
+  };
+
+  const fetchImpl = async (input, init = {}) => {
+    const url = new URL(typeof input === 'string' ? input : input.url);
+    const method = String(init.method || 'GET').toUpperCase();
+    const headers = new Headers(init.headers);
+    const prefer = headers.get('prefer') || '';
+    const body = init.body ? JSON.parse(init.body) : undefined;
+    const target = url.pathname.replace(/^\/rest\/v1\//, '');
+    const entry = { seq: log.length + 1, method, target, prefer, onConflict: url.searchParams.get('on_conflict'),
+      query: url.search, rawBody: body };
+    let result;
+    if (target.startsWith('rpc/')) {
+      const fn = target.slice(4);
+      entry.op = 'rpc';
+      entry.fn = fn;
+      if (fn === 'set_letter_mastery') entry.childId = body.p_child_id;
+      result = rpc(fn, body);
+    } else if (method === 'POST') {
+      entry.op = Array.isArray(body) ? `upsert[batch:${body.length}]` : 'upsert';
+      entry.table = target;
+      entry.ids = (Array.isArray(body) ? body : [body]).map(r => r.id);
+      entry.childIds = (Array.isArray(body) ? body : [body]).map(r => r.child_id).filter(Boolean);
+      result = upsert(target, body, prefer);
+    } else if (method === 'PATCH') {
+      entry.op = 'update';
+      entry.table = target;
+      entry.ids = [url.searchParams.get('id')];
+      entry.patch = body;
+      entry.select = url.searchParams.get('select');
+      result = patch(target, body, url.searchParams);
+    } else {
+      entry.op = method.toLowerCase();
+      entry.table = target;
+      result = { status: 200, body: [] };
+    }
+    entry.status = result.status;
+    entry.outcome = result.status < 300 ? 'ok' : result.body?.code;
+    if (result.status >= 300) entry.message = result.body?.message;
+    if (result.rowsAffected != null) entry.rowsAffected = result.rowsAffected;
+    log.push(entry);
+    return new Response(result.body === undefined ? null : JSON.stringify(result.body), {
+      status: result.status, headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  const seed = (table, row) => t(table).set(row.id, { ...row });
+  const snapshot = () => JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(rows).map(([k, m]) => [k, [...m.values()]]))));
+  return { fetchImpl, rows, t, log, seed, snapshot, flags, writeForChild, deliversToChild };
+};
+
+// ---------------------------------------------------------------- harness
+let handle;
+let repos;
+let server;
+let dir;
+const read = async (sql, ...params) => (await handle.getReader()).getAllAsync(sql, ...params);
+const write = task => handle.withTransaction(task);
+const shortLog = (from = 0, to = undefined) => server.log.slice(from, to).map((e) => {
+  const what = e.op === 'rpc' ? `rpc ${e.fn}${e.childId ? ` child=${e.childId}` : ''}`
+    : `${e.op} ${e.table} ${(e.ids || []).join(',')}${e.childIds?.length ? ` child=${e.childIds.join(',')}` : ''}`;
+  return `#${e.seq} ${e.method} ${what} -> ${e.status} ${e.outcome}${e.rowsAffected != null ? ` rows=${e.rowsAffected}` : ''}${e.message ? ` "${e.message}"` : ''}`;
+});
+
+const sessionTypeFields = buildSessionTypeFields({ jobTitlesCache: [] });
+
+const seedBoth = async (children) => {
+  const local = [];
+  const serverRows = [];
+  const add = (table, row) => { local.push([table, row]); serverRows.push([table, row]); };
+  local.push(['schools', { id: SCHOOL, name: 'Masi Primary' }]);
+  local.push(['programmes', { id: PROG, code: 'literacy', name: 'Literacy' }]);
+  local.push(['academic_years', { id: YEAR, label: '2026', starts_on: '2026-01-15', ends_on: '2026-12-15', is_active: 1 }]);
+  add('staff_programme_assignments', { id: SPA, user_id: USER, programme_id: PROG, school_id: SCHOOL, assigned_at: T_SEED });
+  add('classes', { id: CLASS, school_id: SCHOOL, name: 'Grade 1A', grade: '1', academic_year_id: YEAR, created_by: HO });
+  add('class_ea_assignments', {
+    id: classEaAssignmentDomainId({ classId: CLASS, eaUserId: USER, programmeId: PROG }),
+    class_id: CLASS, ea_user_id: USER, programme_id: PROG, assigned_at: T_SEED, created_by: HO,
+  });
+  add('groups', { id: GROUP, name: 'Group 1', programme_id: PROG, class_id: CLASS, created_by: USER });
+  add('group_ea_assignments', {
+    id: groupEaAssignmentDomainId({ groupId: GROUP }), group_id: GROUP, ea_user_id: USER, programme_id: PROG,
+    assigned_at: T_SEED, created_by: USER,
+  });
+  for (const id of children) {
+    add('children', { id, first_name: 'Kid', last_name: id.slice(-4), class_id: CLASS, created_by: HO, reading_level: '2 Letter Blends' });
+    add('child_ea_assignments', { id: childEaAssignmentDomainId({ userId: USER, childId: id }), user_id: USER, child_id: id, assigned_at: T_SEED, created_by: HO });
+    add('child_programme_enrollments', { id: childProgrammeEnrollmentDomainId({ childId: id, programmeId: PROG }), child_id: id, programme_id: PROG, enrolled_at: T_SEED, created_by: HO });
+    add('child_class_memberships', { id: `cc${id.slice(2)}`, child_id: id, class_id: CLASS, academic_year_id: YEAR, enrolled_at: T_SEED, created_by: HO });
+    add('child_group_memberships', { id: `cb${id.slice(2)}`, child_id: id, group_id: GROUP, joined_at: T_SEED, created_by: USER });
+  }
+  const SYNCED = new Set(['classes', 'class_ea_assignments', 'groups', 'group_ea_assignments', 'children',
+    'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships', 'child_group_memberships']);
+  await write(async (txn) => {
+    for (const [table, row] of local) {
+      const full = SYNCED.has(table) ? { ...row, sync_status: 'synced' } : row;
+      await txn.runAsync(
+        `insert into ${table} (${Object.keys(full).join(', ')}) values (${Object.keys(full).map(() => '?').join(', ')})`,
+        ...Object.values(full),
+      );
+    }
+  });
+  for (const [table, row] of serverRows) {
+    server.seed(table, { ...row, ...(SYNCED.has(table) ? { row_version: 1 } : {}), unassigned_at: row.unassigned_at ?? null });
+  }
+  seededSnapshot = server.snapshot();
+};
+let seededSnapshot = null;
+// Raw wire requests for the PostgreSQL replay harness (pg-replay.cjs).
+const dumpWire = (label, { hoActions = [] } = {}) => {
+  fs.mkdirSync(REPORT_DIR, { recursive: true });
+  fs.writeFileSync(path.join(REPORT_DIR, `wire-${label}.json`), JSON.stringify({
+    label, actor: USER, headOffice: HO, ids: { SCHOOL, PROG, YEAR, CLASS, GROUP, SPA, C, D },
+    seed: seededSnapshot, hoActions,
+    requests: server.log.map(({ seq, method, target, prefer, onConflict, query, rawBody, status, outcome, rowsAffected, message }) => ({
+      seq, method, target, prefer, onConflict, query, body: rawBody,
+      fake: { status, outcome, rowsAffected, message },
+    })),
+  }, null, 2));
+};
+
+const baseDraft = lessonDraftInput();
+const saveLessonFor = async (present, { tracker = {} } = {}) => {
+  const draft = await repos.lessonDrafts.create(lessonDraftInput({
+    programme_id: PROG, group_id: GROUP, class_id: CLASS,
+    attendance: { childIds: present, absentChildIds: [], addedChildIds: [] },
+    plan: { ...baseDraft.plan, present_child_ids: present, up_next_group_id: GROUP },
+    tracker_changes: tracker, reading_level_changes: {},
+  }));
+  return saveLesson({ handle, draft, sessionTypeFields, nowIso: WED });
+};
+const tickFor = (childId) => ({ [childId]: { a: { mastered: true, languageCode: 'en', madeAt: MON } } });
+
+// Mirrors ChildrenContext.deleteChild (src/context/ChildrenContext.js:558-573) step for step.
+const deleteChildLikeContext = async (childId) => {
+  const existing = (await repos.children.getChildren()).find(child => child.id === childId);
+  if (!existing) return { success: false, error: 'Child not found in local cache' };
+  const deleted = await repos.children.deleteIfNoHistory(childId, { actorUserId: USER });
+  if (!deleted) await repos.children.archiveChild(childId, { actorUserId: USER });
+  return { success: true, deletedNoHistory: deleted };
+};
+
+const outbox = () => read(`select id, table_name, operation, status, retry_count, error_class, error_code, last_error
+  from sync_outbox order by created_at, id`);
+const attention = async () => {
+  const status = await handle.services.syncEngine.getSyncStatus({ ownerUserId: USER });
+  const notes = await repos.syncState.getReconcileBreakerNotes();
+  const needsAttentionCount = (status.needsAttentionCount || 0) + notes.length; // OfflineContext.js:80-88
+  const state = deriveSyncState({ isOnline: true, isSyncing: false, waitingCount: status.waitingCount, needsAttentionCount });
+  return {
+    needsAttentionCount,
+    waitingCount: status.waitingCount,
+    headerState: state,
+    headerMessage: describeSyncState(state, { waitingCount: status.waitingCount, needsAttentionCount }).message,
+    homeCards: deriveHomeAttentionItems({ needsAttentionCount }).map(item => item.title),
+    needsAttentionItems: status.needsAttentionItems.map(i => ({ table: i.table, operation: i.operation, reason: i.reason })),
+  };
+};
+const incidents = () => read('select kind, status from support_incident_queue order by created_at, id');
+const sync = (opts) => handle.services.syncEngine.syncAll(opts);
+const passSummary = (r) => ({
+  success: r.success, totalSynced: r.totalSynced, totalTerminal: r.totalTerminal,
+  totalRetriable: r.totalRetriable, totalDeferred: r.totalDeferred,
+});
+
+beforeEach(async () => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'masi-repro-archive-'));
+  server = createFakePostgrest({ actor: USER });
+  setLatestAuthSession({ user: { id: USER }, access_token: 'test-token' });
+  handle = await requestOpen({
+    userId: USER, fetchImpl: server.fetchImpl,
+    openDatabase: async (name) => createBetterSqliteTestDatabase(path.join(dir, name), { honorQueryOnly: true }),
+  });
+  repos = handle.repositories;
+});
+afterEach(async () => {
+  await resetHandleRegistryForTests();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+afterAll(() => {
+  fs.mkdirSync(REPORT_DIR, { recursive: true });
+  fs.writeFileSync(path.join(REPORT_DIR, 'observations.json'), JSON.stringify(report, null, 2));
+});
+
+// ---------------------------------------------------------------- C1
+test('C1 offline lesson + letter tick for C, then Delete child, then ONE sync pass', async () => {
+  await seedBoth([C, D]);
+  await saveLessonFor([C], { tracker: tickFor(C) });
+  const afterSave = await outbox();
+  const del = await deleteChildLikeContext(C);
+  const queued = await outbox();
+  const pass1 = await sync();
+  const r = {
+    deleteResult: del,
+    outboxAfterSave: afterSave.map(o => `${o.table_name}:${o.operation}`),
+    outboxQueuedBeforeSync: queued.map(o => `${o.table_name}:${o.operation}`),
+    pass1: passSummary(pass1),
+    pushOrderPass1: shortLog(),
+    outboxAfterPass1: await outbox(),
+    attentionAfterPass1: await attention(),
+    incidentsAfterPass1: await incidents(),
+    serverAfterPass1: {
+      sessions: [...server.t('sessions').keys()],
+      attendees: [...server.t('session_attendees').values()].map(a => a.child_id),
+      letterMastery: [...server.t('letter_mastery').keys()],
+      cDirectAssignmentUnassigned: server.t('child_ea_assignments').get(childEaAssignmentDomainId({ userId: USER, childId: C })).unassigned_at,
+    },
+    localDomainStatus: await read(`select 'session_attendees' as t, child_id, sync_status, last_sync_error from session_attendees
+      union all select 'letter_mastery', child_id, sync_status, last_sync_error from letter_mastery`),
+  };
+  // Forced "Sync now" (SyncStatusScreen.js:185-191 -> syncNow({force:true}) -> syncAll({force:true}))
+  const before = server.log.length;
+  const forced = await sync({ force: true });
+  r.forcedPass = passSummary(forced);
+  r.forcedPassRequests = shortLog(before);
+  r.outboxAfterForced = await outbox();
+  // Per-item Retry (SyncStatusScreen.js:102-109): retryFailedItem then forced pass
+  const before2 = server.log.length;
+  const terminal = (await outbox()).filter(o => o.status === 'terminal');
+  for (const row of terminal) {
+    const recordId = (await read('select record_id from sync_outbox where id = ?', row.id))[0].record_id;
+    await handle.services.syncEngine.retryFailedItem(row.table_name, recordId);
+  }
+  const retried = await sync({ force: true });
+  r.retryPass = passSummary(retried);
+  r.retryPassRequests = shortLog(before2);
+  r.outboxAfterRetry = await outbox();
+  r.attentionAfterRetry = await attention();
+  report.C1 = r;
+  dumpWire('C1');
+
+  expect(del).toEqual({ success: true, deletedNoHistory: false });
+  const finalRows = Object.fromEntries(r.outboxAfterRetry.map(o => [o.table_name, o.status]));
+  expect(finalRows).toEqual({ session_attendees: 'terminal', letter_mastery: 'terminal' });
+});
+
+// ---------------------------------------------------------------- C2
+test('C2 group lesson with C and healthy D, then Delete C, ONE sync pass', async () => {
+  await seedBoth([C, D]);
+  await saveLessonFor([C, D], { tracker: { ...tickFor(C), ...tickFor(D) } });
+  await deleteChildLikeContext(C);
+  const pass1 = await sync();
+  const sessionId = [...server.t('sessions').keys()][0];
+  report.C2 = {
+    pass1: passSummary(pass1),
+    pushOrderPass1: shortLog(),
+    outboxAfterPass1: await outbox(),
+    attentionAfterPass1: await attention(),
+    serverFamily: {
+      session: sessionId ? { id: sessionId, group_id: server.t('sessions').get(sessionId).group_id } : null,
+      attendeesOnServer: [...server.t('session_attendees').values()].map(a => a.child_id === C ? 'C' : a.child_id === D ? 'D' : a.child_id),
+      letterMasteryOnServer: [...server.t('letter_mastery').keys()].map(k => (k.startsWith(C) ? 'C' : k.startsWith(D) ? 'D' : k)),
+    },
+    localSessionChildrenIds: (await repos.sessions.getSessions({ userId: USER }))[0]?.children_ids?.map(id => id === C ? 'C' : id === D ? 'D' : id),
+  };
+  dumpWire('C2');
+  expect(report.C2.serverFamily.attendeesOnServer).toEqual(['D']);
+});
+
+// ---------------------------------------------------------------- C3
+describe('C3 Head Office ends C while the lesson is queued', () => {
+  const hoEnd = (what) => {
+    const at = '2026-10-20T10:00:00.000Z';
+    const actions = [];
+    const asgId = childEaAssignmentDomainId({ userId: USER, childId: C });
+    const asg = server.t('child_ea_assignments').get(asgId);
+    asg.unassigned_at = at; asg.row_version += 1;
+    actions.push({ table: 'child_ea_assignments', id: asgId, set: { unassigned_at: at } });
+    if (what === 'all') {
+      const ccm = server.t('child_class_memberships').get(`cc${C.slice(2)}`); ccm.exited_at = at; ccm.row_version += 1;
+      const cgm = server.t('child_group_memberships').get(`cb${C.slice(2)}`); cgm.removed_at = at; cgm.row_version += 1;
+      actions.push({ table: 'child_class_memberships', id: ccm.id, set: { exited_at: at } });
+      actions.push({ table: 'child_group_memberships', id: cgm.id, set: { removed_at: at } });
+    }
+    return actions;
+  };
+  const reconcileDirect = async () => {
+    const active = [...server.t('child_ea_assignments').values()].filter(r => r.user_id === USER && r.unassigned_at == null);
+    const result = await repos.children.saveServerStaffChildRows(
+      active.map(r => ({ ...r, synced: true })),
+      { reconcile: { acknowledgedIds: active.map(r => r.id), pulledAt: '2026-10-20T12:00:00.000Z', userId: USER } },
+    );
+    return result;
+  };
+  test.each([
+    ['C3a', 'direct only', 'reconcile'],
+    ['C3b', 'all', 'no-pull'],
+    ['C3c', 'all', 'reconcile'],
+  ])('%s HO ends %s; phone %s; then sync', async (label, what, pull) => {
+    await seedBoth([C, D]);
+    await saveLessonFor([C, D], { tracker: { ...tickFor(C), ...tickFor(D) } });
+    const hoActions = hoEnd(what);
+    let reconcileResult = null;
+    if (pull === 'reconcile') reconcileResult = await reconcileDirect();
+    const localAfterPull = await read(`select 'cea' as t, unassigned_at as ended, sync_status from child_ea_assignments where child_id = ?
+      union all select 'letter_mastery', changed_at, sync_status from letter_mastery where child_id = ?`, C, C);
+    const pass1 = await sync();
+    const before = server.log.length;
+    const forced = await sync({ force: true });
+    report[label] = {
+      headOfficeEnded: what === 'all' ? 'direct assignment + class membership + group membership' : 'direct assignment only',
+      phonePull: pull, reconcileResult, localAfterPull,
+      pass1: passSummary(pass1),
+      pushOrderPass1: shortLog(0, before),
+      outboxAfterPass1AndForced: await outbox(),
+      forcedPassRequests: shortLog(before),
+      forced: passSummary(forced),
+      attention: await attention(),
+      attendeesOnServer: [...server.t('session_attendees').values()].map(a => a.child_id === C ? 'C' : a.child_id === D ? 'D' : a.child_id),
+    };
+    dumpWire(label, { hoActions });
+  });
+});
+
+// ---------------------------------------------------------------- C4
+describe('C4 forced-pass batch poisoning', () => {
+  test('C4c control: same as C4a but an ordinary (non-forced) pass', async () => {
+    const kids = Array.from({ length: 5 }, (_, i) => E(i + 1));
+    await seedBoth([C, D, ...kids]);
+    await saveLessonFor([C], { tracker: tickFor(C) });
+    await deleteChildLikeContext(C);
+    await sync();
+    await saveLessonFor(kids);
+    const before = server.log.length;
+    const pass = await sync();
+    report.C4c = {
+      pass: passSummary(pass), requests: shortLog(before),
+      healthyLanded: kids.filter(id => [...server.t('session_attendees').values()].some(a => a.child_id === id)).length,
+      outbox: (await outbox()).map(o => ({ t: o.table_name, s: o.status })),
+    };
+  });
+  test.each([
+    ['C4a', 5],
+    ['C4b', 30],
+  ])('%s one terminal attendee + %i healthy pending attendees, forced pass', async (label, healthy) => {
+    const kids = Array.from({ length: healthy }, (_, i) => E(i + 1));
+    await seedBoth([C, D, ...kids]);
+    await saveLessonFor([C], { tracker: tickFor(C) });
+    await deleteChildLikeContext(C);
+    await sync();
+    const terminalBefore = (await outbox()).filter(o => o.status === 'terminal').map(o => `${o.table_name}:${o.operation}`);
+    await saveLessonFor(kids);
+    const pendingBefore = (await outbox()).filter(o => o.status === 'pending').map(o => o.table_name);
+    const before = server.log.length;
+    const forced = await sync({ force: true });
+    const after = await outbox();
+    const healthyLanded = kids.filter(id => [...server.t('session_attendees').values()].some(a => a.child_id === id)).length;
+    const r = {
+      terminalBefore, pendingBeforeCounts: pendingBefore.reduce((m, t) => ({ ...m, [t]: (m[t] || 0) + 1 }), {}),
+      forced: passSummary(forced),
+      forcedPassRequests: shortLog(before),
+      healthyLanded, healthyTotal: healthy,
+      outboxAfterForced: after.map(o => ({ t: o.table_name, s: o.status, ec: o.error_class, retry: o.retry_count })),
+    };
+    if (healthy > 24) {
+      const b2 = server.log.length;
+      const next = await sync();
+      r.followUpNonForced = passSummary(next);
+      r.followUpRequests = shortLog(b2);
+      r.healthyLandedAfterFollowUp = kids.filter(id => [...server.t('session_attendees').values()].some(a => a.child_id === id)).length;
+      r.outboxAfterFollowUp = (await outbox()).map(o => ({ t: o.table_name, s: o.status }));
+    }
+    report[label] = r;
+  });
+});
+
+// ---------------------------------------------------------------- C5
+describe('C5 ordering-control feasibility probes', () => {
+  const runChain = async () => {
+    await seedBoth([C, D]);
+    await saveLessonFor([C, D], { tracker: { ...tickFor(C), ...tickFor(D) } });
+    await deleteChildLikeContext(C);
+  };
+  test('C5a add history tables to ARCHIVE_TABLE_DEPENDENCIES only (exported map, mutated in-process)', async () => {
+    const deps = _testEvidenceMaps.ARCHIVE_TABLE_DEPENDENCIES;
+    const subj = _testEvidenceMaps.ARCHIVE_DEPENDENCY_SUBJECT_COLUMNS;
+    const savedDeps = [...deps.child_ea_assignments];
+    const savedSubj = { ...subj.child_ea_assignments };
+    deps.child_ea_assignments.push('session_attendees', 'letter_mastery', 'skill_mastery');
+    Object.assign(subj.child_ea_assignments, { session_attendees: 'child_id', letter_mastery: 'child_id', skill_mastery: 'child_id' });
+    try {
+      await runChain();
+      const pass = await sync();
+      report.C5a = { pass: passSummary(pass), requests: shortLog(), outbox: await outbox(),
+        attendeesOnServer: [...server.t('session_attendees').values()].map(a => (a.child_id === C ? 'C' : 'D')) };
+    } finally {
+      deps.child_ea_assignments.splice(0, deps.child_ea_assignments.length, ...savedDeps);
+      for (const key of Object.keys(subj.child_ea_assignments)) delete subj.child_ea_assignments[key];
+      Object.assign(subj.child_ea_assignments, savedSubj);
+    }
+  });
+  test('C5b patched engine copy: ARCHIVE_PUSH_ORDER.child_ea_assignments = 18 (+ history deps)', async () => {
+    let probe;
+    try { probe = require('../src/services/__repro_c5_offlineSync'); } catch (error) {
+      report.C5b = { skipped: `probe module missing: ${error.message}` };
+      return;
+    }
+    await runChain();
+    const engine = probe.createOutboxSyncEngine({
+      database: handle, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
+      outboxRepository: repos.syncOutbox, stateRepository: repos.syncState,
+      supportIncidentRepository: repos.supportIncidents,
+      getAuthSession: async () => {
+        const s = getLatestAuthSession();
+        return { data: { session: s?.user?.id === handle.userId ? s : null } };
+      },
+    });
+    const pass = await engine.syncAll();
+    report.C5b = {
+      pass: passSummary(pass), requests: shortLog(), outbox: await outbox(),
+      attendeesOnServer: [...server.t('session_attendees').values()].map(a => (a.child_id === C ? 'C' : 'D')),
+      letterMasteryOnServer: [...server.t('letter_mastery').keys()].map(k => (k.startsWith(C) ? 'C' : 'D')),
+      cDirectAssignmentOnServer: server.t('child_ea_assignments').get(childEaAssignmentDomainId({ userId: USER, childId: C })).unassigned_at,
+      cChildArchivedOnServer: server.t('children').get(C).archived_at,
+    };
+    dumpWire('C5b');
+    expect(pass.totalTerminal).toBe(0);
+  });
+  test('C5d patched engine copy, but the attendee upload fails transiently in pass 1 (cross-pass gap)', async () => {
+    let probe;
+    try { probe = require('../src/services/__repro_c5_offlineSync'); } catch (error) {
+      report.C5d = { skipped: `probe module missing: ${error.message}` };
+      return;
+    }
+    await runChain();
+    const engine = probe.createOutboxSyncEngine({
+      database: handle, supabaseClient: handle.dataClient, enqueueRequest: handle.enqueueRequest,
+      outboxRepository: repos.syncOutbox, stateRepository: repos.syncState,
+      supportIncidentRepository: repos.supportIncidents,
+      getAuthSession: async () => {
+        const s = getLatestAuthSession();
+        return { data: { session: s?.user?.id === handle.userId ? s : null } };
+      },
+    });
+    server.flags.attendeesDown = true;
+    const p1 = await engine.syncAll();
+    const after1 = await outbox();
+    server.flags.attendeesDown = false;
+    const l1 = server.log.length;
+    const p2 = await engine.syncAll(); // immediately: attendees are inside their 5 s backoff
+    const after2 = await outbox();
+    const l2 = server.log.length;
+    const p3 = await engine.syncAll({ force: true }); // backoff over (forced includes backed-off rows)
+    report.C5d = {
+      pass1: passSummary(p1), pass1Requests: shortLog(0, l1),
+      outboxAfter1: after1.map(o => ({ t: o.table_name, op: o.operation, s: o.status, ec: o.error_class, retry: o.retry_count })),
+      pass2: passSummary(p2), pass2Requests: shortLog(l1, l2),
+      outboxAfter2: after2.map(o => ({ t: o.table_name, op: o.operation, s: o.status, ec: o.error_class })),
+      pass3: passSummary(p3), pass3Requests: shortLog(l2),
+      outboxAfter3: (await outbox()).map(o => ({ t: o.table_name, op: o.operation, s: o.status, ec: o.error_code, err: o.last_error })),
+    };
+  });
+  test('C5c history-first via the public tableName filter, then the full pass (production engine)', async () => {
+    await runChain();
+    const passes = [];
+    for (const tableName of ['sessions', 'session_attendees', 'letter_mastery']) {
+      passes.push({ tableName, ...passSummary(await sync({ tableName })) });
+    }
+    passes.push({ tableName: null, ...passSummary(await sync()) });
+    report.C5c = { passes, requests: shortLog(), outbox: await outbox(),
+      attendeesOnServer: [...server.t('session_attendees').values()].map(a => (a.child_id === C ? 'C' : 'D')) };
+  });
+});

@@ -1,0 +1,17 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+INSERT INTO public.class_ea_assignments (id, class_id, ea_user_id, programme_id, created_by) VALUES ('f7d4c787-0457-5e47-a121-0056036ab0f5', '4a000000-0000-0000-0000-000000000002', '1a000000-0000-0000-0000-000000000002', (SELECT id FROM public.programmes WHERE code = 'literacy'), '1a000000-0000-0000-0000-000000000002');
+INSERT INTO public.groups (id, name, programme_id, class_id, created_by) VALUES ('7a000000-0000-0000-0000-000000000040', 'KA group', (SELECT id FROM public.programmes WHERE code = 'literacy'), '4a000000-0000-0000-0000-000000000002', '1a000000-0000-0000-0000-000000000002');
+INSERT INTO public.sessions (id, user_id, programme_id, class_id, session_date) VALUES ('86a00000-0000-0000-0000-000000000001', '1a000000-0000-0000-0000-000000000002', (SELECT id FROM public.programmes WHERE code = 'literacy'), '4a000000-0000-0000-0000-000000000002', DATE '2026-10-20');
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A DELETE classes KA', $dml$DELETE FROM public.classes WHERE id = '4a000000-0000-0000-0000-000000000002' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('class KA', 'public.classes', '4a000000-0000-0000-0000-000000000002', ARRAY['id']);
+SELECT harness.peek('class assignment KA', 'public.class_ea_assignments', 'f7d4c787-0457-5e47-a121-0056036ab0f5', ARRAY['id', 'unassigned_at']);
+SELECT harness.peek('group in KA', 'public.groups', '7a000000-0000-0000-0000-000000000040', ARRAY['class_id']);
+SELECT harness.peek('child C_EA (was class KA)', 'public.children', '5a000000-0000-0000-0000-000000000004', ARRAY['class_id']);
+SELECT harness.peek('session in KA', 'public.sessions', '86a00000-0000-0000-0000-000000000001', ARRAY['class_id']);
+ROLLBACK;

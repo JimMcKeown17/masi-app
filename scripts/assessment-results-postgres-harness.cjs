@@ -33,7 +33,9 @@ const PROGRAMME = "(SELECT id FROM public.programmes WHERE code = 'literacy')";
 const ACTIVE_YEAR = '(SELECT id FROM public.academic_years WHERE is_active)';
 const STARTED_AT = '2026-10-01T09:00:00.000Z';
 const COMPLETED_AT = '2026-10-01T09:10:00.000Z';
-const WHOLE_CLASS_MIGRATION = '20261023120000_whole_class_assessment_access.sql';
+// The latest migration that (re)defines submit_assessment, save_battery_run and
+// private.user_held_grant_on. Re-applying an older definer would reinstall superseded bodies.
+const ASSESSMENT_AUTHORITY_MIGRATION = '20261105120200_held_at_time_history_authority.sql';
 const OLD_UPDATED_AT = '2001-01-01T00:00:00.000Z';
 const quoteIdentifier = (value) => `"${value.replaceAll('"', '""')}"`;
 const quote = (value) => `'${value.replaceAll("'", "''")}'`;
@@ -401,14 +403,15 @@ const runCases = (databaseUrl, programmeId) => {
       ${expectResult(saveRun(run), 'inserted')}
       ${sqlAssert(`${count('assessments', 'child_id', childId)} = 0`, 'Run has zero Questions')}
       ${direct ? `RESET ROLE; DELETE FROM public.children WHERE id = '${childId}';` : `
-        ${sqlAssert(`public.delete_child_if_no_history('${childId}') = false`, 'Zero-Question run blocks RPC deletion')}
+        ${sqlAssert(`public.delete_child_if_no_history('${childId}') = true`, 'Delete child acknowledges (20261105120300)')}
         RESET ROLE;
-        ${sqlAssert(`${count('children', 'id', childId)} = 1`, 'Child preserved')}
+        ${sqlAssert(`${count('children', 'id', childId)} = 1`, 'Child preserved: the RPC never hard-deletes')}
+        ${sqlAssert(`(SELECT archived_at IS NOT NULL FROM public.children WHERE id = '${childId}')`, 'Sole holder archives the child')}
         ${sqlAssert(`${count('battery_runs', 'id', run.id)} = 1`, 'Run preserved')}
       `}
     `, { setup: childSetup(childId) });
     if (direct) denied('run-child-delete-restrict-postgres', sql, '23503');
-    else check('run-only-history-blocks-delete-rpc', sql);
+    else check('run-only-history-delete-rpc-archives', sql);
   }
 
   const timestampFamily = makeFamily(programmeId);
@@ -523,8 +526,10 @@ const runWholeClassCases = (databaseUrl, programmeId) => {
     { label: 'class-start-next-local-midnight', start: at(day(-9), '00:00:00'), denied: true },
     { label: 'class-zero-duration-grant', start: at(d), end: at(d), denied: true },
     { label: 'class-future-date', start: at(day(-1)), end: at(day(2)), date: day(1), denied: true },
-    { label: 'class-outside-active-year', date: day(-366), memberStart: at(day(-367)), start: at(day(-367)), end: at(day(-365)), denied: true },
-    { label: 'class-no-active-year', noActiveYear: true, denied: true },
+    // D2 (lifecycle safety, 20261105120200): the academic year is a reporting label, not a
+    // permission. A grant held on the work's day authorizes it in any year, or with none active.
+    { label: 'class-outside-active-year', date: day(-366), memberStart: at(day(-367)), start: at(day(-367)), end: at(day(-365)) },
+    { label: 'class-no-active-year', noActiveYear: true },
     { label: 'class-no-open-programme', actor: NO_PROGRAMME_EA, denied: true },
     { label: 'class-current-before-grant', start: at(day(-1)), end: null },
     { label: 'class-current-future-preserved', end: null, date: day(1) },
@@ -570,11 +575,16 @@ const runWholeClassCases = (databaseUrl, programmeId) => {
   `, { setup: `UPDATE public.staff_programme_assignments SET ended_at = now()
     WHERE user_id = '${EA_A}' AND ended_at IS NULL;` }));
 
-  // Grace cannot bypass the exact-instant class-at-started_at check.
+  // S2 item 4 (20261105120200): the run's class membership must overlap the SAST day of
+  // started_at, not contain the instant; a class the child never joined is still refused.
   const instant = seedGrant({ memberStart: at(d, '13:00:00') });
-  check('whole-class-run-still-checks-class-at-started-at', asActor(EA_A, `SELECT ${saveRun(
-    makeRun(programmeId, { child_id: instant.childId, class_id: instant.scopeId, started_at: at(d) }))};`,
-  { setup: instant.setup }), '42501');
+  check('whole-class-run-class-membership-same-sast-day', asActor(EA_A, expectResult(saveRun(
+    makeRun(programmeId, { child_id: instant.childId, class_id: instant.scopeId, started_at: at(d) })), 'inserted'),
+  { setup: instant.setup }));
+  const otherClass = seedGrant({});
+  check('whole-class-run-still-checks-class-membership', asActor(EA_A, `SELECT ${saveRun(
+    makeRun(programmeId, { child_id: instant.childId, class_id: otherClass.scopeId, started_at: at(d) }))};`,
+  { setup: instant.setup + otherClass.setup }), '42501');
   check('whole-class-run-valid-class-at-started-at', asActor(EA_A, expectResult(saveRun(
     makeRun(programmeId, { child_id: instant.childId, class_id: instant.scopeId, started_at: at(d, '14:00:00') })), 'inserted'),
   { setup: instant.setup }));
@@ -748,17 +758,17 @@ const main = async () => {
     for (const filename of fs.readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort()) {
       runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, filename), label: `migration-${filename}` });
     }
-    // Apply the new migration twice in total before exercising its behavior.
+    // Apply the latest authority migration twice in total before exercising its behavior.
     // CREATE OR REPLACE must preserve signatures, grants and repeated application.
-    const wholeClassMigration = path.join(MIGRATIONS_DIR, WHOLE_CLASS_MIGRATION);
-    if (fs.existsSync(wholeClassMigration)) {
-      runPsql({ databaseUrl, file: wholeClassMigration, label: 'whole-class-migration-second-application' });
+    const authorityMigration = path.join(MIGRATIONS_DIR, ASSESSMENT_AUTHORITY_MIGRATION);
+    if (fs.existsSync(authorityMigration)) {
+      runPsql({ databaseUrl, file: authorityMigration, label: 'authority-migration-second-application' });
     }
     runPsql({ databaseUrl, sql: fixtureSql, label: 'assessment-results-fixture' });
     const programmeId = runPsql({ databaseUrl, label: 'literacy-programme', sql: `SELECT ${PROGRAMME};` });
     assert.match(programmeId, /^[0-9a-f-]{36}$/, 'Exactly one literacy programme is required');
     const cases = {
-      ...(fs.existsSync(wholeClassMigration) ? { 'whole-class-migration-applied-twice': 'passed' } : {}),
+      ...(fs.existsSync(authorityMigration) ? { 'authority-migration-applied-twice': 'passed' } : {}),
       ...runCases(databaseUrl, programmeId),
       ...runWholeClassCases(databaseUrl, programmeId),
       ...await runOverlappingCases(databaseUrl, programmeId),

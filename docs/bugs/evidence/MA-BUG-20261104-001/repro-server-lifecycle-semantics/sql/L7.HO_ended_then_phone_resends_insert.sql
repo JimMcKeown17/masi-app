@@ -1,0 +1,11 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends', $dml$UPDATE public.child_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02' WHERE id = 'b20d56d9-e39a-56bf-9d92-5afc2cc1d9ad' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('phone insert-or-ignore replay', $dml$INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by) VALUES ('b20d56d9-e39a-56bf-9d92-5afc2cc1d9ad', '1a000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000004', TIMESTAMPTZ '2026-02-01 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('server row', 'public.child_ea_assignments', 'b20d56d9-e39a-56bf-9d92-5afc2cc1d9ad', ARRAY['unassigned_at']);
+ROLLBACK;

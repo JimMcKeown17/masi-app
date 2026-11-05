@@ -1,0 +1,13 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+INSERT INTO public.sessions (id, user_id, programme_id, class_id, session_date) VALUES ('86a00000-0000-0000-0000-000000000002', '1a000000-0000-0000-0000-000000000002', (SELECT id FROM public.programmes WHERE code = 'literacy'), '4a000000-0000-0000-0000-000000000003', DATE '2026-10-20');
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A DELETE classes K2', $dml$DELETE FROM public.classes WHERE id = '4a000000-0000-0000-0000-000000000003' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('class K2', 'public.classes', '4a000000-0000-0000-0000-000000000003', ARRAY['id']);
+SELECT harness.peek('EA_A class assignment K2 (held-grant evidence)', 'public.class_ea_assignments', '72337903-fac1-5804-b901-a37df11604f3', ARRAY['id']);
+SELECT harness.peek('session for K2', 'public.sessions', '86a00000-0000-0000-0000-000000000002', ARRAY['class_id']);
+ROLLBACK;
