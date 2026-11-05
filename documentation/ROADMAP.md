@@ -223,8 +223,8 @@ shape.
 - [ ] **Lifecycle safety before real lessons** ([plan](../docs/superpowers/plans/2026-11-04-lifecycle-safety.md)
   D10). Gate: the server batch is applied and verified, the
   [interim rules](./lifecycle-interim-field-rules.md) are briefed, and every pilot phone is
-  confirmed on `1.5.0+4` or later by its Send diagnostics receipt. Open: the two-phone check on
-  installed 1.5.0 (#157); the app update device gate and per-phone uptake (#158, including plan
+  confirmed on `1.5.0+4` or later by its Send diagnostics receipt. Open: the app update device gate,
+  which replaces the two-phone check on installed 1.5.0 (#157), and per-phone uptake (#158, including plan
   step G1.1, not done before the update went live); field verification (#159); the fix decision
   for MA-BUG-20261105-003; and the first live `--apply` of the Head Office lifecycle script, which
   needs Jim.
