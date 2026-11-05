@@ -204,10 +204,8 @@ export default function LessonWrapUpScreen({ navigation, route }) {
       keyboardShouldPersistTaps="handled">
       {dateLabel ? <Text testID="wrap-up-lesson-date" style={styles.note}>Lesson on {dateLabel}</Text> : null}
       {letters.length ? <View style={styles.heading}>
-        <Text accessibilityRole="header" accessibilityLabel={`Who knows ${letters.join(' ')} without help?`} style={styles.title}>
-          Who knows <Text style={styles.headingLetters}>{letters.join(' ')}</Text> without help?
-        </Text>
-        <Text style={styles.note}>Teaching it today doesn't count.</Text>
+        <Text accessibilityRole="header" style={styles.title}>Who learned something new today?</Text>
+        <Text style={styles.note}>Tap a letter if the child knows it without help. Teaching it today doesn't count.</Text>
       </View> : null}
       {draft && metadata ? ids.map(id => metadata.children[id] ? <WrapUpChildRow key={id}
         child={metadata.children[id]} letters={letters} trackerLetters={trackerLetters}
@@ -250,6 +248,5 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background }, scroll: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg }, heading: { gap: spacing.sm },
   title: { ...typeRoles.displayHeading, color: colors.text }, note: { ...typeRoles.textBody, color: colors.textSecondary },
-  headingLetters: { color: colors.primary },
   footer: { gap: spacing.ms },
 });

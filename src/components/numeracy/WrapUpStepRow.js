@@ -6,13 +6,14 @@ import { masteryStateColors } from '../../constants/masteryStateColors';
 import { typeRoles } from '../../constants/typography';
 import { chipLabel } from '../../numeracyLesson/copy';
 import { getCurriculum } from '../../../content/numeracy-curriculum';
+import WrapUpChildCard, { WrapUpTrackerRow } from '../lessons/WrapUpChildCard';
 
 export default function WrapUpStepRow({ child, steps, model, pending, isDelivery, onToggle, onOpenTracker }) {
   const tiles = model.sections.flatMap(section => section.rows.flatMap(row => row.tiles));
-  return <View testID={`wrap-up-child-${child.id}`} style={styles.row}>
-    <Text style={styles.name}>{child.first_name}</Text>
-    {isDelivery ? <>
-      <View style={styles.chips}>{steps.map(stepKey => {
+  const rows = isDelivery ? [<WrapUpTrackerRow label="Number tracker" value={`${model.knownCount} / ${model.total}`}
+    accessibilityLabel={`${child.first_name}, number tracker, ${model.knownCount} of ${model.total} steps`} onPress={onOpenTracker} />] : [];
+  return <WrapUpChildCard testID={`wrap-up-child-${child.id}`} child={child} rows={rows}>
+    {isDelivery ? steps.length > 0 ? <View style={styles.chips}>{steps.map(stepKey => {
         const tile = tiles.find(item => item.stepKey === stepKey);
         const known = ['ticked', 'implied', 'assessment'].includes(tile?.state);
         const locked = tile?.state === 'assessment';
@@ -27,17 +28,11 @@ export default function WrapUpStepRow({ child, steps, model, pending, isDelivery
           <Text style={[styles.label, { color: palette.text }]}>{label}</Text>
           {locked ? <Ionicons name="lock-closed-outline" size={14} color={palette.text} accessible={false} /> : null}
         </Pressable>;
-      })}</View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${child.first_name}, ${model.knownCount} of ${model.total} steps`} onPress={onOpenTracker} style={styles.count}>
-        <Text style={styles.label}>{`${model.knownCount} / ${model.total} ›`}</Text>
-      </Pressable>
-    </> : <Text style={styles.label}>Steps can't be updated for this child</Text>}
-  </View>;
+      })}</View> : null : <Text style={styles.label}>Steps can't be updated for this child</Text>}
+  </WrapUpChildCard>;
 }
 const styles = StyleSheet.create({
-  row: { gap: spacing.sm }, name: { ...typeRoles.textBodyStrong, color: colors.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 44, paddingHorizontal: spacing.md, borderWidth: 1, borderRadius: borderRadius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  count: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   label: { ...typeRoles.textBody, color: colors.text },
 });

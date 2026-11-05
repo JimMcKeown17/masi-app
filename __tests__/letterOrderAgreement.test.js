@@ -127,7 +127,7 @@ test.each([
       { name: 'SessionComplete', component: Complete },
     ] });
     const displayed = order.letters.filter(letter => selected.includes(letter));
-    await view.findByRole('header', { name: `Who knows ${displayed.join(' ')} without help?` });
+    await view.findByRole('header', { name: 'Who learned something new today?' });
     const chips = view.getAllByTestId('wrap-up-letter-chips');
     expect(chips).toHaveLength(2);
     for (const row of chips) expect(lettersIn(within(row))).toEqual(displayed);

@@ -5652,6 +5652,20 @@ Branch `feat/numeracy-screens`. Baseline (Task 0, clean `git archive` of `29e85c
 | 2026-11-03 | Codex adversarial review round 2 at `145cd988` | approve: no material findings | Reviewer's in-memory harness ran 21 ordering, failure and stale-handle scenarios. |
 | 2026-11-03 | Full gates at `145cd988`: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `npm run test:integration`; `npm run test:content` | PASS: **517 suites / 8,183 tests**; **111 / 1,530**; content exit 0 | +1 suite / +18 tests and +7 integration tests on the 2026-11-01 Task 13 gates. A03s recheck on the next build still open. |
 
+### 2026-11-05 — Wrap up: one card per child, matching tracker rows
+
+Branch `feat/wrap-up-child-cards`; plan `docs/superpowers/plans/2026-11-05-wrap-up-child-cards.md`.
+Jim picked option A of three mockups (https://claude.ai/artifact/8YNGvtCUuVN3UKVRk61MbF). Each child on
+both Wrap up screens is now a white card (avatar initial, name, controls) whose trackers are matching
+rows: **Letter tracker · 6/26**, **Reading level · 2 Letter Blends**, numeracy **Number tracker · 3 / 37**.
+The literacy heading is "Who learned something new today?"; "None of these yet" is a **None yet** chip
+in the tile row. JS only; no data or save change.
+
+| Date | Command/Check | Result | Notes |
+| --- | --- | --- | --- |
+| 2026-11-05 | RED: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/LessonWrapUpScreen.test.js __tests__/NumeracyWrapUpScreen.test.js` with the updated tests | RED: 6 failed, 39 passed (45) | Failures are the new heading, card, rows, "None yet" and Number tracker row. |
+| 2026-11-05 | GREEN: same command after `WrapUpChildCard` / `WrapUpTrackerRow` | PASS: 45/45 | Mockup said "Reading Tracker"; built as "Reading level" because CONTEXT.md makes that the term and the row opens the level picker. Note copy dropped the letters ("Tap a letter if the child knows it…") because "Tap k u if … knows it" misreads with several letters. |
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

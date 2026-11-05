@@ -361,8 +361,7 @@ testSave('Wrap up displays letters in the class order and preserves tap order in
     }])) },
   }));
   const view = mount(); await ready(view);
-  expect(await view.findByRole('header', { name: 'Who knows s a n d without help?' })).toBeTruthy();
-  expect(view.getByText('Who knows s a n d without help?')).toBeTruthy();
+  expect(await view.findByRole('header', { name: 'Who learned something new today?' })).toBeTruthy();
   const rows = view.getAllByTestId('wrap-up-letter-chips');
   expect(rows).toHaveLength(2);
   for (const chips of rows) expect(within(chips).getAllByRole('button')
