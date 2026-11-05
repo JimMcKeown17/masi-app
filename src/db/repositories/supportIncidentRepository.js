@@ -13,6 +13,36 @@ export const incidentRepeatKey = (...parts) => uuidv5(parts.map(String).join('\u
 export const incidentReportId = (id, generation) => uuidv5(`${id}:${generation}`, INCIDENT_KEY_NAMESPACE);
 export const releaseIdentity = runtime => ({ version: runtime?.application?.version ?? null,
   build: runtime?.application?.build ?? null, updateId: runtime?.update?.id ?? null });
+// The condition parts of a refused outbox row's upload_terminal receipt. The observer and the
+// exit rule must derive the same repeat key, so both use this.
+export const uploadTerminalParts = row => [row.table_name, row.record_id, row.operation, row.created_at,
+  row.error_class, row.error_code];
+export const canonicalJson = value => JSON.stringify(value, (_key, item) => (
+  item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item
+));
+export const wireDigest = value => uuidv5(canonicalJson(value ?? null), INCIDENT_KEY_NAMESPACE);
+
+// Lifecycle safety O1 item 2: markSent records what the office accepted for an upload_terminal
+// receipt, from the bounded snapshot it actually sent. A refused row may leave the phone only
+// while this proof matches its current revision and nothing was cut (services/deliveredReceipt.js).
+// It lives in local_state, so the OTA needs no SQLite migration.
+export const DELIVERED_RECEIPT_PREFIX = 'delivered_receipt:';
+export const deliveredReceiptKey = incidentId => `${DELIVERED_RECEIPT_PREFIX}${incidentId}`;
+const hasCutMarker = value => Boolean(value) && typeof value === 'object' && (Array.isArray(value)
+  ? value.some(hasCutMarker)
+  : Object.entries(value).some(([key, item]) => (/Truncated$/.test(key) && item === true) || hasCutMarker(item)));
+export const deliveryProof = (reportGeneration, snapshot) => {
+  const payload = snapshot?.payload ?? {};
+  return {
+    report_generation: reportGeneration,
+    outboxId: payload.outboxId ?? null,
+    outboxUpdatedAt: payload.outboxUpdatedAt ?? null,
+    wireDigest: wireDigest(payload.wirePayload),
+    cut: Object.prototype.hasOwnProperty.call(payload, 'wirePayloadError') || hasCutMarker(payload),
+  };
+};
+
 const json = value => JSON.stringify(value);
 const decode = row => row && ({ ...row, repeatKey: row.repeat_key,
   ...Object.fromEntries(['payload', 'observed', 'first_observed', 'report_snapshot', 'last_sent_release']
@@ -68,6 +98,7 @@ export const record = async (txn, kind, conditionParts, payload, { event = false
     }
     evictedFiles.push(victim.bundle_file, victim.screenshot_file);
     await txn.runAsync('delete from support_incident_queue where id = ?', victim.id);
+    await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(victim.id));
   }
   const id = uuidv4();
   await txn.runAsync(`insert into support_incident_queue
@@ -138,6 +169,22 @@ export const createSupportIncidentRepository = ({ database } = {}) => {
       new Date(Date.parse(now) - 86400000).toISOString());
       for (const row of rows) await promote(txn, row.id, now);
     },
+    // O1 item 2: a sent upload_terminal receipt with no proof for its current generation (sent
+    // before this update) is sent once more; that send writes the proof, so it is not repeated.
+    promoteUndelivered: async (txn, incidentIds, now = timestamp()) => {
+      let promoted = 0;
+      for (const id of incidentIds) {
+        const row = await txn.getFirstAsync(`select q.id from support_incident_queue q
+          left join local_state s on s.key = ?
+          where q.id = ? and q.kind = 'upload_terminal' and q.schema_version = 2 and q.status = 'sent'
+            and (s.value is null or json_extract(s.value, '$.report_generation') is not q.report_generation)`,
+        deliveredReceiptKey(id), id);
+        if (!row) continue;
+        await promote(txn, id, now);
+        promoted += 1;
+      }
+      return promoted;
+    },
     freeze: (reference, { transaction, prepare = snapshot => snapshot } = {}) => mutate(reference, transaction, async (txn, row) => {
       if (row.schema_version !== 2 || !['none', 'uploaded', 'failed'].includes(row.bundle_state)) return null;
       if (row.report_snapshot) return row.report_snapshot;
@@ -149,10 +196,18 @@ export const createSupportIncidentRepository = ({ database } = {}) => {
       await txn.runAsync('update support_incident_queue set report_snapshot = ? where id = ? and report_snapshot is null', json(snapshot), row.id);
       return snapshot;
     }),
-    markSent: (reference, { transaction, now = timestamp(), release } = {}) => mutate(reference, transaction, (txn, row) => txn.runAsync(`
+    markSent: (reference, { transaction, now = timestamp(), release } = {}) => mutate(reference, transaction, async (txn, row) => {
+      // The proof is taken from the accepted snapshot before it is cleared, in this transaction.
+      if (row.kind === 'upload_terminal' && row.report_snapshot) {
+        await txn.runAsync(`insert into local_state (key, value, updated_at) values (?, ?, ?)
+          on conflict(key) do update set value = excluded.value, updated_at = excluded.updated_at`,
+        deliveredReceiptKey(row.id), json(deliveryProof(row.report_generation, row.report_snapshot)), now);
+      }
+      return txn.runAsync(`
       update support_incident_queue set status = 'sent', last_sent_at = ?, last_sent_release = ?, report_snapshot = null,
       next_attempt_at = null, last_error = null, updated_at = ? where id = ? and report_generation = ?`,
-    now, json(releaseIdentity(release ?? row.report_snapshot?.observed ?? row.observed)), now, row.id, row.report_generation)),
+      now, json(releaseIdentity(release ?? row.report_snapshot?.observed ?? row.observed)), now, row.id, row.report_generation);
+    }),
     markRejected: (reference, errorMessage, { transaction } = {}) => mutate(reference, transaction, (txn, row) => txn.runAsync(`
       update support_incident_queue set status = 'rejected', last_error = ?, next_attempt_at = null, updated_at = ?
       where id = ? and report_generation = ?`, errorMessage, timestamp(), row.id, row.report_generation)),

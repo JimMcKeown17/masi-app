@@ -21,6 +21,7 @@ const toOutboxRecord = (row) => {
 };
 
 const toFailedItem = (row) => ({
+  outboxId: row.id,
   table: row.table_name,
   id: row.record_id,
   operation: row.operation,

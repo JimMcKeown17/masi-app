@@ -1,4 +1,6 @@
-import { incidentRepeatKey, ONCE_KINDS, releaseIdentity, withBundleOutcomes } from '../db/repositories/supportIncidentRepository';
+import {
+  DELIVERED_RECEIPT_PREFIX, incidentRepeatKey, ONCE_KINDS, releaseIdentity, uploadTerminalParts, withBundleOutcomes,
+} from '../db/repositories/supportIncidentRepository';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths } from 'expo-file-system/next';
 import { v4 as uuidv4 } from 'uuid';
@@ -111,7 +113,7 @@ export const observeStandingConditions = async handle => {
     (scope >= 'skill_mastery_pull:' and scope < 'skill_mastery_pull;') or
     (scope >= 'letter_mastery_pull:' and scope < 'letter_mastery_pull;')`);
   const conditions = terminal.map(row => ({ kind: 'upload_terminal',
-    parts: [row.table_name, row.record_id, row.operation, row.created_at, row.error_class, row.error_code], payload: terminalPayload(row) }));
+    parts: uploadTerminalParts(row), payload: terminalPayload(row) }));
   if (backlog.length && Date.parse(backlog[0].created_at) < Date.parse(now)-72*3600000 &&
       Date.parse(handle.lastServerResponseAt) >= Date.parse(now)-86400000) {
     conditions.push({kind:'upload_backlog_stale',parts:['backlog'],payload:backlogPayload(backlog,now)});
@@ -135,8 +137,8 @@ export const observeStandingConditions = async handle => {
       payload:{foreignTotal:foreign.length,foreignByTable}});
   }
   // At most 200 live conditions. Unchanged refreshes need not acquire the domain writer.
-  const queue = await db.getAllAsync(`select kind,repeat_key,schema_version,status,bundle_state,updated_at,
-    has_unsent_changes,last_sent_at,last_seen_at,payload,observed from support_incident_queue`);
+  const queue = await db.getAllAsync(`select id,kind,repeat_key,schema_version,status,report_generation,bundle_state,
+    updated_at,has_unsent_changes,last_sent_at,last_seen_at,payload,observed from support_incident_queue`);
   const release = canonicalJson(releaseIdentity(getRuntimeDiagnostics()));
   const changed = conditions.filter(condition => {
     const old = queue.find(row => row.kind === condition.kind && row.repeat_key === incidentRepeatKey(...condition.parts));
@@ -152,8 +154,20 @@ export const observeStandingConditions = async handle => {
   const hasTransition = queue.some(row => (row.bundle_state === 'capturing' && row.updated_at <= recoveryAt) ||
     (row.schema_version === 2 && row.status === 'sent' && row.has_unsent_changes && !ONCE_KINDS.includes(row.kind) &&
       Date.parse(row.last_sent_at) <= Date.parse(now)-86400000));
+  // O1 item 2: a live refusal's sent receipt with no delivery proof for its generation (sent
+  // before this update) is sent once more, which writes the proof.
+  const proofs = await db.getAllAsync(`select key,value from local_state where key >= ? and key < ?`,
+    DELIVERED_RECEIPT_PREFIX, `${DELIVERED_RECEIPT_PREFIX.slice(0, -1)};`);
+  const proofGeneration = new Map(proofs.map(row => {
+    let generation = null; try { generation = JSON.parse(row.value)?.report_generation ?? null; } catch { /* unreadable proof */ }
+    return [row.key.slice(DELIVERED_RECEIPT_PREFIX.length), generation];
+  }));
+  const liveRefusalKeys = new Set(terminal.map(row => incidentRepeatKey(...uploadTerminalParts(row))));
+  const undelivered = queue.filter(row => row.kind === 'upload_terminal' && row.schema_version === 2 &&
+    row.status === 'sent' && liveRefusalKeys.has(row.repeat_key) && proofGeneration.get(row.id) !== row.report_generation)
+    .map(row => row.id);
   assertExportHandle(handle);
-  if (!changed.length && !hasTransition) return;
+  if (!changed.length && !hasTransition && !undelivered.length) return;
   const repository = handle.services.repositories.supportIncidents;
   const captures = []; const evicted = [];
   await handle.withTransaction(async txn => {
@@ -167,6 +181,7 @@ export const observeStandingConditions = async handle => {
       payload = ?, updated_at = ? where id = ? and bundle_state = 'capturing'`,
     JSON.stringify({...JSON.parse(row.payload),bundleCaptureFailed:true}),now,row.id);
     await repository.promoteDue(txn,now);
+    await repository.promoteUndelivered(txn,undelivered,now);
   });
   cleanupBundleFiles(handle,evicted);
   for (const incidentRef of captures) {

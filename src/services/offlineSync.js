@@ -9,6 +9,8 @@ import { applyCorrectionAcknowledgement as applySkillCorrectionAcknowledgement }
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
+import { readDeliveredReceipt } from './deliveredReceipt';
+import { DELIVERED_RECEIPT_PREFIX, deliveredReceiptKey } from '../db/repositories/supportIncidentRepository';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import { VERSIONED_TABLES, IMMUTABLE_ASSIGNMENT_TABLES, isStampedOperation } from '../db/repositories/rowVersion';
@@ -550,6 +552,25 @@ const isHealableRlsError = (record) => {
   if (err.startsWith(AUTHENTICATED_DENIAL_MARKER)) return false;
   if (record.error_code && record.error_code !== 'OTHER') return record.error_code === '42501';
   return RLS_ERROR_SIGNATURE.test(err);
+};
+
+// Lifecycle safety O1: how a refused row leaves the phone, once the office holds the delivered
+// receipt of its exact current revision (services/deliveredReceipt.js). A refused archive,
+// restore or edit resolves to server truth by itself (D6): the receipt keeps the EA's intent and
+// the next pull converges the row. Refused history, and any other refusal, waits for the EA's
+// "The office has a copy — remove from this phone" (D8). A foreign-owner quarantine never leaves.
+const SELF_CLEARING_REFUSAL_CODES = Object.freeze([
+  'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED', 'MV001', 'UPDATE_NOT_APPLIED', '42501',
+]);
+export const refusalExit = (row) => {
+  if (row?.status !== 'terminal' || row.error_code === 'FOREIGN_OWNER') return null;
+  if (
+    !isResendableRefusal(row)
+    && SELF_CLEARING_REFUSAL_CODES.includes(row.error_code)
+    // An unmarked 42501 is auth-loss collateral that the auth-restore heal requeues (Item 9).
+    && !(row.error_code === '42501' && isHealableRlsError(row))
+  ) return 'clears_itself';
+  return 'ea_removes';
 };
 
 const errorMessage = (error) => (
@@ -1898,6 +1919,12 @@ export const createOutboxSyncEngine = ({
           // Support reporting never changes whether the upload pass succeeded.
           console.warn('syncAll: support incident drain failed:', errorMessage(error));
         }
+        try {
+          result.refusalsCleared = await resolveDeliveredRefusals(passUserId);
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          console.warn('syncAll: refused-row resolve failed:', errorMessage(error));
+        }
       }
     } catch (error) {
       if (isStaleActorError(error)) {
@@ -1933,6 +1960,78 @@ export const createOutboxSyncEngine = ({
 
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
+  // O1 item 2: after each pass's receipt drain, refused archives, restores and edits whose
+  // exact current revision the office holds leave the phone. The check and the delete share one
+  // transaction. Proof keys leave with their outbox row or receipt, whichever goes first.
+  const resolveDeliveredRefusals = async (ownerUserId) => runRepositoryTransaction(database, async (txn) => {
+    const refused = await txn.getAllAsync(
+      "select * from sync_outbox where status = 'terminal' and owner_user_id = ?", ownerUserId);
+    let cleared = 0;
+    for (const row of refused) {
+      if (refusalExit(row) !== 'clears_itself') continue;
+      const { delivery, incidentId } = await readDeliveredReceipt(txn, row);
+      if (delivery !== 'delivered') continue;
+      await outboxRepository.deleteRecord(row.id, { transaction: txn });
+      await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
+      cleared += 1;
+    }
+    await txn.runAsync(`
+      delete from local_state
+      where key >= ? and key < ?
+        and (substr(key, ?) not in (select id from support_incident_queue)
+          or json_extract(value, '$.outboxId') is null
+          or json_extract(value, '$.outboxId') not in (select id from sync_outbox))
+    `, DELIVERED_RECEIPT_PREFIX, `${DELIVERED_RECEIPT_PREFIX.slice(0, -1)};`, DELIVERED_RECEIPT_PREFIX.length + 1);
+    return cleared;
+  });
+
+  // D8: "The office has a copy — remove from this phone". Removes only the stuck upload (the
+  // local record stays) and only while the rule holds, checked in the same transaction.
+  const removeDeliveredItem = async (outboxId) => {
+    let outcome = { removed: false, delivery: null };
+    await runRepositoryTransaction(database, async (txn) => {
+      const row = await txn.getFirstAsync('select * from sync_outbox where id = ?', outboxId);
+      if (!refusalExit(row)) return;
+      const { delivery, incidentId } = await readDeliveredReceipt(txn, row);
+      if (delivery !== 'delivered') {
+        outcome = { removed: false, delivery };
+        return;
+      }
+      await outboxRepository.deleteRecord(row.id, { transaction: txn });
+      await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
+      outcome = { removed: true };
+    });
+    return outcome;
+  };
+
+  // Adds each needs-attention item's way out. Support bookkeeping never breaks the status the EA
+  // sees, so a failed read leaves the items without one.
+  const describeRefusalExits = async (items) => {
+    if (!items?.length) return items || [];
+    try {
+      const db = await resolveDatabase(database);
+      const described = [];
+      for (const item of items) {
+        const row = item.outboxId
+          ? await db.getFirstAsync('select * from sync_outbox where id = ?', item.outboxId) : null;
+        const exit = refusalExit(row);
+        const { delivery } = exit ? await readDeliveredReceipt(db, row) : { delivery: null };
+        described.push({
+          ...item,
+          delivery,
+          clearsItself: exit === 'clears_itself',
+          canRemove: exit === 'ea_removes' && delivery === 'delivered',
+          canRetry: exit !== null && isResendableRefusal(row),
+        });
+      }
+      return described;
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      console.warn('Refused-row exits unavailable:', errorMessage(error));
+      return items.map((item) => ({ ...item, delivery: null, clearsItself: false, canRemove: false, canRetry: false }));
+    }
+  };
+
   const getSyncStatus = async (options = {}) => {
     try { await observeStandingConditions?.(); } catch (error) {
       if (isStaleActorError(error)) throw error;
@@ -1950,6 +2049,7 @@ export const createOutboxSyncEngine = ({
     ]);
     return {
       ...status,
+      needsAttentionItems: await describeRefusalExits(status.needsAttentionItems),
       incidentReadyCount,
       lastSyncTime: meta.lastSyncTime,
       lastSuccessfulSyncTime: meta.lastSuccessfulSyncTime || null,
@@ -2025,6 +2125,7 @@ export const createOutboxSyncEngine = ({
     getSyncStatus,
     requeueTerminalRlsFailures,
     retryFailedItem,
+    removeDeliveredItem,
   };
 };
 
