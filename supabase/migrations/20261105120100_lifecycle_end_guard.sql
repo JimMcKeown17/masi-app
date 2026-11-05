@@ -76,11 +76,34 @@ begin
     if p_lock then
       perform 1 from public.classes c where c.id = p_id for update;
     end if;
+    -- Someone else holds the class when they teach it, or when they hold one of its children
+    -- directly or through a group of the class: an archive would hide that child from them.
+    -- Children and groups are read, not locked, so the global lock order is kept. That is safe
+    -- because any Head Office grant that makes someone a holder here (a class assignment, a
+    -- direct assignment to a child of the class, a group assignment on a group of the class)
+    -- locks this class row first, in the children -> classes -> groups order.
     return exists (
       select 1 from public.class_ea_assignments a
       where a.class_id = p_id
         and a.ea_user_id is distinct from p_actor
         and a.unassigned_at is null
+    )
+    or exists (
+      select 1 from public.child_class_memberships m
+      join public.child_ea_assignments a
+        on a.child_id = m.child_id and a.unassigned_at is null
+      where m.class_id = p_id
+        and m.exited_at is null
+        and a.user_id is distinct from p_actor
+    )
+    or exists (
+      select 1 from public.groups g
+      join public.group_ea_assignments a
+        on a.group_id = g.id and a.unassigned_at is null
+      join public.child_group_memberships m
+        on m.group_id = g.id and m.removed_at is null
+      where g.class_id = p_id
+        and a.ea_user_id is distinct from p_actor
     );
   elsif p_table = 'groups' then
     if p_lock then

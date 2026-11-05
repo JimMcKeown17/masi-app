@@ -801,6 +801,22 @@ const buildCases = ({ literacyId, numeracyId }) => {
       check('ended row unchanged', `SELECT enrolled_at = TIMESTAMPTZ '${GRANT_START}' AS start_kept, exited_at = TIMESTAMPTZ '${HO_END}' AS end_kept FROM public.child_class_memberships WHERE id = '${CCM_F}'`, [{ start_kept: true, end_kept: true }]),
     ]);
   }
+  // ===== Review follow-up 5: Delete class leaves when another EA holds a child in the class.
+  add('E1a.ea_class_child_held_directly_by_other', 'T1 archives (review follow-up 5)', "EA_A created KA and is its only class holder, but EA_B delivers to F in KA: Delete class means leave", [
+    asHO('ho.EA_B delivers F', `INSERT INTO public.child_ea_assignments (id, user_id, child_id, created_by) VALUES ('${uid('f6', 42)}', '${EA_B}', '${F}', '${HO}') RETURNING id`, rows(1)),
+    asEA(EA_A, 'class archive', archive('classes', KA, { archived_at: ARCHIVE_AT, row_version: 2 }), rows(1)),
+    check('KA live; F still in KA', `SELECT (SELECT archived_at IS NULL FROM public.classes WHERE id = '${KA}') AS live, (SELECT exited_at IS NULL FROM public.child_class_memberships WHERE id = '${CCM_F}') AS f_in_class`, [{ live: true, f_in_class: true }]),
+  ]);
+  add('E1a.ea_class_child_held_via_group_of_class', 'T1 archives (review follow-up 5)', "EA_A created KA and is its only class holder, but EA_B holds a group of KA with F in it: Delete class means leave", [
+    ...hoSeed('ho.EA_B group in KA', [
+      `INSERT INTO public.groups (id, name, programme_id, class_id, created_by) VALUES ('${uid('fa', 43)}', 'Group in KA', ${LIT}, '${KA}', '${HO}') RETURNING id`,
+      `INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by) VALUES ('${uid('fb', 43)}', '${uid('fa', 43)}', '${EA_B}', ${LIT}, '${HO}') RETURNING id`,
+      `INSERT INTO public.child_group_memberships (id, child_id, group_id, joined_at, created_by) VALUES ('${uid('fc', 43)}', '${F}', '${uid('fa', 43)}', '${GRANT_START}', '${HO}') RETURNING id`,
+    ]),
+    asEA(EA_A, 'class archive', archive('classes', KA, { archived_at: ARCHIVE_AT, row_version: 2 }), rows(1)),
+    check('KA live', `SELECT archived_at IS NULL AS live FROM public.classes WHERE id = '${KA}'`, [{ live: true }]),
+  ]);
+
   add('E.group_handover_bare_id_archive', 'T1 other (H1 group handover)', "Head Office hands G to EA_B with a fresh-id row; EA_A's 1.5.0 archiveGroup chain converges", [
     hoEnd('ho.end EA_A on G', 'group_ea_assignments', GEA_G, 'unassigned_at', ", handover_reason = 'HO handover'"),
     asHO('ho.EA_B on G (fresh id)', `INSERT INTO public.group_ea_assignments (id, group_id, ea_user_id, programme_id, created_by) VALUES ('${uid('fb', 10)}', '${G}', '${EA_B}', ${LIT}, '${HO}') RETURNING id`, rows(1)),
