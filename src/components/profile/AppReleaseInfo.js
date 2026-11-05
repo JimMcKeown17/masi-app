@@ -5,9 +5,9 @@ import SectionHeader from '../common/SectionHeader';
 import { colors, spacing } from '../../constants/colors';
 import { typeRoles } from '../../constants/typography';
 
-const MISSING = '—';
+const MISSING = '\u2014';
 const shown = (value) => (value === null || value === undefined || value === '' ? MISSING : String(value));
-const fact = (text) => text.replace(/ /g, ' ');
+const fact = (text) => text.replace(/ /g, '\u00a0');
 
 function Fact({ label, value, note, large = false }) {
   return <View accessible accessibilityLabel={[label, value, note].filter(Boolean).join(', ')} style={styles.cell}>
