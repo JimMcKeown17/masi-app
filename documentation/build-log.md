@@ -8754,6 +8754,31 @@ could not tell name order from id order) is fixed by giving the fixture classes 
 opposes their ids. The Django real-Postgres gate (`api/tests_masi_app_postgres.py`) passed against
 the retained harness database, decoding both v2 functions through the new read-only guard.
 
+### 2026-11-05 — First-sweep fixes released and checked on pilot builds (`docs/first-sweep-released`)
+
+The 1.5.0 pilot builds iOS 28 / Android 58 (from `8b79eae5`, 2026-11-03) contain the keyboard
+fix (#123, `4bc23d1`) and the first-sweep small bugs (#128, `a9458ac`). Records
+MA-BUG-20261030-001 to -006 move to `RELEASED`.
+
+| Check | Result |
+| --- | --- |
+| Release identity (005), iPhone | Diagnostics receipt `cdb020e4` and report `c06d09b7` (iPhone 17, iOS 26.6.2): `build` 28, `releaseLabel` "1.5.0 (28)", `gitCommit` `8b79eae58699…`. Pass. |
+| Release identity (005), Android | Diagnostics receipt `90a17f75` (A03s, build 58): `build` 58, `releaseLabel` "1.5.0 (58)", same commit. Pass. Record 005 → `DEVICE_VERIFIED`; #127 closed. |
+| Send diagnostics spacing (006), iPhone | Jim: fine. A03s build 58 also clear. |
+| Report with screenshot (002/003), iPhone | Jim sent one with a screenshot; stored; no layout problem raised. |
+| Keyboard band (MA-BUG-20261031-001), iPhone | Same empty band as Android: 270 px = 90 pt on the iPhone 17. The offset is excess on both platforms; record → `PROBABLE` (90%), fix = offset 0 on all four forms (#129). |
+
+**Play Store surprise.** Jim reinstalled from the Play internal-testing link and got build 55,
+not 58, although EAS reports submission `a947322f` as released to the internal track with
+`releaseStatus: completed`. Build 57 on the phone was a `preview` APK (installed directly), so
+going to 55 was Play's first offer, not a downgrade by Play. Opening the app's Play page a few
+minutes later showed "Update"; it installed 58 (versionCode 58, data kept). Likely Play's cached
+listing on the device. If a tester reports the same, open the app's Play page and tap Update.
+
+**Seen, not ours:** the A03s on build 58 shows "No active programme" right after reinstall
+(MA-BUG-20261031-002), and there are 7 `pull_failing` receipts from builds 26 and 28 since
+2026-11-03. Both need a `/bug-sync` sweep.
+
 ### 2026-11-05 — Draft content packs: words, blends and books on pilot builds
 
 **Decision (Jim, 2026-11-05).** Masi's team is testing the app now and needs every candidate word and
