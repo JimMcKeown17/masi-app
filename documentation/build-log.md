@@ -10046,3 +10046,55 @@ commits reworked `src/` lines changed by the commit phones run (safe; `git branc
 restores the ref while the commit is still in the clone). On a refusal, the check runs up to 20
 `merge-tree`s at HEAD plus a first-parent walk per tip. Each walk is short when the tip has merged
 main recently (148–453 ms on the real history).
+
+### 2026-11-05 — Lifecycle stack merged to main; post-merge audit; Jim's offline lesson + Delete child check (`feat/app-release-card`, work order 11)
+
+**Merges (squash).** #160 `3458adc9` (bug records and the plan), #161 `f0a34da3` (server batch),
+#162 `58414b60` (Head Office lifecycle script with `restore child`, daily invariant check), #163
+`ccd064a1` (lifecycle app update). #167 (App release card, `ota:publish` with the rollback guard)
+and #168 (bug records) merge next. Trees compared with `git rev-parse <sha>^{tree}` against each
+PR's head (`gh pr view N --json headRefOid,mergeCommit`): the #161, #162 and #163 squashes equal the
+PR heads CI passed on. #160's does not: its CI ran 15:44–16:01 UTC, before #165 merged (17:55),
+and the squash landed on main `9f6b0f96`. Its tree equals `git merge-tree --write-tree 9f6b0f96
+<head>` (no conflict), and #160 changed only `docs/` and `documentation/`.
+
+**Post-merge audit** (read-only, 7 agents). No file that reaches the app bundle differs between
+`b759128f` (what `1.5.0+4` runs) and the merged tree: only `package.json` scripts entries, docs,
+tests, `scripts/` and `supabase/` differ. So the merge needs no new update. The doc drifts it found
+are fixed in this commit: contract map (R1 applied), interim rules (a concrete app-update test and a
+dated status line), runbook (rule 1's lift now links to the interim rules), DEPLOYMENT (bundles
+without the card; JS-only changes ship with `ota:publish`), CONTEXT (App release footer wording;
+`ho:restore`), ADR-0014 (`restore child` row), documentation README (interim rules row), ROADMAP
+(lifecycle gate item; the OTA wrapper item narrowed to what `ota:publish` does not do yet), and a
+status note at the top of the plan. Left alone (optional): escaping `|` inside register table rows.
+
+**The app-update test.** A phone has the lifecycle app update when Profile → App release shows
+Release `1.5.0+4` or later and its Send diagnostics receipt has `observed.update.otaRelease` ≥ 4.
+That field is set in `src/utils/runtimeDiagnostics.js` from `buildReleaseIdentity`
+(`src/utils/releaseMetadata.js`), and the receipt's `observed` column stores that snapshot. Group
+`9542a163` (a bare `eas update`, counted as 3) and `1.5.0+1` (`8addaae6`) carry none:
+`git show <commit>:src/utils/runtimeDiagnostics.js` has no `otaRelease` at `fd053cfc`, `9f6b0f96`
+or `8b79eae5`. Live since about 19:55 UTC: `1.5.0+5`, group `3ec327af` from `1bddda8e` (this
+branch at `513dd664` plus the Wrap up child-cards redesign, #169, not yet on main), published by
+another session with `ota:publish`; the guard passed against `1.5.0+4`.
+
+**Jim's device check** (iPhone, build 28 on `1.5.0+4`, staging). An offline lesson with a child in
+a class two test EA accounts both hold, then Delete child. On the server: the lesson, its
+attendance and 2 letter ticks were written 18:44:00–01 UTC; at 18:44:19.719975 UTC the server ended
+only that EA's direct assignment and group membership, in one transaction. The child stayed live
+(the other EA holds it through the class), its class membership and enrollment stayed open, and no
+incident receipts arrived after. Not covered: removing a group or class after an offline lesson;
+the second EA's phone was not opened.
+
+**Open.**
+- #157: the two-phone check on installed 1.5.0.
+- #158: the app update device gate and per-phone uptake. Plan step G1.1 (re-freeze the T1
+  disposition fixture for the update commit; replay the all-offline Delete child chain's wire
+  requests into Postgres with the server batch) was not done before the update went live.
+- #159: field verification during the retest.
+- The fix decision for MA-BUG-20261105-003, and the first live `--apply` of the Head Office
+  script (Jim).
+- #167 and #168 merge. Main must take #169 before the next publish from main, or the guard will
+  refuse it. That is the guard working as intended, not a bug.
+
+Docs only: no source, script, test or SQL change, so no suites were run.

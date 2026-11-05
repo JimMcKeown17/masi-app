@@ -200,8 +200,9 @@ A bundle built from the App release change (2026-11-05) or later shows the card:
 
 An older bundle has no card: it still shows the old caption footer at the bottom of Profile
 (`Version 1.5.0 (Build N) · Backend …`, then the project, then the device and `Update <full update
-id>`). Today that is the 1.5.0 store builds' own bundle and the lifecycle update on `preview`
-(group `8addaae6`, from `fd053cfc`). So once the first scripted update is out, a phone that shows
+id>`). Today that is the 1.5.0 store builds' own bundle, the lifecycle update on `preview`
+(group `8addaae6`, from `fd053cfc`), and group `9542a163` (a bare `eas update` from `main` at
+`9f6b0f96`, counted as update 3), which also lacks the lifecycle app update. So once the first scripted update is out, a phone that shows
 the App release card at all is running it or a later one.
 
 Numbers count per runtime, so a new app version starts again: the first update for 1.6.0 is
@@ -233,7 +234,7 @@ For reference, here's what was configured:
 3. Added `channel: "production"` to the production profile in `eas.json`
 4. **Still needed:** One full native build per platform to bake in the update client (see next section)
 
-> **Important:** The first build after this setup MUST be a full native build (`eas build`). After that, JS-only changes can use `eas update`.
+> **Important:** The first build after this setup MUST be a full native build (`eas build`). After that, JS-only changes ship with `npm run ota:publish` (never a bare `eas update`; see "Pushing an OTA Update").
 
 ---
 
