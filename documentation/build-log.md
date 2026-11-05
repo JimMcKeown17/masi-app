@@ -10241,6 +10241,12 @@ the merge's own `merge-tree` into HEAD, and its walk.
 - **The false refusal this branch fixes:** MA-BUG-20261105-008. The workaround (the release branch moved to
   e312df77) is what made the dry run above pass. Keep `release/ota-wrap-up-cards` and `feat/wrap-up-child-cards`
   on origin until an update published from main is live.
+- **Later the same evening, `1.5.0+6`** was published by the other session from PR #170's own branch:
+  group 841de43e, commit ab9e16f, `feat/wrap-up-letter-rule` = main fc0bae37 + the bold letter rule. Its guard
+  check passed through `release/ota-wrap-up-cards`. Publishing from the PR branch itself avoids the merge-commit
+  shape. Main can't publish again until #170 merges.
+- **Standing docs no longer name the live update.** The interim rules keep only the lasting test (Release
+  `1.5.0+4` or later); which update is live is recorded here and on #158.
 - **Jim, 2026-11-05:**
   - The app update device gate (#158) replaces the two-phone check on installed 1.5.0 (#157).
   - #154 stays open until the Head Office script's first live use.

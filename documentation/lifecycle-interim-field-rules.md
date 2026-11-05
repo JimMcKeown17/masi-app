@@ -3,7 +3,7 @@
 **Status:** in force from 2026-11-04 until the fixes below are live. Each rule says what lifts it.
 **2026-11-05:** the server batch (plan step R1) is applied to `masi-app-sqlite`. Jim decided that the
 app update device gate (#158) replaces the two-phone check on installed 1.5.0 (#157). The lifecycle app update is in `1.5.0+4` and every
-later update; `1.5.0+5` (Wrap up cards, #169) is live. A phone has it only when
+later update. A phone has it only when
 [its receipt says so](#how-to-tell-a-phone-has-the-app-update).
 **Why:** the 1.5.0 pilot builds can strand recorded work when a child, class or group is removed,
 or when Head Office changes who teaches whom while a phone is offline. The bug records are
