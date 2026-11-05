@@ -9199,3 +9199,29 @@ was reproduced in the repo's own suites first; the fixes keep to the Delete chil
   - `npx jest -c jest.integration.config.js`: 114 suites / 1,565 tests passed.
   - No SQL changed, and the wire is unchanged (the `deleteChildChain` wire fixture still matches),
     so no PostgreSQL harness applies. `npm run lint` does not exist.
+
+### 2026-11-05 — App update `1.5.0+2` published (`feat/app-release-card` e9a4360d, PRs #163 + #167)
+
+First update published with `npm run ota:publish`, from a clean detached worktree at `e9a4360d`
+after CI passed on #167 (16m27s) and #163 (16m51s). The combined tree (`feat/lifecycle-ota`
+e74a32c4 merged into this branch) passed unit 526 suites / 8,402 tests and integration 114 suites /
+1,565 tests locally.
+
+- **Dry run against live EAS:** `channel:view preview` showed the channel on its own branch, and
+  `update:list` counted one earlier 1.5.0 group (`8addaae6`), giving `1.5.0+2`. Nothing published.
+- **Publish (`--publish`):** group `2ed208c1-1760-4c1d-b450-0844d4eeb7f0`, iOS update
+  `01a1accc-289c-7734-a8af-803a9eafc0d9`, Android `01a1accc-289c-7935-8740-2cc659d1b4be`, runtime
+  1.5.0, channel `preview`, message `OTA 1.5.0+2: App release card on Profile; Delete child and Head
+  Office restore fixes (#163, #167) (e9a4360)`. Sentry source maps were uploaded for both bundles by
+  the script's second step.
+- **Manifest check:** fetched as a 1.5.0 iPhone and a 1.5.0 Android phone would (`u.expo.dev`,
+  protocol 1). Both carry `extra.expoClient.extra.otaRelease: 2`, `otaPublishedAt
+  2026-11-05T17:39:31.658Z`, `gitCommit e9a4360d…`, and `supabaseTarget sqlite-staging`, with
+  `createdAt 2026-11-05T17:40:23.324Z`.
+- **What a phone on it shows** in Profile → App release: Release `1.5.0+2`; Build `1.5.0 (<its
+  build>)`; Channel `preview`; Runtime `1.5.0`; Update `01a1accc`; Running `Update`; Source
+  `e9a4360`; Published `2026-11-05 17:40 UTC`; Backend `sqlite-staging`.
+- **Also in this update** (from #163): Delete child no longer fails when the phone's clock was fast
+  when the child's rows were made (9107d37c), and a child Head Office restores comes back on the
+  phone's next pull.
+- **Open:** the device check of the card (Jim's iPhone) and per-phone uptake (#158).
