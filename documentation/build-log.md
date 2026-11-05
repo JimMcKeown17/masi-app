@@ -8825,3 +8825,12 @@ so a later Head Office reopen of that same child would not un-archive it on this
 class by the creator and only holder still leaves that class's delivery children in a closed class
 (same outcome as before; the sheet says to move them first). An acknowledged membership whose
 archive backs off can still meet a re-add 23505 (outside E4's still-queued case).
+
+**Verification (Node 20.19.4, 2026-11-04, branch head before this note).**
+- `npx jest`: **519 suites / 8203 tests passed** (baseline before the slice: 15 failures in 5
+  suites, all environmental — missing node_modules assets, since restored).
+- `npx jest -c jest.integration.config.js`: **113 suites / 1544 tests passed** (adds
+  `deleteChildChain` and `groupMembershipReAdd`).
+- Focused slice run (13 suites): **263 passed**.
+- `pg-replay.cjs` on the recorded O2 chain into disposable `postgres:17-alpine` (42 migrations):
+  all replayed requests agree. Container removed. No `lint` script exists. No live or staging access.
