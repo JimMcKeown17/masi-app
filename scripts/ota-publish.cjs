@@ -18,6 +18,21 @@ const MAX_PAGES = 200;
 const CHANNEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const IGNORED_UNTRACKED = /^\?\? (node_modules|dist)(\/.*)?$/;
 const MESSAGE_REQUIRED = 'Missing --message: --message "describe what changed" is required.';
+const USAGE = 'npm run ota:publish -- --message "…" [--channel preview] [--dry-run]';
+
+// npm reads flags written before the `--` as its own settings and passes the script only what
+// follows it, so `npm run ota:publish --dry-run -- --message x` would reach this script as a real
+// publish. npm exports such a setting as npm_config_<name>; any of this script's flags there means
+// the command was not what it looks like, so refuse it rather than guess what was meant.
+const NPM_TAKEN_FLAGS = [['dry_run', '--dry-run'], ['channel', '--channel'], ['message', '--message']];
+const refuseFlagsNpmTook = (env) => {
+  for (const [name, flag] of NPM_TAKEN_FLAGS) {
+    const value = env[`npm_config_${name}`];
+    if (value === undefined || value === '' || value === 'false') continue;
+    throw new Error(`npm took ${flag} for itself (npm_config_${name}=${value}), so this script never saw it. `
+      + `Write every flag after the \`--\`: ${USAGE}. Nothing was published.`);
+  }
+};
 
 const parseArgs = (argv) => {
   const options = { message: undefined, channel: 'preview', dryRun: false };
@@ -32,6 +47,8 @@ const parseArgs = (argv) => {
   }
   const message = typeof options.message === 'string' ? options.message.trim() : '';
   if (!message) throw new Error(MESSAGE_REQUIRED);
+  // `--message --dry-run` must not publish with the message "--dry-run" and no dry run.
+  if (message.startsWith('-')) throw new Error(`--message needs a description, not "${message}": a message cannot start with "-".`);
   if (/[\r\n]/.test(message)) throw new Error('--message must be one line.');
   if (typeof options.channel !== 'string' || !CHANNEL_NAME.test(options.channel)) {
     throw new Error('--channel needs a channel name, such as preview or production.');
@@ -127,14 +144,15 @@ const describe = ({ command, args }, env = {}) => [
   ...Object.entries(env).map(([key, value]) => `${key}=${shellWord(value)}`), command, ...args.map(shellWord),
 ].join(' ');
 
-const main = (argv, { git, runForOutput, run, loadConfig, now = () => new Date(), log = console.log }) => {
+const main = (argv, { git, runForOutput, run, loadConfig, env = process.env, now = () => new Date(), log = console.log }) => {
+  refuseFlagsNpmTook(env);
   const { message, channel, dryRun } = parseArgs(argv);
   const version = readAppVersion(loadConfig);
   const head = assertReleaseReady({ git });
   const release = nextReleaseNumber({ groups: listUpdateGroups({ branch: channel, runForOutput }), version });
   const releaseLabel = `${version}+${release}`;
   const updateMessage = formatUpdateMessage({ version, release, message, commit: head });
-  const env = { MASI_OTA_RELEASE: String(release), MASI_OTA_PUBLISHED_AT: now().toISOString() };
+  const releaseEnv = { MASI_OTA_RELEASE: String(release), MASI_OTA_PUBLISHED_AT: now().toISOString() };
   const update = buildUpdateCommand({ channel, message: updateMessage });
   const sourcemaps = buildSourcemapCommand({ channel });
   const result = { release, releaseLabel, message: updateMessage, channel, dryRun };
@@ -142,13 +160,13 @@ const main = (argv, { git, runForOutput, run, loadConfig, now = () => new Date()
   if (dryRun) {
     log(`Next release: ${releaseLabel} on ${channel}`);
     log(`Update message: ${updateMessage}`);
-    log(`Would run: ${describe(update, env)}`);
+    log(`Would run: ${describe(update, releaseEnv)}`);
     log(`Then: ${describe(sourcemaps)}`);
     return result;
   }
 
   log(`Publishing ${releaseLabel} on ${channel}: ${updateMessage}`);
-  run(update.command, update.args, { env });
+  run(update.command, update.args, { env: releaseEnv });
   try {
     run(sourcemaps.command, sourcemaps.args, {});
   } catch (error) {

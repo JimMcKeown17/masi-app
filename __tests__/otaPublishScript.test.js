@@ -44,7 +44,7 @@ const deps = (overrides = {}) => {
   const runForOutput = jest.fn(() => JSON.stringify(previewPage));
   const lines = [];
   return {
-    run, runForOutput, lines,
+    run, runForOutput, lines, env: {},
     git: fakeGit().git, loadConfig: () => config, now: () => NOW, log: line => lines.push(line),
     ...overrides,
   };
@@ -66,8 +66,42 @@ describe('arguments', () => {
     [['--message', 'ok', '--channel'], /--channel needs a channel name/],
     [['--message', 'ok', '--channel', 'pre view'], /--channel needs a channel name/],
     [['--message', 'ok', '--force'], /Unknown argument: --force/],
+    // A flag written where the message should be is never taken as the message.
+    [['--message', '--dry-run'], /--message needs a description, not "--dry-run"/],
+    [['-m', '--dry-run', '--channel', 'preview'], /--message needs a description, not "--dry-run"/],
+    [['--message=--dry-run'], /--message needs a description, not "--dry-run"/],
+    [['--message', 'ok', '--channel', '--dry-run'], /--channel needs a channel name/],
   ])('refuses %p', (argv, error) => {
     expect(() => parseArgs(argv)).toThrow(error);
+  });
+});
+
+describe('flags npm takes for itself', () => {
+  // npm 10 reads flags written before the `--` as its own settings and passes the script only what
+  // follows it: `npm run ota:publish --dry-run -- --message x` runs the script with
+  // ["--message", "x"] and npm_config_dry_run=true (probed with npm 10.8.2). Read as written, that
+  // would be a real publish to every phone on the channel.
+  test.each([
+    ['npm run ota:publish --dry-run -- --message x', { npm_config_dry_run: 'true' }, '--dry-run'],
+    ['npm run ota:publish --channel=production -- --message x', { npm_config_channel: 'production' }, '--channel'],
+    ['npm run ota:publish --channel production -- --message x', { npm_config_channel: 'true' }, '--channel'],
+    ['npm run ota:publish --message x', { npm_config_message: 'x' }, '--message'],
+    ['npm run ota:publish -m x', { npm_config_message: 'x' }, '--message'],
+  ])('%s is refused before anything is checked, listed or published', (_typed, env, flag) => {
+    const d = deps({ env });
+    let error;
+    try { main(['--message', 'x'], d); } catch (caught) { error = caught; }
+    expect(error?.message).toContain(`npm took ${flag} for itself`);
+    expect(error.message).toContain('npm run ota:publish -- --message "…"');
+    expect(error.message).toContain('Nothing was published.');
+    expect(d.runForOutput).not.toHaveBeenCalled();
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  test('npm settings that are unset or false do not block a publish', () => {
+    const d = deps({ env: { npm_config_dry_run: 'false', npm_config_message: '', npm_config_loglevel: 'warn' } });
+    expect(main(['--message', 'x'], d)).toMatchObject({ dryRun: false, releaseLabel: '1.5.0+2' });
+    expect(d.run).toHaveBeenCalledTimes(2);
   });
 });
 
