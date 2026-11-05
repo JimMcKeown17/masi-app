@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 90
 confidence_basis: The footer prints the raw update id (formatReleaseLines in AppReleaseInfo.js at fd053cfc); the phone was on the new update, so only the label was unreadable. PR #167 replaces it with a card and numbered updates and is locally tested, not yet seen on a phone.
 
 created_at_utc: 2026-11-05T17:25:14Z
-updated_at_utc: 2026-11-05T17:25:14Z
+updated_at_utc: 2026-11-05T18:05:00Z
 first_observed_at: 2026-11-05
 last_observed_at: 2026-11-05
 
@@ -148,6 +148,7 @@ PR #167: App release card with the version, a numbered update (`1.5.0+N`), when 
 | --- | --- | --- | --- |
 | 2026-11-05T17:00:00Z | Jim | Reports the unreadable update line | Message with two screenshots |
 | 2026-11-05T17:25:14Z | Claude | Report recorded | Code read at fd053cfc; PR #167 linked |
+| 2026-11-05T18:05:00Z | Claude | Released | Released in app update `1.5.0+2` (group `2ed208c1`, channel `preview`, runtime 1.5.0, from `e9a4360d`, PR #167), published 17:40 UTC with `npm run ota:publish`; both platform manifests carry `otaRelease: 2`. Not merged. Device check of the card on Jim's iPhone is open (#158) |
 
 ## Open questions
 

@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 90
 confidence_basis: A real-SQLite test with the EA's assignment and group membership starting 6 hours ahead fails with the local CHECK before the fix and passes after (9107d37c); not seen on a phone.
 
 created_at_utc: 2026-11-05T17:25:14Z
-updated_at_utc: 2026-11-05T17:25:14Z
+updated_at_utc: 2026-11-05T18:05:00Z
 first_observed_at: 2026-11-05
 last_observed_at: 2026-11-05
 
@@ -140,6 +140,7 @@ Done in `9107d37c`: end each row at the later of the tap time and the row's star
 | --- | --- | --- | --- |
 | 2026-11-05T16:41:58Z | Claude | Fix committed | 9107d37c |
 | 2026-11-05T17:25:14Z | Claude | Report recorded | Code read at fd053cfc |
+| 2026-11-05T18:05:00Z | Claude | Released | Released in app update `1.5.0+2` (group `2ed208c1`, from `e9a4360d`, which includes `feat/lifecycle-ota` e74a32c4 with fix 9107d37c). Not merged. Phones run it from their second launch after it downloads |
 
 ## Open questions
 

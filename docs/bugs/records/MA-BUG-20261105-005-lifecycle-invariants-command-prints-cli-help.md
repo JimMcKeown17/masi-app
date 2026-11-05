@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: IN_PROGRESS
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: E2E_REPRO_CLOSED
 
 root_cause_confidence_pct: 85
 confidence_basis: The staging run printed help, and the SQL starts with `--`, which the Supabase CLI reads as a flag; the fix is still in progress.
 
 created_at_utc: 2026-11-05T17:25:14Z
-updated_at_utc: 2026-11-05T17:25:14Z
+updated_at_utc: 2026-11-05T18:05:00Z
 first_observed_at: 2026-11-05
 last_observed_at: 2026-11-05
 
@@ -133,6 +133,7 @@ In progress in PR #162.
 | Time UTC | Actor | Event | Evidence or decision |
 | --- | --- | --- | --- |
 | 2026-11-05T17:25:14Z | Claude | Report recorded | Observed in the orchestrating session |
+| 2026-11-05T18:05:00Z | Claude | Fixed in code, verified on staging | Fixed on `feat/lifecycle-ho-tools` d5813495 (PR #162): the staging helper passes SQL to the CLI with `--file`, red first in `__tests__/sqliteStagingScript.test.js`. The documented command `npm run sqlite:staging:query -- "$(cat scripts/lifecycle-invariants.sql)"`, run from that branch against staging `segygjzpujphwvrubusm`, returned the invariant table (one old 2026-10-30 receipt) instead of the CLI help. Not merged |
 
 ## Open questions
 
