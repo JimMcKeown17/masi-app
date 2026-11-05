@@ -9027,3 +9027,62 @@ numbers every update so the card can say `1.5.0+2`.
   none of which touch release code. Those 5 suites rerun with `--runInBand`: 110 tests passed.
   `npx jest` again on `baf6dbdc` (load ~60): 525 suites / 8,365 tests passed, exit 0.
 - No SQL, sync or RLS change, so no PostgreSQL harness and no contract-map change. No lint script.
+
+#### 2026-11-05 — App release: independent review fixes (`feat/app-release-card`)
+
+An independent review of the branch found one medium and five low defects. All six are fixed.
+
+- **Medium: a dry run could become a real publish.** npm 10 keeps flags written before the `--`
+  as its own settings and passes the script only what follows. Probed with npm 10.8.2 (Node 20):
+  `npm run ota:publish --dry-run -- --message x` gives the script `["--message","x"]` with
+  `npm_config_dry_run=true`, a real publish to every phone on the channel. The same mechanism made
+  `--channel=production -- …` publish to preview (`npm_config_channel=production`), and `-m x` or
+  `--message x` without the `--` reach the script as `npm_config_message`. Separately,
+  `--message --dry-run` took `--dry-run` as the message. Fix: the script refuses before any check,
+  listing or publish when `npm_config_dry_run`, `_channel` or `_message` is set (unset, empty or
+  `false` pass), naming the setting and the right form; a message cannot start with `-`. Refusing
+  rather than honouring npm's dry run keeps one rule for all three flags and never guesses what a
+  mistyped command meant. Re-run through real `npm run` with a fake `npx` first on PATH: the
+  three npm forms and `-- --message --dry-run` are refused, exit 1; `-- --message x --dry-run`
+  reaches the readiness check.
+- **Low: the counted branch could differ from the published branch.** `eas update --channel c`
+  publishes to the branch c points at (eas-cli 26.0.0
+  `getBranchFromChannelNameAndCreateAndLinkIfNotExistsAsync`: `updateBranches[0]`), but the number
+  was counted on the branch named c. The script now runs `channel:view c --json --non-interactive`
+  first (dry runs too) and refuses unless c points at exactly one branch, named c; a channel EAS
+  cannot find, or output it cannot read, is refused, never created. The JSON shape
+  (`{ currentPage: { ...channel, updateBranches: [{ id, name, updateGroups }] } }`, header on
+  stderr) is read from `build/channel/queries.js` `renderPageOfBranchesOnChannel` and
+  `build/utils/json.js`; the fixture `test-support/fixtures/eas-channel-view/preview.json` is
+  shaped from that source, not captured. If the live shape differs, the first publish refuses
+  with the parse error and publishes nothing.
+- **Low: deleting the newest numbered update group repeats its number.** EAS lists no deleted
+  groups, so after `eas update:delete` of the top `OTA 1.5.0+N:` group both the count and the
+  highest listed number fall and N is used again. Kept as a known limit rather than adding a
+  durable counter outside EAS (a pushed git tag or a committed file would add a write and new
+  failure modes for a rare operator action); the Update id on the card still tells the two
+  updates apart. The script comment, the test title, DEPLOYMENT.md and the bullet above now say
+  only older deletions are safe, and DEPLOYMENT.md says to replace a bad update, not delete it.
+- **Low: DEPLOYMENT.md said the live lifecycle update shows `1.5.0+?`.** That bundle (group
+  `8addaae6`, from `fd053cfc`) predates the card and shows the old caption footer; so does every
+  1.5.0 store build's own bundle (the footer dates from 2026-10-19, 1.5.0 from 2026-10-30).
+  DEPLOYMENT.md now says which bundles show the card, what older ones show, and that a phone
+  showing the card at all is on the first scripted update or later.
+- **Low: no test pinned that a dry run makes the readiness checks.** Two cases added (dirty tree,
+  commit not on origin, both with `--dry-run`); they fail against the reviewer's mutant (dry run
+  skips `assertReleaseReady`) and pass against the script.
+- **Low: App release rows sat top-heavy.** A fact row was min height 64 with its facts
+  top-aligned (36dp of text: 10dp above, 18dp below), unlike the centred `ListRow` rows above it.
+  The row now centres its content; two facts in one row stay top-aligned with each other.
+  design-system.md updated. Not seen on a device (no build or OTA from this branch, and no web
+  renderer installed).
+
+**Verification (Node 20).** RED first, then GREEN: the npm-flag and flag-as-message cases
+(8 failed: "Received function did not throw"), the channel cases (12 failed:
+`assertChannelBranch is not a function`, or `main` publishing to a re-pointed channel), the
+dry-run readiness cases (2 failed against the mutant), and the row-alignment test (1 failed:
+`justifyContent` missing). `__tests__/otaPublishScript.test.js` 55 tests and
+`__tests__/profileComponents.test.js` 16 tests pass; the 9 release-card suites: 137 tests passed.
+`npx jest` on `a42d8933`: 525 suites / 8,389 tests passed, exit 0. `npx jest -c
+jest.integration.config.js`: 113 suites / 1,555 tests passed, exit 0. No SQL, sync or RLS change,
+so no PostgreSQL harness and no contract-map change; no lint script.
