@@ -52,8 +52,8 @@ fetch a version published minutes ago. The 2026-10-28 pilot used 26.0.0.
   switches backends when it installs the SQLite app; there is no legacy-data
   migration, so anything it had not synced stays behind. Nobody uses the legacy
   app today.
-- OTA: store builds are on update channel `preview`
-  (`eas update --channel preview --environment preview`). SQLite runtimes
+- OTA: store builds are on update channel `preview`; publish with
+  `npm run ota:publish -- --message "…"` (see "Pushing an OTA Update"). SQLite runtimes
   (`1.3.0` and later) cannot land on legacy binaries, which use channel
   `production` at runtime 1.1.x/1.2.x.
 - Preview content: never set `MASI_PREVIEW_CONTENT` in an EAS environment.
@@ -70,7 +70,7 @@ fetch a version published minutes ago. The 2026-10-28 pilot used 26.0.0.
 
 | What changed? | What to do |
 |---|---|
-| JavaScript only (screens, logic, styles) | `eas update` — instant OTA, no build needed |
+| JavaScript only (screens, logic, styles) | `npm run ota:publish -- --message "…"` — OTA update, no build needed |
 | Added/removed/upgraded a native package (`expo-location`, etc.) | Full `eas build` + `eas submit` |
 | Changed `app.json` native config (permissions, bundle ID, plugins) | Full `eas build` + `eas submit` |
 | Changed `eas.json` build profiles | Full `eas build` + `eas submit` |
@@ -93,17 +93,60 @@ OTA (over-the-air) updates let you push JS-only changes in ~30 seconds without a
 
 ### Pushing an OTA Update
 
+Publish every update with the script, from a clean commit that is pushed to origin:
+
 ```bash
-npx eas-cli@26.0.0 update --channel preview --environment preview --message "describe what changed"
-npx eas-cli@26.0.0 env:exec --environment preview 'npm run sentry:sourcemaps'
+npm run ota:publish -- --message "describe what changed" --dry-run   # check: prints the number and both commands
+npm run ota:publish -- --message "describe what changed"             # publish on channel preview
 ```
 
-After the field launch, use `production` for both the channel and the environment.
-The first command leaves the exported bundle in `dist/`. The second uploads the
-matching source maps to Sentry using the sensitive `SENTRY_AUTH_TOKEN` stored in
-the same EAS environment. Do not consider the OTA release complete if the
-source-map upload fails: events would arrive, but production stack traces could
-remain minified and much less actionable.
+After the field launch, add `--channel production` (the EAS environment has the channel's name).
+The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
+
+1. Refuses unless the working tree is clean (untracked `node_modules`/`dist` aside) and HEAD is on
+   an origin branch, so every update's Source commit can be found later. `--dry-run` applies the
+   same checks.
+2. Numbers the update. It lists the update groups on the channel's EAS branch
+   (`npx eas-cli@26.0.0 update:list --branch <channel> --json --non-interactive`, page by page) and
+   counts those for this runtime: release N = count + 1. A number already used in an
+   `OTA <version>+N:` message is never reused, even if a group was deleted. If the listing fails
+   the script stops and publishes nothing; it never guesses.
+3. Publishes: `npx eas-cli@26.0.0 update --channel <channel> --environment <channel>
+   --non-interactive --message "OTA 1.5.0+2: <message> (<short commit>)"`, with
+   `MASI_OTA_RELEASE=<N>` and `MASI_OTA_PUBLISHED_AT=<now, ISO UTC>` set. `app.config.js` copies
+   them into `extra.otaRelease` and `extra.otaPublishedAt`, which EAS publishes in the update's
+   manifest. This leaves the exported bundle in `dist/`.
+4. Uploads the matching source maps to Sentry with the sensitive `SENTRY_AUTH_TOKEN` stored in the
+   same EAS environment: `npx eas-cli@26.0.0 env:exec <channel> 'npm run sentry:sourcemaps'
+   --non-interactive`. eas-cli 26 takes the environment as an argument; the older
+   `env:exec --environment preview` form fails. If this step fails, the update is already out: the
+   script says so and prints the command to re-run. Do not consider the OTA release complete
+   until it succeeds: events would arrive, but stack traces could remain minified and much less
+   actionable.
+
+Child processes get argument arrays, so a message with quotes or `$( )` is never run by a shell.
+Do not publish with a bare `eas update`: the phone would show the update as `<version>+?`.
+
+### Release numbers: what the phone shows
+
+| Phone is running | Release | Running |
+|---|---|---|
+| The store build's own bundle | `1.5.0` (the app version) | `Built-in` |
+| The 2nd update published for runtime 1.5.0 | `1.5.0+2` | `Update` |
+| An update published without the script (before 2026-11-05, or a bare `eas update`) | `1.5.0+?` | `Update` |
+
+Numbers count per runtime, so a new app version starts again: the first update for 1.6.0 is
+`1.6.0+1`. Updates published before the script still count: the lifecycle update on `preview`
+(group `8addaae6`, from `fd053cfc`) is 1.5.0's update 1, and a phone running it shows `1.5.0+?`.
+
+**Profile → App release** shows Release (large); Build (version and native build) and Channel;
+Runtime and Update (the first 8 characters of the update id); Running and Published (UTC); Source
+(commit) and Backend, with the project id under it. Device and OS sit in a caption under the
+card. Incident receipts and support exports carry the same label in
+`application.releaseLabel`, plus `update.launch`, `update.otaRelease` and `update.createdAt`.
+
+A phone fetches a new update while it runs and starts it on the next cold start, so after a publish
+open the app, close it fully, and open it again; Release should then read the new number.
 
 ### How Runtime Versions Work
 
@@ -181,7 +224,8 @@ be shipped safely as an OTA update to binaries which do not contain the SDK.
 
 1. Confirm the build logs show successful Sentry source-map upload.
 2. Install the preview or production binary on a physical device.
-3. Open Profile, then choose **Test Crash Reporting** under Debug & Support.
+3. Open Profile, check **App release** shows the expected Release, then choose
+   **Support tools → Test crash reporting**.
 4. Confirm a handled `Masi observability test error` arrives in Sentry with
    `observability_test=true`.
 5. Confirm the stack is symbolicated and the event contains app build, device,
@@ -192,8 +236,8 @@ be shipped safely as an OTA update to binaries which do not contain the SDK.
    identity appears in the local support package.
 
 For EAS Build, source-map upload is automatic when the token and plugin values
-are present. For every EAS Update, run the separate `sentry:sourcemaps` command
-shown above against the generated `dist/` directory.
+are present. For every EAS Update, `npm run ota:publish` runs the separate
+`sentry:sourcemaps` upload against the generated `dist/` directory.
 
 ---
 
