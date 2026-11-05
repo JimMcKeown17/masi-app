@@ -62,7 +62,9 @@ test.each([
   expect(await snapshot()).toEqual(before);
 });
 
-test('archiveClass cascades only delivery-or-creator children and preserves control rows and queued payloads byte-for-byte', async () => {
+// Plan O2 item 3 (MA-BUG-20261104-013): Delete class never changes any child, delivery or control:
+// no membership exit, no class_id change, no queued child write; only the EA's class assignment ends.
+test('archiveClass leaves every child, membership and queued child payload byte-for-byte', async () => {
   await children.save({ id: 'delivery', first_name: 'Delivery', last_name: 'Child', class_id: 'class-1',
     created_by: 'office', synced: true }, { actorUserId: 'user-1' });
   await children.saveChildRecord({ id: 'creator', first_name: 'Created', last_name: 'Child', class_id: 'class-1',
@@ -73,17 +75,14 @@ test('archiveClass cascades only delivery-or-creator children and preserves cont
   await assign('user-1', '2026-09-01');
   await db.runAsync(`insert into sync_outbox (id, table_name, record_id, operation, payload, owner_user_id)
     values ('control-pending', 'children', 'control', 'update', '{"id":"control","first_name":"Still queued"}', 'user-1')`);
-  const control = await db.getFirstAsync("select * from children where id = 'control'");
-  const membership = await db.getFirstAsync("select * from child_class_memberships where child_id = 'control'");
-  const controlOutbox = await db.getAllAsync("select * from sync_outbox where record_id in ('control', 'membership-control') order by id");
-  await classes.archiveClass('class-1', { actorUserId: 'other-ea', archivedAt: '2099-01-01T00:00:00.000Z' });
-  expect(await db.getFirstAsync("select * from children where id = 'control'")).toEqual(control);
-  expect(await db.getFirstAsync("select * from child_class_memberships where child_id = 'control'")).toEqual(membership);
-  expect(await db.getAllAsync("select * from sync_outbox where record_id in ('control', 'membership-control') order by id")).toEqual(controlOutbox);
-  expect(await db.getAllAsync("select id, class_id from children where id <> 'control' order by id"))
-    .toEqual([{ id: 'creator', class_id: null }, { id: 'delivery', class_id: null }]);
-  expect(await db.getAllAsync("select exited_at from child_class_memberships where child_id <> 'control'"))
-    .toEqual([ { exited_at: '2099-01-01T00:00:00.000Z' }, { exited_at: '2099-01-01T00:00:00.000Z' } ]);
+  const childRows = () => db.getAllAsync('select * from children order by id');
+  const membershipRows = () => db.getAllAsync('select * from child_class_memberships order by id');
+  const childOutbox = () => db.getAllAsync("select * from sync_outbox where table_name in ('children', 'child_class_memberships') order by id");
+  const [beforeChildren, beforeMemberships, beforeOutbox] = [await childRows(), await membershipRows(), await childOutbox()];
+  await classes.archiveClass('class-1', { actorUserId: 'user-1', archivedAt: '2099-01-01T00:00:00.000Z' });
+  expect(await childRows()).toEqual(beforeChildren);
+  expect(await membershipRows()).toEqual(beforeMemberships);
+  expect(await childOutbox()).toEqual(beforeOutbox);
 });
 
 test.each(['class-only', 'creator-only', 'other-ea', 'ended-assignment'])(
@@ -192,13 +191,13 @@ test('deleteChild returns the repository error code for a real class-only child 
   } finally { unmount(); }
 });
 
-test('a cascade outbox failure rolls back class, assignments, child and membership together', async () => {
+test('a Delete class outbox failure rolls back the class and its assignment together', async () => {
   await assign();
   const before = await snapshot();
-  await db.execAsync(`create trigger reject_cascade_outbox before insert on sync_outbox
-    when new.table_name = 'children' begin select raise(abort, 'cascade outbox failed'); end;`);
+  await db.execAsync(`create trigger reject_class_assignment_outbox before insert on sync_outbox
+    when new.table_name = 'class_ea_assignments' begin select raise(abort, 'class outbox failed'); end;`);
   await expect(classes.archiveClass('class-1', { actorUserId: 'user-1' })).rejects.toMatchObject({
-    code: 'SQLITE_CONSTRAINT_TRIGGER', message: 'cascade outbox failed',
+    code: 'SQLITE_CONSTRAINT_TRIGGER', message: 'class outbox failed',
   });
   expect(await snapshot()).toEqual(before);
 });

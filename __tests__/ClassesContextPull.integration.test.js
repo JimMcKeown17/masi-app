@@ -538,11 +538,16 @@ test('archiving a class offline refreshes child assignment state without a serve
     await result.current.classesContext.deleteClass('class-1');
   });
 
+  // The creator and only holder closes the class (the server decides; plan O2 item 3). The child
+  // keeps its class and membership (no exit, no class_id change) and leaves the delivery list
+  // with the closed class.
   expect(result.current.classesContext.getChildrenInClass('class-1')).toEqual([]);
   expect(result.current.childrenContext.children).toEqual([]);
   expect(await childrenRepository.getChildren()).toEqual([
-    expect.objectContaining({ id: 'child-1', class_id: null }),
+    expect.objectContaining({ id: 'child-1', class_id: 'class-1' }),
   ]);
+  expect(await testDb.getFirstAsync("select exited_at from child_class_memberships where id = 'child-class-1'"))
+    .toEqual({ exited_at: null });
   expect(mockPullPreloadedChildData).not.toHaveBeenCalled();
   expect(mockSupabaseFrom).not.toHaveBeenCalled();
 });

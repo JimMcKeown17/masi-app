@@ -54,8 +54,9 @@ describe('ClassesContext repository operations', () => {
     expect(classes[0].school_id).toBe('school-1');
   });
 
-  test('deleteClass nulls out class_id on affected children in SQLite', async () => {
-    // Set up a class and two children — one in the class, one not
+  // Plan O2 item 3 (MA-BUG-20261104-013): Delete class no longer exits the class's children or
+  // clears their class_id; only this EA's class assignment ends (the server decides the rest).
+  test('deleteClass keeps the class children in their class in SQLite', async () => {
     await classesRepository.saveClass({
       id: 'class-1',
       name: '1A',
@@ -75,35 +76,20 @@ describe('ClassesContext repository operations', () => {
       synced: false,
     });
 
-    const child1 = {
-      id: 'child-1',
-      first_name: 'Alice',
-      last_name: 'A',
-      class_id: 'class-1',
-      created_by: TEST_ACTOR_ID, // the signed-in EA's own child: archive cascades only to delivery or creator children
-      synced: true,
-    };
-    const child2 = {
-      id: 'child-2',
-      first_name: 'Bob',
-      last_name: 'B',
-      class_id: 'other-class',
-      synced: true,
-    };
-    await childrenRepository.saveChildRecord(child1);
-    await childrenRepository.saveChildRecord(child2);
+    await childrenRepository.saveChildRecord({
+      id: 'child-1', first_name: 'Alice', last_name: 'A', class_id: 'class-1', created_by: TEST_ACTOR_ID, synced: true,
+    });
+    await childrenRepository.saveChildRecord({
+      id: 'child-2', first_name: 'Bob', last_name: 'B', class_id: 'other-class', synced: true,
+    });
 
-    // Delete the class
     await classesRepository.deleteClass('class-1', { actorUserId: 'user-1' });
 
     const children = await childrenRepository.getChildren();
-    const alice = children.find(c => c.id === 'child-1');
-    const bob = children.find(c => c.id === 'child-2');
-
-    expect(alice.class_id).toBeNull();
-    expect(alice.synced).toBe(false);
-    expect(bob.class_id).toBe('other-class'); // unaffected
-    expect(bob.synced).toBe(true);
+    expect(children.find(c => c.id === 'child-1')).toEqual(expect.objectContaining({ class_id: 'class-1', synced: true }));
+    expect(children.find(c => c.id === 'child-2')).toEqual(expect.objectContaining({ class_id: 'other-class', synced: true }));
+    const db = await getTestWriter();
+    expect(await db.getAllAsync("select table_name from sync_outbox where table_name in ('children', 'child_class_memberships')")).toEqual([]);
   });
 
   test('loadSchools returns cached schools when available', async () => {

@@ -8,6 +8,7 @@ import EditClassScreen from '../src/screens/children/EditClassScreen';
 const mockUpdateClass = jest.fn();
 const mockDeleteClass = jest.fn();
 const mockGetChildrenInClass = jest.fn(() => []);
+const mockIsClassShared = jest.fn(async () => false);
 const mockNavigationGoBack = jest.fn();
 let mockClasses;
 let mockSchools;
@@ -19,6 +20,7 @@ jest.mock('../src/context/ClassesContext', () => ({
     updateClass: mockUpdateClass,
     deleteClass: mockDeleteClass,
     getChildrenInClass: mockGetChildrenInClass,
+    isClassShared: mockIsClassShared,
   }),
 }));
 
@@ -173,4 +175,57 @@ test('uses shared fields without a duplicate page title', () => {
   const screen = renderScreen();
   expect(screen.UNSAFE_queryAllByType(PaperTextInput)).toHaveLength(0);
   expect(screen.queryByText('Edit Class')).toBeNull();
+});
+
+// Plan O2 item 3 (ADR-0014 D4): Delete class asks in a sheet. When the class is shared (another EA
+// created it or teaches it), it can only mean leaving it; otherwise the server decides whether the
+// class closes. The class's children never lose their class. Draft copy for Jim's wording pass.
+describe('Delete class sheet', () => {
+  beforeEach(() => {
+    mockIsClassShared.mockResolvedValue(false);
+    mockGetChildrenInClass.mockReturnValue([]);
+    mockDeleteClass.mockResolvedValue({ success: true });
+  });
+
+  test('a shared class is left, not deleted, and stays for the other EAs', async () => {
+    mockIsClassShared.mockResolvedValue(true);
+    mockGetChildrenInClass.mockReturnValue([{ id: 'child-1' }, { id: 'child-2' }]);
+    const screen = renderScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Delete class' }));
+    expect(await screen.findByRole('header', { name: 'Leave 1A?' })).toBeTruthy();
+    expect(screen.getByText('1A stays open for the other EAs who teach it. Lessons you saved will still upload. Your children in 1A stay in your list.')).toBeTruthy();
+    expect(mockIsClassShared).toHaveBeenCalledWith('class-1');
+    fireEvent.press(screen.getByRole('button', { name: 'Leave class' }));
+    await waitFor(() => expect(mockDeleteClass).toHaveBeenCalledWith('class-1'));
+    expect(mockNavigationGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  test('a class only this EA holds may close, and the copy says what happens to its children', async () => {
+    mockGetChildrenInClass.mockReturnValue([{ id: 'child-1' }, { id: 'child-2' }]);
+    const screen = renderScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Delete class' }));
+    expect(await screen.findByRole('header', { name: 'Delete 1A?' })).toBeTruthy();
+    expect(screen.getByText('Lessons you saved will still upload. If another EA also teaches 1A, you only leave it. '
+      + 'Otherwise 1A closes and its 2 children leave your list, so first move any child you still teach to another class.')).toBeTruthy();
+    expect(screen.queryByText(/become unassigned/)).toBeNull();
+    // The open sheet is modal, so its confirm is the only reachable "Delete class" button.
+    fireEvent.press(screen.getByRole('button', { name: 'Delete class' }));
+    await waitFor(() => expect(mockDeleteClass).toHaveBeenCalledWith('class-1'));
+  });
+
+  test('an empty class only this EA holds gets the short copy', async () => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Delete class' }));
+    expect(await screen.findByRole('header', { name: 'Delete 1A?' })).toBeTruthy();
+    expect(screen.getByText('Lessons you saved will still upload. If another EA also teaches 1A, you only leave it.')).toBeTruthy();
+  });
+
+  test('Keep class closes the sheet without deleting', async () => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Delete class' }));
+    await screen.findByRole('header', { name: 'Delete 1A?' });
+    fireEvent.press(screen.getByRole('button', { name: 'Keep class' }));
+    expect(screen.queryByRole('header', { name: 'Delete 1A?' })).toBeNull();
+    expect(mockDeleteClass).not.toHaveBeenCalled();
+  });
 });
