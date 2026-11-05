@@ -315,7 +315,9 @@ export const ChildrenProvider = ({ children }) => {
         await saveScopedPulledRows(
           'childrenGroups',
           groupsRepository.saveServerChildrenGroupRows,
-          scopes.childrenGroups.rows,
+          // A child being removed keeps its group memberships ended on this phone until the
+          // server's removal lands (plan O2: pending-hard-delete pull filter).
+          scopes.childrenGroups.rows.filter((row) => !pendingChildDeleteIds.has(row.child_id)),
           reconcileAuthorityComplete && programmeScopeOk
             ? {
               acknowledgedIds: acknowledgmentData.childGroupMembershipIds,
@@ -551,9 +553,9 @@ export const ChildrenProvider = ({ children }) => {
   }, [user?.id, refreshSyncStatus]);
 
   /**
-   * Remove a child from the active list. No-history children are deleted
-   * locally, with a server hard-delete queued if INSERT may have been
-   * acknowledged. Children with history are archived with their relationships.
+   * Delete child (plan O2 item 2): one repository transaction removes the child from this EA's
+   * lists and queues the server's actor-scoped removal. Whether the child also leaves the class
+   * for other EAs is the server's decision, never this phone's.
    */
   const deleteChild = useCallback(async (childId) => {
     try {
@@ -563,14 +565,7 @@ export const ChildrenProvider = ({ children }) => {
         return { success: false, error: 'Child not found in local cache' };
       }
 
-      const deleted = await childrenRepository.deleteIfNoHistory(childId, {
-        actorUserId: user.id,
-      });
-      if (!deleted) {
-        await childrenRepository.archiveChild(childId, {
-          actorUserId: user.id,
-        });
-      }
+      await childrenRepository.removeChild(childId);
 
       setChildrenList(prev => prev.filter(c => c.id !== childId));
       setChildrenGroups(prev => prev.filter(cg => cg.child_id !== childId));

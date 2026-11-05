@@ -39,9 +39,25 @@ const lessonInProgressItem = ({ draftId, childNames, route = 'Lesson' }) => {
   };
 };
 
-const syncAttentionItem = (count) => {
+// Lifecycle safety O1 (MA-BUG-20261104-011): once the office has a copy of every item that
+// needs attention, nothing is at risk, so the EA may dismiss the card. The signature names the
+// exact items and their content, so a new or changed item brings the card back, and a forced pass
+// that re-sends an item and is refused again (a new refusal time, the same content) does not.
+export const describeSyncAttention = ({
+  needsAttentionCount = 0, needsAttentionItems = [], reconcileBreakerNotes = [],
+} = {}) => {
+  const items = needsAttentionItems || [];
+  const dismissible = needsAttentionCount > 0
+    && (reconcileBreakerNotes || []).length === 0
+    && items.length === needsAttentionCount
+    && items.every((item) => item.delivery === 'delivered');
+  const signature = items.map((item) => `${item.outboxId}@${item.contentDigest ?? ''}`).sort().join('|');
+  return { dismissible, signature };
+};
+
+const syncAttentionItem = (count, { dismissible = false, signature = null } = {}) => {
   const title = `${count} ${plural(count, 'item needs', 'items need')} attention`;
-  const subtitle = 'Open sync status to sort it out';
+  const subtitle = dismissible ? 'The office has a copy' : 'Open sync status to sort it out';
   return {
     key: 'sync_attention',
     kind: 'sync_attention',
@@ -50,7 +66,8 @@ const syncAttentionItem = (count) => {
     subtitle,
     accessibilityLabel: `${title}. ${subtitle}`,
     route: 'SyncStatus',
-    dismissible: false,
+    dismissible,
+    ...(dismissible ? { signature } : {}),
   };
 };
 
@@ -96,6 +113,8 @@ const isNoticeVisible = (notice, now) => {
 export function deriveHomeAttentionItems({
   lessonInProgress = null,
   needsAttentionCount = 0,
+  syncAttention = null,
+  syncAttentionDismissed = null,
   autoClockOut = null,
   coverage = null,
   assessmentDismissedOn = null,
@@ -107,7 +126,10 @@ export function deriveHomeAttentionItems({
     items.push(lessonInProgressItem(lessonInProgress));
   }
   if (needsAttentionCount > 0) {
-    items.push(syncAttentionItem(needsAttentionCount));
+    const dismissible = Boolean(syncAttention?.dismissible);
+    if (!(dismissible && syncAttentionDismissed && syncAttentionDismissed === syncAttention.signature)) {
+      items.push(syncAttentionItem(needsAttentionCount, { dismissible, signature: syncAttention?.signature }));
+    }
   }
   if (isNoticeVisible(autoClockOut, now)) {
     items.push(autoClockOutItem(autoClockOut, now));

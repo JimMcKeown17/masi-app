@@ -139,8 +139,11 @@ test.each([false, true])('editing then deleting a pulled child keeps the context
   const child = await testDb.getFirstAsync("select archived_at from children where id = 'child-9'");
   const operations = await testDb.getAllAsync("select operation from sync_outbox where table_name = 'children' order by operation");
   if (hasHistory) {
+    // Plan O2 item 2: the child is archived on this phone only and the server is asked to remove
+    // it (hard_delete); no archive of the shared child row or its relationships is queued.
     expect(child.archived_at).toEqual(expect.any(String));
-    expect(operations).toEqual([{ operation: 'archive' }, { operation: 'update' }]);
+    expect(operations).toEqual([{ operation: 'hard_delete' }, { operation: 'update' }]);
+    expect(await testDb.getAllAsync("select table_name from sync_outbox where table_name <> 'children'")).toEqual([]);
     expect(await testDb.getFirstAsync('select count(*) as count from assessments')).toEqual({ count: 1 });
   } else {
     expect(child).toBeNull();
@@ -196,4 +199,75 @@ test('pending hard-delete filtering avoids FK-invalid relationship resurrection'
       `select count(*) as count from ${tableName} where child_id = 'child-9'`
     )).toEqual({ count: 0 });
   }
+});
+
+// Plan O2 item 2: a sole holder's Delete child archives the child on the phone and queues the
+// server removal. Pulls that still return the child (the server has not run the removal yet) must
+// not bring it, its assignment or its group membership back.
+test('a deleted child with history stays hidden until the server removal lands, across pulls', async () => {
+  const USER = '00000000-0000-4000-8000-0000000000aa';
+  await testDb.runAsync('delete from sync_outbox');
+  const pulled = await mockPullPreloadedChildData();
+  const successfulScope = (rows) => ({ ok: true, rows, complete: true, failureKind: null });
+  const serverStillHoldsChild = {
+    ...pulled,
+    scopes: {
+      ...pulled.scopes,
+      groups: successfulScope([{ id: 'group-1', name: 'Group 1', programme_id: 'programme-a', class_id: 'class-1', created_by: USER, synced: true }]),
+      groupEaAssignments: successfulScope([{ id: 'gea-1', group_id: 'group-1', ea_user_id: USER, programme_id: 'programme-a', created_by: USER, synced: true }]),
+      // Full server rows, as `select *` returns them (the open end column is an explicit null).
+      childrenGroups: successfulScope([{
+        id: 'cgm-9', child_id: 'child-9', group_id: 'group-1', grouping_version_id: null,
+        joined_at: '2026-10-01T00:00:00.000Z', removed_at: null, created_by: USER, row_version: 1,
+        synced: true, sync_status: 'synced',
+      }]),
+    },
+  };
+  mockPullPreloadedChildData.mockResolvedValue(serverStillHoldsChild);
+  const { result } = renderHook(() => useChildren(), { wrapper });
+  await waitFor(() => expect(result.current.children.map(row => row.id)).toContain('child-9'));
+  await waitFor(() => expect(result.current.childrenGroups.map(row => row.id)).toContain('cgm-9'));
+  await testDb.runAsync(`
+    insert into assessments (id, user_id, child_id, programme_id, assessment_type, assessment_date)
+    values ('assessment-1', ?, 'child-9', 'programme-a', 'letter_egra', '2026-10-15')
+  `, USER);
+
+  await act(async () => {
+    expect(await result.current.deleteChild('child-9')).toEqual({ success: true });
+  });
+  expect(result.current.children.map(row => row.id)).not.toContain('child-9');
+  expect(result.current.childrenGroups.map(row => row.id)).not.toContain('cgm-9');
+
+  // The server has not run the removal yet: the pull still returns the child, its direct
+  // assignment and its group membership.
+  await act(async () => { await result.current.loadChildren(); });
+  expect(result.current.children.map(row => row.id)).not.toContain('child-9');
+  expect(result.current.childrenGroups.map(row => row.id)).not.toContain('cgm-9');
+  expect(await testDb.getFirstAsync("select archived_at is not null as archived from children where id = 'child-9'"))
+    .toEqual({ archived: 1 });
+  expect(await testDb.getAllAsync(`
+    select 'assignment' as row, unassigned_at is not null as ended from child_ea_assignments where child_id = 'child-9'
+    union all select 'group membership', removed_at is not null from child_group_memberships where child_id = 'child-9'
+  `)).toEqual([{ row: 'assignment', ended: 1 }, { row: 'group membership', ended: 1 }]);
+  expect(await testDb.getAllAsync('select table_name, operation, status from sync_outbox')).toEqual([
+    { table_name: 'children', operation: 'hard_delete', status: 'pending' },
+  ]);
+
+  // The removal lands (the engine deletes the acknowledged outbox row) and the server has ended
+  // this EA's grants and archived the child, so the next pull no longer returns it.
+  await testDb.runAsync("delete from sync_outbox where id = 'children:child-9:hard_delete'");
+  mockPullPreloadedChildData.mockResolvedValue({
+    ...serverStillHoldsChild,
+    scopes: {
+      ...serverStillHoldsChild.scopes,
+      children: successfulScope([]),
+      childEaAssignments: successfulScope([]),
+      childProgrammeEnrollments: successfulScope([]),
+      childClassMemberships: successfulScope([]),
+      childrenGroups: successfulScope([]),
+    },
+  });
+  await act(async () => { await result.current.loadChildren(); });
+  expect(result.current.children.map(row => row.id)).not.toContain('child-9');
+  expect(result.current.childrenGroups.map(row => row.id)).not.toContain('cgm-9');
 });

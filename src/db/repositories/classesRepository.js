@@ -220,26 +220,50 @@ export const createClassesRepository = ({ database } = {}) => {
     return rows.map(mapDomainRow);
   };
 
+  // D4 (ADR-0014): an EA closes a class for everyone only when they created it and are its only
+  // holder. When this phone already knows otherwise (another creator, or another EA's active class
+  // assignment held here), Delete class can only mean leave. Otherwise the server decides (S1).
+  const leaveOnlySql = `
+    select 1 as leave from classes c
+    where c.id = ?
+      and (c.created_by is not ? or exists (
+        select 1 from class_ea_assignments a
+        where a.class_id = c.id and a.unassigned_at is null and a.ea_user_id is not ?
+      ))
+  `;
+  const isLeaveOnly = async (classId, { userId } = {}) => {
+    const db = await resolveDatabase(database);
+    return Boolean(await db.getFirstAsync(leaveOnlySql, classId, userId, userId));
+  };
+
+  // Delete class (plan O2 item 3; MA-BUG-20261104-013). Only this EA's own class assignment ends.
+  // The class's children keep their class membership and class_id: the old cascade that exited
+  // them emptied the class for the EA's own children and, on a shared class, for co-EAs. A known
+  // leave queues no class archive at all; a possible close queues it and the server decides.
   const archiveClass = async (classId, {
     actorUserId,
     archivedAt = new Date().toISOString(),
     archiveReason = null,
     transaction,
   } = {}) => runWrite(transaction, async (txn) => {
-    await txn.runAsync(`
-      update classes
-      set archived_at = ?,
-          archived_by_user_id = ?,
-          archive_reason = ?,
-          sync_status = 'pending',
-          updated_at = ?
-      where id = ?
-    `, archivedAt, actorUserId || null, archiveReason, archivedAt, classId);
-    await enqueueDomainOutbox(txn, 'classes', classId, 'archive', { id: classId, archived_at: archivedAt });
+    const actor = getConnectionActor(txn) ?? database?.userId ?? null;
+    const leaveOnly = Boolean(await txn.getFirstAsync(leaveOnlySql, classId, actor, actor));
+    if (!leaveOnly) {
+      await txn.runAsync(`
+        update classes
+        set archived_at = ?,
+            archived_by_user_id = ?,
+            archive_reason = ?,
+            sync_status = 'pending',
+            updated_at = ?
+        where id = ?
+      `, archivedAt, actorUserId || null, archiveReason, archivedAt, classId);
+      await enqueueDomainOutbox(txn, 'classes', classId, 'archive', { id: classId, archived_at: archivedAt });
+    }
 
     const assignments = await txn.getAllAsync(
-      'select id from class_ea_assignments where class_id = ? and unassigned_at is null',
-      classId
+      'select id from class_ea_assignments where class_id = ? and ea_user_id = ? and unassigned_at is null',
+      classId, actor
     );
     await txn.runAsync(`
       update class_ea_assignments
@@ -247,64 +271,15 @@ export const createClassesRepository = ({ database } = {}) => {
           sync_status = 'pending',
           updated_at = ?
       where class_id = ?
+        and ea_user_id = ?
         and unassigned_at is null
-    `, archivedAt, archivedAt, classId);
+    `, archivedAt, archivedAt, classId, actor);
 
     for (const assignment of assignments) {
       await enqueueDomainOutbox(txn, 'class_ea_assignments', assignment.id, 'archive', {
         id: assignment.id,
         unassigned_at: archivedAt,
       });
-    }
-
-    const actor = getConnectionActor(txn) ?? database?.userId ?? null;
-    const deliveryChildren = `select c.id from children c where c.created_by = ? or exists (
-      select 1 from child_ea_assignments a
-      where a.child_id = c.id and a.user_id = ? and a.unassigned_at is null
-    )`;
-    const childClassRows = await txn.getAllAsync(
-      `select id from child_class_memberships where class_id = ? and exited_at is null
-        and child_id in (${deliveryChildren})`,
-      classId, actor, actor
-    );
-    await txn.runAsync(`
-      update child_class_memberships
-      set exited_at = ?,
-          sync_status = 'pending',
-          updated_at = ?
-      where class_id = ?
-        and exited_at is null
-        and child_id in (${deliveryChildren})
-    `, archivedAt, archivedAt, classId, actor, actor);
-    for (const membership of childClassRows) {
-      await enqueueDomainOutbox(txn, 'child_class_memberships', membership.id, 'archive', {
-        id: membership.id,
-        exited_at: archivedAt,
-      });
-    }
-
-    const childRows = await txn.getAllAsync(
-      `select * from children where class_id = ? and archived_at is null
-        and id in (${deliveryChildren})`,
-      classId, actor, actor
-    );
-    await txn.runAsync(`
-      update children
-      set class_id = null,
-          sync_status = 'pending',
-          updated_at = ?
-      where class_id = ?
-        and archived_at is null
-        and id in (${deliveryChildren})
-    `, archivedAt, classId, actor, actor);
-    for (const child of childRows) {
-      const payload = normalizeSyncFields({
-        ...mapDomainRow(child),
-        class_id: null,
-        updated_at: archivedAt,
-        sync_status: 'pending',
-      });
-      await enqueueDomainOutbox(txn, 'children', child.id, 'update', payload);
     }
 
     return true;
@@ -323,6 +298,7 @@ export const createClassesRepository = ({ database } = {}) => {
     deleteClass,
     getUnsyncedClasses,
     archiveClass,
+    isLeaveOnly,
   };
 };
 

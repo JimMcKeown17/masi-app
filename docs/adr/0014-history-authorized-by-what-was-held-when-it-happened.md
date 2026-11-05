@@ -144,3 +144,4 @@ Plan: [`2026-11-04-lifecycle-safety.md`](../superpowers/plans/2026-11-04-lifecyc
 | `handover` (group) | Old EA's `group_ea_assignments` | Successor's `group_ea_assignments` with a **fresh id** |
 | `end-delivery` | The EA's `child_ea_assignments` for the named children | — |
 | `reopen` | — | Clears the end in place on the EA's deterministic row and prints the gap |
+| `restore child` (added 2026-11-05) | — | Head Office only. Reopens in place what one EA's mistaken Delete child ended at the removal instant: that EA's delivery row, the child's enrollments and memberships ended at that instant, and the archive if that removal made it. Refuses when the evidence does not fit (runbook, [Undo a mistaken Delete child](../../documentation/ea-access-runbook.md#undo-a-mistaken-delete-child-restore-child)) |

@@ -86,7 +86,8 @@ test('Sync Status Retry changes A failed outbox row to pending through its bound
   await a.repositories.syncOutbox.enqueue({ tableName: 'time_entries', recordId: 'retry-me', operation: 'insert', payload: { id: 'retry-me', user_id: A } });
   await a.withTransaction((tx) => tx.runAsync("update sync_outbox set status='failed' where record_id='retry-me'"));
   mockOffline.isOnline = true;
-  mockOffline.syncStatus = { needsAttentionItems: [{ table: 'time_entries', id: 'retry-me', terminal: true, reason: 'failed' }] };
+  // The engine marks a resendable refused row with canRetry (lifecycle safety O1).
+  mockOffline.syncStatus = { needsAttentionItems: [{ table: 'time_entries', id: 'retry-me', terminal: true, reason: 'failed', canRetry: true }] };
   const view = render(wrapper(a, <SyncStatusScreen />));
   fireEvent.press(view.getByText('Retry'));
   await waitFor(async () => expect((await (await a.getReader()).getFirstAsync("select status from sync_outbox where record_id='retry-me'")).status).toBe('pending'));

@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 jest.mock('expo-application', () => ({ nativeBuildVersion: '55' }));
+jest.mock('expo-updates', () => ({ __esModule: true, isEmbeddedLaunch: true, updateId: 'embedded-id', channel: 'preview', runtimeVersion: '1.2.0' }));
 jest.mock('expo-constants', () => ({
   expoConfig: {
     version: '1.2.0',
@@ -32,18 +33,21 @@ describe('release metadata', () => {
       updateUrl: 'https://u.expo.dev/project-id',
       supabaseTarget: 'sqlite-staging',
       supabaseProjectId: 'segygjzpujphwvrubusm',
+      otaRelease: null,
+      otaPublishedAt: null,
     }));
   });
 });
 
-test.each(['android', 'ios'])('running %s binary supplies build, extra commit and derived labels', platform => {
+test.each(['android', 'ios'])('running %s binary supplies build and extra commit; the release label is the release identity', platform => {
   jest.replaceProperty(Platform, 'OS', platform);
   Application.nativeBuildVersion = '55';
   const saved = Constants.expoConfig;
   Constants.expoConfig = { version: '1.5.0', extra: { gitCommit: 'abcdef1234567890' } };
   expect(getReleaseMetadata()).toMatchObject({
     [platform === 'android' ? 'androidVersionCode' : 'iosBuildNumber']: platform === 'android' ? 55 : '55',
-    gitCommit: 'abcdef1234567890', releaseLabel: '1.5.0 (55)', buildMessage: '1.5.0 (55)',
+    // The built-in bundle's release is its version; the build number has its own field.
+    gitCommit: 'abcdef1234567890', releaseLabel: '1.5.0', buildMessage: '1.5.0',
   });
   Application.nativeBuildVersion = null;
   expect(getReleaseMetadata()).toMatchObject({ releaseLabel: '1.5.0' });
@@ -51,4 +55,29 @@ test.each(['android', 'ios'])('running %s binary supplies build, extra commit an
   expect(getReleaseMetadata()).toMatchObject({ androidVersionCode: 42, iosBuildNumber: '7', gitCommit: 'unknown' });
   Constants.expoConfig = saved;
   Application.nativeBuildVersion = '55';
+});
+
+test('export metadata reports a serializer {} as no release number or publish time', () => {
+  const saved = Constants.expoConfig;
+  Constants.expoConfig = { version: '1.5.0', extra: { otaRelease: {}, otaPublishedAt: {} } };
+  try {
+    expect(getReleaseMetadata()).toMatchObject({ otaRelease: null, otaPublishedAt: null });
+  } finally {
+    Constants.expoConfig = saved;
+  }
+});
+
+test('an update launch labels its release from the running manifest\'s release number', () => {
+  const Updates = jest.requireMock('expo-updates');
+  const saved = Constants.expoConfig;
+  Updates.isEmbeddedLaunch = false;
+  Constants.expoConfig = { version: '1.5.0', extra: { otaRelease: 4, otaPublishedAt: '2026-11-05T09:11:02.000Z' } };
+  try {
+    expect(getReleaseMetadata()).toMatchObject({
+      releaseLabel: '1.5.0+4', buildMessage: '1.5.0+4', otaRelease: 4, otaPublishedAt: '2026-11-05T09:11:02.000Z',
+    });
+  } finally {
+    Updates.isEmbeddedLaunch = true;
+    Constants.expoConfig = saved;
+  }
 });

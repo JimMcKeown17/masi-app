@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => require('../test-support/expoSQLiteMock'));
 import { runMigrations } from '../src/db/migrations';
 import { createSessionsRepository } from '../src/db/repositories/sessionsRepository';
 import { createChildrenRepository } from '../src/db/repositories/childrenRepository';
-import { createGroupsRepository, repairGroupOwnershipForSync } from '../src/db/repositories/groupsRepository';
+import { createGroupsRepository } from '../src/db/repositories/groupsRepository';
 import { syncStateRepository } from '../src/db/repositories/syncStateRepository';
 import { createMigratedDatabase, seedCoreData } from '../test-support/sqliteRepositoryTestUtils';
 
@@ -176,10 +176,6 @@ describe('sessionsRepository.saveHistoryPage', () => {
     expect(await groups.getGroups({ userId: 'user-1', programmeId: 'programme-a' })).toEqual([]);
     expect(await groups.getGroups()).toEqual([]);
 
-    await repairGroupOwnershipForSync({ database: db });
-
-    expect(await db.getFirstAsync('select count(*) as count from group_ea_assignments')).toEqual({ count: 0 });
-    expect(await db.getFirstAsync('select count(*) as count from sync_outbox')).toEqual({ count: 0 });
     const sessions = await repo.getSessions({ programmeId: 'programme-a' });
     expect(sessions[0].group_id).toBe('group-not-on-phone');
     expect(sessions[0].group_ids).toEqual([]);

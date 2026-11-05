@@ -109,7 +109,9 @@ describe('versioned startup repairs', () => {
     })).toThrow('strictly increasing');
   });
 
-  test('version 1 owns the former per-sync group ownership cutover repair', async () => {
+  // Plan O2 item 4: version 1 (the group ownership cutover) is retired. It could reopen an ended
+  // group assignment, and every installed phone already ran it.
+  test('the retired version 1 repair no longer runs, and an existing marker stays put', async () => {
     await seedCoreData(db);
     await createGroupsRepository({ database: db }).saveGroup({
       id: 'group-startup-repair',
@@ -122,19 +124,19 @@ describe('versioned startup repairs', () => {
       'group-startup-repair'
     );
 
-    const runner = createStartupRepairRunner({ database: db, localStateRepository });
-    await expect(runner.run()).resolves.toEqual({
-      success: true,
-      fromVersion: 0,
-      toVersion: STARTUP_REPAIR_VERSION,
-      applied: ['group_ownership_cutover'],
+    expect(STARTUP_REPAIR_VERSION).toBe(1);
+    await expect(createStartupRepairRunner({ database: db, localStateRepository }).run()).resolves.toEqual({
+      success: true, fromVersion: 0, toVersion: 0, applied: [],
     });
     await expect(db.getFirstAsync(
       'select created_by from groups where id = ?',
       'group-startup-repair'
-    )).resolves.toEqual({ created_by: 'user-1' });
-    await expect(localStateRepository.get(STARTUP_REPAIR_MARKER_KEY, 0))
-      .resolves.toBe(STARTUP_REPAIR_VERSION);
+    )).resolves.toEqual({ created_by: null });
+
+    await localStateRepository.set(STARTUP_REPAIR_MARKER_KEY, 1);
+    await expect(createStartupRepairRunner({ database: db, localStateRepository }).run()).resolves.toEqual({
+      success: true, fromVersion: 1, toVersion: 1, applied: [],
+    });
   });
 
   test('never downgrades a marker written by newer repair code', async () => {

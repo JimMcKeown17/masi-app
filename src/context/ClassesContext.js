@@ -590,6 +590,13 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     }
   }, [user?.id, refreshChildrenFromCache, refreshSyncStatus]);
 
+  // Plan O2 item 3 (ADR-0014 D4): true when this phone already knows Delete class can only mean
+  // leaving the class (another EA created it or holds it). The server still decides the rest.
+  const isClassShared = useCallback(
+    (classId) => classesRepository.isLeaveOnly(classId, { userId: user?.id }),
+    [user?.id]
+  );
+
   /**
    * Get children in a specific class
    */
@@ -612,10 +619,11 @@ export const ClassesProvider = ({ children: reactChildren }) => {
     completeClassOnboarding,
     updateClass,
     deleteClass,
+    isClassShared,
     getChildrenInClass,
   }), [
     assignmentsVersion, schools, classes, loading, incompleteOnboardingClassId, classBootstrap, user?.id, loadSchools,
-    loadClasses, addClass, completeClassOnboarding, updateClass, deleteClass, getChildrenInClass,
+    loadClasses, addClass, completeClassOnboarding, updateClass, deleteClass, isClassShared, getChildrenInClass,
   ]);
 
   return (

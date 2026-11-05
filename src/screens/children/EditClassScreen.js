@@ -1,11 +1,12 @@
 import { useScrollBottomPadding } from '../../hooks/useScrollBottomPadding';
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import KeyboardAvoidingView from '../../components/common/KeyboardAvoidingView';
 
 import { colors, spacing } from '../../constants/colors';
 import BrandButton from '../../components/common/BrandButton';
 import SurfaceCard from '../../components/common/SurfaceCard';
+import ConfirmSheet from '../../components/common/ConfirmSheet';
 import TextField from '../../components/common/TextField';
 import SelectField from '../../components/common/SelectField';
 import { useHeaderHairline } from '../../components/common/ScreenHeader';
@@ -17,7 +18,7 @@ import SelectSheet from '../../components/common/SelectSheet';
 
 export default function EditClassScreen({ route, navigation }) {
   const { classId } = route.params;
-  const { schools, classes, updateClass, deleteClass, getChildrenInClass } = useClasses();
+  const { schools, classes, updateClass, deleteClass, isClassShared, getChildrenInClass } = useClasses();
 
   const classItem = classes.find(c => c.id === classId);
   const childrenInClass = getChildrenInClass(classId);
@@ -32,6 +33,8 @@ export default function EditClassScreen({ route, navigation }) {
   const [schoolPickerVisible, setSchoolPickerVisible] = useState(false);
   const [gradePickerVisible, setGradePickerVisible] = useState(false);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
+  // null while closed; otherwise whether Delete class can only mean leaving a shared class.
+  const [deleteSheet, setDeleteSheet] = useState(null);
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -96,27 +99,42 @@ export default function EditClassScreen({ route, navigation }) {
     }
   };
 
-  const handleDelete = () => {
-    const childCount = childrenInClass.length;
-    const message = childCount > 0
-      ? `This class has ${childCount} ${childCount === 1 ? 'child' : 'children'}. They will become unassigned.`
-      : 'Are you sure you want to delete this class?';
+  // Delete class (plan O2 item 3; ADR-0014 D4). An EA closes a class for everyone only when they
+  // created it and nobody else teaches it; the server decides. The class's children always keep
+  // their class. Draft copy for Jim's wording pass.
+  const openDeleteSheet = async () => {
+    setDeleteSheet({ shared: await isClassShared(classId) });
+  };
 
-    Alert.alert('Delete Class', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await deleteClass(classId);
-          if (result.success) {
-            navigation.goBack();
-          } else {
-            toast.show({ message: 'Error deleting class', tone: 'error', duration: 3000 });
-          }
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    setDeleteSheet(null);
+    const result = await deleteClass(classId);
+    if (result.success) {
+      navigation.goBack();
+    } else {
+      toast.show({ message: 'Error deleting class', tone: 'error', duration: 3000 });
+    }
+  };
+
+  const deleteSheetCopy = () => {
+    const name = classItem.name;
+    const childCount = childrenInClass.length;
+    if (deleteSheet?.shared) {
+      return {
+        title: `Leave ${name}?`,
+        body: `${name} stays open for the other EAs who teach it. Lessons you saved will still upload.`
+          + (childCount > 0 ? ` Your children in ${name} stay in your list.` : ''),
+        confirmLabel: 'Leave class',
+      };
+    }
+    return {
+      title: `Delete ${name}?`,
+      body: `Lessons you saved will still upload. If another EA also teaches ${name}, you only leave it.`
+        + (childCount > 0
+          ? ` Otherwise ${name} closes and its ${childCount} ${childCount === 1 ? 'child leaves' : 'children leave'} your list, so first move any child you still teach to another class.`
+          : ''),
+      confirmLabel: 'Delete class',
+    };
   };
 
   if (!classItem) return null;
@@ -197,12 +215,20 @@ export default function EditClassScreen({ route, navigation }) {
 
         {/* Delete Button */}
         <BrandButton
-          onPress={handleDelete}
+          onPress={openDeleteSheet}
           style={styles.deleteButton}
           icon="trash-outline"
           variant="destructiveQuiet" size="lg" label="Delete class"
         />
       </ScrollView>
+
+      <ConfirmSheet
+        visible={deleteSheet !== null}
+        {...deleteSheetCopy()}
+        cancelLabel="Keep class"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteSheet(null)}
+      />
 
       <SelectSheet
         visible={schoolPickerVisible}

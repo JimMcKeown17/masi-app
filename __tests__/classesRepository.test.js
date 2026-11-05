@@ -354,70 +354,83 @@ describe('classesRepository', () => {
     }
   });
 
-  test('archiveClass ends active class EA assignments in the same transaction', async () => {
-    const db = await createMigratedDatabase(runMigrations);
+  // Delete class (plan O2 item 3; ADR-0014 D4; MA-BUG-20261104-013). An EA closes a class for
+  // everyone only when they created it and nobody else holds it; otherwise Delete class means leave.
+  // Either way the class's children keep their class: no membership exit, no class_id change.
+  describe('Delete class', () => {
+    const ARCHIVED_AT = '2026-05-24T00:00:00.000Z';
+    const seedClassWithDeliveryChild = async (db) => {
+      await db.runAsync(`insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, assigned_at, created_by, sync_status)
+        values ('own-class-grant', 'class-1', 'user-1', 'programme-a', '2026-01-15T00:00:00.000Z', 'office', 'synced')`);
+      await db.runAsync(`insert into children (id, first_name, last_name, class_id, created_by, sync_status)
+        values ('child-1', 'Amahle', 'Dlamini', 'class-1', 'office', 'synced')`);
+      await db.runAsync(`insert into child_ea_assignments (id, user_id, child_id, assigned_at, created_by, sync_status)
+        values ('child-grant', 'user-1', 'child-1', '2026-01-15T00:00:00.000Z', 'office', 'synced')`);
+      await db.runAsync(`insert into child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by, sync_status)
+        values ('enrollment-1', 'child-1', 'programme-a', '2026-01-15T00:00:00.000Z', 'office', 'synced')`);
+      await db.runAsync(`insert into child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by, sync_status)
+        values ('membership-1', 'child-1', 'class-1', 'year-2026', '2026-01-15T00:00:00.000Z', 'office', 'synced')`);
+    };
+    const childState = db => db.getAllAsync(`
+      select c.class_id, m.exited_at, c.sync_status as child_sync, m.sync_status as membership_sync
+      from children c join child_class_memberships m on m.child_id = c.id where c.id = 'child-1'
+    `);
+    const queued = db => db.getAllAsync('select table_name, record_id, operation from sync_outbox order by table_name, record_id');
 
-    try {
-      await seedCoreData(db);
-      const classesRepository = createClassesRepository({ database: db });
-      const assignmentsRepository = createClassEaAssignmentsRepository({ database: db });
-      await createChildrenRepository({ database: db }).save({
-        id: 'child-1',
-        first_name: 'Amahle',
-        last_name: 'Dlamini',
-        class_id: 'class-1',
-        created_by: 'user-1',
-        synced: false,
-      }, { actorUserId: 'user-1' });
+    test.each([
+      ['another EA created it', async (db) => { await db.runAsync("update classes set created_by = 'office' where id = 'class-1'"); }],
+      ['another EA also holds it on this phone', async (db) => {
+        await db.runAsync(`insert into class_ea_assignments (id, class_id, ea_user_id, programme_id, assigned_at, created_by, sync_status)
+          values ('other-class-grant', 'class-1', 'other-ea', 'programme-a', '2026-01-15T00:00:00.000Z', 'office', 'synced')`);
+      }],
+    ])('when %s, Delete class leaves: only this EA\'s class assignment ends', async (_label, share) => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        await seedClassWithDeliveryChild(db);
+        await share(db);
+        const repository = createClassesRepository({ database: db });
+        expect(await repository.isLeaveOnly('class-1', { userId: 'user-1' })).toBe(true);
 
-      await assignmentsRepository.save({
-        id: 'class-assignment-1',
-        class_id: 'class-1',
-        ea_user_id: 'user-1',
-        programme_id: 'programme-a',
-        assigned_at: '2026-05-21T08:00:00.000Z',
-        created_by: 'user-1',
-        synced: false,
-      });
+        await repository.archiveClass('class-1', { actorUserId: 'user-1', archivedAt: ARCHIVED_AT });
 
-      await classesRepository.archiveClass('class-1', {
-        actorUserId: 'user-1',
-        archivedAt: '2026-05-24T00:00:00.000Z',
-      });
+        expect(await db.getFirstAsync("select archived_at from classes where id = 'class-1'")).toEqual({ archived_at: null });
+        expect(await db.getAllAsync('select id, unassigned_at from class_ea_assignments order by id')).toEqual([
+          ...(await db.getFirstAsync("select 1 as present from class_ea_assignments where id = 'other-class-grant'")
+            ? [{ id: 'other-class-grant', unassigned_at: null }] : []),
+          { id: 'own-class-grant', unassigned_at: ARCHIVED_AT },
+        ]);
+        expect(await childState(db)).toEqual([{ class_id: 'class-1', exited_at: null, child_sync: 'synced', membership_sync: 'synced' }]);
+        expect(await queued(db)).toEqual([{ table_name: 'class_ea_assignments', record_id: 'own-class-grant', operation: 'archive' }]);
+        // The EA keeps teaching their own children, who stay in their class.
+        expect((await createChildrenRepository({ database: db }).getMyChildren('user-1')).map(child => child.id)).toEqual(['child-1']);
+      } finally {
+        await db.closeAsync();
+      }
+    });
 
-      expect(await db.getFirstAsync('select archived_at from classes where id = ?', 'class-1'))
-        .toEqual({ archived_at: '2026-05-24T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select unassigned_at from class_ea_assignments where id = ?', 'class-assignment-1'))
-        .toEqual({ unassigned_at: '2026-05-24T00:00:00.000Z' });
-      expect(await db.getFirstAsync('select class_id from children where id = ?', 'child-1'))
-        .toEqual({ class_id: null });
-      expect(await db.getFirstAsync('select exited_at from child_class_memberships where child_id = ?', 'child-1'))
-        .toEqual({ exited_at: '2026-05-24T00:00:00.000Z' });
-      expect(await db.getFirstAsync(`
-        select table_name, operation
-        from sync_outbox
-        where table_name = 'child_class_memberships'
-          and operation = 'archive'
-      `)).toEqual({
-        table_name: 'child_class_memberships',
-        operation: 'archive',
-      });
-      const childOutbox = await db.getFirstAsync(`
-        select payload
-        from sync_outbox
-        where table_name = 'children'
-          and record_id = 'child-1'
-          and operation = 'update'
-      `);
-      expect(JSON.parse(childOutbox.payload)).toEqual(expect.objectContaining({
-        id: 'child-1',
-        first_name: 'Amahle',
-        last_name: 'Dlamini',
-        class_id: null,
-      }));
-    } finally {
-      await db.closeAsync();
-    }
+    test('the creator and only holder asks the server to close the class, and its children keep their class', async () => {
+      const db = await createMigratedDatabase(runMigrations);
+      try {
+        await seedCoreData(db);
+        await seedClassWithDeliveryChild(db);
+        const repository = createClassesRepository({ database: db });
+        expect(await repository.isLeaveOnly('class-1', { userId: 'user-1' })).toBe(false);
+
+        await repository.archiveClass('class-1', { actorUserId: 'user-1', archivedAt: ARCHIVED_AT });
+
+        expect(await db.getFirstAsync("select archived_at from classes where id = 'class-1'")).toEqual({ archived_at: ARCHIVED_AT });
+        expect(await db.getFirstAsync("select unassigned_at from class_ea_assignments where id = 'own-class-grant'"))
+          .toEqual({ unassigned_at: ARCHIVED_AT });
+        expect(await childState(db)).toEqual([{ class_id: 'class-1', exited_at: null, child_sync: 'synced', membership_sync: 'synced' }]);
+        expect(await queued(db)).toEqual([
+          { table_name: 'class_ea_assignments', record_id: 'own-class-grant', operation: 'archive' },
+          { table_name: 'classes', record_id: 'class-1', operation: 'archive' },
+        ]);
+      } finally {
+        await db.closeAsync();
+      }
+    });
   });
 
   test('deleteClass archives synced classes with dependents instead of creating a sync orphan', async () => {

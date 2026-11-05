@@ -9,6 +9,8 @@ import { applyCorrectionAcknowledgement as applySkillCorrectionAcknowledgement }
 export { SERVER_COLUMNS } from './syncServerColumns';
 import { isStaleActorError, StaleActorError } from '../session/staleActor';
 import { buildIncidentEnvelope, drainSupportIncidents } from './supportIncidents';
+import { currentWireDigest, readDeliveredReceipt } from './deliveredReceipt';
+import { DELIVERED_RECEIPT_PREFIX, deliveredReceiptKey } from '../db/repositories/supportIncidentRepository';
 import { getConnectionActor } from '../session/signedInHandle';
 import { resolveDatabase, runRepositoryTransaction } from '../db/repositories/repositoryRuntime';
 import { VERSIONED_TABLES, IMMUTABLE_ASSIGNMENT_TABLES, isStampedOperation } from '../db/repositories/rowVersion';
@@ -18,8 +20,14 @@ import {
   timestamp,
 } from '../db/repositories/sqliteRepositoryUtils';
 import {
+  CHILD_RELATIONSHIP_TABLES,
   createSyncOutboxRepository,
+  isRemovedChildRelationshipInsert,
+  isResendableRefusal,
   outboxRecordId,
+  readRemovedChildIds,
+  REMOVED_WITH_CHILD,
+  RESENDABLE_REFUSAL_SQL,
 } from '../db/repositories/syncOutboxRepository';
 import {
   createSyncStateRepository,
@@ -550,6 +558,28 @@ const isHealableRlsError = (record) => {
   return RLS_ERROR_SIGNATURE.test(err);
 };
 
+// Lifecycle safety O1: how a refused row leaves the phone, once the office holds the delivered
+// receipt of its exact current revision (services/deliveredReceipt.js). A refused archive,
+// restore or edit resolves to server truth by itself (D6): the receipt keeps the EA's intent and
+// the next pull converges the row. Refused history, and any other refusal, waits for the EA's
+// "The office has a copy — remove from this phone" (D8). A foreign-owner quarantine never leaves.
+const SELF_CLEARING_REFUSAL_CODES = Object.freeze([
+  'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED', 'MV001', 'UPDATE_NOT_APPLIED', '42501',
+]);
+// No retry entry point re-sends a refused archive, restore or edit (the auth-restore heal included),
+// so an unmarked 42501 on one clears like a marked one. A refused relationship INSERT of a child
+// this EA removed is never sent again either, and clears the same way whatever its code.
+// `removedChildIds` comes from readRemovedChildIds.
+export const isResendableRefusalHere = (row, removedChildIds = new Set()) => (
+  isResendableRefusal(row) && !isRemovedChildRelationshipInsert(row, removedChildIds)
+);
+export const refusalExit = (row, removedChildIds = new Set()) => {
+  if (row?.status !== 'terminal' || row.error_code === 'FOREIGN_OWNER') return null;
+  if (isRemovedChildRelationshipInsert(row, removedChildIds)) return 'clears_itself';
+  if (!isResendableRefusal(row) && SELF_CLEARING_REFUSAL_CODES.includes(row.error_code)) return 'clears_itself';
+  return 'ea_removes';
+};
+
 const errorMessage = (error) => (
   error?.message || error?.code || String(error || 'Unknown sync error')
 );
@@ -834,8 +864,10 @@ const setDomainSyncResult = async (txn, tableName, recordId, {
 };
 
 const restorePendingAfterStaleFinalize = async (txn, outboxRecord, tableName) => {
-  const existing = await txn.getFirstAsync('select id from sync_outbox where id = ?', outboxRecord.id);
+  const existing = await txn.getFirstAsync('select id, status from sync_outbox where id = ?', outboxRecord.id);
   if (!existing) return false;
+  // A stale finalize never turns a refused row into waiting work (MA-BUG-20261104-021).
+  if (existing.status === 'terminal') return false;
 
   await txn.runAsync(`
     update sync_outbox
@@ -853,6 +885,73 @@ const restorePendingAfterStaleFinalize = async (txn, outboxRecord, tableName) =>
   }
 
   return true;
+};
+
+// When a record's insert lands, its edit or lifecycle row that was refused only because the row did
+// not exist yet (a phone that sent it ahead of the insert, before the combined-OTA fix) is sent
+// again: the cause of its refusal is gone. It then keeps the insert's acknowledgement from
+// overwriting the newer local content (hasRemainingOutbox below).
+const NOT_APPLIED_CODES = "('UPDATE_NOT_APPLIED', 'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED')";
+// When a Delete child is acknowledged, its child's refused relationship INSERTs (this EA's) are
+// stamped REMOVED_WITH_CHILD in the same transaction, so they stay unsendable after the hard_delete
+// row is gone, whatever a later pull writes to the child (second review, 2026-11-05).
+// Their local rows end in the same transaction (Head Office restore, work order 6). removeChild
+// left them open only so they could upload open; refused and never sent again, nothing on the
+// server backs them, and no pull or reconcile ever ends a row that is not synced. Left open, a
+// child Head Office later restores would show this EA a membership or grant the server never
+// accepted. Ending changes only the local row: the outbox payload, and so the delivered-receipt
+// exit, is untouched, and a server row under the same id still replaces it on the next pull.
+// The end never precedes the row's start (the local CHECKs, and the server guard's rule 1:
+// end := greatest(end, start)). A row made while the phone's clock ran ahead can start after the
+// acknowledgement; ending it then would fail the CHECK, undo the whole acknowledgement and send
+// the Delete child again on every pass, re-removing a child Head Office restored meanwhile.
+const RELATIONSHIP_START_COLUMNS = {
+  child_ea_assignments: 'assigned_at',
+  child_programme_enrollments: 'enrolled_at',
+  child_class_memberships: 'enrolled_at',
+  child_group_memberships: 'joined_at',
+};
+const stampRefusalsRemovedWithChild = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'hard_delete' || tableName !== 'children') return;
+  const at = timestamp();
+  const refusedFamily = `status = 'terminal' and operation = 'insert' and owner_user_id = ?
+      and table_name in (${CHILD_RELATIONSHIP_TABLES.map(() => '?').join(', ')})
+      and json_extract(payload, '$.child_id') = ?`;
+  const familyParams = [outboxRecord.owner_user_id, ...CHILD_RELATIONSHIP_TABLES, outboxRecord.record_id];
+  const refused = await txn.getAllAsync(`select table_name, record_id from sync_outbox where ${refusedFamily}`, ...familyParams);
+  await txn.runAsync(`update sync_outbox set error_code = '${REMOVED_WITH_CHILD}', updated_at = ? where ${refusedFamily}`,
+    at, ...familyParams);
+  for (const row of refused) {
+    const endColumn = quoteIdentifier(ARCHIVE_SERVER_COLUMNS[row.table_name][0]);
+    const startColumn = quoteIdentifier(RELATIONSHIP_START_COLUMNS[row.table_name]);
+    await txn.runAsync(`update ${quoteIdentifier(row.table_name)} set ${endColumn} = max(?, ${startColumn}), updated_at = ?
+      where id = ? and ${endColumn} is null`, at, at, row.record_id);
+  }
+};
+
+// A Delete child acknowledged as the child's last outbox row settles a local child row left
+// pending (Head Office restore, work order 6). An INSERT or edit of the child acknowledged while
+// the removal still waited leaves the row pending (hasRemainingOutbox), and a hard_delete
+// acknowledgement never touched it, so the row stayed pending with nothing queued: every pull then
+// refused the server's copy (pending-local-wins), and a child Head Office restored never came back.
+// Nothing is owed for it any more, so it is synced and the next pull may replace it.
+const settleRemovedChildRow = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'hard_delete' || tableName !== 'children') return;
+  const remaining = await txn.getFirstAsync(
+    'select id from sync_outbox where table_name = ? and record_id = ? limit 1', tableName, outboxRecord.record_id);
+  if (remaining) return;
+  await txn.runAsync(`update children set sync_status = 'synced', last_sync_error = null, updated_at = ?
+    where id = ? and sync_status in ('pending', 'failed')`, timestamp(), outboxRecord.record_id);
+};
+
+const releaseRefusalsAfterOwnInsert = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'insert') return;
+  await txn.runAsync(`
+    update sync_outbox
+    set status = 'pending', retry_count = 0, next_retry_at = null, last_error = null, updated_at = ?
+    where table_name = ? and record_id = ? and status = 'terminal'
+      and operation in ('update', 'archive', 'restore') and error_code in ${NOT_APPLIED_CODES}
+  `, timestamp(), tableName, outboxRecord.record_id);
 };
 
 const finalizeSuccess = async ({
@@ -885,7 +984,10 @@ const finalizeSuccess = async ({
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
   }
 
+  await stampRefusalsRemovedWithChild(txn, outboxRecord, tableName);
+  await settleRemovedChildRow(txn, outboxRecord, tableName);
   if (outboxRecord.operation !== 'hard_delete') {
+    await releaseRefusalsAfterOwnInsert(txn, outboxRecord, tableName);
     const hasRemainingOutbox = await txn.getFirstAsync(`
       select id
       from sync_outbox
@@ -1007,6 +1109,7 @@ const finalizeManySuccess = async ({ database, records, tableName, applyAcknowle
         }
 
         if (outboxRecord.operation !== 'hard_delete') {
+          await releaseRefusalsAfterOwnInsert(txn, outboxRecord, tableName);
           const hasRemainingOutbox = await txn.getFirstAsync(`
             select id from sync_outbox where table_name = ? and record_id = ? limit 1
           `, tableName, outboxRecord.record_id);
@@ -1146,7 +1249,49 @@ export const createOutboxSyncEngine = ({
     }
   };
 
-  const processRecord = async (outboxRecord, passUserId) => {
+  const wasRefused = (claimedRecord) => claimedRecord?.claimedFromStatus === 'terminal';
+
+  // Hands claimed rows back without an attempt: a refused row returns to terminal, owed work to
+  // pending (MA-BUG-20261104-021).
+  const releaseClaims = async (claimedRecords) => {
+    const records = claimedRecords.filter(Boolean);
+    const refused = records.filter(wasRefused);
+    const owedIds = records.filter((record) => !wasRefused(record)).map((record) => record.id);
+    if (refused.length > 0) await outboxRepository.restoreRefusedClaims(refused);
+    if (owedIds.length === 0) return;
+    if (typeof outboxRepository.markReadyMany === 'function') {
+      await outboxRepository.markReadyMany(owedIds);
+    } else {
+      for (const id of owedIds) await outboxRepository.markReady(id);
+    }
+  };
+
+  // A claim that throws may have rolled back (nothing changed: a refused row is still terminal, a
+  // backed-off row keeps its backoff) or committed before failing. Hand back only the rows it
+  // left in_flight, as their status before the pass, so it neither changes nor strands anything.
+  // Its own stamp is unknown, so a refused row gets its status back but keeps the stamped payload
+  // and domain version, which stay equal.
+  const settleThrownClaims = async (outboxRecords, batchClaims = new Map()) => {
+    const leftInFlight = [];
+    for (const record of outboxRecords) {
+      const current = await outboxRepository.getById(record.id);
+      if (current?.status !== 'in_flight') continue;
+      const prior = batchClaims.get(record.id);
+      const priorStatus = prior?.claimedFromStatus ?? record.status;
+      leftInFlight.push({
+        ...current,
+        claimedFromStatus: priorStatus,
+        claimedFromUpdatedAt: prior?.claimedFromUpdatedAt ?? record.updated_at,
+        claimedDomainStatus: prior?.claimedDomainStatus ?? (priorStatus === 'terminal' ? 'terminal' : null),
+      });
+    }
+    await releaseClaims(leftInFlight);
+    return leftInFlight;
+  };
+
+  // `batchClaim` is this row's claim by processBatch, when the batch fell back to single rows:
+  // the batch claim, not the re-claim, knows whether the row was refused before the pass.
+  const processRecord = async (outboxRecord, passUserId, { batchClaim = null } = {}) => {
     const config = getConfig(outboxRecord.table_name);
     if (!config) {
       if (!await getMatchingPassSession(passUserId)) {
@@ -1161,7 +1306,28 @@ export const createOutboxSyncEngine = ({
       return { success: false, terminal: true, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
 
-    const [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id]);
+    let inFlightRecord = null;
+    try {
+      [inFlightRecord] = await outboxRepository.markInFlightAndGet([outboxRecord.id]);
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      const reason = recordedFailure(error) || 'Sync claim threw';
+      try {
+        await settleThrownClaims([outboxRecord], batchClaim ? new Map([[outboxRecord.id, batchClaim]]) : undefined);
+      } catch (settleError) {
+        if (isStaleActorError(settleError)) throw settleError;
+        // resetInFlight is the cross-pass backstop for a row this could not hand back.
+      }
+      const refused = (batchClaim?.claimedFromStatus ?? outboxRecord.status) === 'terminal';
+      return { success: false, terminal: refused, failedRecord: makeFailedRecord(outboxRecord, reason) };
+    }
+    if (inFlightRecord && batchClaim) {
+      // The row as it was before the pass; the version to revert from is this re-claim's stamp.
+      for (const key of ['claimedFromStatus', 'claimedFromUpdatedAt', 'claimedFromPayload', 'claimedFromLastError',
+        'claimedDomainStatus', 'claimedDomainVersion']) {
+        inFlightRecord[key] = batchClaim[key];
+      }
+    }
     try {
       if (!inFlightRecord) {
         const reason = `Outbox record disappeared before sync: ${outboxRecord.id}`;
@@ -1169,7 +1335,7 @@ export const createOutboxSyncEngine = ({
       }
 
       if (!await getMatchingPassSession(passUserId)) {
-        await outboxRepository.markReady(outboxRecord.id);
+        await releaseClaims([inFlightRecord]);
         return { success: false, abortedUserSwitch: true };
       }
 
@@ -1288,29 +1454,39 @@ export const createOutboxSyncEngine = ({
       // the CAS HIT → row marked failed+backoff, correct for a real attempt); else the original
       // record (CAS MISSES on the changed updated_at → restorePendingAfterStaleFinalize → pending).
       const reason = recordedFailure(error) || 'Sync record processing threw';
+      const refused = wasRefused(inFlightRecord);
       try {
-        await finalizeRetriableFailure({
-          database,
-          outboxRecord: inFlightRecord || outboxRecord,
-          tableName: config.tableName,
-          outboxRepository,
-          reason,
-          ...dispositionFor(error, { transport: true }),
-        });
+        if (refused) {
+          // A throw is not a new server answer: the row stays refused (MA-BUG-20261104-021).
+          await outboxRepository.restoreRefusedClaims([inFlightRecord]);
+        } else {
+          await finalizeRetriableFailure({
+            database,
+            outboxRecord: inFlightRecord || outboxRecord,
+            tableName: config.tableName,
+            outboxRepository,
+            reason,
+            ...dispositionFor(error, { transport: true }),
+          });
+        }
       } catch (finalizeError) {
         if (isStaleActorError(finalizeError)) throw finalizeError;
         // Full finalize (CAS + domain update) failed; last-resort plain outbox status reset so the
         // row isn't left in_flight within THIS pass (markReady only touches sync_outbox, so it can
         // succeed even when the domain write can't). resetInFlight is the cross-pass backstop.
-        try { await outboxRepository.markReady(outboxRecord.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        // A refused row is left for that backstop rather than made waiting here.
+        if (!refused) {
+          try { await outboxRepository.markReady(outboxRecord.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        }
       }
-      return { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) };
+      return { success: false, terminal: refused, failedRecord: makeFailedRecord(outboxRecord, reason) };
     }
   };
 
   // Per-record fallback for a batch (used when the batch can't/didn't upsert as a unit). The shared
   // budget bounds the whole pass, while small allSettled waves preserve sibling-safe cleanup.
-  const processBatchFallback = async (outboxRecords, passUserId, fallbackBudget) => {
+  // `batchClaims` maps outbox id to the batch's claim; only rows the batch claimed are released.
+  const processBatchFallback = async (outboxRecords, passUserId, fallbackBudget, batchClaims = new Map()) => {
     const attemptCount = Math.min(
       outboxRecords.length,
       Math.max(0, fallbackBudget.remaining)
@@ -1324,7 +1500,7 @@ export const createOutboxSyncEngine = ({
     // each wave: one record rejecting must not let batch cleanup overwrite a sibling that synced.
     for (const wave of chunkArray(attemptedRecords, SYNC_BATCH_LIMITS.maxFallbackConcurrency)) {
       const settled = await Promise.allSettled(
-        wave.map((record) => processRecord(record, passUserId))
+        wave.map((record) => processRecord(record, passUserId, { batchClaim: batchClaims.get(record.id) }))
       );
       const stale = settled.find((outcome) => outcome.status === 'rejected' && isStaleActorError(outcome.reason));
       if (stale) throw stale.reason;
@@ -1337,25 +1513,26 @@ export const createOutboxSyncEngine = ({
         }
         const record = wave[index];
         const reason = recordedFailure(outcome.reason) || 'Fallback record processing threw';
-        try { await outboxRepository.markReady(record.id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
-        results.push({ success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) });
+        const batchClaim = batchClaims.get(record.id);
+        try {
+          if (batchClaim) await releaseClaims([batchClaim]);
+          else await outboxRepository.markReady(record.id);
+        } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        results.push({ success: false, terminal: wasRefused(batchClaim), failedRecord: makeFailedRecord(record, reason) });
       }
     }
 
     if (deferredRecords.length > 0) {
-      const deferredIds = deferredRecords.map((record) => record.id);
+      // A row the batch did not claim was not touched, so it needs no reset.
+      const deferredClaims = deferredRecords.map((record) => batchClaims.get(record.id)).filter(Boolean);
       try {
-        if (typeof outboxRepository.markReadyMany === 'function') {
-          await outboxRepository.markReadyMany(deferredIds);
-        } else {
-          for (const id of deferredIds) await outboxRepository.markReady(id);
-        }
+        await releaseClaims(deferredClaims);
       } catch (resetError) {
         if (isStaleActorError(resetError)) throw resetError;
         // Keep sibling outcomes intact. Best-effort per-row cleanup may recover a partial bulk
         // reset; resetInFlight is the cross-pass backstop for any row that remains in_flight.
-        for (const id of deferredIds) {
-          try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
+        for (const claim of deferredClaims) {
+          try { await releaseClaims([claim]); } catch (retryError) { if (isStaleActorError(retryError)) throw retryError; }
         }
       }
       results.push(...deferredRecords.map(() => ({
@@ -1371,13 +1548,26 @@ export const createOutboxSyncEngine = ({
     let inFlightRecords = null;
     try {
       inFlightRecords = await outboxRepository.markInFlightAndGet(ids);
-
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      // Report the rows as not attempted; dependents wait for the next pass. Only rows the claim
+      // left in_flight are handed back (MA-BUG-20261104-021).
+      console.warn('Sync batch claim failed:', errorMessage(error));
+      try {
+        await settleThrownClaims(outboxRecords);
+      } catch (settleError) {
+        if (isStaleActorError(settleError)) throw settleError;
+      }
+      return outboxRecords.map(() => ({ success: false, deferredBatchFallback: true }));
+    }
+    const batchClaims = new Map(inFlightRecords.map((record) => [record.id, record]));
+    try {
       if (inFlightRecords.length !== outboxRecords.length) {
-        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget, batchClaims);
       }
 
       if (!await getMatchingPassSession(passUserId)) {
-        await Promise.all(ids.map((id) => outboxRepository.markReady(id)));
+        await releaseClaims(inFlightRecords);
         return outboxRecords.map(() => ({ success: false, abortedUserSwitch: true }));
       }
 
@@ -1391,13 +1581,13 @@ export const createOutboxSyncEngine = ({
         // A THROWN batch request (timeout / abort / oversized payload) — degrade to per-record so a
         // deterministic batch-level failure isolates per row (smaller payloads make progress) instead
         // of re-forming the same failing batch forever. processBatchFallback is allSettled-safe.
-        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget, batchClaims);
       }
 
       if (isStaleActorError(serverResult.error)) throw serverResult.error;
       assertActorOpen();
       if (!serverResult.success) {
-        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget);
+        return await processBatchFallback(outboxRecords, passUserId, fallbackBudget, batchClaims);
       }
 
       await finalizeManySuccess({ database, records: inFlightRecords, tableName: config.tableName, applyAcknowledgedPayload });
@@ -1405,27 +1595,32 @@ export const createOutboxSyncEngine = ({
       return outboxRecords.map(() => ({ success: true }));
     } catch (error) {
       if (isStaleActorError(error)) throw error;
-      // Post-markInFlight throw (getById / batch request / finalizeManySuccess) — don't strand the
-      // batch in_flight. finalizeManyRetriableFailure with inFlightRecords when we have them (CAS
-      // hits → failed+backoff); else the originals (CAS misses → restore pending).
+      // Post-claim throw (batch request / fallback / finalizeManySuccess) — don't strand the batch
+      // in_flight. Owed rows: finalizeManyRetriableFailure (CAS hits → failed+backoff). Refused rows
+      // go back to terminal (MA-BUG-20261104-021).
       const reason = recordedFailure(error) || 'Batch processing threw';
+      const refused = inFlightRecords.filter(wasRefused);
+      const owed = inFlightRecords.filter((record) => !wasRefused(record));
       try {
-        await finalizeManyRetriableFailure({
-          database,
-          records: inFlightRecords || outboxRecords,
-          tableName: config.tableName,
-          reason,
-          ...dispositionFor(error, { transport: true }),
-        });
+        if (refused.length > 0) await outboxRepository.restoreRefusedClaims(refused);
+        if (owed.length > 0) {
+          await finalizeManyRetriableFailure({
+            database,
+            records: owed,
+            tableName: config.tableName,
+            reason,
+            ...dispositionFor(error, { transport: true }),
+          });
+        }
       } catch (finalizeError) {
         if (isStaleActorError(finalizeError)) throw finalizeError;
         // Last-resort per-id outbox status reset (see processRecord note).
-        for (const id of ids) {
+        for (const { id } of owed) {
           try { await outboxRepository.markReady(id); } catch (resetError) { if (isStaleActorError(resetError)) throw resetError; }
         }
       }
       return outboxRecords.map((record) => (
-        { success: false, terminal: false, failedRecord: makeFailedRecord(record, reason) }
+        { success: false, terminal: wasRefused(batchClaims.get(record.id)), failedRecord: makeFailedRecord(record, reason) }
       ));
     }
   };
@@ -1500,10 +1695,21 @@ export const createOutboxSyncEngine = ({
       durationMs: 0,
     };
     const failedRecordsByTable = new Map();
+    // Children this EA removed, read when the pass selects its rows (see refusalExit).
+    let removedChildIds = new Set();
     const fieldResolversByOutboxId = new Map();
     const blockedSubjectIndexes = new Map();
 
+    // Plan O2 item 2 ("a children hard_delete is never a parent", review rounds 3-4). A Delete
+    // child waiting on its gate is a waiting destructive operation, not a missing or failed FK
+    // parent. Registering it would skip every relationship INSERT and history row for the child,
+    // forever, while it waits for exactly those rows. This one exclusion covers every entry point
+    // (dependency skip, failure, batch deferral) and the archive subject index built from the map.
+    const isChildHardDelete = (record) => (
+      record.operation === 'hard_delete' && normalizeTableName(record.table_name) === 'children'
+    );
     const rememberBlockedRecord = (record) => {
+      if (isChildHardDelete(record)) return;
       const tableKey = normalizeTableName(record.table_name);
       if (!failedRecordsByTable.has(tableKey)) {
         failedRecordsByTable.set(tableKey, new Map());
@@ -1548,29 +1754,43 @@ export const createOutboxSyncEngine = ({
       if (record.operation === 'hard_delete' && tableNameForRecord === 'children') {
         // Deletion retained a possibly-committed INSERT. Do not let deletion
         // finish before its retry, including a terminal insert retried manually.
+        // Plan O2 item 2: the deletion also waits for the child's own owed relationship INSERTs,
+        // so they land open with the authority the rest of the family and the queued history need,
+        // and the server's actor-scoped removal then ends them. History never waits here. A
+        // refused (terminal) relationship INSERT does not hold it (combined-OTA review): once the
+        // child is being removed such an INSERT is never sent again (RESENDABLE_REFUSAL_SQL), so it
+        // cannot land after the removal, and it clears through its receipt. Only this EA's rows
+        // count. The waiting deletion is never a parent: see isChildHardDelete above.
         const resolvedDatabase = await resolveDatabase(database);
         const retainedInsert = await resolvedDatabase.getFirstAsync(`
           select id from sync_outbox
-          where table_name = 'children' and record_id = ? and operation = 'insert'
+          where operation = 'insert' and owner_user_id = ?
+            and (
+              (table_name = 'children' and record_id = ?)
+              or (table_name in (${CHILD_RELATIONSHIP_TABLES.map(() => '?').join(', ')})
+                and json_extract(payload, '$.child_id') = ?
+                and status in ('pending', 'failed', 'in_flight'))
+            )
           limit 1
-        `, record.record_id);
+        `, passUserId, record.record_id, ...CHILD_RELATIONSHIP_TABLES, record.record_id);
         if (retainedInsert) return { tableName: tableNameForRecord, recordId: record.record_id };
       }
       // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
       // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
-      // A terminal insert does not block; the update then reaches its normal terminal classifier.
-      if (
-        (isLifecycle || (
-          record.operation === 'update'
-          && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
-        ))
-        && await outboxRepository.hasPendingOperation({
+      // It waits while its own insert is queued in ANY status (combined-OTA review, 2026-11-05):
+      // sent ahead of a refused insert it is refused as not applied and could clear, and the
+      // insert could later land with the old content. Its release is the insert landing or
+      // leaving through its exit. Waiting behind a refused insert it holds nothing else back
+      // (`ownInsertRefused`), as the refused insert itself holds nothing in an ordinary pass.
+      if (isLifecycle || (record.operation === 'update' && UPDATE_BY_ID_TABLES.has(tableNameForRecord))) {
+        const ownInsert = await outboxRepository.getQueuedOperationStatus({
           tableName: tableNameForRecord,
           recordId: record.record_id,
           operation: 'insert',
-        })
-      ) {
-        return { tableName: tableNameForRecord, recordId: record.record_id };
+        });
+        if (ownInsert) {
+          return { tableName: tableNameForRecord, recordId: record.record_id, ownInsertRefused: ownInsert === 'terminal' };
+        }
       }
       if (
         isLifecycle
@@ -1664,7 +1884,12 @@ export const createOutboxSyncEngine = ({
         result.tableResults[tableKey].success = false;
         result.tableResults[tableKey].failed += 1;
         result.failedRecords.push(recordResult.failedRecord);
-        rememberBlockedRecord(outboxRecord);
+        // A refused archive, restore or edit says nothing about whether its row exists on the
+        // server, and it is never sent again, so it must not hold back anything (O1). Nor does a
+        // refused relationship INSERT of a child this EA removed.
+        if (!(recordResult.terminal && !isResendableRefusalHere(outboxRecord, removedChildIds))) {
+          rememberBlockedRecord(outboxRecord);
+        }
       }
     };
     const fallbackBudget = {
@@ -1686,6 +1911,7 @@ export const createOutboxSyncEngine = ({
         }
       }
 
+      removedChildIds = await readRemovedChildIds(await resolveDatabase(database));
       const readyRecords = sortByPushOrder(
         await outboxRepository.getReadyRecords({
           limit: 1000,
@@ -1698,10 +1924,34 @@ export const createOutboxSyncEngine = ({
         ? readyRecords.filter((record) => record.table_name === normalizeTableName(tableName))
         : readyRecords;
 
+      // Plan O2 item 2: a genuinely unacknowledged child INSERT keeps its blocker role while it
+      // backs off. The blocker map is otherwise built only from rows this pass selects, and an
+      // ordinary pass does not select a backed-off row, so its family would be sent ahead of the
+      // child. Register every owed child INSERT this pass will not send. Its evidence role needs no
+      // help: hasPendingRecord counts it in any unacknowledged status.
+      const selectedIds = new Set(filteredRecords.map((record) => record.id));
+      const owedChildInserts = await (await resolveDatabase(database)).getAllAsync(`
+        select id, table_name, record_id, operation from sync_outbox
+        where table_name = 'children' and operation = 'insert'
+          and status in ('pending', 'failed', 'in_flight') and owner_user_id = ?
+      `, passUserId);
+      for (const owed of owedChildInserts) {
+        if (!selectedIds.has(owed.id)) rememberBlockedRecord(owed);
+      }
+
       for (let index = 0; index < filteredRecords.length; index += 1) {
         const outboxRecord = filteredRecords[index];
         const config = getConfig(outboxRecord.table_name);
-        const skippedDependency = await findBlockingDependency(outboxRecord);
+        let skippedDependency;
+        try {
+          skippedDependency = await findBlockingDependency(outboxRecord);
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          // A failed dependency read fails only this row, which was not claimed or changed.
+          const reason = recordedFailure(error) || 'Dependency check threw';
+          applyRecordResult(outboxRecord, config, { success: false, terminal: false, failedRecord: makeFailedRecord(outboxRecord, reason) });
+          continue;
+        }
         if (skippedDependency) {
           const tableResult = result.tableResults[outboxRecord.table_name] || {
             success: false,
@@ -1718,8 +1968,9 @@ export const createOutboxSyncEngine = ({
           result.tableResults[outboxRecord.table_name] = tableResult;
           // Skipped rows stay pending for the next pass. Whether this pass "succeeded" is
           // decided by the blocking failure itself: terminal already flipped success in
-          // applyRecordResult; a retriable block leaves the pass successful.
-          rememberBlockedRecord(outboxRecord);
+          // applyRecordResult; a retriable block leaves the pass successful. An edit waiting behind
+          // its own refused insert blocks nothing: that would be a hold with no release.
+          if (!skippedDependency.ownInsertRefused) rememberBlockedRecord(outboxRecord);
           continue;
         }
 
@@ -1795,6 +2046,12 @@ export const createOutboxSyncEngine = ({
           // Support reporting never changes whether the upload pass succeeded.
           console.warn('syncAll: support incident drain failed:', errorMessage(error));
         }
+        try {
+          result.refusalsCleared = await resolveDeliveredRefusals(passUserId);
+        } catch (error) {
+          if (isStaleActorError(error)) throw error;
+          console.warn('syncAll: refused-row resolve failed:', errorMessage(error));
+        }
       }
     } catch (error) {
       if (isStaleActorError(error)) {
@@ -1830,6 +2087,111 @@ export const createOutboxSyncEngine = ({
 
   const syncTableByName = async (name) => syncAll({ tableName: name });
 
+  // O1 item 2: after each pass's receipt drain, refused archives, restores and edits whose
+  // exact current revision the office holds leave the phone. The check and the delete share one
+  // transaction. Proof keys leave with their outbox row or receipt, whichever goes first.
+  // A refused row's way out and whether its receipt proves delivery. A refused edit or lifecycle
+  // row whose own insert is still queued is 'held': it never leaves while that insert could still
+  // land with older content (combined-OTA review, 2026-11-05). It is sent again if the insert
+  // lands (releaseRefusalsAfterOwnInsert), and resolves normally once the insert has left.
+  const readRefusalExit = async (db, row, removedChildIds) => {
+    const exit = refusalExit(row, removedChildIds ?? await readRemovedChildIds(db));
+    if (!exit) return { exit: null, delivery: null, incidentId: null };
+    if (row.operation !== 'insert') {
+      const ownInsert = await db.getFirstAsync(`
+        select id from sync_outbox where table_name = ? and record_id = ? and operation = 'insert' limit 1
+      `, row.table_name, row.record_id);
+      if (ownInsert) return { exit, delivery: 'held', incidentId: null };
+    }
+    return { exit, ...await readDeliveredReceipt(db, row) };
+  };
+
+  // A refused row leaves through its exit: the row, its proof key, and, when it was the record's
+  // last outbox row, a domain row still marked pending becomes terminal so the next pull converges
+  // it (a pending row is never overwritten by a pull). All in the caller's transaction.
+  const leaveThroughExit = async (txn, row, incidentId) => {
+    await outboxRepository.deleteRecord(row.id, { transaction: txn });
+    await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
+    const config = getConfig(row.table_name);
+    if (!config) return;
+    const remaining = await txn.getFirstAsync(
+      'select id from sync_outbox where table_name = ? and record_id = ? limit 1', row.table_name, row.record_id);
+    if (remaining) return;
+    await txn.runAsync(`update ${quoteIdentifier(config.tableName)} set sync_status = 'terminal'
+      where id = ? and sync_status = 'pending'`, row.record_id);
+  };
+
+  const resolveDeliveredRefusals = async (ownerUserId) => runRepositoryTransaction(database, async (txn) => {
+    const refused = await txn.getAllAsync(
+      "select * from sync_outbox where status = 'terminal' and owner_user_id = ?", ownerUserId);
+    const removedChildIds = await readRemovedChildIds(txn);
+    let cleared = 0;
+    for (const row of refused) {
+      const { exit, delivery, incidentId } = await readRefusalExit(txn, row, removedChildIds);
+      if (exit !== 'clears_itself' || delivery !== 'delivered') continue;
+      await leaveThroughExit(txn, row, incidentId);
+      cleared += 1;
+    }
+    await txn.runAsync(`
+      delete from local_state
+      where key >= ? and key < ?
+        and (substr(key, ?) not in (select id from support_incident_queue)
+          or json_extract(value, '$.outboxId') is null
+          or json_extract(value, '$.outboxId') not in (select id from sync_outbox))
+    `, DELIVERED_RECEIPT_PREFIX, `${DELIVERED_RECEIPT_PREFIX.slice(0, -1)};`, DELIVERED_RECEIPT_PREFIX.length + 1);
+    return cleared;
+  });
+
+  // D8: "The office has a copy — remove from this phone". Removes only the stuck upload (the
+  // local record stays) and only while the rule holds, checked in the same transaction.
+  const removeDeliveredItem = async (outboxId) => {
+    let outcome = { removed: false, delivery: null };
+    await runRepositoryTransaction(database, async (txn) => {
+      const row = await txn.getFirstAsync('select * from sync_outbox where id = ?', outboxId);
+      const { exit, delivery, incidentId } = await readRefusalExit(txn, row);
+      if (!exit) return;
+      if (delivery !== 'delivered') {
+        outcome = { removed: false, delivery };
+        return;
+      }
+      await leaveThroughExit(txn, row, incidentId);
+      outcome = { removed: true };
+    });
+    return outcome;
+  };
+
+  // Adds each needs-attention item's way out. Support bookkeeping never breaks the status the EA
+  // sees, so a failed read leaves the items without one.
+  const describeRefusalExits = async (items) => {
+    if (!items?.length) return items || [];
+    try {
+      const db = await resolveDatabase(database);
+      const removedChildIds = await readRemovedChildIds(db);
+      const described = [];
+      for (const item of items) {
+        const row = item.outboxId
+          ? await db.getFirstAsync('select * from sync_outbox where id = ?', item.outboxId) : null;
+        const { exit, delivery } = await readRefusalExit(db, row, removedChildIds);
+        described.push({
+          ...item,
+          // Stable across re-sends that are refused again; changes only with the content.
+          contentDigest: row ? currentWireDigest(row) : null,
+          delivery,
+          clearsItself: exit === 'clears_itself' && delivery !== 'held',
+          canRemove: exit === 'ea_removes' && delivery === 'delivered',
+          canRetry: exit !== null && isResendableRefusalHere(row, removedChildIds),
+        });
+      }
+      return described;
+    } catch (error) {
+      if (isStaleActorError(error)) throw error;
+      console.warn('Refused-row exits unavailable:', errorMessage(error));
+      return items.map((item) => ({
+        ...item, contentDigest: null, delivery: null, clearsItself: false, canRemove: false, canRetry: false,
+      }));
+    }
+  };
+
   const getSyncStatus = async (options = {}) => {
     try { await observeStandingConditions?.(); } catch (error) {
       if (isStaleActorError(error)) throw error;
@@ -1847,6 +2209,7 @@ export const createOutboxSyncEngine = ({
     ]);
     return {
       ...status,
+      needsAttentionItems: await describeRefusalExits(status.needsAttentionItems),
       incidentReadyCount,
       lastSyncTime: meta.lastSyncTime,
       lastSuccessfulSyncTime: meta.lastSuccessfulSyncTime || null,
@@ -1863,9 +2226,13 @@ export const createOutboxSyncEngine = ({
    */
   const requeueTerminalRlsFailures = async (userId) => {
     if (!userId) return 0;
+    // Lifecycle safety O1: a heal is a retry, so it keeps the no-replay rule. A refused archive,
+    // restore or edit is never requeued; it leaves through its delivered receipt.
+    const removedChildIds = await readRemovedChildIds(await resolveDatabase(database));
     const heals = (await outboxRepository.getTerminalRecords()).filter(record => (
       record.owner_user_id === userId
       && record.last_error !== 'foreign_owner'
+      && isResendableRefusalHere(record, removedChildIds)
       && isHealableRlsError(record)
     ));
     if (heals.length === 0) return 0;
@@ -1893,6 +2260,14 @@ export const createOutboxSyncEngine = ({
     // Route through the engine's `database` closure (undefined in prod → writer), NOT a
     // resolved reader handle — resolving first and passing it would hit the query_only reader.
     await runRepositoryTransaction(database, async (txn) => {
+      // Retry is a forced pass for one item: a refused archive, restore or edit is never re-sent.
+      const retried = await txn.getAllAsync(`
+        select id, operation from sync_outbox
+        where lower(table_name) = ?
+          and record_id = ?
+          and (status = 'failed' or (status = 'terminal' and ${RESENDABLE_REFUSAL_SQL}))
+      `, tableName, id);
+      if (retried.length === 0) return;
       await txn.runAsync(`
         update sync_outbox
         set status = 'pending',
@@ -1901,12 +2276,12 @@ export const createOutboxSyncEngine = ({
             last_error = case when table_name = 'children' and operation = 'insert'
               then last_error else null end,
             updated_at = ?
-        where lower(table_name) = ?
-          and record_id = ?
-          and status in ('failed', 'terminal')
-      `, timestamp(), tableName, id);
+        where id in (${retried.map(() => '?').join(', ')})
+      `, timestamp(), ...retried.map((row) => row.id));
       const config = getConfig(tableName);
-      if (config) {
+      // A hard_delete has no domain row to mark pending (as in the auth-restore heal); a removed
+      // child's local row must not turn pending because its deletion is retried.
+      if (config && retried.some((row) => row.operation !== 'hard_delete')) {
         await setDomainSyncResult(txn, config.tableName, id, {
           syncStatus: 'pending',
           lastSyncError: null,
@@ -1921,6 +2296,7 @@ export const createOutboxSyncEngine = ({
     getSyncStatus,
     requeueTerminalRlsFailures,
     retryFailedItem,
+    removeDeliveredItem,
   };
 };
 

@@ -16,6 +16,32 @@ const gitCommit = () => {
   }
 };
 
+// `npm run ota:publish` sets these for `eas update`, which evaluates this file with its
+// environment and publishes the result as the update manifest's extra. On the phone,
+// Constants.expoConfig.extra is that manifest's extra during an update launch, so Profile can
+// show the update's release number (1.5.0+2). Builds and plain `eas update` leave them unset,
+// and then the keys are left out: @expo/config serializes a null here as {}.
+const otaRelease = () => {
+  const value = process.env.MASI_OTA_RELEASE;
+  if (value === undefined || value === '') return null;
+  if (!/^[1-9][0-9]*$/.test(value)) {
+    throw new Error(`MASI_OTA_RELEASE must be a positive whole number, not "${value}".`);
+  }
+  return Number(value);
+};
+
+const otaPublishedAt = () => {
+  const value = process.env.MASI_OTA_PUBLISHED_AT;
+  if (value === undefined || value === '') return null;
+  const date = new Date(value);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(value) || Number.isNaN(date.getTime())) {
+    throw new Error(`MASI_OTA_PUBLISHED_AT must be an ISO 8601 UTC time, not "${value}".`);
+  }
+  return value;
+};
+
+const onlyWhenSet = (key, value) => (value === null ? {} : { [key]: value });
+
 module.exports = () => {
   const supabaseConfig = resolveSupabaseProjectConfig();
   const sentryOrganization = process.env.SENTRY_ORG;
@@ -99,6 +125,8 @@ module.exports = () => {
       },
       extra: {
         gitCommit: gitCommit(),
+        ...onlyWhenSet('otaRelease', otaRelease()),
+        ...onlyWhenSet('otaPublishedAt', otaPublishedAt()),
         questionGallery: GALLERY_PROFILES.includes(process.env.EAS_BUILD_PROFILE),
         ...supabaseConfig,
         ...resolvePreviewContentBuildConfig(),

@@ -145,7 +145,7 @@ test('T8: open quarantines a foreign row before publication and retains file-wid
   expect(await Promise.all(published)).toEqual([expect.objectContaining({ status: 'terminal', last_error: 'foreign_owner' })]);
   expect(await db.getFirstAsync("select sync_status from children where id = 'child'"))
     .toEqual({ sync_status: 'terminal' });
-  expect(await outbox.countUnsent()).toEqual({ total: 1, byTable: { children: 1 } });
+  expect(await outbox.countUnsent()).toEqual({ total: 1, byTable: { children: 1 }, needsAttention: 1 });
   expect(await handle.repositories.localState.get('integrity_scan_last')).toEqual({
     at: expect.any(String), total: 1, byTable: { children: 1 }, adoptedLegacy: 0,
   });
@@ -183,7 +183,7 @@ test('legacy NULL owners in all four unsent states are adopted separately from n
   expect(await outbox.getById('owned')).toMatchObject({ owner_user_id: A, status: 'pending' });
   expect(JSON.parse((await db.getFirstAsync("select value from local_state where key = 'integrity_scan_last'")).value))
     .toEqual({ at: expect.any(String), total: 4, byTable: { children: 4 }, adoptedLegacy: 4 });
-  expect(await outbox.countUnsent()).toEqual({ total: 9, byTable: { children: 9 } });
+  expect(await outbox.countUnsent()).toEqual({ total: 9, byTable: { children: 9 }, needsAttention: 5 });
   expect(await incidents()).toHaveLength(0);
   await open();
   const queued = (await incidents()).filter(r => r.kind === 'foreign_owner_in_file');
@@ -222,7 +222,7 @@ test('T8: each upload pass quarantines an injected foreign row before reset and 
   ]);
   expect(fetchImpl.mock.calls.map(([, options]) => JSON.parse(options.body).p_envelope.payload.foreignTotal)).toEqual([1, 2]);
   expect(await handle.services.syncEngine.requeueTerminalRlsFailures(A)).toBe(0);
-  expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 2, byTable: { children: 2 } });
+  expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 2, byTable: { children: 2 }, needsAttention: 2 });
 });
 
 test('open adopts a legacy in-flight row before recovery; adoption-only and empty scans report no foreign incident', async () => {
@@ -260,7 +260,7 @@ test('multiple tables and absent hard-delete domain rows are counted and stay qu
     total: 2, byTable: { children: 1, classes: 1 }, adoptedLegacy: 0,
   });
   expect(await handle.repositories.syncOutbox.getById('deleted')).toMatchObject({ status: 'terminal', last_error: 'foreign_owner' });
-  expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 2, byTable: { children: 1, classes: 1 } });
+  expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 2, byTable: { children: 1, classes: 1 }, needsAttention: 2 });
   const queued = await handle.repositories.supportIncidents.listPending();
   expect(queued).toHaveLength(1);
   expect(queued[0].repeatKey).toBe(incidentRepeatKey('foreign', 'child', 'deleted'));
@@ -363,7 +363,7 @@ test('a legacy row discovered after open is adopted before reset and uploaded as
   await db.runAsync("update sync_outbox set owner_user_id = null where id = 'legacy-upload'");
   expect(await handle.services.syncEngine.syncAll()).toMatchObject({ success: true, totalSynced: 1 });
   expect(fetchImpl).toHaveBeenCalledTimes(1);
-  expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 0, byTable: {} });
+  expect(await handle.repositories.syncOutbox.countUnsent()).toEqual({ total: 0, byTable: {}, needsAttention: 0 });
   expect(await handle.repositories.localState.get('integrity_scan_last')).toEqual({
     at: expect.any(String), total: 0, byTable: {}, adoptedLegacy: 1,
   });
@@ -371,7 +371,9 @@ test('a legacy row discovered after open is adopted before reset and uploaded as
   expect(log).not.toHaveBeenCalled();
 });
 
-test('T9: an EA edit to a Head Office child heals an unmarked 42501 by its stamped owner', async () => {
+// Lifecycle safety O1 (2026-11-05): the heal keeps the no-replay rule, so a refused edit is never
+// requeued. Resendable work still heals by its stamped owner, not by domain provenance.
+test('T9: an EA edit to a Head Office child is never requeued; a stamped insert still heals by its owner', async () => {
   const handle = await open();
   await db.runAsync("insert into programmes (id, code, name) values ('literacy', 'lit', 'Literacy')");
   await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
@@ -383,10 +385,15 @@ test('T9: an EA edit to a Head Office child heals an unmarked 42501 by its stamp
   expect(edit).toMatchObject({ owner_user_id: A, operation: 'update', payload: { created_by: B } });
   await handle.repositories.syncOutbox.markTerminalFailure(edit.id, { errorMessage: '42501: row-level security' });
   await db.runAsync("update children set sync_status = 'terminal', last_sync_error = '42501' where id = 'office-child'");
+  await handle.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: 'office-child-2', operation: 'insert',
+    payload: { id: 'office-child-2', first_name: 'Other', last_name: 'Child', created_by: B } });
+  await handle.repositories.syncOutbox.markTerminalFailure('children:office-child-2:insert', { errorMessage: '42501: row-level security' });
   expect(await handle.services.syncEngine.requeueTerminalRlsFailures(A)).toBe(1);
-  expect(await handle.repositories.syncOutbox.getById(edit.id)).toMatchObject({
-    status: 'pending', owner_user_id: A, retry_count: 0, next_retry_at: null, last_error: null,
+  expect(await handle.repositories.syncOutbox.getById(edit.id)).toMatchObject({ status: 'terminal', owner_user_id: A });
+  expect(await db.getFirstAsync("select sync_status, created_by, reading_level from children where id = 'office-child'"))
+    .toEqual({ sync_status: 'terminal', created_by: B, reading_level: 'words' });
+  // A child INSERT keeps last_error as dispatch evidence (contract item 13).
+  expect(await handle.repositories.syncOutbox.getById('children:office-child-2:insert')).toMatchObject({
+    status: 'pending', owner_user_id: A, retry_count: 0, next_retry_at: null, last_error: '42501: row-level security',
   });
-  expect(await db.getFirstAsync("select sync_status, last_sync_error, created_by, reading_level from children where id = 'office-child'"))
-    .toEqual({ sync_status: 'pending', last_sync_error: null, created_by: B, reading_level: 'words' });
 });

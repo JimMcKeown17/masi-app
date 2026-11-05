@@ -36,11 +36,11 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-const setup = ({ clockedIn = false, unsent = 0, online = true, clockOutOk = true, uploadClears = false } = {}) => {
-  const state = { unsent };
+const setup = ({ clockedIn = false, unsent = 0, attention = 0, online = true, clockOutOk = true, uploadClears = false } = {}) => {
+  const state = { unsent, attention };
   const deps = {
     signOut: jest.fn(async () => ({ error: null })),
-    countUnsent: jest.fn(async () => ({ total: state.unsent, byTable: {} })),
+    countUnsent: jest.fn(async () => ({ total: state.unsent, byTable: {}, needsAttention: state.attention })),
     isClockedIn: clockedIn,
     clockOut: jest.fn(async () => { if (clockOutOk) state.unsent += 1; return clockOutOk; }),
     isOnline: online,
@@ -310,6 +310,30 @@ describe('Profile sign-out questions (T13)', () => {
     await act(async () => { upload.resolve(); });
     expect(screen.deps.signOut).not.toHaveBeenCalled();
     expect(screen.deps.countUnsent).toHaveBeenCalledTimes(1);
+  });
+
+  // MA-BUG-20261104-020: an item the office refused is never promised an upload.
+  test('needs-attention items are told apart from work waiting to upload', async () => {
+    const screen = setup({ unsent: 1, attention: 1 });
+    await press(screen, 'Sign Out');
+    expect(screen.getByText("1 item hasn't uploaded yet.")).toBeTruthy();
+    expect(screen.getByText("It needs attention and won't upload by itself. Check Sync status first.")).toBeTruthy();
+    expect(screen.queryByText(UNSENT_SUBTITLE_ONE)).toBeNull();
+    expect(screen.deps.signOut).not.toHaveBeenCalled();
+  });
+
+  test('a mix of waiting and needs-attention work says which will upload', async () => {
+    const screen = setup({ unsent: 3, attention: 1 });
+    await press(screen, 'Sign Out');
+    expect(screen.getByText("3 items haven't uploaded yet.")).toBeTruthy();
+    expect(screen.getByText('If you sign out, 2 will upload next time you sign in on this phone. '
+      + "1 needs attention and won't upload by itself. Check Sync status first.")).toBeTruthy();
+  });
+
+  test('several needs-attention items and nothing waiting', async () => {
+    const screen = setup({ unsent: 2, attention: 2 });
+    await press(screen, 'Sign Out');
+    expect(screen.getByText("They need attention and won't upload by themselves. Check Sync status first.")).toBeTruthy();
   });
 
   test('dismissal while rechecking an unreadable count ignores its late zero result', async () => {

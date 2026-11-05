@@ -927,54 +927,6 @@ export const createChildrenRepository = ({ database } = {}) => {
     }
   };
 
-  const archiveChild = async (childId, {
-    actorUserId,
-    archivedAt = new Date().toISOString(),
-    archiveReason = null,
-    transaction,
-  } = {}) => runWrite(transaction, async (txn) => {
-    await assertNotHistoryReference(txn, childId);
-    await assertDeliveryChild(txn, childId);
-    await txn.runAsync(`
-      update children
-      set archived_at = ?,
-          archived_by_user_id = ?,
-          archive_reason = ?,
-          sync_status = 'pending',
-          updated_at = ?
-      where id = ?
-    `, archivedAt, actorUserId || null, archiveReason, archivedAt, childId);
-    await enqueueDomainOutbox(txn, 'children', childId, 'archive', { id: childId, archived_at: archivedAt });
-
-    const relationshipUpdates = [
-      ['child_ea_assignments', 'unassigned_at', 'child_id'],
-      ['child_programme_enrollments', 'ended_at', 'child_id'],
-      ['child_class_memberships', 'exited_at', 'child_id'],
-      ['child_group_memberships', 'removed_at', 'child_id'],
-    ];
-
-    for (const [tableName, endColumn, childColumn] of relationshipUpdates) {
-      const rows = await txn.getAllAsync(
-        `select id from ${tableName} where ${childColumn} = ? and ${endColumn} is null`,
-        childId
-      );
-      await txn.runAsync(`
-        update ${tableName}
-        set ${endColumn} = ?,
-            sync_status = 'pending',
-            updated_at = ?
-        where ${childColumn} = ?
-          and ${endColumn} is null
-      `, archivedAt, archivedAt, childId);
-
-      for (const row of rows) {
-        await enqueueDomainOutbox(txn, tableName, row.id, 'archive', { id: row.id, [endColumn]: archivedAt });
-      }
-    }
-
-    return true;
-  });
-
   const deleteIfNoHistory = async (childId, { transaction } = {}) => runWrite(transaction, async (txn) => {
     await assertNotHistoryReference(txn, childId);
     const child = await txn.getFirstAsync('select created_by from children where id = ?', childId);
@@ -1037,6 +989,58 @@ export const createChildrenRepository = ({ database } = {}) => {
     return true;
   });
 
+  // Delete child (plan O2 item 2; ADR-0014 D3; MA-BUG-20261104-012, -014). One transaction. The
+  // phone states intent through the existing children hard_delete; the server's
+  // delete_child_if_no_history ends only this EA's grants and archives the child only when nobody
+  // else holds it. The phone never decides that global effect from its partial copy.
+  // - No local history: deleted locally exactly as deleteIfNoHistory always has, including the
+  //   purge of a child that never reached the server (no request at all).
+  // - Local history: the child is archived on this phone only, so it leaves every list now. Only
+  //   this EA's own rows end, on this phone only: their direct assignment and memberships in groups
+  //   they hold. Shared rows (programme enrollments, class memberships) and other EAs' rows are
+  //   the server's decision. No per-relationship archive row is queued. A row whose INSERT is still
+  //   in the outbox stays open, matching that INSERT: it uploads open with the authority the rest of
+  //   the family and the queued history need, and the hard_delete waits for it
+  //   (offlineSync findBlockingDependency). Ending it here would also drop it as local grant
+  //   evidence while history for this child is still owed.
+  // - An end never precedes its row's start (the local CHECKs; the server guard's rule 1, end :=
+  //   greatest(end, start)): a row made while the phone's clock ran ahead would otherwise refuse
+  //   the whole Delete child until real time caught up.
+  const removeChild = async (childId, {
+    removedAt = new Date().toISOString(),
+    transaction,
+  } = {}) => runWrite(transaction, async (txn) => {
+    // Runs the history-reference and delivery guards; returns false without writing on history.
+    if (await deleteIfNoHistory(childId, { transaction: txn })) return true;
+    if (!await txn.getFirstAsync('select id from children where id = ?', childId)) return false;
+
+    const actor = getConnectionActor(txn) ?? database?.userId ?? null;
+    await txn.runAsync(`
+      update children
+      set archived_at = ?, archived_by_user_id = ?, archive_reason = 'removed_by_ea', updated_at = ?
+      where id = ? and archived_at is null
+    `, removedAt, actor, removedAt, childId);
+    const insertNotQueued = (tableName) => `not exists (
+      select 1 from sync_outbox o
+      where o.table_name = '${tableName}' and o.record_id = ${tableName}.id and o.operation = 'insert'
+    )`;
+    await txn.runAsync(`
+      update child_ea_assignments set unassigned_at = max(?, assigned_at), updated_at = ?
+      where child_id = ? and user_id = ? and unassigned_at is null
+        and ${insertNotQueued('child_ea_assignments')}
+    `, removedAt, removedAt, childId, actor);
+    await txn.runAsync(`
+      update child_group_memberships set removed_at = max(?, joined_at), updated_at = ?
+      where child_id = ? and removed_at is null
+        and group_id in (
+          select group_id from group_ea_assignments where ea_user_id = ? and unassigned_at is null
+        )
+        and ${insertNotQueued('child_group_memberships')}
+    `, removedAt, removedAt, childId, actor);
+    await enqueueDomainOutbox(txn, 'children', childId, 'hard_delete', { id: childId });
+    return true;
+  });
+
   return {
     getChildren,
     getChildNamesByIds,
@@ -1063,8 +1067,8 @@ export const createChildrenRepository = ({ database } = {}) => {
     saveServerChildClassMembershipRows,
     deleteStaffChild,
     getUnsyncedStaffChildren,
-    archiveChild,
     deleteIfNoHistory,
+    removeChild,
   };
 };
 

@@ -3,7 +3,7 @@ import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as Updates from 'expo-updates';
 import { CURRENT_SCHEMA_VERSION } from '../db/migrations';
-import { getReleaseMetadata } from './releaseMetadata';
+import { getReleaseIdentity, getReleaseMetadata } from './releaseMetadata';
 
 const DEVICE_TYPE_NAMES = {
   0: 'unknown',
@@ -26,6 +26,7 @@ const present = (value, fallback = null) => (
  */
 export const getRuntimeDiagnostics = () => {
   const release = getReleaseMetadata();
+  const identity = getReleaseIdentity();
   const deviceType = present(Device.deviceType);
 
   return {
@@ -37,7 +38,8 @@ export const getRuntimeDiagnostics = () => {
         Application.nativeBuildVersion,
         Platform.OS === 'ios' ? release.iosBuildNumber : release.androidVersionCode
       ),
-      releaseLabel: present(release.releaseLabel),
+      // Profile's App release card shows the same label (1.5.0, 1.5.0+2 or 1.5.0+?).
+      releaseLabel: present(identity.releaseLabel),
       gitCommit: present(release.gitCommit),
     },
     device: {
@@ -64,6 +66,9 @@ export const getRuntimeDiagnostics = () => {
       runtimeVersion: present(Updates.runtimeVersion, release.runtimeVersionSummary),
       isEmbedded: Boolean(Updates.isEmbeddedLaunch),
       isEmergencyLaunch: Boolean(Updates.isEmergencyLaunch),
+      launch: identity.launch,
+      otaRelease: identity.otaRelease,
+      createdAt: identity.publishedAtIso,
     },
     backend: {
       target: present(release.supabaseTarget, 'unknown'),

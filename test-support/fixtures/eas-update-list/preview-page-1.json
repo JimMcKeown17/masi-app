@@ -1,0 +1,38 @@
+{
+  "name": "preview",
+  "id": "3b7c2f0e-51d4-4a8e-9f21-6c0d8e4b1a77",
+  "currentPage": [
+    {
+      "branch": "preview",
+      "message": "\"Lifecycle safety: archive and remove never strand work\" (3 hours ago by jimmckeown)",
+      "runtimeVersion": "1.5.0",
+      "isRollBackToEmbedded": false,
+      "group": "8addaae6-4f1c-4b0e-9d3a-2c7e5f6a1b90",
+      "platforms": "android, ios"
+    },
+    {
+      "branch": "preview",
+      "message": "\"Lesson flow copy fix\" (7 days ago by jimmckeown)",
+      "runtimeVersion": "1.4.0",
+      "isRollBackToEmbedded": false,
+      "group": "c41e9a02-7b3d-4e55-a0f8-91d2c6e7b334",
+      "platforms": "android, ios"
+    },
+    {
+      "branch": "preview",
+      "message": "\"First pilot OTA\" (8 days ago by jimmckeown)",
+      "runtimeVersion": "1.4.0",
+      "isRollBackToEmbedded": false,
+      "group": "9128905a-0c6b-4d1e-8f7a-3e2b1c0d9e8f",
+      "platforms": "android, ios"
+    },
+    {
+      "branch": "preview",
+      "message": "\"July pilot hotfix\" (4 months ago by jimmckeown)",
+      "runtimeVersion": "1.3.0",
+      "isRollBackToEmbedded": false,
+      "group": "5e0d7c6b-2a19-4f3e-b8c7-d6e5f4a3b2c1",
+      "platforms": "android, ios"
+    }
+  ]
+}

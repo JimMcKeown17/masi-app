@@ -110,7 +110,7 @@ describe('hidden children - repository soft-delete', () => {
 
     expect(await childrenRepository.deleteIfNoHistory('child-no-history')).toBe(true);
     expect(await childrenRepository.deleteIfNoHistory('child-with-history')).toBe(false);
-    await childrenRepository.archiveChild('child-with-history', { actorUserId: 'user-1' });
+    expect(await childrenRepository.removeChild('child-with-history')).toBe(true);
 
     const all = await childrenRepository.getChildren();
     expect(all.find(c => c.id === 'child-no-history')).toBeUndefined();

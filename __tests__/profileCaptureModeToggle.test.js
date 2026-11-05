@@ -64,6 +64,12 @@ jest.mock('../src/utils/releaseMetadata', () => ({
     supabaseTarget: 'sqlite-staging',
     supabaseProjectId: 'segygjzpujphwvrubusm',
   }),
+  getReleaseIdentity: () => ({
+    releaseLabel: '1.2.0', version: '1.2.0', build: '7', buildLabel: '1.2.0 (7)', channel: 'preview',
+    runtimeVersion: '1.2.0', updateId: null, shortUpdateId: null, launch: 'Built-in', otaRelease: null,
+    publishedAt: null, publishedAtIso: null, sourceCommit: null, gitCommit: null,
+    backendTarget: 'sqlite-staging', backendProjectId: 'segygjzpujphwvrubusm',
+  }),
 }));
 
 const renderProfile = () => render(

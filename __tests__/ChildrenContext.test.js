@@ -57,8 +57,7 @@ jest.mock('../src/db/repositories/childrenRepository', () => ({
     getChildren: jest.fn(),
     save: jest.fn(),
     updateChild: jest.fn(),
-    deleteIfNoHistory: jest.fn(),
-    archiveChild: jest.fn(),
+    removeChild: jest.fn(),
     saveServerChildRows: jest.fn(),
     saveServerStaffChildRows: jest.fn(),
     saveServerChildProgrammeEnrollmentRows: jest.fn(),
@@ -201,8 +200,7 @@ describe('ChildrenContext Plan 5 hydration', () => {
     ]);
     childrenRepository.save.mockResolvedValue(true);
     childrenRepository.updateChild.mockResolvedValue(true);
-    childrenRepository.deleteIfNoHistory.mockResolvedValue(false);
-    childrenRepository.archiveChild.mockResolvedValue(true);
+    childrenRepository.removeChild.mockResolvedValue(true);
     groupsRepository.getGroups.mockResolvedValue([
       { id: 'cached-group', name: 'Cached Group', synced: false },
     ]);
@@ -964,20 +962,18 @@ describe('ChildrenContext Plan 5 hydration', () => {
       }));
   });
 
-  test('deleteChild uses the repository hard-delete then archive path', async () => {
+  // Plan O2 item 2: Delete child is one repository transaction that queues the server's
+  // actor-scoped removal; the old local archive cascade (MA-BUG-20261104-014) is gone.
+  test('deleteChild removes the child through the one repository removal path', async () => {
     const { result } = renderHook(() => useChildren(), { wrapper });
     await waitFor(() => expect(result.current.children.map(child => child.id)).toContain('cached-child'));
 
     await act(async () => {
-      await result.current.deleteChild('cached-child');
+      expect(await result.current.deleteChild('cached-child')).toEqual({ success: true });
     });
 
-    expect(childrenRepository.deleteIfNoHistory).toHaveBeenCalledWith('cached-child', expect.objectContaining({
-      actorUserId: 'user-1',
-    }));
-    expect(childrenRepository.archiveChild).toHaveBeenCalledWith('cached-child', expect.objectContaining({
-      actorUserId: 'user-1',
-    }));
+    expect(childrenRepository.removeChild).toHaveBeenCalledTimes(1);
+    expect(childrenRepository.removeChild).toHaveBeenCalledWith('cached-child');
     expect(result.current.children.map(child => child.id)).not.toContain('cached-child');
   });
 

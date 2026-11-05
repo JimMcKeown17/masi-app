@@ -1,4 +1,5 @@
 import { resolveDatabase, runRepositoryTransaction } from './repositoryRuntime';
+import { RESENDABLE_REFUSAL_SQL } from './syncOutboxRepository';
 import {
   mapRowFromSqlite,
   quoteIdentifier,
@@ -330,11 +331,15 @@ export const createReferenceDataRepository = ({
       from sync_outbox
       where table_name = ?
         and payload is not null
+        and (status <> 'terminal' or ${RESENDABLE_REFUSAL_SQL})
     `,
       reference.tableName
     );
 
     for (const row of rows) {
+      // Lifecycle safety O1: requeueing is a retry, so a refused row that is never sent again (an
+      // archive, restore or edit, or a removed child's relationship INSERT) is left as it is, and
+      // its delivered receipt keeps matching.
       const payload = parseOutboxPayload(row.payload);
       if (!payload || payload[reference.column] !== fromId) continue;
 

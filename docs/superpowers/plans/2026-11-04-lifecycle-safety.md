@@ -2,6 +2,18 @@
 
 **Status:** approved by Jim 2026-11-04 (plan and all ten decisions). Active plan; executable work is
 tracked as GitHub issues linked from the MA-BUG records.
+**Status note (2026-11-05, after merge):** squash-merged to main: #160 `3458adc9` (bug records and
+this plan), #161 `f0a34da3` (server batch), #162 `58414b60` (Head Office lifecycle script with
+`restore child`, and the daily invariant check), #163 `ccd064a1` (lifecycle app update); #167 (App
+release card, and `npm run ota:publish` with its rollback guard) merges with this note. R1: the
+server batch was applied to `masi-app-sqlite` at 15:39 UTC. The lifecycle app update is in
+`1.5.0+4` and every later update on `preview`; `1.5.0+5` (Wrap up cards, #169) is live. Where this
+plan says a receipt shows the new `updateId`, the test is Release `1.5.0+4` or later
+([interim rules](../../../documentation/lifecycle-interim-field-rules.md#how-to-tell-a-phone-has-the-app-update)).
+Open steps are tracked in #157 (two-phone check on installed 1.5.0), #158 (app update gate and
+per-phone uptake; G1.1 was not done before the update was published) and #159 (field
+verification). Deferred items live in [`documentation/ROADMAP.md`](../../../documentation/ROADMAP.md),
+which replaces the closing pointer to `docs/deferred/` (step L1). The body below is unchanged.
 **Bugs:** MA-BUG-20261104-001 … -021 ([registry](../../bugs/README.md)); evidence in
 `docs/bugs/evidence/MA-BUG-20261104-001/` (executed disposable-Postgres and real-SQLite reproductions).
 **Interim rules until this lands:** [`documentation/lifecycle-interim-field-rules.md`](../../../documentation/lifecycle-interim-field-rules.md).
@@ -514,6 +526,12 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
    A sent incident without a proof, such as one sent before the OTA, is re-sent once through the
    existing `promote` path, which produces a proof. Proof keys are deleted with their outbox row or
    incident.
+
+   *Build note (2026-11-05, work order 4, accepted by the orchestrator):* (a) does not require
+   `has_unsent_changes = 0` (the observer sets it on every 15-minute last-seen refresh), and (c)
+   matches content, not `updated_at`: same outbox id, the same wire digest with the send-time
+   `row_version` stamp left out, and `cut = false`. `outboxUpdatedAt` stays in the proof for
+   diagnostics. Contract: `documentation/rls-sync-contract-map.md`, "Refused rows".
 
    The check and the delete run in one SQLite transaction. If any condition fails, the row stays and
    the card says what to do. Typically: "Connect to the internet so the office gets a copy." For an
