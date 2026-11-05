@@ -8873,3 +8873,77 @@ opens; the named group. It recomputes those sets after locking and asks for a re
   suite: 517/518 suites, 8,243/8,244 tests (the worktree's `node_modules` is now complete);
   `CreateClassScreen` failed once under parallel load and passed alone (12/12). Integration suite:
   111/111 suites, 1,530/1,530 tests.
+
+### 2026-11-05 — Head Office `restore child`: undo a mistaken Delete child (feat/lifecycle-ho-tools)
+
+Jim approved (2026-11-05) a Head Office command that undoes an EA's mistaken Delete child. Before it,
+nothing could: `reopen child` refuses an archived child, and a sole holder's Delete child archives the
+child for everyone. No live data, staging, Supabase CLI or `.env.local` was touched; everything ran on
+a disposable local PostgreSQL 17.
+
+**Built.**
+- `restore child --ea <email> --children <uuid[,uuid...]>` in `scripts/ho-lifecycle.cjs`
+  (`npm run ho:restore -- child ...`), with the other commands' safety model: READ ONLY dry run with
+  no lock or write statement, apply as one transaction, separate READ ONLY read-back, suspended and
+  profile-less EAs refused before planning.
+- Removal instant T: the child's `archived_at` when it is archived, and the archive must be this EA's
+  (`archived_by_user_id` = the EA, or unset and the EA's delivery row ended at exactly T); otherwise
+  the end of the EA's latest ended delivery row. Both removal paths end every row at one T: the
+  server's Delete child in one transaction, and 1.5.0's `archiveChild` with one phone time that the
+  guard keeps.
+- Reopens in place, never touching identity, start or `row_version`: the EA's own delivery row (the
+  app's deterministic row, else the latest ended one) whatever its end; every enrolment and class or
+  group membership of the child ended at exactly T; the child's archive (date, archiver, reason).
+  Never another EA's row and never another instant. Each UPDATE matches the planned end, so a row
+  that changed after planning makes the command ask for a rerun.
+- Notes: `group_archived_skipped`, `class_archived_skipped`, `near_miss_not_reopened` (rows ended
+  within an hour of T, either side, with `seconds_from_t`), `assignment_ended_at_another_time`.
+  Refusals: `child_not_found`, `ea_never_held_child`, `archived_by_another_ea` (names the EA; restore
+  them first), `removal_not_finished` (archived while the EA still holds it), `active_row_conflict`
+  (the enrolment, class-membership and group-membership active unique indexes).
+- Locks: the child, then the classes of its open and T-ended class memberships and of the groups of
+  its open and T-ended group memberships, then those groups; ids ascending; sets rechecked under the
+  locks (`ho_lifecycle_retry`).
+- Runbook subsection "Undo a mistaken Delete child", contract-map paragraph, CONTEXT.md term
+  **Restore child**, docs-map row, `ho:restore` script.
+
+**Harness.** `scripts/ho-lifecycle-postgres-harness.cjs` produces every removal through the real
+path, as the EA (role `authenticated`, the EA's JWT claims): `public.delete_child_if_no_history`, or
+the 1.5.0 `archiveChild` chain as one `UPDATE ... RETURNING id` per row with stamped row versions,
+each needing exactly one returned id. The server batch is not committed here. The harness merges any
+`.sql` files in `HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR` into `supabase/migrations` by file name (a file in
+both must be byte-identical) and runs the restore cases only when the catalog shows the batch
+(`private.other_active_holder`, `private.guard_lifecycle_row`). Without it, it prints a SKIPPED line
+and reports `restoreCases: skipped`. Once the server PR merges, the cases run in CI with no change.
+This was the least invasive option: a disposable merged worktree would also need this branch's
+unmerged code. Cases: sole-holder server Delete child (same ids and starts, history untouched, write
+access and a new lesson back, invariant query silent for the child); co-held leave (only X's rows
+back); 1.5.0 phone archive; another EA's archive refused, then restore Y and then X; earlier removal
+kept; archived group and class skipped; near misses on both sides of T; unique-index conflict
+refused; dry run and refusals leave a digest of nine tables unchanged; rerun is `already_active`; apply
+waits for held locks on the T-ended class membership's class, a T-ended group membership's group
+and its class, and the child row.
+
+**Verification (Node 20, `postgres:17-alpine`, PGTZ=UTC).**
+- RED first: 18 new unit tests failed on `Unknown command.` / `Unknown program restore.`; the harness
+  setup (real Delete child, lesson, lost write access) passed and the first restore call failed with
+  `restore-dry-run: Unknown command.`.
+- Mutation checks, each killed by the harness: no T-ended class lock, no group's-class lock, no
+  T-ended group lock (each: "apply did not wait"), reopen any ended membership, ignore the archiver,
+  skip the conflict check, skip the archived-group note, near misses after T only, no unarchive
+  (`read_back_unconfirmed`). Dropping the child-row lock first survived (an archived child's
+  unarchive UPDATE waits anyway); the child-lock probe moved to a live child and then killed it.
+- `npx jest __tests__/hoLifecycleScript.test.js __tests__/eaAccessScript.test.js`: 2 suites, 128/128.
+- `HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR=<copy of the four 20261105120* server migrations> npm run
+  verify:ho-lifecycle:postgres`: 55 checks passed over 46 migrations through `20261105120300`.
+  Without the variable: 34 checks over 42 migrations, restore cases reported skipped.
+- Full unit suite: 517/518 suites, 8,264/8,265 tests; `useNumeracyLessonDraft` failed once under
+  parallel load and passed alone (13/13). Integration suite: 111/111 suites, 1,530/1,530 tests.
+
+**Not verified / open.** Never run against `masi-app-sqlite`; the first `--apply` needs Jim's
+go-ahead, after the server batch is applied there. Phone convergence after a restore is work order 6
+(lifecycle OTA branch); the runbook's "the child comes back on the next sync" rests on it. A 1.5.0
+archive sent with a fast phone clock ends each row at a different server instant, so restore brings
+back only what matches T and lists the rest as near misses; there is no command yet to reopen those.
+Restore after a `reopen child` of the same EA is `already_active` and leaves memberships ended at the
+earlier removal untouched.

@@ -111,8 +111,34 @@ recomputes each with its parity-tested JS mirror and refuses on any mismatch. A 
 gets a fresh id, because `f(group_id)` stays with the first holder and `ea_user_id` is immutable;
 an earlier group row is never reopened for another EA. Daily read-only checks are
 `scripts/lifecycle-invariants.sql`. Proof: `npm run verify:ho-lifecycle:postgres`, all current
-migrations (none of the server batch's lifecycle migrations yet); runbook in
+migrations; runbook in
 [`ea-access-runbook.md`](./ea-access-runbook.md#head-office-lifecycle-changes-handover-end-delivery-reopen).
+
+**`restore child`** (added 2026-11-05, Jim) undoes one EA's mistaken Delete child, and is the only
+command that touches more than assignment rows. Both removal paths end every row they end at one
+instant T: the server's `private.delete_child_if_no_history` writes its `now()` in one transaction,
+and the 1.5.0 `archiveChild` chain stamps one phone time that the end guard keeps (`least(T, now())`).
+T is `children.archived_at` when the child is archived, and that archive must be the EA's
+(`archived_by_user_id` is the EA, or it is unset and the EA's delivery row ended at exactly T);
+otherwise T is the end of the EA's latest ended `child_ea_assignments` row. Restore clears, in
+place, the EA's own delivery row (the deterministic row, else the latest ended one, whatever its
+end), `ended_at`/`exited_at`/`removed_at` on every `child_programme_enrollments`,
+`child_class_memberships` and `child_group_memberships` row of the child ended at exactly T, and
+`archived_at`, `archived_by_user_id` and `archive_reason` on the child when it is archived. It never
+touches another instant or another EA's assignment and never writes `row_version`, a start or an
+identity column. As postgres it is outside the guard's EA rules (2a–2d), `enforce_row_version` sees
+an equal version and `<table>_set_updated_at` moves `updated_at`. Apply locks the child, then the
+classes of its open and T-ended class memberships and of the groups of its open and T-ended group
+memberships, then those groups (a reopened group membership makes the group's holder a holder of
+the group's class), rechecks the sets, and updates each row only while its end still equals the
+planned T (otherwise `ho_lifecycle_retry`). It refuses another EA's archive, an archived child the
+EA still holds (the removal is still syncing), an EA who never held the child, and a reopen that
+would break `idx_child_programme_enrollments_active_unique`,
+`idx_child_class_memberships_active_unique` or `idx_child_group_memberships_active_by_version`. A
+membership whose class or group is archived now stays ended, with a note. The restore cases of the
+same harness need the server lifecycle batch: until it is merged they run only when
+`HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR` names a directory holding `20261105120000`–`20261105120300`, and
+the harness reports when it skipped them.
 
 ## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 

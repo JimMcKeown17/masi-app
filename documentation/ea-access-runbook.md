@@ -5,8 +5,9 @@ Jim's decision to use Zazi's Auth-ban mechanism with an operator script before b
 Office website. The [ROADMAP §0](./ROADMAP.md) owns the remaining gates; the
 [contract map](./rls-sync-contract-map.md#ea-access-suspension--applied-to-hosted-device-proven)
 describes the SQL and grants. Handing over, ending and reopening an EA's children, classes and
-groups is in [Head Office lifecycle changes](#head-office-lifecycle-changes-handover-end-delivery-reopen)
-below.
+groups, and undoing an EA's mistaken Delete child, is in
+[Head Office lifecycle changes](#head-office-lifecycle-changes-handover-end-delivery-reopen) below.
+(`ea:restore` below gives a suspended EA their login back; it is not the `restore child` command.)
 
 ## Before first use
 
@@ -124,9 +125,9 @@ first `--apply` against `masi-app-sqlite` needs Jim's go-ahead.
 - **Until the server fix (plan step R1) is live and the EA's phone has the app update**, the EA's
   phone must upload everything before any change (interim rule 1 in
   [`lifecycle-interim-field-rules.md`](./lifecycle-interim-field-rules.md)).
-- **No reopen, and no handover back to a former holder,** for an EA whose receipts show a refused
-  archive or restore, until that phone has the app update (plan step O1; interim rule 2). Their
-  phone would send the old archive again and end the row again.
+- **No reopen, no restore, and no handover back to a former holder,** for an EA whose receipts show
+  a refused archive or restore, until that phone has the app update (plan step O1; interim rule 2).
+  Their phone would send the old archive again and end the row again.
 
 ### Commands
 
@@ -142,6 +143,7 @@ npm run ho:handover -- group --from old@example.test --to new@example.test --gro
 npm run ho:end-delivery -- --ea ea@example.test --children <child-id>[,<child-id>...] --reason "..." --operator "..."
 npm run ho:reopen -- child --ea ea@example.test --children <child-id>[,<child-id>...] --reason "..." --operator "..."
 npm run ho:reopen -- class --ea ea@example.test --class <class-id> --programme literacy --reason "..." --operator "..."
+npm run ho:restore -- child --ea ea@example.test --children <child-id>[,<child-id>...] --reason "Deleted by mistake" --operator "..."
 ```
 
 Add `--apply` to the same command to make the change.
@@ -154,6 +156,7 @@ Add `--apply` to the same command to make the change.
 | `handover group` | `--from`'s `group_ea_assignments` row | a new row for `--to` with a fresh id |
 | `end-delivery` | the EA's delivery rows for the named children | nothing |
 | `reopen child` / `reopen class` | nothing | the EA's own earlier row, in place |
+| `restore child` | nothing | what that EA's Delete child ended, in place ([below](#undo-a-mistaken-delete-child-restore-child)) |
 
 - **A class handover never moves groups.** The plan lists `--from`'s groups in that class; hand
   each one over with `handover group`, or the new EA's group lessons will be refused.
@@ -181,7 +184,7 @@ children, class or group with their names), then `plan`:
 | Refusal | Meaning and what to do |
 | --- | --- |
 | `child_not_found`, `class_not_found`, `group_not_found` | Wrong id. Copy it again. |
-| `child_archived`, `class_archived`, `group_archived` | The script never gives access to an archived child, class or group. Un-archiving is not in this script: ask Jim. For an archived child that an EA still delivers to, use `end-delivery`. |
+| `child_archived`, `class_archived`, `group_archived` | The script never gives access to an archived child, class or group. To undo an EA's mistaken Delete child, use `restore child`; any other un-archive: ask Jim. For an archived child that an EA still delivers to, use `end-delivery`. |
 | `ea_not_in_programme` | The new EA has no open programme assignment for this class or group's programme. Fix their programme first, or their lessons would be refused. |
 | `predecessor_not_holding` | `--from` does not hold this child, class or group. Check the plan; to give back an EA's own ended row, use `reopen`. |
 | `no_row_to_reopen` | The EA never held it under the app's id. Use `handover` from the current holder. |
@@ -208,11 +211,68 @@ moved. The script never deletes and never bumps `row_version`.
 - `read_back_unconfirmed` means the commit may have happened but the read-back did not match. Run
   the dry run, and record an MA-BUG if it is not explained.
 
+### Undo a mistaken Delete child (`restore child`)
+
+Added 2026-11-05 (Jim). Use it when an EA deleted a child by mistake in the app (Delete child, or
+Archive on the 1.5.0 app). It undoes that one EA's removal and nothing else. It is not for a child
+Head Office ended or handed over (use `reopen` or `handover`), and it is not `ea:restore`.
+
+**Before the dry run**, the EA's phone must have sent the removal: ask the EA to tap Sync now with
+signal, then Send diagnostics, and check the receipt shows 0 waiting. A removal still queued on the
+phone would land after the restore and remove the child again. The rules above apply: no restore
+for an EA whose receipts show a refused archive or restore until their phone has the app update.
+
+```sh
+npm run ho:restore -- child --ea ea@example.test --children <child-id> --reason "Deleted by mistake" --operator "Your name"
+```
+
+**What it works out.** Every removal ends its rows at one moment, printed as `removed_at` in
+`plan.removals`. If the child is archived, that is when it was archived, and the archive must be
+this EA's. If the child stayed live (another EA still holds it, so the EA only left), it is when this
+EA's delivery row ended.
+
+**What it reopens, in place** (same ids, start dates and row versions; ends cleared):
+
+- the EA's own delivery row (`child_ea_assignments`), with the gap printed;
+- every programme enrolment, class membership and group membership of the child that ended at
+  exactly `removed_at`;
+- the child itself, when the EA's removal archived it (`unarchive`: the archive date, archiver and
+  reason are cleared).
+
+It never reopens a row that ended at any other time, and never another EA's delivery row. A rerun,
+or a child the EA already holds again, shows only `already_active` and changes nothing.
+
+| Note | Meaning and what to do |
+| --- | --- |
+| `group_archived_skipped`, `class_archived_skipped` | The group or class has been archived since, so that membership stays ended. Place the child in a live group or class in the app. |
+| `near_miss_not_reopened` | Rows that ended within an hour of `removed_at` but not at the same moment (`seconds_from_t`). Usually a phone with a wrong clock; sometimes a separate change. They stay ended: check each one, and record an MA-BUG if one should have come back. |
+| `assignment_ended_at_another_time` | The EA's delivery row ended at a different time from the removal (for example a Head Office end). Restore reopens it anyway; check that is what you want. |
+
+| Refusal | Meaning and what to do |
+| --- | --- |
+| `child_not_found` | Wrong id. Copy it again. |
+| `ea_never_held_child` | This EA never had a delivery row for the child. Restore the EA who deleted it. |
+| `archived_by_another_ea` | Another EA's Delete child archived the child (`archived_by_user_id`). Restore that EA first, then this one. If `archived_by_user_id` is empty, record an MA-BUG and ask Jim. |
+| `removal_not_finished` | The child is archived but this EA still holds it: the phone is still sending the removal. Wait until it has synced, then run the dry run again. |
+| `active_row_conflict` | The child already has another open enrolment in that programme, class membership for that academic year, or group membership in that grouping (`conflicting_id`), so reopening would make two. Nothing was changed. Decide with Jim which one should stay. |
+
+A suspended EA, an unknown email and a profile-less login are refused as in the other commands.
+
+**What the EA sees.** On their next sync the child is back in My Children with its class and
+groups, and the lessons and assessments recorded before the removal are still attached. Ask them to
+tap Sync now. If the child does not come back, record an MA-BUG with their Share database export.
+
+Apply locks the child, then the classes and groups of its open memberships and of the memberships
+it reopens (and the class of each such group), works the plan out again, reopens only rows still
+ended at the planned moment (otherwise `ho_lifecycle_retry`), commits, and reads every row back. Failures
+and reruns work as above.
+
 ### What the script does not do
 
-It does not un-archive anything, reopen class or group memberships or programme enrollments, move
-children between classes or groups, change an EA's programme, end group memberships (including the
-duplicates the daily check lists), or delete anything. Those need a separate decision.
+Apart from `restore child` undoing an EA's own Delete child, it does not un-archive anything, reopen
+class or group memberships or programme enrollments, move children between classes or groups,
+change an EA's programme, end group memberships (including the duplicates the daily check lists), or
+delete anything. Those need a separate decision.
 
 ### Daily check
 

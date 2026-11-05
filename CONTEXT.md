@@ -460,6 +460,10 @@ an EA id or a hardware identifier.
 **Mutation owner**:
 The EA who made a change, stamped on its outbox row from the signed-in EA handle. Never derived from the record's content (`created_by` is provenance, not ownership): an EA's edit of a Head Office-created child is that EA's to upload.
 
+**Restore child** (Head Office):
+Head Office's undo of one EA's mistaken Delete child (`npm run ho:restore`): it reopens, in place, exactly what that EA's removal ended at its one removal instant (the EA's delivery assignment, the child's enrolments and class and group memberships ended at that instant, and the archive when that EA's removal made it). EAs never restore (ADR-0014, D5).
+_Avoid_: "restore" for lifting a suspension (that is `ea:restore`) or for the retired phone `restore` upload.
+
 ## Relationships
 
 - An **EA** has at most one *active* **Staff Programme Assignment** at a time (enforced by a unique index on `staff_programme_assignments(user_id) WHERE ended_at IS NULL`).
