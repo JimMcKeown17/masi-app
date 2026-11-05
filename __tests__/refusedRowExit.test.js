@@ -57,6 +57,7 @@ beforeEach(async () => {
     updateResults: {
       classes: ({ value }) => server.classesUpdate || { data: [{ id: value }], error: null },
       children: ({ value }) => server.childrenUpdate || { data: [{ id: value }], error: null },
+      time_entries: ({ value }) => server.timeEntriesUpdate || { data: [{ id: value }], error: null },
     },
     rpcResults: { report_mobile_support_incident_v2: { data: { status: 'inserted' }, error: null } },
   }));
@@ -368,4 +369,26 @@ test('a proof is cleaned up once its row has left by a successful upload', async
   await engine.syncAll({ force: true });
   expect(await outboxRow(ENTRY_OUTBOX)).toBeNull();
   expect(await h.services.repositories.localState.get(deliveredReceiptKey(incident.id))).toBeNull();
+});
+
+// Combined-OTA review item 4d: a clock-out is EA-recorded history, not an edit of someone else's
+// record. A refused one is re-sent by forced passes and offers the EA the exit; it never clears.
+test('a refused clock-out is re-sent by forced passes and waits for the EA, never clearing by itself', async () => {
+  await h.withTransaction(txn => txn.runAsync(`insert into time_entries (id, user_id, sign_in_time, sign_in_lat, sign_in_lon, sync_status)
+    values (?, ?, '2026-11-04T07:00:00.000Z', 0, 0, 'synced')`, ENTRY_ID, h.userId));
+  await h.services.repositories.timeEntries.updateTimeEntry(ENTRY_ID, { sign_out_time: '2026-11-04T15:00:00.000Z' });
+  const updateId = `time_entries:${ENTRY_ID}:update`;
+  server.timeEntriesUpdate = { data: [], error: null };
+  await engine.syncAll();
+  expect(await outboxRow(updateId)).toMatchObject({ status: 'terminal', error_code: 'UPDATE_NOT_APPLIED' });
+  expect(await itemFor(updateId)).toMatchObject({ clearsItself: false, canRetry: true });
+
+  const sends = () => calls.filter(call => call.type === 'update' && call.tableName === 'time_entries').length;
+  await engine.syncAll({ force: true });
+  expect(sends()).toBe(2);
+  await syncAndReport();
+  await syncAndReport();
+  expect(await outboxRow(updateId)).toMatchObject({ status: 'terminal' });
+  expect(await itemFor(updateId)).toMatchObject({ delivery: 'delivered', canRemove: true, clearsItself: false });
+  expect(await engine.removeDeliveredItem(updateId)).toEqual({ removed: true });
 });

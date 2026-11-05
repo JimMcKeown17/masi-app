@@ -42,7 +42,9 @@ export const outboxRecordId = (tableName, recordId, operation) => (
 // edit is never sent again: it could land on newer server state (MA-BUG-20261104-011, -018). It
 // leaves the phone only through its delivered receipt (services/deliveredReceipt.js).
 const HISTORY_RPC_UPDATE_TABLES = ['battery_runs', 'letter_mastery', 'skill_mastery'];
-const HISTORY_UPDATE_TABLES = HISTORY_RPC_UPDATE_TABLES;
+// A time entry's update (a clock-out) is EA-recorded history too, sent as an idempotent UPDATE by
+// id: re-sending it cannot overwrite anyone else's newer state (combined-OTA review, 2026-11-05).
+const HISTORY_UPDATE_TABLES = [...HISTORY_RPC_UPDATE_TABLES, 'time_entries'];
 // The child's relationship family a Delete child ends (plan O2 item 2).
 export const CHILD_RELATIONSHIP_TABLES = Object.freeze([
   'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships', 'child_group_memberships',
