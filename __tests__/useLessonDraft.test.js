@@ -64,7 +64,7 @@ for (const allowPreview of [false, true]) {
     expect(result.current.teachingOrder).toBeNull();
     await ready(result);
     expect(result.current.teachingOrder).toMatchObject({ kind: 'order', id: 'isixhosa-order-2026-10-23' });
-    const expected = 'isixhosa-draft-content-v2';
+    const expected = 'isixhosa-draft-content-v3';
     expect(result.current.draft.pack_id).toBe(expected);
     expect(result.current.lessonInput.pack.id).toBe(expected);
     await change(result, transitions.setNotes, 'Persist the selected edition pack');
@@ -336,7 +336,7 @@ testHook('a mixed-class group needs a class; choosing stores class, language, pa
   await change(result, transitions.chooseClass, { classId: 'class-2' });
   await ready(result);
   const row = await handle.repositories.lessonDrafts.getActive();
-  expect(row).toMatchObject({ class_id: 'class-2', language_code: 'xh', pack_id: 'isixhosa-draft-content-v2',
+  expect(row).toMatchObject({ class_id: 'class-2', language_code: 'xh', pack_id: 'isixhosa-draft-content-v3',
     plan: { present_child_ids: ['c1', 'c2'] } });
   expect(result.current.needs).toBeNull();
 });
@@ -348,7 +348,7 @@ testHook('a class with no language needs a language (P6)', async () => {
   await change(result, transitions.chooseLanguage, { languageCode: 'en' });
   await ready(result);
   expect(await handle.repositories.lessonDrafts.getActive()).toMatchObject({
-    class_id: 'class-1', language_code: 'en', pack_id: 'english-draft-content-v1', plan: { made_on: '2026-10-19' },
+    class_id: 'class-1', language_code: 'en', pack_id: 'english-draft-content-v2', plan: { made_on: '2026-10-19' },
   });
 });
 testHook('engine functions run once per change', async () => {

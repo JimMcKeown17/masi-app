@@ -279,7 +279,7 @@ The Lesson screen starts with visible group members present. Attendance toggles 
 change today's attendees only. Class/language choices are explicit when missing; the fixed lesson
 class gives its language and ECD behaviour. Letters, blends and a printed book are tickable; ECD
 hides pair reading. Since 2026-11-05 the release packs are draft content packs: every build, pilot included,
-suggests blends and words for all three languages and isiXhosa books, from content not yet signed
+suggests blends and words (the 25 most common per step) for all three languages and isiXhosa books, from content not yet signed
 off by native speakers (`documentation/content-packs.md`).
 
 Opening writes nothing. The first change (or Wrap up) persists one draft per EA; the first content

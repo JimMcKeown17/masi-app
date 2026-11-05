@@ -8,9 +8,9 @@ import afrikaansInterimV2 from './afrikaans-interim-letters-v2.json';
 import isixhosaPreviewV2 from './isixhosa-candidates-preview-v2.json';
 import englishPreview from './english-candidates-preview-v1.json';
 import afrikaansPreview from './afrikaans-candidates-preview-v1.json';
-import isixhosaDraftContent from './isixhosa-draft-content-v2.json';
-import englishDraftContent from './english-draft-content-v1.json';
-import afrikaansDraftContent from './afrikaans-draft-content-v1.json';
+import isixhosaDraftContent from './isixhosa-draft-content-v3.json';
+import englishDraftContent from './english-draft-content-v2.json';
+import afrikaansDraftContent from './afrikaans-draft-content-v2.json';
 import { packLetterOrderId } from './packLetterOrder';
 
 export { lintMasiPack, PACK_LANGUAGE_CODES } from './lintMasiPack.js';
@@ -82,9 +82,9 @@ export const { BUNDLED_PACKS, CURRENT_PACK_IDS, getPackForOrder, getPackById } =
     // Draft words, blends and books for team testing (Jim, 2026-11-05); not yet signed off by
     // native speakers. Every build, preview content or not, teaches from these packs.
     release: {
-      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v2',
-      'english-order-2026-10-23': 'english-draft-content-v1',
-      'afrikaans-order-2026-10-23': 'afrikaans-draft-content-v1',
+      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v3',
+      'english-order-2026-10-23': 'english-draft-content-v2',
+      'afrikaans-order-2026-10-23': 'afrikaans-draft-content-v2',
     },
     preview: {},
   },

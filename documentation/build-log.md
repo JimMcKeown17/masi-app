@@ -8790,3 +8790,11 @@ with a new print-fit gate), so the PR bundles `isixhosa-draft-content-v2` (books
 SHA-256 `ad7bf609…a48e`) instead of v1, which no build ever shipped. Two books per step for steps
 1-3. The LessonScreen book test now expects the engine's real pick for a group that knows letters
 through step 6: the first step-3 book, Ekunene, Malo!.
+
+**Same day, trimmed lists (before merge).** Jim judged 3,300 words too many: suggestions rotate
+over every decodable word and "+ more" lists them all, so EAs would mostly see rare words, and the
+list could not be reviewed by January. The books exporter now keeps the 25 best-ranked unflagged
+words per step plus the books' words. The PR bundles `isixhosa-draft-content-v3` (352 words, six
+books), `english-draft-content-v2` (682) and `afrikaans-draft-content-v2` (534), books `fbe909f`.
+Pack tests now assert at most 25 words per step, all from the preview's candidates, with blends
+unchanged.
