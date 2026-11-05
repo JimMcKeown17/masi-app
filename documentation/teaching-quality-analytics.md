@@ -48,7 +48,7 @@ side remains a label. **Destination (decided 2026-07-24): evidence-based blendin
 | `blend_tier_shown` | Displayed tier selection, falling back to the draft plan tier; distinct from the measured ticked level |
 | `blends_done` | Ticked pack texts, including lower-tier top-ups at their own length |
 | `books_read` | `{ id, how: 'printed' }` entries; separate from 1000 Stories' top-level count |
-| `tracker_check` | `'marked'` if any present child has changes; else `'none'` if all present children have No one new yet; else null |
+| `tracker_check` | `'marked'` if any present child has changes, else null. Sessions saved before 2026-11-05 may hold `'none'` (every present child had the since-removed "None of these yet" answer). |
 
 No blends ticked means **no measured blending level**, not inability. Save changes durable child
 levels only for explicitly edited present children, while snapshotting every present child's

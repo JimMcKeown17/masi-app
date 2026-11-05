@@ -9,7 +9,7 @@ import LessonWrapUpScreen from '../src/screens/lessons/LessonWrapUpScreen';
 import ScreenHeader from '../src/components/common/ScreenHeader';
 import { getTeachingOrder } from '../src/utils/letterOrders';
 import { ActivityIndicator } from 'react-native-paper';
-import { colors } from '../src/constants/colors';
+import { borderRadius, colors, tints } from '../src/constants/colors';
 import { saveLesson, LessonSaveError } from '../src/services/lessonSave';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }), { virtual: true });
@@ -79,25 +79,35 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-test('the heading names the ticked letters; no ticked letters skips the section', async () => {
+test('the heading asks who learned something new; no ticked letters skips the section', async () => {
   const view = mount(); await ready(view);
-  const heading = view.getByRole('header', { name: 'Who knows a m without help?' });
-  expect(heading.props.accessibilityLabel).toBe('Who knows a m without help?');
-  const letters = within(heading).getByText('a m');
-  // The letters keep the heading's own type and only change colour.
-  expect(StyleSheet.flatten(letters.props.style)).toEqual({ color: colors.primary });
-  expect(view.getByText("Teaching it today doesn't count.")).toBeTruthy();
+  expect(view.getByRole('header', { name: 'Who learned something new today?' })).toBeTruthy();
+  expect(view.getByText("Tap a letter if the child knows it without help. Teaching it today doesn't count.")).toBeTruthy();
   view.unmount(); mockInitial = draftStart();
   const empty = mount(); await ready(empty);
-  expect(empty.queryByText(/Who knows/)).toBeNull();
-  expect(empty.queryByText("Teaching it today doesn't count.")).toBeNull();
+  expect(empty.queryByText('Who learned something new today?')).toBeNull();
+  expect(empty.queryByText(/Teaching it today doesn't count/)).toBeNull();
+});
+test('each child is a card whose letter tracker and reading level are matching labelled rows', async () => {
+  const view = mount(); await ready(view);
+  const card = StyleSheet.flatten(view.getByTestId('wrap-up-child-c1').props.style);
+  expect(card).toMatchObject({ backgroundColor: colors.surface, borderColor: tints.rule, borderWidth: 1, borderRadius: borderRadius.lg });
+  const tracker = row(view).getByRole('button', { name: /^Amahle, letter tracker, \d+\/26$/ });
+  expect(within(tracker).getByText('Letter tracker')).toBeTruthy();
+  expect(within(tracker).getByText(/^\d+\/26$/)).toBeTruthy();
+  const level = row(view, 'c2').getByRole('button', { name: 'Lulu, reading level, 2 Letter Blends' });
+  expect(within(level).getByText('Reading level')).toBeTruthy();
+  expect(within(level).getByText('2 Letter Blends')).toBeTruthy();
+  expect(within(row(view).getByRole('button', { name: /Amahle, reading level/ })).getByText('Cannot blend')).toBeTruthy();
+  // The two rows are one component, so they cannot drift apart.
+  expect(StyleSheet.flatten(tracker.props.style)).toEqual(StyleSheet.flatten(level.props.style));
 });
 test('no ticked letters leaves no empty chip row between the name and the tracker', async () => {
   // An empty row would still take the row's gap on both sides (A03, 2026-10-24: 12 dp extra).
   mockInitial = draftStart();
   const view = mount(); await ready(view);
   expect(view.queryAllByTestId('wrap-up-letter-chips')).toHaveLength(0);
-  expect(view.queryByText('None of these yet')).toBeNull();
+  expect(view.queryByText('None yet')).toBeNull();
   expect(row(view).getByText('Amahle')).toBeTruthy();
   expect(row(view).getByLabelText(/Amahle, letter tracker/)).toBeTruthy();
 });
@@ -114,18 +124,13 @@ test('an assessment-mastered letter is locked', async () => {
   const tile = await row(view).findByRole('button', { name: 'm, mastered from assessment, locked' });
   expect(tile).toBeDisabled(); fireEvent.press(tile); expect(mockApply).not.toHaveBeenCalled();
 });
-test("None of these yet clears the child's chips", async () => {
-  mockInitial.tracker_changes = { c1: { a: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' },
-    z: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' } } };
+test('the letter row has only the letter tiles: no None yet answer', async () => {
+  // Jim, 2026-11-05: nothing read the "None of these yet" answer, so it was removed.
   const view = mount(); await ready(view);
-  expect(row(view).getByText('None of these yet')).toBeTruthy();
-  expect(row(view, 'c2').getByRole('checkbox', { name: 'Lulu, none of these yet' })).not.toBeChecked();
-  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' })).not.toBeChecked();
-  fireEvent.press(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' }));
-  await waitFor(() => expect(mockDraft.ticks.noOneNew).toEqual(['c1']));
-  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' })).toBeChecked();
-  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' }).findAll(node => node.props.name === 'checkmark').length).toBeGreaterThan(0);
-  expect(Object.keys(mockDraft.tracker_changes.c1)).toEqual(['z']);
+  const tiles = within(row(view).getByTestId('wrap-up-letter-chips'));
+  expect(tiles.getAllByRole('button').map(tile => tile.props.accessibilityLabel.split(',')[0])).toEqual(['a', 'm']);
+  expect(view.queryByText('None yet')).toBeNull();
+  expect(view.queryAllByRole('checkbox')).toHaveLength(0);
 });
 test("the tracker sheet opens in the lesson language with the child's marks", async () => {
   mockInitial.language_code = 'xh';
@@ -272,7 +277,7 @@ test('at 1.3x text the heading and child controls can grow and the letter chips 
   const dimensions = ReactNative.useWindowDimensions;
   jest.spyOn(ReactNative, 'useWindowDimensions').mockImplementation(() => ({ ...dimensions(), width: 360, fontScale: 1.3 }));
   const view = mount(); await ready(view);
-  expect(StyleSheet.flatten(view.getByText('Who knows a m without help?').props.style).height).toBeUndefined();
+  expect(StyleSheet.flatten(view.getByText('Who learned something new today?').props.style).height).toBeUndefined();
   expect(StyleSheet.flatten(view.getByTestId('wrap-up-child-c1').props.style).height).toBeUndefined();
   expect(StyleSheet.flatten(view.getAllByTestId('wrap-up-letter-chips')[0].props.style).flexWrap).toBe('wrap');
 });

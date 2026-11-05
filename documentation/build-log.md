@@ -5652,6 +5652,27 @@ Branch `feat/numeracy-screens`. Baseline (Task 0, clean `git archive` of `29e85c
 | 2026-11-03 | Codex adversarial review round 2 at `145cd988` | approve: no material findings | Reviewer's in-memory harness ran 21 ordering, failure and stale-handle scenarios. |
 | 2026-11-03 | Full gates at `145cd988`: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent --runInBand`; `npm run test:integration`; `npm run test:content` | PASS: **517 suites / 8,183 tests**; **111 / 1,530**; content exit 0 | +1 suite / +18 tests and +7 integration tests on the 2026-11-01 Task 13 gates. A03s recheck on the next build still open. |
 
+### 2026-11-05 — Wrap up: one card per child, matching tracker rows
+
+Branch `feat/wrap-up-child-cards`; plan `docs/superpowers/plans/2026-11-05-wrap-up-child-cards.md`.
+Jim picked option A of three mockups (https://claude.ai/artifact/8YNGvtCUuVN3UKVRk61MbF). Each child on
+both Wrap up screens is now a white card (avatar initial, name, controls) whose trackers are matching
+rows: **Letter tracker · 6/26**, **Reading level · 2 Letter Blends**, numeracy **Number tracker · 3 / 37**.
+The literacy heading is "Who learned something new today?"; "None of these yet" is a **None yet** chip
+in the tile row. JS only; no data or save change.
+
+| Date | Command/Check | Result | Notes |
+| --- | --- | --- | --- |
+| 2026-11-05 | RED: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest __tests__/LessonWrapUpScreen.test.js __tests__/NumeracyWrapUpScreen.test.js` with the updated tests | RED: 6 failed, 39 passed (45) | Failures are the new heading, card, rows, "None yet" and Number tracker row. |
+| 2026-11-05 | GREEN: same command after `WrapUpChildCard` / `WrapUpTrackerRow` | PASS: 45/45 | Mockup said "Reading Tracker"; built as "Reading level" because CONTEXT.md makes that the term and the row opens the level picker. Note copy dropped the letters ("Tap a letter if the child knows it…") because "Tap k u if … knows it" misreads with several letters. |
+| 2026-11-05 | Full unit gate: `PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH npx jest --silent` | First run: 4 failed in `LessonWrapUp.save` and `letterOrderAgreement` (they read the letter order from the old "Who knows s a n d…" heading). Both already check the tile order, so the heading lines now assert the new heading. Rerun PASS: **518 suites / 8,286 tests** | |
+| 2026-11-05 | Integration gate: `npm run test:integration` | PASS: **111 suites / 1,533 tests** | |
+| 2026-11-05 | Release tree `release/ota-wrap-up-cards` = `origin/feat/app-release-card` `513dd664` (contains live `b759128f`) + `014a069a`, merge `1bddda8e`; the five Wrap up suites | PASS: 70/70 (an earlier 7-fail run was CPU contention with the full gate; each suite passes alone) | Built on the stack, not main, because main lacked the live 1.5.0+4 code; coordinated with the lifecycle session. |
+| 2026-11-05 | `npm run ota:publish -- --message "Wrap up: one card per child, matching tracker rows"` (dry run), then `--publish` | PASS: guard saw phones on 1.5.0+4 (`dd1ef964`, `b759128f`) in HEAD's history. Published **1.5.0+5** on `preview`, group `3ec327af-f25e-417d-bc7a-80acc934c0e0`, android + ios, runtime 1.5.0; Sentry maps uploaded | 1bddda8e is now the live commit: main cannot publish until it contains #169. |
+| 2026-11-05 | Galaxy A03s, Android build 58, density 320 (360 dp, as found), default text; account Test (Literacy) | PASS: two cold starts → Profile App release 1.5.0+5, source `1bddda8`. Wrap up for a 3-child group with o, k ticked: heading and note, one card per child, avatar/tiles/row labels on one 16 dp edge, None yet chip centred on 48 dp tiles, full-width hairlines, Letter tracker 8/26 and Reading level rows identical in height and type; both rows open their sheets; None yet selected state correct | Recorded without clocking in; nothing saved; draft discarded afterwards. Numeracy Wrap up not device-checked (no numeracy EA signed in on the A03); covered by its suites. |
+| 2026-11-05 | "None yet" removed (Jim: it made little sense). RED: `npx jest` on LessonWrapUpScreen, lessonDraftState, lessonRecord | RED: 5 failed / 65; GREEN after removal: 104/104 across those plus lessonDraftController, LessonWrapUp.save, letterOrderAgreement | `tracker_check` had no reader anywhere (app, backend, both dashboards); numeracy dropped the same chip 2026-10-31. Key kept, now `marked` or null; an older draft's `noOneNew` is ignored. |
+| 2026-11-05 | After merging `origin/main` `f4ba06bd` (#163, #167): full unit and integration gates | PASS: **527 suites / 8,573 tests**; integration **114 / 1,568** | An earlier integration run was stopped because the merge landed mid-run. |
+
 ## Decision Register
 
 | Date | Decision | Rationale | Revisit Trigger |

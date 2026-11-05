@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIXED_IN_CODE
+delivery_state: RELEASED
 verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: an insert-or-ignore of the deterministic assignment id after an end returned 0 rows and left the row ended with no error, for child and class assignments and for a phone replay after a Head Office end, while an insert with a different id for the same pair was accepted. The deterministic-id rule and insert-or-ignore are read in the contract map and the sync engine."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T09:00:00Z
+updated_at_utc: 2026-11-05T19:10:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -170,6 +170,7 @@ the script (service role) is the single reopen path. The daily invariant check i
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
 | 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #154; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ho-tools |
 | 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ho-tools: ho-lifecycle harness 34/34 on all 46 migrations incl. the guard, 107 unit tests. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T19:04:11Z | Claude | Merged to main (delivery RELEASED; verification unchanged) | The Head Office lifecycle script merged to main as squash 58414b60 (PR #162); CI run 42087416548 passed, including the Head Office PostgreSQL harness (63 checks, with the restore cases). A Head Office script ships when it is on main, because it is run from a checkout. Verification stays LOCAL_TESTED: no live use on staging yet, and first live use needs Jim's go-ahead |
 
 ## Open questions
 

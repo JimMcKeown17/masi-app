@@ -325,7 +325,8 @@ Wrap up → Save lesson → Session complete** (numeracy design
   Wrap up →. Before that it follows attendance and new
   maths data (history pages and `skill_mastery` sync results) while the lesson is open.
 - Wrap up asks "Who can do these without help?" with a Tick when strip per taught step and one chip
-  per taught step per child; chips only add ticks, and the "N / 37 ›" sheet can untick. Every
+  per taught step per child; chips only add ticks, and the Number tracker sheet (each child's
+  "Number tracker · N / 37" row) can untick. Every
   change is held in the draft until **Save lesson**, which has no empty-save confirmation.
 - Save writes, in one SQLite transaction: the session with `activities.numeracy =
   { curriculum_edition, plan, plan_reason?, taught }`, its attendees, each held tick through
