@@ -8778,3 +8778,30 @@ listing on the device. If a tester reports the same, open the app's Play page an
 **Seen, not ours:** the A03s on build 58 shows "No active programme" right after reinstall
 (MA-BUG-20261031-002), and there are 7 `pull_failing` receipts from builds 26 and 28 since
 2026-11-03. Both need a `/bug-sync` sweep.
+
+### 2026-11-05 — Dashboard real-data fixes rolled out; live check
+
+Rollout per spec §5.3, each step approved by Jim: SQL reporting v2 #152 merged (`f09669a0`) and applied
+to staging (read-only checks: reader-only grants; download-failure cards distinguished by scope family;
+groups carry classes 1A, 1B, AF1, NL1); web release A merged (masi-web-nextjs #57, `bd10861`; both Vercel
+production deploys succeeded); Django merged (masi-website-main #35, `02bd2c4`). Render Shell:
+`python manage.py masi_app_check` → `OK user=masi_reporting_reader read_only=on statement_timeout=15s
+lock_timeout=5s accounts=14`.
+
+**Live check (www.masinyusane.org, test accounts included).** New shape renders on every page.
+Overview: "27 sessions on closed days or weekends, not counted"; rate over rated EAs only (0 of 1).
+EAs: chips add up (1 Needs a visit + 2 No expected days = 3 up and running); closed-day and weekend
+flags on three EAs. EA page: hatched closed days with "Check: session on a closed day"; groups read
+"1A · Grade 1" (no "Grade Grade 1"); duplicate group names flagged with creation time. Sessions,
+Assessments and Onboarding load with no console errors.
+
+**Found (open in ROADMAP §5, "Masi App dashboard"):** diagnostics "What failed" shows raw keys and a raw
+float (`68.04838305555556 h`) instead of the spec's one-line summary; the fixtures used whole hours, so
+review missed it. Diagnostics cards fill only the left column (one grid per consecutive group). Onboarding
+EAs show "0 a day" and sort as lowest rate though they are not rated. One transient "Access denied" on
+Onboarding: the guard maps an unreachable `/api/me/` to forbidden; a reload worked.
+
+**Unresolved:** Jim received emails that many builds failed. GitHub Actions (all three repos), Vercel
+and the Django web service were green; the four Render cron jobs that rebuild from Django `main` are the
+likely source. #35 changed neither `requirements.txt` nor `scripts/render-install.sh`. Needs a failed
+build log.

@@ -864,6 +864,49 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
   Low priority: no EA has been seen using that font size, and device gates no longer check it
   (Jim, 2026-10-27).
 
+### Masi App dashboard (website, `/operations/masi-app`)
+
+Real-data fixes shipped 2026-11-05 (spec: `masi-app-dashboard-web/docs/superpowers/specs/2026-11-04-masi-app-dashboard-real-data-fixes.md`):
+SQL reporting v2 #152 applied to staging, web release A (masi-web-nextjs #57, `bd10861`) and Django #35
+(masi-website-main, `02bd2c4`). Render `masi_app_check` passed; live pages checked 2026-11-05.
+
+- [ ] **Find the Render build failures reported by email on 2026-11-05.** GitHub Actions, both Vercel
+  production deploys and the Django web service are green. The likely source is the four cron jobs that
+  rebuild from Django `main` with `scripts/render-install.sh` (`daily-syncs`, `sync_airtable_sessions_daily`,
+  `sync_youth_sessions_literacy_incremental`, `sync_youth_sessions_numeracy_incremental`). #35 changed
+  neither `requirements.txt` nor the install script, so suspect the environment (for example an expired
+  `MASI_FINANCE_GITHUB_TOKEN`). Needs one failed build log from Jim.
+- [ ] **Web release B:** accept the new response shape only (spec §5.2–5.3). Ship after the live check;
+  from then on, never revert Django #35 (rollback matrix, spec §5.4). Include the two fixes below.
+- [ ] **Field diagnostics "What failed" shows raw keys and values**, for example
+  `failing for hours: failing for 68.04838305555556 h`. The spec (§4.1) asks for one plain line:
+  "Session history · query · AuthUnavailableError: auth unavailable · failing for 68 h". Round the hours.
+  Add a fixture with fractional hours (the current fixtures use whole hours, which hid this).
+  Code: `src/components/masi-app/ops/DiagnosticsView.tsx:49`.
+- [ ] **Field diagnostics cards all sit in the left column.** Each group of consecutive conditions gets
+  its own `lg:grid-cols-2` grid, so a one-card group fills only the first column
+  (`DiagnosticsView.tsx:43-45`). Use one grid across the groups, with group headings spanning both columns.
+- [ ] **Onboarding EAs show a rate.** An onboarding EA with expected days shows "0 a day · target 3" and
+  sorts to the top of "Lowest rate against target first", although only up-and-running EAs are rated
+  (spec §3). Show "Not rated" and give the same reason line as up-and-running EAs ("No expected days"),
+  which onboarding rows with 0 expected days also lack today. Ask Jim before changing.
+- [ ] **"Access denied" when the role lookup fails (site-wide Operations, own PR).** `assertMasiAppAccess`
+  and its siblings (`src/lib/masi/auth-guard.ts`) treat "Django /api/me/ unreachable" the same as "no
+  role". Seen once on 2026-11-05: Onboarding said Access denied, the Operations menu vanished, and a
+  reload worked. Keep failing closed, but say "We couldn't check your access. Try again" for the
+  unreachable case. Ask Jim before building.
+- [ ] **Check the school calendar for Astra.** Closures mark Aaron Gqadu, Seyisi and Dumani closed from
+  19 Oct to at least 4 Nov 2026 (7 expected days in the 28-day window); Astra has none (20 expected days).
+  If Astra was closed too, its entries are missing (data question for Jim).
+- [ ] **Drop the two v1 reporting functions** (`masi_reporting_incidents`, `masi_reporting_ea_detail`)
+  no earlier than 2026-11-12, after web B is live (spec §5.1). This raises the rollback floor.
+- [ ] Spec §9 follow-ups: server-owned `sessions.received_at` for exact upload lag; phone prevents
+  duplicate group names and warns on weekend/closure capture; programme-specific closures
+  (`applies_to_programmes` ignored today); `sslmode=verify-full` to the pooler; flag EAs teaching classes
+  outside their assigned school.
+- [ ] Jim: delete the unused Vercel variables `MASI_SUPABASE_URL` and `MASI_SUPABASE_SERVICE_ROLE_KEY`
+  (may already be done).
+
 ## 6. Head Office import and provisioning
 
 **Deferred by Jim on 2026-07-14.** Roughly half of EAs receive classes, children, and groups from
