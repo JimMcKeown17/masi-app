@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Controlled Postgres 17 scenarios: S4 refuses all four kinds of literacy work after the literacy programme assignment ends, S4b isolates the check to the session, run and assessment (the attendee itself is not programme-checked), and the mastery rows are stamped numeracy; S5b shows a replay of an already-saved session is refused too. The approved fix is not yet tested."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:51:09Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -49,7 +49,8 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-refusals/
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "Nothing lost on the phone while the rows stay terminal there; the office copy lacks the refused sessions, runs and assessments, and the surviving ticks carry the wrong programme. Never observed in the field."
 workaround_status: "None from the phone. Interim: Head Office switches an EA's programme only after that EA's phone shows everything synced (same drain-first practice as MA-BUG-20261104-002)."
@@ -157,6 +158,7 @@ Approved by Jim on 2026-11-04.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | S4, S4b, S5b; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
 
 ## Open questions
 

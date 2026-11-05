@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 95
 confidence_basis: "Read in source on main and at f002e08: the unsent count includes terminal rows and the sheet promises every counted item will upload next time; whether a refused item ever uploads depends on the cause, and the sheet does not distinguish."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-05T00:50:00Z
 last_observed_at: 2026-11-05T00:50:00Z
 
@@ -51,7 +51,8 @@ evidence_paths:
   - src/components/profile/SignOutSheets.js
   - src/hooks/useSignOutFlow.js
   - src/db/repositories/syncOutboxRepository.js
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/155
 
 data_safety_status: "no data lost by the sheet itself; the risk is false reassurance before the EA signs out with work the server has refused"
 workaround_status: "the EA can open the Sync status screen before signing out and read the Needs attention list"
@@ -154,6 +155,7 @@ Approved (fix step 7, OTA): the sheet separates "waiting to upload" from "needs 
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | code trace of the cited source paths, no repro files |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #155; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-stuck-items |
 
 ## Open questions
 

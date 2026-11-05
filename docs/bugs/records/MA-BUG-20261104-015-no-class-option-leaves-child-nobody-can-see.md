@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Real SQLite through the production repositories, sync engine and pull shows the child leave My Children after 'No class', with the same writes accepted by disposable PostgreSQL 17 (E6-no-class)."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:55:33Z
 last_observed_at: 2026-11-04T19:55:33Z
 
@@ -51,7 +51,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/observations.jsonl
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/pg-results.json
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/reproLifecycleEdges.integration.test.js.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/156
 
 data_safety_status: "No data lost. The child, assignment and enrolment stay open; only the class membership is ended, so no reader lists the child."
 workaround_status: "Interim: EAs avoid choosing No class. Whether the EA can reach the child afterwards to pick a class again is unknown; Head Office can reattach a class."
@@ -159,6 +160,7 @@ OTA arrives.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | E6, `docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #156; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-removal |
 
 ## Open questions
 

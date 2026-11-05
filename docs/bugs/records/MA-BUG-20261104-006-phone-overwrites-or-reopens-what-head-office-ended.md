@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: an EA token's later end overwrote Head Office's end time (and wiped the handover reason) on three assignment tables, redundant exits through a second access path returned one row and moved the end time, a group restore and a raw un-end cleared Head Office's end and made write-for-child true again, and a Head Office row_version bump turned the same writes into MV001. The unguarded UPDATE policies and the tie-passing row_version trigger are read in the migrations."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -52,7 +52,9 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/raw-output.log
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/
   - docs/bugs/evidence/MA-BUG-20261104-001/SHA256SUMS.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
+  - https://github.com/JimMcKeown17/masi-app/issues/154
 
 data_safety_status: "Head Office's recorded end of access can be silently moved, blanked or reversed by a later phone write; no rows are lost, but who held a child, class or group and when becomes wrong, and write authority can return to an EA Head Office removed. Never seen in the field."
 workaround_status: "None for the EA. Head Office can re-end the row, but nothing tells them it was overwritten. Interim rule: Head Office must not bump row_version on ends (that turns the overwrite into a terminal MV001 on the phone instead)."
@@ -194,6 +196,7 @@ guard covers 1.5.0 phones already in the field.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L1.*, L2.*, `docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153, #154; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server, feat/lifecycle-ho-tools |
 
 ## Open questions
 

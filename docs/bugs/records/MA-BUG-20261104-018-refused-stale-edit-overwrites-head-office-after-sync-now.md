@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 90
 confidence_basis: "The designed override is asserted by a passing test (__tests__/rowVersionSend.test.js, terminal recovery after MV001) and documented in the contract map; the server refusal is reproduced in Postgres 17 (L2 bumped-version cases); the full phone chain against Postgres was not replayed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -55,7 +55,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L2.group_ea.HO_no_version.sql
   - __tests__/rowVersionSend.test.js
   - documentation/rls-sync-contract-map.md
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/155
 
 data_safety_status: "a Head Office correction can be silently replaced by an older EA edit; the replaced values are not recoverable from the row itself, and the EA is never told"
 workaround_status: "none for the EA; Head Office can re-apply the correction if it notices; the overwritten value is not logged on the row"
@@ -167,6 +168,7 @@ Approved (fix step 7, OTA, with Jim's decision to reverse the override): the ser
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L2.child_ea.HO_bumps_version, L2.group_ea.restore_HO_bumps_version, L2.child_ea.HO_no_version, L2.group_ea.HO_no_version; rowVersionSend.test.js terminal recovery; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #155; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-stuck-items |
 
 ## Open questions
 

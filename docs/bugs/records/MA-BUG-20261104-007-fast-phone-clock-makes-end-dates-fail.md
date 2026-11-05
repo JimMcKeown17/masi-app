@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: rows created with a clock two days fast were accepted, and every later end stamped with a corrected clock was refused with 23514 on six tables; a Head Office end at server now failed the same way and passed only at a time after the start. The CHECK constraints and the 1.5.0 classifier are read in source."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -51,7 +51,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/results.json
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L3.clock_skew.sql
   - docs/bugs/evidence/MA-BUG-20261104-001/SHA256SUMS.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "Durable data preserved on the phone; the end of a child, class, group or enrolment never reaches the server, so the server keeps showing the EA as holding it. Never seen in the field."
 workaround_status: "Turn automatic date and time ON for pilot phones (interim rule). After a skewed row exists, Head Office can end it at a time after its start, but only by hand."
@@ -172,6 +173,7 @@ automatic date and time ON for pilot phones.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L3.clock_skew, `docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
 
 ## Open questions
 

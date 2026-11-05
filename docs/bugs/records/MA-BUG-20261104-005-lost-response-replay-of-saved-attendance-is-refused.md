@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 80
 confidence_basis: "Controlled Postgres 17 scenario S5 replays 1.5.0's attendee merge upsert for a row the server already holds and gets 42501 once access has ended, while the session, run, assessment and tick replays are acknowledged; variants without RETURNING and with insert-or-ignore are refused identically, which isolates the INSERT policy check. The real lost-response path through the sync engine was not executed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:51:09Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -49,7 +49,8 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-refusals/
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "The attendance row is on the server; the phone wrongly marks it terminal and tells the EA it needs attention. No data lost, but a false failure that is not self-clearing. Never observed in the field."
 workaround_status: "None needed for the data (the office already has it); the phone keeps the false terminal row until fix step 7 resolves it to server truth."
@@ -160,6 +161,7 @@ Approved by Jim on 2026-11-04.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | S5 and its three variants; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
 
 ## Open questions
 

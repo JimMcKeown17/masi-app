@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Controlled Postgres 17 scenario (S2) refuses attendance and ticks after Head Office ends access, and three real-SQLite chains (C3a, C3b, C3c) through the production sync engine reproduce it with the recorded requests replayed into the same Postgres; the same payloads land when history goes first (MA-BUG-20261104-001 control). The approved fix is not yet tested."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:50:52Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -50,7 +50,8 @@ support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-refusals/
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "Nothing lost on the phone (refused rows stay terminal locally); the office copy permanently lacks the refused attendance and ticks. Never observed in the field."
 workaround_status: "Interim drain-first rule: Head Office does not end or hand over an EA's child until that EA's phone shows everything synced. The rule lapses once held-on-the-day (fix step 4) is live. After a refusal there is no safe repair from the phone."
@@ -161,6 +162,7 @@ Approved by Jim on 2026-11-04.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | S2; C3a, C3b, C3c; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
 
 ## Open questions
 

@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 95
 confidence_basis: "The display-name map is keyed by legacy upper-case names, outbox table names are lower-case snake_case, and the lookup falls back to the raw name; read in source on main and at f002e08, and an existing screen test confirms the map is only exercised with the upper-case key."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-05T00:50:00Z
 last_observed_at: 2026-11-05T00:50:00Z
 
@@ -52,7 +52,8 @@ evidence_paths:
   - src/db/repositories/syncOutboxRepository.js
   - src/db/repositories/domainRepositoryUtils.js
   - __tests__/syncStatusScreen.test.js
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/155
 
 data_safety_status: "no data risk; a presentation problem that hides what is stuck"
 workaround_status: "none needed to keep working; the EA can still press Retry, but cannot tell which child or lesson the item is"
@@ -156,6 +157,7 @@ Approved (fix step 7, OTA): list needs-attention items in plain words that name 
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | code trace of the cited source paths, no repro files; docs/bugs/evidence/MA-BUG-20261104-001/ not used |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #155; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-stuck-items |
 
 ## Open questions
 

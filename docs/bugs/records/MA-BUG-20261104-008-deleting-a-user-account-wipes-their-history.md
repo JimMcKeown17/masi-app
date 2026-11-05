@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 90
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: deleting one EA's login account removed their sessions, attendance, assessments, assessment items, time entries and every assignment (counts 1 to 0), while the same delete was refused only when the EA also had a tick or run row; the complete foreign-key inventory with ON DELETE actions was read from the live catalog of the same database."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -52,7 +52,9 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/raw-output.log
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/
   - docs/bugs/evidence/MA-BUG-20261104-001/SHA256SUMS.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
+  - https://github.com/JimMcKeown17/masi-app/issues/154
 
 data_safety_status: "Destructive and unrecoverable from the app: deleting a login account or profile row removes the EA's teaching and assessment history for every child, with no archive. Reproduced only in a disposable database; never seen in the field."
 workaround_status: "Off-board by suspending the account (npm run ea:suspend), never by deleting an auth user or public.users row. Restore from a Supabase backup if a delete has happened."
@@ -177,6 +179,7 @@ today, so a deliberate delete of a never-used account still drops them.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L6.*, `docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153, #154; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server, feat/lifecycle-ho-tools |
 
 ## Open questions
 

@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Controlled reproductions in disposable PostgreSQL 17 (S1 refused, S1-control with history first lands everything) and in real SQLite through the production repositories and sync engine, whose recorded wire requests were replayed into the same Postgres with identical outcomes; the approved fix itself is not yet tested."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:50:52Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -50,7 +50,9 @@ support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-refusals/
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
+  - https://github.com/JimMcKeown17/masi-app/issues/156
 
 data_safety_status: "Nothing lost on the phone: refused rows stay terminal in the local outbox and the local lesson still shows the child. The office copy permanently lacks the refused attendance and ticks. Never observed in the field."
 workaround_status: "Before the removal only: let the phone finish syncing (history first lands everything, S1-control and C5c) before removing a child, group or class. After the refusal there is none from the phone; Sync now and Retry are refused again."
@@ -168,6 +170,7 @@ Approved by Jim on 2026-11-04. Plan steps:
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | S1, S1b, S1-control, S3, S7; C1, C2, C5a-d; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153, #156; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server, feat/lifecycle-ota-removal |
 
 ## Open questions
 

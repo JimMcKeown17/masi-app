@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
+delivery_state: IN_PROGRESS
 verification_state: NOT_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Real SQLite through the production repositories, sync engine and ChildrenContext pull reproduces the loop twice (E2, E2-ctx), and the server answer was reproduced in disposable PostgreSQL 17; the handover trigger is inferred from the server's history check, not executed with a literal handover."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T02:30:00Z
 first_observed_at: 2026-11-04T19:55:33Z
 last_observed_at: 2026-11-04T19:55:33Z
 
@@ -53,7 +53,9 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/reproLifecycleEdges.integration.test.js.txt
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/reproLifecycleEdgesE2Context.integration.test.js.txt
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/jest-run-e2ctx.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
+  - https://github.com/JimMcKeown17/masi-app/issues/156
 
 data_safety_status: "No data lost: the server keeps the child and its history; the phone deleted its local copy and the next download restores it."
 workaround_status: "None that works: deleting again repeats the loop. The EA cannot remove the child from their list."
@@ -176,6 +178,7 @@ which now succeeds, so the server change repairs them before the OTA.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | E2, E2-ctx, `docs/bugs/evidence/MA-BUG-20261104-001/repro-client-lifecycle-edges/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153, #156; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server, feat/lifecycle-ota-removal |
 
 ## Open questions
 
