@@ -209,7 +209,7 @@ export default function SyncStatusScreen() {
         {needsAttentionItems.length > 0 && (
           <SurfaceCard style={styles.card}>
             <Text variant="titleMedium" style={styles.sectionTitle}>Needs Attention</Text>
-            {!isOnline && (
+            {!isOnline && needsAttentionItems.some((item) => item.canRetry) && (
               <Text variant="bodySmall" style={styles.reconnectHint}>
                 Reconnect to retry these items.
               </Text>

@@ -247,6 +247,16 @@ test('offline with terminal items shows reconnect framing and an inert Retry', (
   expect(retryFailedItem).not.toHaveBeenCalled();
 });
 
+test('offline with only self-clearing items does not promise a retry', () => {
+  mockUseOffline.mockReturnValue(offline({
+    isOnline: false, needsAttentionCount: 1,
+    syncStatus: { needsAttentionItems: [terminalItem({ table: 'classes', operation: 'archive', clearsItself: true, canRetry: false })] },
+  }));
+  const screen = renderScreen();
+  expect(screen.queryByText('Reconnect to retry these items.')).toBeNull();
+  expect(screen.getByText('Connect to the internet so the office gets a copy.')).toBeTruthy();
+});
+
 test('Retry is secondary and publishes its neutral progress message through the root host', async () => {
   const state = offline({ needsAttentionCount: 1, syncStatus: { needsAttentionItems: [terminalItem({ table: 'sessions' })] } });
   mockUseOffline.mockReturnValue(state);
