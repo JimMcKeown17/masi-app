@@ -8993,13 +8993,83 @@ check clean; B refused with the new row as `conflicting_id`.
 
 **Design notes.** The near-miss refusal is one-sided on purpose: the 1.5.0 chain can only spread
 after the archive (archived child) or before the delivery-row end (live child). An enrolment or class
-membership that ended on the other side, such as an EA's class move just before the Delete child,
-stays a note rather than blocking the restore. Residual: a live-child restore still cannot tell
-an EA's Delete child that ended only their delivery row from a Head Office end-delivery. Both end
-exactly one row, as before this review; the dry run's gap hours are the operator's check.
+membership that ended on the other side stays a note rather than blocking the restore. (Corrected
+in the final fix round below: an EA's class move just before a live child's Delete child ends on the
+blocking side, and as built here it was refused; the refusal now applies only when the restored
+child would have no enrolment in that programme or no live class.) Residual: a live-child restore
+still cannot tell an EA's Delete child that ended only their delivery row from a Head Office
+end-delivery. Both end exactly one row, as before this review; the dry run's gap hours are the
+operator's check.
 
 **Verification.** `npm run verify:ho-lifecycle:postgres` with the four server migrations from
 `HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR` (46 migrations): 60/60 checks, restore cases ran. Without them
 (42 migrations): 34/34, restore cases skipped as reported. `npx jest
 __tests__/hoLifecycleScript.test.js`: 82/82. `npx jest`: 518/518 suites, 8,265/8,265 tests. `npx jest
 -c jest.integration.config.js`: 111/111 suites, 1,530/1,530 tests. No `lint` script exists.
+
+### 2026-11-05 — `restore child` final fix round, and the staging query helper (feat/lifecycle-ho-tools)
+
+The verifier's second pass found one residual of the high finding, one regression from the
+fast-clock fix, a cosmetic mismatch, and a helper defect seen on staging. Each was red first in
+`scripts/ho-lifecycle-postgres-harness.cjs` or the helper's own test file. No live data, staging,
+Supabase CLI run (only `supabase db query --help`, from an empty temporary directory) or `.env.local`
+was touched.
+
+**Fixed.**
+- **Handover mistaken for a removal (verifier case Z0).** X added the child and teaches its class;
+  Head Office handed X's delivery to Y; X's Delete child was then a leave that ended nothing. A
+  removal that ends nothing leaves no trace, so restore took the handover's end for the removal and
+  reopened X's row beside Y's (`confirmed: true`, two EAs delivering). Now a delivery row whose end
+  equals the `assigned_at` of another EA's `child_ea_assignments` row for the child is refused as
+  `ended_by_handover`, naming the successor (id, email, name, assignment id): the handover ends one
+  row and inserts the other at one `now()`, so the equality is exact. The runbook now says a removal
+  that ended nothing cannot be seen, tells the operator to compare `removed_at` with when the EA says
+  they deleted the child, and to use `reopen child` only when Head Office's end was the mistake.
+  Harness case 12 (real `handover child`, then the server Delete child as X).
+- **Class move refused (verifier case M).** For a live child, `nearby_end_not_restored` refused any
+  enrolment or class membership ended within the hour before X's delivery-row end, including an
+  ordinary class move (membership A exited, B added in a live class). It now refuses only when, after
+  the planned reopens, the child would have no open enrolment in that row's programme, or no open
+  membership in a live class. Otherwise the row is a `near_miss_not_reopened` note. The same rule
+  applies on the archived side. Harness case 13: R15 (X's real class move as the EA, plus a literacy
+  re-enrolment, ten minutes before the leave) is restored with both as notes and a clean daily
+  check. R16 (the same move, into a class archived since) is refused. Case 11's R12 is still
+  refused, now with an open numeracy enrolment that must not stand in for literacy.
+- **Cosmetic.** For `delivery_not_part_of_removal` on a live child, `plan.removals[].removed_at`
+  showed Head Office's end while the refusal showed the group-membership end that was the real
+  removal. The later end is now found before the plan entry is written, and both show it. Every
+  `refusedNoChange` call in the harness now checks that they agree.
+- **`npm run sqlite:staging:query -- "$(cat scripts/lifecycle-invariants.sql)"` printed the CLI
+  help** (staging, 2026-11-05): the SQL starts with `--`, and the CLI parsed the positional argument
+  as a flag. The helper now never passes SQL as an argument. It writes the SQL to `query.sql`
+  (owner-only) in its own fresh temporary directory and runs `supabase db query --linked --file
+  <path>`. `--file, -f` is documented by the installed CLI's `db query --help` (2.122.0). The CLI cwd
+  still holds only the `supabase` symlink, as AGENTS.md and the skill say, and both directories are
+  removed in `finally`. The usage line is unchanged; the skill documents the file route.
+
+**RED → GREEN.** Cosmetic: R8's plan showed `2026-11-02T17:31:36…` (Head Office's end, three days
+back), and the refusal showed `2026-11-05T17:31:37…`. Case 12: `''` did not match `refused:
+ended_by_handover` (the dry run planned the reopen). Case 13: `restore-r15-dry-run: refused:
+nearby_end_not_restored`. Helper: the args were `['db', 'query', '--linked', <137 lines of SQL>]`
+instead of `--file <path>`. Six new helper tests failed, then passed. R16 passed before and after:
+the old rule also refused it. It guards the live-class condition, and two mutation runs confirm the
+new conditions are pinned (dropping the programme filter fails case 11; dropping the live-class
+filter fails R16). The verifier's repros rerun against the fix: M now restores with a
+`near_miss_not_reopened` note. Z0 as written still reopens, because its fixture backdates only X's
+end by three days and leaves Y's `assigned_at` at the handover instant, which no single handover
+transaction can produce. A variant that moves both timestamps together is refused as
+`ended_by_handover`, and nothing changes.
+
+**Residuals (not fixed, no new scope).** The equality only sees a handover that inserted the
+successor's row. If the handover reopened a row the successor held before (`assigned_at` is that
+row's old start), or the successor already delivered (`already_active`), or the predecessor's
+`assigned_at` was in the future (`greatest(now(), assigned_at)`), the end and the start differ.
+A later Delete child that ended nothing is then indistinguishable from the EA's own removal, as an
+end-delivery is. The runbook's compare-`removed_at` step is the operator's check for all of these.
+
+**Verification.** `npm run verify:ho-lifecycle:postgres` (disposable PG17) with the four server
+migrations from `HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR` (46 migrations): 63/63 checks, restore cases
+ran. Without them (42 migrations): 34/34, restore cases skipped as reported. `npx jest
+__tests__/sqliteStagingScript.test.js`: 85/85. `npx jest __tests__/hoLifecycleScript.test.js`: 82/82.
+`npx jest`: 518/518 suites, 8,271/8,271 tests. `npx jest -c jest.integration.config.js`: 111/111
+suites, 1,530/1,530 tests. No `lint` script exists.
