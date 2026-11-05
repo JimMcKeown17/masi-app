@@ -8998,7 +8998,8 @@ numbers every update so the card can say `1.5.0+2`.
   `appVersion`; pages `npx --yes eas-cli@26.0.0 update:list --branch <channel> --limit 50 --offset k
   --json --non-interactive` (refuses any listing error, non-JSON, a group without a runtime, a page
   from another branch, or more than 10,000 groups); N = groups for this runtime + 1, and never a
-  number already used in an `OTA <version>+N:` message (so deleting a group cannot repeat one);
+  number already used in an `OTA <version>+N:` message (so deleting an older group cannot repeat
+  one; deleting the newest numbered group can, see the review fixes below);
   publishes `update --channel c --environment c --non-interactive --message "OTA 1.5.0+N: … (abc1234)"`
   with `MASI_OTA_RELEASE`/`MASI_OTA_PUBLISHED_AT`; then `env:exec c 'npm run sentry:sourcemaps'
   --non-interactive`. A source-map failure says the update is out and prints the command. Argument

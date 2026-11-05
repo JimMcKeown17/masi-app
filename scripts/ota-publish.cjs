@@ -134,7 +134,9 @@ const assertChannelBranch = ({ channel, runForOutput }) => {
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // N = (update groups already published for this runtime) + 1. A number already used in an
-// update message ("OTA 1.5.0+5: …") also counts, so deleting a group cannot make one repeat.
+// update message ("OTA 1.5.0+5: …") also counts, so deleting an older group cannot make one
+// repeat. Known limit: EAS lists no deleted groups, so deleting the newest numbered group frees
+// its number for the next publish (the phone's Update id still tells the two apart).
 const nextReleaseNumber = ({ groups, version }) => {
   const forRuntime = groups.filter(group => group.runtimeVersion === version);
   const numbered = new RegExp(`OTA ${escapeRegExp(version)}\\+(\\d+):`);

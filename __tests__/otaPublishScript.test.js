@@ -138,7 +138,7 @@ describe('release number', () => {
     expect(nextReleaseNumber({ groups, version: '1.6.0' })).toBe(1);
   });
 
-  test('a deleted update group cannot make a number repeat: numbers already published stay used', () => {
+  test('numbers already used on the branch stay used, so deleting an older update group cannot make one repeat', () => {
     const groups = [
       group('1.5.0', '"Lifecycle safety" (2 days ago by jimmckeown)'),
       group('1.5.0', '"OTA 1.5.0+5: Release card (abc1234)" (1 hour ago by jimmckeown)'),

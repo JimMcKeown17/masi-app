@@ -101,22 +101,36 @@ npm run ota:publish -- --message "describe what changed"             # publish o
 ```
 
 After the field launch, add `--channel production` (the EAS environment has the channel's name).
+Write every flag after the `--`. npm keeps a flag written before it for itself and hides it from
+the script (`npm run ota:publish --dry-run -- --message "…"` would otherwise be a real publish), so
+the script refuses whenever npm has taken `--dry-run`, `--channel` or `--message`. A message cannot
+start with `-`, so `--message --dry-run` is refused rather than published with that message.
+
 The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
 
 1. Refuses unless the working tree is clean (untracked `node_modules`/`dist` aside) and HEAD is on
-   an origin branch, so every update's Source commit can be found later. `--dry-run` applies the
-   same checks.
-2. Numbers the update. It lists the update groups on the channel's EAS branch
+   an origin branch, so every update's Source commit can be found later. `--dry-run` makes the
+   same checks as a publish, through step 3.
+2. Checks the channel. `npx eas-cli@26.0.0 channel:view <channel> --json --non-interactive` must
+   show the channel pointing at exactly one branch, named after the channel. `eas update
+   --channel` publishes to whatever branch the channel points at, but the number is counted on the
+   branch with the channel's name, so a re-pointed channel (`eas channel:edit … --branch …`) or one
+   in a branch rollout is refused. So is a channel EAS cannot find; the script never creates one.
+3. Numbers the update. It lists the update groups on the channel's EAS branch
    (`npx eas-cli@26.0.0 update:list --branch <channel> --json --non-interactive`, page by page) and
-   counts those for this runtime: release N = count + 1. A number already used in an
-   `OTA <version>+N:` message is never reused, even if a group was deleted. If the listing fails
-   the script stops and publishes nothing; it never guesses.
-3. Publishes: `npx eas-cli@26.0.0 update --channel <channel> --environment <channel>
+   counts those for this runtime: release N = count + 1, raised past any number an
+   `OTA <version>+N:` message on the branch already uses, so deleting an older group cannot make a
+   number repeat. Deleting the newest numbered group (`eas update:delete`) does free its number:
+   EAS no longer lists it, so the next publish reuses it, and a phone that had downloaded the
+   deleted update shows the same Release (only the Update id differs). Replace a bad update by
+   publishing a fixed one; do not delete its group. If a listing fails the script stops and
+   publishes nothing; it never guesses.
+4. Publishes: `npx eas-cli@26.0.0 update --channel <channel> --environment <channel>
    --non-interactive --message "OTA 1.5.0+2: <message> (<short commit>)"`, with
    `MASI_OTA_RELEASE=<N>` and `MASI_OTA_PUBLISHED_AT=<now, ISO UTC>` set. `app.config.js` copies
    them into `extra.otaRelease` and `extra.otaPublishedAt`, which EAS publishes in the update's
    manifest. This leaves the exported bundle in `dist/`.
-4. Uploads the matching source maps to Sentry with the sensitive `SENTRY_AUTH_TOKEN` stored in the
+5. Uploads the matching source maps to Sentry with the sensitive `SENTRY_AUTH_TOKEN` stored in the
    same EAS environment: `npx eas-cli@26.0.0 env:exec <channel> 'npm run sentry:sourcemaps'
    --non-interactive`. eas-cli 26 takes the environment as an argument; the older
    `env:exec --environment preview` form fails. If this step fails, the update is already out: the
@@ -129,15 +143,23 @@ Do not publish with a bare `eas update`: the phone would show the update as `<ve
 
 ### Release numbers: what the phone shows
 
+A bundle built from the App release change (2026-11-05) or later shows the card:
+
 | Phone is running | Release | Running |
 |---|---|---|
 | The store build's own bundle | `1.5.0` (the app version) | `Built-in` |
 | The 2nd update published for runtime 1.5.0 | `1.5.0+2` | `Update` |
-| An update published without the script (before 2026-11-05, or a bare `eas update`) | `1.5.0+?` | `Update` |
+| An update of this code published without the script (a bare `eas update`) | `1.5.0+?` | `Update` |
+
+An older bundle has no card: it still shows the old caption footer at the bottom of Profile
+(`Version 1.5.0 (Build N) · Backend …`, then the project, then the device and `Update <full update
+id>`). Today that is the 1.5.0 store builds' own bundle and the lifecycle update on `preview`
+(group `8addaae6`, from `fd053cfc`). So once the first scripted update is out, a phone that shows
+the App release card at all is running it or a later one.
 
 Numbers count per runtime, so a new app version starts again: the first update for 1.6.0 is
-`1.6.0+1`. Updates published before the script still count: the lifecycle update on `preview`
-(group `8addaae6`, from `fd053cfc`) is 1.5.0's update 1, and a phone running it shows `1.5.0+?`.
+`1.6.0+1`. Updates published before the script still count towards the number: the lifecycle update
+is 1.5.0's update 1, so the first update published with the script is `1.5.0+2`.
 
 **Profile → App release** shows Release (large); Build (version and native build) and Channel;
 Runtime and Update (the first 8 characters of the update id); Running (`Update`, `Built-in`, or
