@@ -1,5 +1,11 @@
 # Field Diagnostics: Incident Receipts, Diagnostic Bundles, and the MA-BUG Registry — Design
 
+> **Status note (2026-11-05):** the `upload_backlog_stale` threshold is now 24 h, not 72 h
+> (lifecycle safety O1, `docs/superpowers/plans/2026-11-04-lifecycle-safety.md`). The
+> `upload_terminal` payload also carries `outboxId`, and `markSent` writes a delivery proof to
+> `local_state`. The current contract is `documentation/rls-sync-contract-map.md`; this document
+> is otherwise unchanged as the record of its revision.
+
 **Status:** revision 4.1, 2026-10-29.
 
 | Revision | Change |
