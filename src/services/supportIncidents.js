@@ -6,7 +6,7 @@ import { Paths } from 'expo-file-system/next';
 import { v4 as uuidv4 } from 'uuid';
 import { buildDiagnosticBundle, cleanupBundleFiles, uploadIncidentBundle } from './diagnosticBundle';
 import { assertExportHandle } from '../db/debugDump';
-import { utf8Bytes, boundedEnvelope, appErrorPayload, terminalPayload, backlogPayload, breakerPayload, historyFailurePayload } from './incidentPayloads';
+import { envelopeFits, boundedEnvelope, appErrorPayload, terminalPayload, backlogPayload, breakerPayload, historyFailurePayload } from './incidentPayloads';
 import { getRuntimeDiagnostics } from '../utils/runtimeDiagnostics';
 import { getInstallId } from './installId';
 import { isStaleActorError } from '../session/staleActor';
@@ -75,7 +75,7 @@ export const drainSupportIncidents = async ({
         } });
         if (!snapshot) continue;
         const report = { ...snapshot, repeat_key: `${delivery.installId}:${snapshot.repeat_key}`, delivery };
-        if (utf8Bytes(JSON.stringify(report)) > 56000) {
+        if (!envelopeFits(report)) {
           await repository.markRejected(incidentRef, 'TOO_LARGE'); outcome.rejected++; continue;
         }
         response = await enqueueRequest(() => supabaseClient.rpc('report_mobile_support_incident_v2', { p_envelope: report }));

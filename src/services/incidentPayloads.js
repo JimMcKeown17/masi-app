@@ -54,15 +54,50 @@ const cutWire = (value, stringLimit, arrayLimit) => {
   }
   return out;
 };
+// The server refuses an envelope whose PostgreSQL text rendering (`p_envelope::text`) exceeds
+// 65,536 bytes (22023). That rendering is longer than JSON.stringify: jsonb prints a space after
+// every ':' and ',', and numbers in plain decimal notation (1e21 is 22 digits). A separator-dense
+// payload therefore grows by up to half (an array of single digits). jsonbTextBytes computes that
+// length exactly, measured against PostgreSQL 17 (build log, combined-OTA review 2026-11-05).
+const numberTextBytes = n => {
+  const text = JSON.stringify(n);
+  const match = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(text);
+  if (!match) return text.length;
+  const [, sign, lead, fraction = '', exponentText] = match;
+  const exponent = Number(exponentText);
+  const digits = lead + fraction;
+  if (exponent >= 0) return sign.length + Math.max(digits.length + (digits.length > exponent + 1 ? 1 : 0), exponent + 1);
+  return sign.length + 2 + (-exponent - 1) + digits.length;
+};
+const jsonbValueBytes = value => {
+  if (value === null) return 4;
+  if (typeof value === 'boolean') return value ? 4 : 5;
+  if (typeof value === 'number') return numberTextBytes(value);
+  if (typeof value === 'string') return utf8Bytes(JSON.stringify(value));
+  if (Array.isArray(value)) {
+    return 2 + value.reduce((sum, item) => sum + jsonbValueBytes(item), 0) + Math.max(0, value.length - 1) * 2;
+  }
+  const entries = Object.entries(value);
+  return 2 + entries.reduce((sum, [key, item]) => sum + utf8Bytes(JSON.stringify(key)) + 2 + jsonbValueBytes(item), 0)
+    + Math.max(0, entries.length - 1) * 2;
+};
+export const jsonbTextBytes = value => jsonbValueBytes(JSON.parse(JSON.stringify(value)));
+// Both bounds hold for every envelope the phone sends: the existing compact bound, and the jsonb
+// rendering with 1,536 bytes of margin under the server's 65,536.
+export const MAX_ENVELOPE_JSON_BYTES = 56000;
+export const MAX_ENVELOPE_JSONB_TEXT_BYTES = 64000;
+export const envelopeFits = envelope => utf8Bytes(JSON.stringify(envelope)) <= MAX_ENVELOPE_JSON_BYTES
+  && jsonbTextBytes(envelope) <= MAX_ENVELOPE_JSONB_TEXT_BYTES;
+
 export const boundedEnvelope = envelope => {
   // Never alter the persisted snapshot or producer's diagnostic payload.
   const out = { ...envelope, payload: { ...envelope.payload } };
-  const size = () => utf8Bytes(JSON.stringify(out));
-  if (size() <= 56000) return { envelope: out };
+  const fits = () => envelopeFits(out);
+  if (fits()) return { envelope: out };
   if (out.payload.wirePayload) {
     for (const [strings, arrays] of [[2048, 20], [512, 5], [128, 1]]) {
       out.payload.wirePayload = cutWire(envelope.payload.wirePayload, strings, arrays);
-      if (size() <= 56000) return { envelope: out };
+      if (fits()) return { envelope: out };
     }
   }
   for (const key of ['stack', 'componentStack', 'sampleLastErrors']) {
@@ -74,7 +109,7 @@ export const boundedEnvelope = envelope => {
       mark(out.payload, key, original);
       if (typeof original === 'string') out.payload[`${key}OriginalBytes`] = utf8Bytes(original);
     }
-    if (size() <= 56000) return { envelope: out };
+    if (fits()) return { envelope: out };
   }
   return { error: 'TOO_LARGE' };
 };

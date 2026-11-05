@@ -14,6 +14,7 @@ import { observeStandingConditions } from '../src/services/supportIncidents';
 import { deliveredReceiptKey } from '../src/db/repositories/supportIncidentRepository';
 import { INSTALL_ID_KEY, resetInstallIdForTests } from '../src/services/installId';
 import { getRuntimeDiagnostics } from '../src/utils/runtimeDiagnostics';
+import { jsonbTextBytes, MAX_ENVELOPE_JSONB_TEXT_BYTES } from '../src/services/incidentPayloads';
 
 // Lifecycle safety O1 item 2: a refused row leaves the phone only once the office holds a
 // delivered upload_terminal receipt of its exact current revision, untruncated. Refused archives
@@ -170,6 +171,23 @@ test('an oversized payload truncated on send never gets the exit', async () => {
   await engine.syncAll();
   expect(await outboxRow(ENTRY_OUTBOX)).toMatchObject({ status: 'terminal' });
   expect(reports()).toHaveLength(1);
+});
+
+// Combined-OTA review item 4c: the server measures the jsonb text, which prints a space after
+// every separator. A separator-dense copy that fits the compact bound is cut to fit that check,
+// so it can never be sent in a form the server rejects.
+test('a separator-dense payload is cut to fit the server jsonb check, so it never gets the exit', async () => {
+  await h.services.repositories.timeEntries.saveTimeEntry({
+    id: ENTRY_ID, user_id: h.userId, sign_in_time: '2026-11-04T07:00:00.000Z', sync_status: 'pending',
+  });
+  await h.withTransaction(txn => txn.runAsync(
+    "update sync_outbox set payload = json_set(payload, '$.sign_in_location_status', json(?)) where id = ?",
+    JSON.stringify(Array(25000).fill(0)), ENTRY_OUTBOX));
+  await syncAndReport();
+  const [report] = reports();
+  expect(report.args.p_envelope.payload.wirePayload.sign_in_location_statusTruncated).toBe(true);
+  expect(jsonbTextBytes(report.args.p_envelope)).toBeLessThanOrEqual(MAX_ENVELOPE_JSONB_TEXT_BYTES);
+  expect(await itemFor(ENTRY_OUTBOX)).toMatchObject({ delivery: 'support', canRemove: false });
 });
 
 test('a send cut only by large delivery metadata stays cut after the metadata shrinks', async () => {

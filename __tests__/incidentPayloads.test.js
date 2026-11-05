@@ -49,3 +49,42 @@ test('the phone rejects the 56,000-to-65,536 byte window rather than relying on 
  expect(Buffer.byteLength(JSON.stringify(envelope,null,1))).toBeLessThan(65536);
  expect(builders.boundedEnvelope(envelope)).toEqual({error:'TOO_LARGE'});
 });
+
+// Combined-OTA review item 4c. The server refuses p_envelope when octet_length(p_envelope::text)
+// exceeds 65,536. Expected values below were measured on PostgreSQL 17.10
+// (select octet_length($j$...$j$::jsonb::text)), 2026-11-05.
+describe('envelope bound against the server jsonb text check', () => {
+  const { jsonbTextBytes, envelopeFits, boundedEnvelope: bound, MAX_ENVELOPE_JSONB_TEXT_BYTES, utf8Bytes } = jest.requireActual('../src/services/incidentPayloads');
+  test.each([
+    ['flat', { a: 1, b: 'x', c: true, d: null, e: false }, 52],
+    ['nested', { a: [1, 2, { b: [] }], c: {}, d: [[], [[]]] }, 50],
+    ['single digits', Array.from({ length: 5000 }, (_, i) => i % 10), 15000],
+    ['numbers in exponent form', [1e21, 1.5e21, 1e-7, 1.5e-7, -1e-7, -2.5e21, 123.456, 0, -0, 5e-324,
+      1.7976931348623157e308, 0.1, 1e20, 123456789012345680000, 1e-6, 0.000001234], 836],
+    ['strings', ['plain', 'tab\there', 'quote"and\\back', 'nl\n', 'ctrl\u0001\u001f', 'zulu ñ é 😀 中文', '', 'u2028 '], 112],
+    ['keys', { 'k é': 1, 'k"q': 2, '': 3, 'a\nb': [true, false] }, 52],
+  ])('jsonbTextBytes matches PostgreSQL for %s', (_name, value, measured) => {
+    expect(jsonbTextBytes(value)).toBe(measured);
+  });
+
+  // A separator-dense wire payload fits the compact bound but not the server's check.
+  const dense = (padding) => ({ kind: 'upload_terminal', payload: { wirePayload: { digits: Array(16000).fill(0) }, note: 'x'.repeat(padding) } });
+  const paddingFor = (target) => target - jsonbTextBytes(dense(0));
+
+  test('an envelope fits at exactly the jsonb bound and not one byte over', () => {
+    const atBound = dense(paddingFor(MAX_ENVELOPE_JSONB_TEXT_BYTES));
+    expect(jsonbTextBytes(atBound)).toBe(MAX_ENVELOPE_JSONB_TEXT_BYTES);
+    expect(utf8Bytes(JSON.stringify(atBound))).toBeLessThan(56000);
+    expect(envelopeFits(atBound)).toBe(true);
+    expect(bound(atBound).envelope).toEqual(atBound);
+    const over = dense(paddingFor(MAX_ENVELOPE_JSONB_TEXT_BYTES) + 1);
+    expect(envelopeFits(over)).toBe(false);
+    const cut = bound(over).envelope;
+    expect(cut.payload.wirePayload.digitsTruncated).toBe(true);
+    expect(jsonbTextBytes(cut)).toBeLessThanOrEqual(MAX_ENVELOPE_JSONB_TEXT_BYTES);
+  });
+
+  test('the jsonb bound keeps a margin under the server limit', () => {
+    expect(MAX_ENVELOPE_JSONB_TEXT_BYTES).toBeLessThanOrEqual(65536 - 1024);
+  });
+});
