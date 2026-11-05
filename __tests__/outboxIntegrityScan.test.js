@@ -371,7 +371,9 @@ test('a legacy row discovered after open is adopted before reset and uploaded as
   expect(log).not.toHaveBeenCalled();
 });
 
-test('T9: an EA edit to a Head Office child heals an unmarked 42501 by its stamped owner', async () => {
+// Lifecycle safety O1 (2026-11-05): the heal keeps the no-replay rule, so a refused edit is never
+// requeued. Resendable work still heals by its stamped owner, not by domain provenance.
+test('T9: an EA edit to a Head Office child is never requeued; a stamped insert still heals by its owner', async () => {
   const handle = await open();
   await db.runAsync("insert into programmes (id, code, name) values ('literacy', 'lit', 'Literacy')");
   await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
@@ -383,10 +385,15 @@ test('T9: an EA edit to a Head Office child heals an unmarked 42501 by its stamp
   expect(edit).toMatchObject({ owner_user_id: A, operation: 'update', payload: { created_by: B } });
   await handle.repositories.syncOutbox.markTerminalFailure(edit.id, { errorMessage: '42501: row-level security' });
   await db.runAsync("update children set sync_status = 'terminal', last_sync_error = '42501' where id = 'office-child'");
+  await handle.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: 'office-child-2', operation: 'insert',
+    payload: { id: 'office-child-2', first_name: 'Other', last_name: 'Child', created_by: B } });
+  await handle.repositories.syncOutbox.markTerminalFailure('children:office-child-2:insert', { errorMessage: '42501: row-level security' });
   expect(await handle.services.syncEngine.requeueTerminalRlsFailures(A)).toBe(1);
-  expect(await handle.repositories.syncOutbox.getById(edit.id)).toMatchObject({
-    status: 'pending', owner_user_id: A, retry_count: 0, next_retry_at: null, last_error: null,
+  expect(await handle.repositories.syncOutbox.getById(edit.id)).toMatchObject({ status: 'terminal', owner_user_id: A });
+  expect(await db.getFirstAsync("select sync_status, created_by, reading_level from children where id = 'office-child'"))
+    .toEqual({ sync_status: 'terminal', created_by: B, reading_level: 'words' });
+  // A child INSERT keeps last_error as dispatch evidence (contract item 13).
+  expect(await handle.repositories.syncOutbox.getById('children:office-child-2:insert')).toMatchObject({
+    status: 'pending', owner_user_id: A, retry_count: 0, next_retry_at: null, last_error: '42501: row-level security',
   });
-  expect(await db.getFirstAsync("select sync_status, last_sync_error, created_by, reading_level from children where id = 'office-child'"))
-    .toEqual({ sync_status: 'pending', last_sync_error: null, created_by: B, reading_level: 'words' });
 });

@@ -8819,3 +8819,9 @@ tests. Final: unit 519 suites / 8,232 tests passed (`npx jest`); integration 111
 - The proof now matches content, not `updated_at`: a forced re-send refused again keeps the exit.
   The digest also leaves out the claim's send-time `row_version` stamp, because resendable inserts
   on versioned tables (children, enrollments, memberships) are stamped on every send.
+- Every retry entry point keeps the no-replay rule (Codex round-5 inventory item 14): the
+  auth-restore heal (`requeueTerminalRlsFailures` and `requeueTerminalRows`) and the reference-id
+  repair (`retargetOutboxPayloadReferences`) now leave refused archives, restores and edits alone,
+  in addition to the forced pass, the claim, Retry and the `markReady` paths. An unmarked 42501 on a
+  refused archive or edit therefore clears like a marked one. A `classes` hard_delete (no producer)
+  is no longer healed.

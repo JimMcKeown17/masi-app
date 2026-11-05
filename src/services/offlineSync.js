@@ -562,14 +562,11 @@ const isHealableRlsError = (record) => {
 const SELF_CLEARING_REFUSAL_CODES = Object.freeze([
   'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED', 'MV001', 'UPDATE_NOT_APPLIED', '42501',
 ]);
+// No retry entry point re-sends a refused archive, restore or edit (the auth-restore heal included),
+// so an unmarked 42501 on one clears like a marked one.
 export const refusalExit = (row) => {
   if (row?.status !== 'terminal' || row.error_code === 'FOREIGN_OWNER') return null;
-  if (
-    !isResendableRefusal(row)
-    && SELF_CLEARING_REFUSAL_CODES.includes(row.error_code)
-    // An unmarked 42501 is auth-loss collateral that the auth-restore heal requeues (Item 9).
-    && !(row.error_code === '42501' && isHealableRlsError(row))
-  ) return 'clears_itself';
+  if (!isResendableRefusal(row) && SELF_CLEARING_REFUSAL_CODES.includes(row.error_code)) return 'clears_itself';
   return 'ea_removes';
 };
 
@@ -2072,9 +2069,12 @@ export const createOutboxSyncEngine = ({
    */
   const requeueTerminalRlsFailures = async (userId) => {
     if (!userId) return 0;
+    // Lifecycle safety O1: a heal is a retry, so it keeps the no-replay rule. A refused archive,
+    // restore or edit is never requeued; it leaves through its delivered receipt.
     const heals = (await outboxRepository.getTerminalRecords()).filter(record => (
       record.owner_user_id === userId
       && record.last_error !== 'foreign_owner'
+      && isResendableRefusal(record)
       && isHealableRlsError(record)
     ));
     if (heals.length === 0) return 0;

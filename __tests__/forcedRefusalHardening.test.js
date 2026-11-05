@@ -7,7 +7,8 @@ import { createBetterSqliteTestDatabase } from '../test-support/betterSqliteAdap
 import { createSupabaseMock } from '../test-support/supabaseSyncMock';
 import { runMigrations } from '../src/db/migrations';
 import { createSyncOutboxRepository } from '../src/db/repositories/syncOutboxRepository';
-import { createOutboxSyncEngine, SYNC_BATCH_LIMITS } from '../src/services/offlineSync';
+import { createReferenceDataRepository } from '../src/db/repositories/referenceDataRepository';
+import { createOutboxSyncEngine, refusalExit, SYNC_BATCH_LIMITS } from '../src/services/offlineSync';
 
 // Lifecycle safety O1 item 5 (MA-BUG-20261104-021): a refused row forced into a pass and then
 // not attempted (deferred, user switch, thrown claim or request) stays refused. It never becomes
@@ -167,6 +168,46 @@ describe('refused rows in a forced pass', () => {
     await outbox.markReady(first);
     await outbox.markReadyMany([first, second]);
     expect(await statuses()).toEqual(['terminal', 'terminal']);
+  });
+
+  // Lifecycle safety O1: every retry entry point keeps the no-replay rule, not just the forced pass.
+  test('requeueTerminalRows never requeues a refused archive, restore or edit', async () => {
+    await seedRefusedInserts(1);
+    for (const operation of ['archive', 'restore', 'update']) {
+      await outbox.enqueue({ tableName: 'children', recordId: childId(1), operation, payload: { id: childId(1) } });
+      await outbox.markTerminalFailure(`children:${childId(1)}:${operation}`, { errorMessage: 'denied', errorCode: '42501' });
+    }
+    const ids = (await db.getAllAsync('select id from sync_outbox order by id')).map(row => row.id);
+    expect(await outbox.requeueTerminalRows(ids)).toBe(1);
+    expect(await db.getAllAsync('select operation, status from sync_outbox order by operation')).toEqual([
+      { operation: 'archive', status: 'terminal' },
+      { operation: 'insert', status: 'pending' },
+      { operation: 'restore', status: 'terminal' },
+      { operation: 'update', status: 'terminal' },
+    ]);
+  });
+
+  test('a reference-id repair never requeues a refused archive or edit; refused history is still retargeted', async () => {
+    await db.runAsync("insert into programmes (id, code, name, sync_status) values ('programme-local', 'literacy', 'Literacy', 'synced')");
+    await outbox.enqueue({ tableName: 'child_programme_enrollments', recordId: 'enr-1', operation: 'archive',
+      payload: { id: 'enr-1', child_id: childId(1), programme_id: 'programme-local', ended_at: '2026-11-04T08:00:00.000Z' } });
+    await outbox.markTerminalFailure('child_programme_enrollments:enr-1:archive', { errorMessage: 'not applied', errorCode: 'ARCHIVE_NOT_APPLIED' });
+    await outbox.enqueue({ tableName: 'sessions', recordId: 'session-1', operation: 'insert',
+      payload: { id: 'session-1', user_id: USER, programme_id: 'programme-local', session_date: '2026-11-04' } });
+    await outbox.markTerminalFailure('sessions:session-1:insert', { errorMessage: '42501-authenticated: denied', errorCode: '42501' });
+    const refusedArchive = await outbox.getById('child_programme_enrollments:enr-1:archive');
+    await createReferenceDataRepository({ database: db, tableName: 'programmes' })
+      .replaceFromServer([{ id: 'programme-canonical', code: 'literacy', name: 'Literacy' }]);
+    expect(await outbox.getById('child_programme_enrollments:enr-1:archive')).toEqual(refusedArchive);
+    expect(await outbox.getById('sessions:session-1:insert')).toMatchObject({
+      status: 'pending', payload: expect.objectContaining({ programme_id: 'programme-canonical' }),
+    });
+  });
+
+  test('with no retry entry point left for it, an unmarked 42501 archive clears itself like a marked one', () => {
+    const unmarked = { status: 'terminal', error_code: '42501', last_error: 'new row violates row-level security policy' };
+    expect(refusalExit({ ...unmarked, table_name: 'children', operation: 'archive' })).toBe('clears_itself');
+    expect(refusalExit({ ...unmarked, table_name: 'time_entries', operation: 'insert' })).toBe('ea_removes');
   });
 
   test('a refused archive, restore or edit is never claimed, even when asked directly', async () => {

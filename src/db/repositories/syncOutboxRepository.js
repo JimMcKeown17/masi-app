@@ -418,6 +418,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
               updated_at = ?
           where id = ?
             and status = 'terminal'
+            and ${RESENDABLE_REFUSAL_SQL}
         `, timestamp(), id);
         count += result?.changes || 0;
       }
