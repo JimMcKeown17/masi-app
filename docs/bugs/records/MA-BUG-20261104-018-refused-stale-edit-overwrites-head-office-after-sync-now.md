@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 90
 confidence_basis: "The designed override is asserted by a passing test (__tests__/rowVersionSend.test.js, terminal recovery after MV001) and documented in the contract map; the server refusal is reproduced in Postgres 17 (L2 bumped-version cases); the full phone chain against Postgres was not replayed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -55,7 +55,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L2.group_ea.HO_no_version.sql
   - __tests__/rowVersionSend.test.js
   - documentation/rls-sync-contract-map.md
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/155
 
 data_safety_status: "a Head Office correction can be silently replaced by an older EA edit; the replaced values are not recoverable from the row itself, and the EA is never told"
 workaround_status: "none for the EA; Head Office can re-apply the correction if it notices; the overwritten value is not logged on the row"
@@ -167,6 +168,9 @@ Approved (fix step 7, OTA, with Jim's decision to reverse the override): the ser
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L2.child_ea.HO_bumps_version, L2.group_ea.restore_HO_bumps_version, L2.child_ea.HO_no_version, L2.group_ea.HO_no_version; rowVersionSend.test.js terminal recovery; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #155; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-stuck-items |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | App update published to channel `preview`, runtime 1.5.0, update group `8addaae6` from `feat/lifecycle-ota` fd053cfc (PR #163). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 

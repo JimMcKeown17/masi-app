@@ -16,14 +16,14 @@ severity_override: none
 priority: P1
 
 diagnosis_state: PROBABLE
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 70
 confidence_basis: "Mechanism traced step by step in the current source and the 1.5.0 pilot source and supported by executed single-EA archive runs (E1c, pg-results), but the two-EA (literacy plus numeracy) case itself was not executed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-05T00:50:00Z
 last_observed_at: 2026-11-05T00:50:00Z
 
@@ -48,7 +48,9 @@ field_report_ids: []
 support_incident_keys: []
 support_incident_signatures: []
 evidence_paths: []
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/156
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "No rows deleted. The child is archived and its class membership ended on the server for everyone; the other EA's phone hides the child. Head Office can reopen them."
 workaround_status: "Interim rule: EAs do not use Delete child until their phone shows the OTA updateId. The OTA part of the plan is a hard gate before real lessons."
@@ -161,6 +163,9 @@ lessons. Interim: EAs do not use Delete child until their phone shows the OTA up
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from code trace | Found by the plan's adversarial critic and spot-checked by Claude; no reproduction |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #156, #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-removal, feat/lifecycle-safety-server |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555; feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | Server batch applied to staging `segygjzpujphwvrubusm` at 15:39 UTC from `feat/lifecycle-safety-server` 09fb332a (PR #161; before/after checks in its build log, b15fb722); app update published to channel `preview`, runtime 1.5.0, update group `8addaae6` from `feat/lifecycle-ota` fd053cfc (PR #163). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 

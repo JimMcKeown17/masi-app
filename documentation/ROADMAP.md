@@ -595,7 +595,7 @@ the current-state model better than Zazi's per-session carry-forward.
   V8. Still to check on the 1.4.0 pilot build: Wrap up's "None of these yet" and header date
   button, and lesson advice after the known-letters fix (both postdate build 24); iPhone V1, V2
   and V4; ECD (no ECD class on staging). v1 has no timer. C4/C5 reader/receipt work remains
-  separate; release packs are letters-only (P11). The build log holds implementation and review
+  separate; release packs were letters-only (P11) until the draft content packs of 2026-11-05 added draft words, blends and books. The build log holds implementation and review
   evidence.
 
 ### Upload contract (before pilot; priority item 5)
@@ -805,8 +805,10 @@ Additional Head Office behavior retained from the Sprint 4 follow-up:
 - [ ] **Masi's second letter order edition:** add the edition schedule in the same migration that
   widens the class edition check constraint. The first edition, `2026-10-23`, needs no schedule
   ([ADR-0011](../docs/adr/0011-letter-order-edition-per-class-set-by-server.md)).
-- [ ] **Readers for the books v2 previews:** add readers to the new-order preview packs in the
-  early-reader-books project. They currently supply candidate word banks without readers.
+- [ ] **More books, then signed-off words:** adopt each new early-reader-books release pack
+  (`<language>-draft-content-v<N>`, built by `npm run app-pack`) as a new immutable version. The
+  v1 packs carry one isiXhosa book. In January 2027 the language team's signed-off lists replace
+  the draft words the same way. Never add content to the unmapped preview packs.
 - [ ] **One "current class" rule for delivery lists (deferred 2026-10-28).** The letter tracker
   and the Letter mastery ranking take a child's class from the active class membership. Class
   lists and Child Results' "Assess now" still use `children.class_id`. They agree today: on

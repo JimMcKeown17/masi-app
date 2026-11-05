@@ -16,14 +16,14 @@ severity_override: none
 priority: P3
 
 diagnosis_state: PROBABLE
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 60
 confidence_basis: "Code path traced on main and at f002e08: a forced pass claims terminal rows, and a deferred fallback record is reset with markReadyMany, which sets status pending with no status filter; the pass was not executed, so the budget and batch conditions that trigger it are unconfirmed."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-05T00:50:00Z
 last_observed_at: 2026-11-05T00:50:00Z
 
@@ -50,7 +50,8 @@ support_incident_signatures: []
 evidence_paths:
   - src/services/offlineSync.js
   - src/db/repositories/syncOutboxRepository.js
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/155
 
 data_safety_status: "no data lost; local rows and payloads are kept, but a refused item can silently change from needs attention to waiting, and its domain row can be re-stamped"
 workaround_status: "none needed; a later pass sends the item again, and it returns to terminal if the server refuses it again"
@@ -158,6 +159,9 @@ Approved (fix step 7, hardening, OTA): `markReadyMany` never demotes terminal ro
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | code trace of the cited source paths, no repro files |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #155; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-stuck-items |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | App update published to channel `preview`, runtime 1.5.0, update group `8addaae6` from `feat/lifecycle-ota` fd053cfc (PR #163). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 
