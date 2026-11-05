@@ -2193,7 +2193,14 @@ export const createOutboxSyncEngine = ({
     // resolved reader handle — resolving first and passing it would hit the query_only reader.
     await runRepositoryTransaction(database, async (txn) => {
       // Retry is a forced pass for one item: a refused archive, restore or edit is never re-sent.
-      const result = await txn.runAsync(`
+      const retried = await txn.getAllAsync(`
+        select id, operation from sync_outbox
+        where lower(table_name) = ?
+          and record_id = ?
+          and (status = 'failed' or (status = 'terminal' and ${RESENDABLE_REFUSAL_SQL}))
+      `, tableName, id);
+      if (retried.length === 0) return;
+      await txn.runAsync(`
         update sync_outbox
         set status = 'pending',
             retry_count = 0,
@@ -2201,12 +2208,12 @@ export const createOutboxSyncEngine = ({
             last_error = case when table_name = 'children' and operation = 'insert'
               then last_error else null end,
             updated_at = ?
-        where lower(table_name) = ?
-          and record_id = ?
-          and (status = 'failed' or (status = 'terminal' and ${RESENDABLE_REFUSAL_SQL}))
-      `, timestamp(), tableName, id);
+        where id in (${retried.map(() => '?').join(', ')})
+      `, timestamp(), ...retried.map((row) => row.id));
       const config = getConfig(tableName);
-      if (config && (result?.changes || 0) > 0) {
+      // A hard_delete has no domain row to mark pending (as in the auth-restore heal); a removed
+      // child's local row must not turn pending because its deletion is retried.
+      if (config && retried.some((row) => row.operation !== 'hard_delete')) {
         await setDomainSyncResult(txn, config.tableName, id, {
           syncStatus: 'pending',
           lastSyncError: null,

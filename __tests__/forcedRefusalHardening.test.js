@@ -242,6 +242,20 @@ describe('refused rows in a forced pass', () => {
       new Set(['child-gone']))).toBe('clears_itself');
   });
 
+  // Combined-OTA review item 4b: like the auth-restore heal, Retry leaves the removed child's
+  // domain row alone when it re-queues the deletion.
+  test('Retry on a refused Delete child re-queues it without marking the removed child pending', async () => {
+    await db.runAsync(`insert into children (id, first_name, last_name, created_by, archived_at, archive_reason, sync_status)
+      values ('child-gone', 'Amahle', 'Dlamini', ?, '2026-11-04T08:00:00.000Z', 'removed_by_ea', 'synced')`, USER);
+    await outbox.enqueue({ tableName: 'children', recordId: 'child-gone', operation: 'hard_delete', payload: { id: 'child-gone' } });
+    await outbox.markTerminalFailure('children:child-gone:hard_delete', { errorMessage: 'Child not in your delivery scope', errorCode: '42501' });
+    const { supabaseClient } = createSupabaseMock();
+    await engine(supabaseClient).retryFailedItem('children', 'child-gone');
+    expect(await outbox.getById('children:child-gone:hard_delete')).toMatchObject({ status: 'pending' });
+    expect(await db.getFirstAsync("select sync_status, archived_at from children where id = 'child-gone'"))
+      .toEqual({ sync_status: 'synced', archived_at: '2026-11-04T08:00:00.000Z' });
+  });
+
   test('a refused archive, restore or edit is never claimed, even when asked directly', async () => {
     await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
       values ('child-a', 'Amahle', 'Dlamini', ?, 'terminal')`, USER);
