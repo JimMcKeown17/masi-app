@@ -99,7 +99,17 @@ test('AppReleaseInfo sets the release in large tabular numerals and lets support
 
 test('AppReleaseInfo rows sit in one white group with a divider between rows, not after the last', () => {
   const ui = render(<AppReleaseInfo release={release} device={device} />);
-  expect(ui.getAllByTestId('list-row-divider')).toHaveLength(4);
+  expect(ui.getAllByTestId('list-row-divider')).toHaveLength(5);
+});
+
+test('AppReleaseInfo pairs short facts and gives the long ones a full row, so none breaks mid-value on a 360dp phone', () => {
+  // Measured with Figtree metrics: a half-width cell on 360dp is 131dp, but
+  // "2026-11-05 09:12 UTC" (textData) is 154dp and the project id (textCaption) is 140dp.
+  const ui = render(<AppReleaseInfo release={release} device={device} />);
+  const rows = ui.getAllByTestId('release-fact-row').map(row => row
+    .findAll(node => node.type === 'View' && node.props.accessible === true)
+    .map(node => node.props.accessibilityLabel.split(',')[0]));
+  expect(rows).toEqual([['Release'], ['Build', 'Channel'], ['Runtime', 'Update'], ['Running', 'Source'], ['Published'], ['Backend']]);
 });
 
 test('AppReleaseInfo for the built-in bundle shows no published time and says it is running the built-in bundle', () => {

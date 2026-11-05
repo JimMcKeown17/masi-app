@@ -19,7 +19,7 @@ function Fact({ label, value, note, large = false }) {
 
 // A ListGroup row: ListGroup passes showDivider to every row but the last.
 function FactRow({ children, showDivider = false }) {
-  return <View style={styles.row}>
+  return <View testID="release-fact-row" style={styles.row}>
     {children}
     {showDivider ? <View testID="list-row-divider" pointerEvents="none" style={styles.divider} /> : null}
   </View>;
@@ -48,12 +48,11 @@ export default function AppReleaseInfo({ release, device, platform = Platform })
       </FactRow>
       <FactRow>
         <Fact label="Running" value={shown(release.launch)} />
-        <Fact label="Published" value={shown(release.publishedAt)} />
-      </FactRow>
-      <FactRow>
         <Fact label="Source" value={shown(release.sourceCommit)} />
-        <Fact label="Backend" value={shown(release.backendTarget)} note={release.backendProjectId} />
       </FactRow>
+      {/* Full rows: on a 360dp phone a half cell is 131dp, the UTC time 154dp and the project id 140dp. */}
+      <FactRow><Fact label="Published" value={shown(release.publishedAt)} /></FactRow>
+      <FactRow><Fact label="Backend" value={shown(release.backendTarget)} note={release.backendProjectId} /></FactRow>
     </ListGroup>
     <Text style={styles.device}>{deviceLine}</Text>
   </View>;

@@ -140,8 +140,9 @@ Numbers count per runtime, so a new app version starts again: the first update f
 (group `8addaae6`, from `fd053cfc`) is 1.5.0's update 1, and a phone running it shows `1.5.0+?`.
 
 **Profile → App release** shows Release (large); Build (version and native build) and Channel;
-Runtime and Update (the first 8 characters of the update id); Running and Published (UTC); Source
-(commit) and Backend, with the project id under it. Device and OS sit in a caption under the
+Runtime and Update (the first 8 characters of the update id); Running (`Update`, `Built-in`, or
+`Development` for a Metro bundle) and Source (commit); Published (UTC, updates only); Backend, with
+the project id under it. Device and OS sit in a caption under the
 card. Incident receipts and support exports carry the same label in
 `application.releaseLabel`, plus `update.launch`, `update.otaRelease` and `update.createdAt`.
 
