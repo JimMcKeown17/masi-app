@@ -145,7 +145,13 @@ the interim sheet.
 it waits for, and the child's history, were skipped forever while staying `pending`. The reviewer
 reproduced this on real SQLite: 9 pending rows across 3 passes. Excluding the waiting deletion from
 blockers drained the chain in 2 passes.
-**Adopted:** O2 item 2, "A waiting deletion is not a blocked parent", plus a repeated-pass regression.
+**Adopted:** O2 item 2, "A children `hard_delete` is never a parent", plus a repeated-pass regression.
+
+**Round 4 (1 high).** The same waiting deletion also counted as FK retry evidence through
+`hasPendingRecord`, which does not filter by operation. A permanently refused relationship INSERT
+therefore retried forever and never reached O1's exit; the reviewer reproduced this over 10 passes.
+**Adopted:** the "never a parent" rule now covers retry evidence as well, plus an audit of every other
+outbox-reading mechanism, and a permanent-refusal regression.
 
 ## Live staging preflight (P0, done 2026-11-05 ~01:10Z, read-only)
 
@@ -547,17 +553,28 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
      land open, with the authority the rest of the family and the queued history need. The RPC then
      ends them server-side (actor-scoped). This answers review round 1 finding 5 (no open grant
      after an acknowledged removal) without stranding anything. History is never gated.
-   - **A waiting deletion is not a blocked parent** (review round 3). A children `hard_delete`
-     deferred by the retained-insert or relationship-family gate must **not** be registered through
-     `rememberBlockedRecord` (`offlineSync.js` ~1506-1511, ~1719-1723). It is a waiting destructive
-     operation, not a missing or failed FK parent. Otherwise every relationship INSERT and history row
-     for the child skips it as a blocked parent (~1593-1605), on every pass, while staying `pending`,
-     which is a permanent hold that O1 cannot release. Blockers for a genuinely unacknowledged child
-     INSERT stay as they are.
-   - Regression: repeated ordinary and forced passes, including a failed first upload. The
-     relationship INSERTs and history make progress while the deletion waits. The deletion completes
-     once those INSERTs are acknowledged, or once a terminal relationship INSERT leaves through O1's
-     exit.
+   - **A children `hard_delete` is never a parent** (review rounds 3 and 4). A deletion waiting on the
+     gate is a waiting destructive operation, not a missing or failed FK parent. It must be invisible to
+     every mechanism that infers parent state from the outbox:
+     - (i) blocker registration: it is not registered through `rememberBlockedRecord`
+       (`offlineSync.js` ~1506-1511, ~1719-1723). Otherwise every relationship INSERT and history row
+       for the child is skipped as blocked (~1593-1605) forever while `pending`;
+     - (ii) FK retry evidence: `computeEvidencePending` / `hasPendingRecord` (`offlineSync.js`
+       ~420-425, `syncOutboxRepository.js` ~119-129) must not count it as evidence that the child is
+       awaiting creation. Otherwise a permanently refused relationship INSERT (42501 after Head Office
+       ends access) is classified retryable forever and never reaches O1's exit;
+     - (iii) any other place the builder finds that reads the child's outbox rows to decide ordering,
+       blocking or retryability. Audit them all and list them in the build report.
+
+     A genuinely unacknowledged child INSERT keeps both roles, blocker and evidence, including while
+     it backs off.
+   - Regressions:
+     - repeated ordinary and forced passes, including a failed first upload: the relationship INSERTs
+       and history make progress while the deletion waits, and the deletion completes once they are
+       acknowledged;
+     - an acknowledged child, a relationship INSERT permanently refused with 42501, and a waiting
+       deletion: the INSERT becomes terminal, leaves through O1's delivered-receipt exit, and then the
+       deletion completes.
    - Test: an all-offline chain (create child → record a lesson, a tick, a class-scoped Battery Run
      and an assessment → Delete child → sync, including a failed first pass). Assert that all
      history and relationship evidence are delivered with no terminal rows, that the `hard_delete`
