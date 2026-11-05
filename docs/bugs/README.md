@@ -22,6 +22,7 @@ Sweep phone incident receipts and report what is unrecorded.
 | ID | Title | Severity | Priority | Diagnosis | Delivery | Verification | Known users | Cause confidence | Updated | Record |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 <!-- Rows are added newest first. -->
+| MA-BUG-20261105-006 | An app update published from main rolled every 1.5.0 phone back to code without the lifecycle fixes and the version card | S3 (3) | P2 | CONFIRMED | IN_PROGRESS | NOT_TESTED | unknown | 85% | 2026-11-05 | [record](records/MA-BUG-20261105-006-update-from-main-rolled-1-5-0-phones-back.md) |
 | MA-BUG-20261105-005 | The daily invariant check's documented command prints the command's help instead of running | S3 (1) | P3 | CONFIRMED | FIXED_IN_CODE | E2E_REPRO_CLOSED | 0 | 85% | 2026-11-05 | [record](records/MA-BUG-20261105-005-lifecycle-invariants-command-prints-cli-help.md) |
 | MA-BUG-20261105-004 | A missing build commit would reach the phone as an empty object and be reported as the commit | S3 (1) | P3 | PROBABLE | NO_FIX_PROPOSED | NOT_TESTED | 0 | 70% | 2026-11-05 | [record](records/MA-BUG-20261105-004-null-git-commit-reaches-phone-as-empty-object.md) |
 | MA-BUG-20261105-003 | A download that ends a row the office removed can fail on a row the phone made while its clock was fast | S3 (3) | P2 | PROBABLE | NO_FIX_PROPOSED | NOT_TESTED | 0 | 65% | 2026-11-05 | [record](records/MA-BUG-20261105-003-download-removal-can-fail-on-fast-clock-row.md) |
