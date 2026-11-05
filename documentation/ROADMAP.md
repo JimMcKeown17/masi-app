@@ -150,8 +150,10 @@ shape.
   rows and adopts legacy ownerless ones; shared auth-session persistence is fenced by admitted
   identity. The null-owner claim this item warned about is closed. Plan 3's sign-out questions,
   left-behind reporting, minimal incident envelope and legacy `masi.db` discovery are built.
-  The Profile App Release information was already delivered at the bottom of Profile: version,
-  build, backend, project, device and update id. The incident migration is on `masi-app-sqlite`
+  Profile's App release card (2026-11-05; it replaced the caption footer) shows the release
+  (`1.5.0`, `1.5.0+N` for the Nth update published with `npm run ota:publish`), build, channel,
+  runtime, short update id, launch, publish time, source commit, backend and project, with device
+  and OS under it. The incident migration is on `masi-app-sqlite`
   (2026-10-17, grants verified against S2), and D1 passed on the Galaxy A03s with Android build 8.
   **Still open before the field:**
   - **Sign-out copy:** a wording pass with Jim; the current sheet copy is provisional.

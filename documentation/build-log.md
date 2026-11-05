@@ -8954,3 +8954,75 @@ jest.integration.config.js`: 113 suites / 1,554 tests passed. Container `wo4-jso
   so the next pull converges it.
 - Verification (Node 20): `npx jest` 522 suites / 8,293 tests passed; `npx jest -c
   jest.integration.config.js` 113 suites / 1,555 tests passed.
+
+### 2026-11-05 — App release card and numbered app updates (`feat/app-release-card`)
+
+Jim could not tell whether his phone ran the new update: Profile's footer showed a 36-character
+update UUID in a caption line. Profile now has an **App release** card, and `npm run ota:publish`
+numbers every update so the card can say `1.5.0+2`.
+
+- **Release identity.** `getReleaseIdentity()` (`src/utils/releaseMetadata.js`) is the one source
+  for the card, receipts and exports: built-in bundle `1.5.0`; numbered update `1.5.0+N`; an update
+  published without the script `1.5.0+?` (never an invented number); a Metro bundle (no update id,
+  not embedded) is `Development`. `runtimeDiagnostics.application.releaseLabel` takes the new label
+  (was `1.5.0 (55)`; the build stays in `build`), and `update` gains `launch`, `otaRelease` and
+  `createdAt`. The incident RPC fixes only top-level envelope keys and requires `observed` to be an
+  object, so the nested additions are safe; `releaseIdentity()` (receipt promotion) still compares
+  version, build and update id only, and `read-support-incidents.cjs` does not parse the label.
+- **Where the number comes from on the phone.** expo-constants 18.0.13 (`src/Constants.ts`
+  163–168): on an update launch `Constants.expoConfig` is the running update manifest's
+  `extra.expoClient`; on a built-in launch it is the config embedded in the binary. eas-cli 26.0.0
+  evaluates `expo config --type public` with the parent environment merged in
+  (`build/project/expoConfig.js:28`, `build/utils/expoCli.js:89`) and publishes that as
+  `expoClient` (`build/project/publish.js:143`). So `MASI_OTA_RELEASE` → `extra.otaRelease` reaches
+  the phone the same way `extra.gitCommit` does. `npx expo config --type public` with
+  `MASI_OTA_RELEASE=2 MASI_OTA_PUBLISHED_AT=2026-11-05T09:11:02.000Z` printed `otaRelease: 2` and
+  the time; without them the keys are absent.
+- **Surprise: `@expo/config` turns a `null` in a dynamic config into `{}`** (`Serialize.js`
+  `serializeAndEvaluate`: `typeof null === 'object'`). A first version set `otaRelease: null` for
+  builds; `expo config` printed `{}`. The keys are now left out when unset, and the identity reads
+  config strings and numbers by type, so a `{}` can neither show nor crash Profile (it would have
+  thrown on `gitCommit.slice`). The same applies to the existing `gitCommit: null` fallback (git
+  unavailable while evaluating config): `getReleaseMetadata().gitCommit` would export `{}`. Not
+  fixed here; low impact, since EAS builds set `EAS_BUILD_GIT_COMMIT_HASH` and updates run git.
+- **Card.** `SectionHeader` + `ListGroup` after Legal: Release (`displayTitle`, tabular), Build |
+  Channel, Runtime | Update (8 characters), Running | Source, Published (UTC), Backend with the
+  project id under it; values selectable; a missing value is an em dash; device and OS in one
+  caption line under the card. **Deviation from the work order's pairing** (Running | Published,
+  Source | Backend): measured with Figtree's metrics, half a row on a 360dp phone is 131dp, but the
+  UTC time is 154dp and the project id 140dp (one word, so Android would break it mid-id). Those two
+  facts take full rows.
+- **`scripts/ota-publish.cjs`** (`npm run ota:publish -- --message "…" [--channel preview]
+  [--dry-run]`): refuses a dirty tree (untracked `node_modules`/`dist` aside) or a HEAD on no
+  `origin/` branch; reads the version from `app.config.js` and refuses a runtime policy other than
+  `appVersion`; pages `npx --yes eas-cli@26.0.0 update:list --branch <channel> --limit 50 --offset k
+  --json --non-interactive` (refuses any listing error, non-JSON, a group without a runtime, a page
+  from another branch, or more than 10,000 groups); N = groups for this runtime + 1, and never a
+  number already used in an `OTA <version>+N:` message (so deleting a group cannot repeat one);
+  publishes `update --channel c --environment c --non-interactive --message "OTA 1.5.0+N: … (abc1234)"`
+  with `MASI_OTA_RELEASE`/`MASI_OTA_PUBLISHED_AT`; then `env:exec c 'npm run sentry:sourcemaps'
+  --non-interactive`. A source-map failure says the update is out and prints the command. Argument
+  arrays throughout. `--dry-run` runs the same checks and the listing, then prints the number, the
+  message and both commands. `npx --yes` keeps a non-interactive run from waiting on an install
+  prompt. Only the refusal paths were run for real (offline); EAS was not called by this branch.
+- **Not verified here:** the card on a device (no build or OTA from this branch), the live
+  `update:list` JSON (the test fixture is shaped from the eas-cli 26.0.0 renderer source, not
+  captured), and the published manifest carrying `otaRelease` (the orchestrator's first publish and
+  a phone check close these).
+- Docs: DEPLOYMENT.md "Pushing an OTA Update" and "Release numbers: what the phone shows" (and the
+  `env:exec` syntax fix), design-system Profile section, CONTEXT.md **App release**, ROADMAP note.
+
+**Verification (Node 20).**
+- TDD: the new tests (`releaseIdentity`, `otaReleaseConfig`, `otaPublishScript`, the card tests in
+  `profileComponents`) and the updated ones (`runtimeDiagnostics` `1.2.0 (47)` → `1.2.0+?`,
+  `releaseMetadata`, `debugExport`, `ProfileScreen.releaseMetadata`) failed first for the intended
+  reason (missing module or function, the old label, config ignoring the env, the old footer), then
+  passed (6 suites / 83 tests). The serializer follow-up (4 suites / 39 tests) and the full-row
+  follow-up (`profileComponents` + `ProfileScreen.releaseMetadata`, 29 tests) went RED, then GREEN.
+- `npx jest -c jest.integration.config.js` on `baf6dbdc`: 113 suites / 1,555 tests passed.
+- `npx jest` during the work (load average ~90, three other worktrees running Jest): 520 of 525
+  suites, 8,357 of 8,366 tests; the 9 failures were 5 s timeouts and their knock-on unmounts in
+  `task5AuthRaces`, `LessonScreen`, `LessonWrapUp.save`, `signedInTree` and `NumeracyWrapUpScreen`,
+  none of which touch release code. Those 5 suites rerun with `--runInBand`: 110 tests passed.
+  `npx jest` again on `baf6dbdc` (load ~60): 525 suites / 8,365 tests passed, exit 0.
+- No SQL, sync or RLS change, so no PostgreSQL harness and no contract-map change. No lint script.
