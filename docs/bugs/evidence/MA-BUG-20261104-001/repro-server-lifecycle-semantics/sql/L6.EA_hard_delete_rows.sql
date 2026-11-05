@@ -1,0 +1,17 @@
+BEGIN;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('DELETE child_group_memberships C_DIRECT->G', $dml$DELETE FROM public.child_group_memberships WHERE id = '9b000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE child_class_memberships C_DIRECT->K', $dml$DELETE FROM public.child_class_memberships WHERE id = '9a000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE child_programme_enrollments C_DIRECT', $dml$DELETE FROM public.child_programme_enrollments WHERE id = 'a346575c-8206-5f67-97fa-8bd426dfee99' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE child_class_memberships C_CLASSONLY->K', $dml$DELETE FROM public.child_class_memberships WHERE id = '9a000000-0000-0000-0000-000000000002' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE child_ea_assignments (own)', $dml$DELETE FROM public.child_ea_assignments WHERE id = '72da7ecf-0b86-52c2-9b00-a7eafbeec2b9' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE class_ea_assignments (own)', $dml$DELETE FROM public.class_ea_assignments WHERE id = 'b593ffec-8582-5ad8-bec1-d586fdbe10a0' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE group_ea_assignments (own)', $dml$DELETE FROM public.group_ea_assignments WHERE id = 'c189a976-3679-542d-966d-c9e28c04112e' RETURNING id$dml$);
+SELECT harness.try_dml('DELETE groups G', $dml$DELETE FROM public.groups WHERE id = '7a000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('CGM_DIRECT_G after', 'public.child_group_memberships', '9b000000-0000-0000-0000-000000000001', ARRAY['id']);
+SELECT harness.peek('CCM_DIRECT after', 'public.child_class_memberships', '9a000000-0000-0000-0000-000000000001', ARRAY['id']);
+SELECT harness.peek('CPE_DIRECT after', 'public.child_programme_enrollments', 'a346575c-8206-5f67-97fa-8bd426dfee99', ARRAY['id']);
+ROLLBACK;

@@ -1,0 +1,15 @@
+BEGIN;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('insert (insert-or-ignore) first time', $dml$INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by) VALUES ('75ef5e60-8ebf-5380-97f9-2d0af1d91184', '1a000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000007', TIMESTAMPTZ '2026-10-01 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+SELECT harness.try_dml('archive', $dml$UPDATE public.child_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-10-15 08:00:00+02', row_version = '2' WHERE id = '75ef5e60-8ebf-5380-97f9-2d0af1d91184' RETURNING id$dml$);
+SELECT harness.try_dml('re-assign: same fixed id insert-or-ignore (new assigned_at, no unassigned_at)', $dml$INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by) VALUES ('75ef5e60-8ebf-5380-97f9-2d0af1d91184', '1a000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000007', TIMESTAMPTZ '2026-11-04 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+SELECT harness.try_dml('batched form of the same insert (multi-row VALUES, ignore duplicates)', $dml$INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by) VALUES ('75ef5e60-8ebf-5380-97f9-2d0af1d91184', '1a000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000007', TIMESTAMPTZ '2026-11-04 08:00:00+02', '1a000000-0000-0000-0000-000000000002'), ('64868c8c-21ac-52ba-9473-b6d2f23abe2c', '1a000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000006', TIMESTAMPTZ '2026-11-04 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('server row after re-assign', 'public.child_ea_assignments', '75ef5e60-8ebf-5380-97f9-2d0af1d91184', ARRAY['assigned_at', 'unassigned_at', 'row_version']);
+SELECT harness.q('active assignments EA_A->C_L7', $dml$SELECT id FROM public.child_ea_assignments WHERE user_id = '1a000000-0000-0000-0000-000000000002' AND child_id = '5a000000-0000-0000-0000-000000000007' AND unassigned_at IS NULL$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('contrast: a different id for the same pair would be accepted', $dml$INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by) VALUES ('65000000-0000-0000-0000-000000000077', '1a000000-0000-0000-0000-000000000002', '5a000000-0000-0000-0000-000000000007', TIMESTAMPTZ '2026-11-04 08:00:00+02', '1a000000-0000-0000-0000-000000000002') ON CONFLICT (id) DO NOTHING RETURNING id$dml$);
+ROLLBACK;

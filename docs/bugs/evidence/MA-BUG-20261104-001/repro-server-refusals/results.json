@@ -1,0 +1,2964 @@
+{
+  "generated_at": "2026-11-04T19:51:09.129Z",
+  "masi_commit": "8b79eae58699b4d591043368eb4e537868a6e048",
+  "migrations_loaded": 41,
+  "db_today_sast": "2026-11-04",
+  "timeline": {
+    "GRANT_START": "2026-09-01T07:00:00+02:00",
+    "WORK_DAY": "2026-10-28",
+    "WORK_AT": "2026-10-28T09:00:00+02:00",
+    "ARCHIVE_AT": "2026-11-02T10:00:00+02:00"
+  },
+  "results": [
+    {
+      "id": "S0",
+      "title": "Baseline control: no lifecycle change",
+      "claim": "Control: every payload used below is valid and accepted while all grants are active (so later refusals are caused by the lifecycle change, not by a bad payload).",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000001"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000001"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_D",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_D",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_D",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.class",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.class.CHILD_E",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_E",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_E",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000001",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          },
+          {
+            "id": "87000000-0000-0000-0000-000000000002",
+            "class_id": "CLASS_K",
+            "group_id": null,
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.326542+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": null,
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": null,
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000001",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          },
+          {
+            "id": "b7000000-0000-0000-0000-000000000002",
+            "items": 3,
+            "child_id": "CHILD_D",
+            "programme": "literacy"
+          },
+          {
+            "id": "b7000000-0000-0000-0000-000000000003",
+            "items": 3,
+            "child_id": "CHILD_E",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000001",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "e7000000-0000-0000-0000-000000000001"
+          }
+        ],
+        "letter_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "d7000000-0000-0000-0000-000000000001"
+          }
+        ],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000001"
+          },
+          {
+            "child_id": "CHILD_D",
+            "session_id": "87000000-0000-0000-0000-000000000001"
+          },
+          {
+            "child_id": "CHILD_E",
+            "session_id": "87000000-0000-0000-0000-000000000002"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S0.sql"
+    },
+    {
+      "id": "S1",
+      "title": "EA's own archive of child C uploads before C's earlier history (Masi push order)",
+      "claim": "After the phone's own archiveChild syncs (push orders 2-7), work recorded before the archive (push orders 12-17) is refused.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 2,
+          "mirrors": "outbox archive -> .update([\"archived_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.children.CHILD_C",
+          "returned": [
+            {
+              "id": "CHILD_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 3,
+          "mirrors": "outbox archive -> .update([\"ended_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_programme_enrollments.CPE_C",
+          "returned": [
+            {
+              "id": "CPE_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 4,
+          "mirrors": "outbox archive -> .update([\"exited_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_class_memberships.CCM_C",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 5,
+          "mirrors": "outbox archive -> .update([\"removed_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 7,
+          "mirrors": "outbox archive -> .update([\"unassigned_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_ea_assignments.CA_C",
+          "returned": [
+            {
+              "id": "CA_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.class",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.class.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": false,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": false,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000101",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          },
+          {
+            "id": "87000000-0000-0000-0000-000000000102",
+            "class_id": "CLASS_K",
+            "group_id": null,
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.393651+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": "2026-11-02T08:00:00+00:00",
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": "2026-11-02T08:00:00+00:00",
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000101",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000101",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": []
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S1.sql"
+    },
+    {
+      "id": "S1-control",
+      "title": "Same work and archive, but history uploads BEFORE the archive",
+      "claim": "Control: if the history is pushed before the lifecycle rows, everything lands and the archive still applies.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000201"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000201"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.class",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.class.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 2,
+          "mirrors": "outbox archive -> .update([\"archived_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.children.CHILD_C",
+          "returned": [
+            {
+              "id": "CHILD_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 3,
+          "mirrors": "outbox archive -> .update([\"ended_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_programme_enrollments.CPE_C",
+          "returned": [
+            {
+              "id": "CPE_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 4,
+          "mirrors": "outbox archive -> .update([\"exited_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_class_memberships.CCM_C",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 5,
+          "mirrors": "outbox archive -> .update([\"removed_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 7,
+          "mirrors": "outbox archive -> .update([\"unassigned_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_ea_assignments.CA_C",
+          "returned": [
+            {
+              "id": "CA_C"
+            }
+          ],
+          "rows_affected": 1
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": false,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": false,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000201",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          },
+          {
+            "id": "87000000-0000-0000-0000-000000000202",
+            "class_id": "CLASS_K",
+            "group_id": null,
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.462251+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": "2026-11-02T08:00:00+00:00",
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": "2026-11-02T08:00:00+00:00",
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000201",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000201",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "e7000000-0000-0000-0000-000000000201"
+          }
+        ],
+        "letter_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "d7000000-0000-0000-0000-000000000201"
+          }
+        ],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000201"
+          },
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000202"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S1-control.sql"
+    },
+    {
+      "id": "S1b",
+      "title": "S1 with child C created by EA_A (creator arm)",
+      "claim": "The children creator arm does not rescue attendees/mastery: write_for_child has no creator arm.",
+      "setup": "UPDATE public.children SET created_by = '17000000-0000-0000-0000-000000000002' WHERE id = '57000000-0000-0000-0000-000000000001';",
+      "steps": [
+        {
+          "push_order": 2,
+          "mirrors": "outbox archive -> .update([\"archived_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.children.CHILD_C",
+          "returned": [
+            {
+              "id": "CHILD_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 3,
+          "mirrors": "outbox archive -> .update([\"ended_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_programme_enrollments.CPE_C",
+          "returned": [
+            {
+              "id": "CPE_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 4,
+          "mirrors": "outbox archive -> .update([\"exited_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_class_memberships.CCM_C",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 5,
+          "mirrors": "outbox archive -> .update([\"removed_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 7,
+          "mirrors": "outbox archive -> .update([\"unassigned_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_ea_assignments.CA_C",
+          "returned": [
+            {
+              "id": "CA_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": false,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": false,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000301",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.530769+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": "2026-11-02T08:00:00+00:00",
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": "2026-11-02T08:00:00+00:00",
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000301",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000301",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": []
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S1b.sql"
+    },
+    {
+      "id": "S2",
+      "title": "Head Office ends C's direct assignment and memberships; EA_A then uploads earlier work",
+      "claim": "A Head Office end (no child archive) refuses the same history as S1.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_ea_assignments.CA_C",
+          "returned": [
+            {
+              "id": "CA_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_class_memberships.CCM_C",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.class",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.class.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": false,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": false,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000401",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          },
+          {
+            "id": "87000000-0000-0000-0000-000000000402",
+            "class_id": "CLASS_K",
+            "group_id": null,
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.600121+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000401",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000401",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": []
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S2.sql"
+    },
+    {
+      "id": "S3",
+      "title": "Group-only child D: EA_A archives group G, then uploads the earlier group session",
+      "claim": "After archiveGroup syncs, the session for G lands (held-group rule) but the attendee row for group-only child D is refused.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 1,
+          "mirrors": "outbox archive -> .update([\"archived_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.groups.GROUP_G",
+          "returned": [
+            {
+              "id": "GROUP_G"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 5,
+          "mirrors": "outbox archive -> .update([\"removed_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 5,
+          "mirrors": "outbox archive -> .update([\"removed_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_group_memberships.CGM_D",
+          "returned": [
+            {
+              "id": "CGM_D"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 6,
+          "mirrors": "outbox archive -> .update([\"unassigned_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.group_ea_assignments.GEA_G",
+          "returned": [
+            {
+              "id": "GEA_G"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore (offlineSync.js:794-803)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees batched merge upsert, all ready rows in one request (offlineSync.js:806-818, BATCHABLE_UPSERT_TABLES :215-223)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendees.batch[C,D]",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 13,
+          "mirrors": "per-record fallback after batch failure (offlineSync.js:1311-1400)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C(fallback single)",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "per-record fallback after batch failure (offlineSync.js:1311-1400)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_D(fallback single)",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_D",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_D",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": false,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000501",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.66166+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": null,
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": "2026-11-02T08:00:00+00:00",
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "GROUP_G.archived_at": "2026-11-02T08:00:00+00:00"
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000502",
+            "items": 3,
+            "child_id": "CHILD_D",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000502",
+            "child_id": "CHILD_D",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000501"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S3.sql"
+    },
+    {
+      "id": "S4",
+      "title": "Programme switch: Head Office ends EA_A's literacy programme assignment and opens numeracy",
+      "claim": "Earlier literacy work (session, assessment, run) is refused once the literacy staff_programme_assignment has ended.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.staff_programme_assignments.SPA_LIT",
+          "returned": [
+            {
+              "id": "SPA_LIT"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.open.staff_programme_assignments.SPA_NUM",
+          "returned": [
+            {
+              "id": "SPA_NUM"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"sessions\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "detail": null,
+          "message": "No authority to start run",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "detail": null,
+          "message": "No authority to submit assessment",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000601"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000601"
+            }
+          ],
+          "rows_affected": 1
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.72573+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 1,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": null,
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": null,
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": "2026-11-02T08:00:00+00:00",
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [],
+        "battery_runs": [],
+        "skill_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "numeracy",
+            "correction_id": "e7000000-0000-0000-0000-000000000601"
+          }
+        ],
+        "letter_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "numeracy",
+            "correction_id": "d7000000-0000-0000-0000-000000000601"
+          }
+        ],
+        "session_attendees": []
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S4.sql"
+    },
+    {
+      "id": "S4b",
+      "title": "Programme switch after the session already landed: attendee and RPC uploads only",
+      "claim": "Control for S4: is the attendee itself programme-checked, or only refused because its parent session was refused?",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore (offlineSync.js:794-803)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group(before switch)",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.staff_programme_assignments.SPA_LIT",
+          "returned": [
+            {
+              "id": "SPA_LIT"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.open.staff_programme_assignments.SPA_NUM",
+          "returned": [
+            {
+              "id": "SPA_NUM"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "detail": null,
+          "message": "No authority to start run",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "detail": null,
+          "message": "No authority to submit assessment",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000701"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000701"
+            }
+          ],
+          "rows_affected": 1
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000701",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.783761+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 1,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": null,
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": null,
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": "2026-11-02T08:00:00+00:00",
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [],
+        "battery_runs": [],
+        "skill_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "numeracy",
+            "correction_id": "e7000000-0000-0000-0000-000000000701"
+          }
+        ],
+        "letter_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "numeracy",
+            "correction_id": "d7000000-0000-0000-0000-000000000701"
+          }
+        ],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000701"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S4b.sql"
+    },
+    {
+      "id": "S5",
+      "title": "Lost-response replay after C's grants end (row already on the server)",
+      "claim": "A replay of a session/attendee the server already holds is refused 42501 once authority is lost; RPC replays are acknowledged.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 12,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.attendee.group.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 14,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000801"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000801"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_ea_assignments.CA_C",
+          "returned": [
+            {
+              "id": "CA_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_class_memberships.CCM_C",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "exact replay of the client call",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.session.group(insert-or-ignore)",
+          "returned": [],
+          "rows_affected": 0
+        },
+        {
+          "push_order": 13,
+          "mirrors": "exact replay of the client call",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.attendee.group.CHILD_C(merge upsert)",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": "exact replay",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "unchanged"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": "exact replay",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "already_present"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": "exact replay",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000801"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": "exact replay",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000801"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "sensitivity: same merge upsert with no RETURNING clause, run as a plain statement",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "VARIANT(not client).attendee merge upsert without RETURNING",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": null,
+          "mirrors": "sensitivity: same insert-or-ignore with no RETURNING clause, run as a plain statement",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "VARIANT(not client).session insert-or-ignore without RETURNING",
+          "returned": null,
+          "rows_affected": 0
+        },
+        {
+          "push_order": null,
+          "mirrors": "sensitivity: ON CONFLICT DO NOTHING instead of merge",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "VARIANT(not client).attendee insert-or-ignore",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": false,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": false,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000801",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.841824+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000801",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000801",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "e7000000-0000-0000-0000-000000000801"
+          }
+        ],
+        "letter_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "d7000000-0000-0000-0000-000000000801"
+          }
+        ],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000801"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S5.sql"
+    },
+    {
+      "id": "S5b",
+      "title": "Lost-response replay after a programme switch",
+      "claim": "A replayed session insert-or-ignore for a row the server already holds is refused 42501 once the programme assignment ends.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 12,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.attendee.group.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": "first send, response lost",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "first.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.staff_programme_assignments.SPA_LIT",
+          "returned": [
+            {
+              "id": "SPA_LIT"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.open.staff_programme_assignments.SPA_NUM",
+          "returned": [
+            {
+              "id": "SPA_NUM"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "exact replay of the client call",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.session.group(insert-or-ignore)",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"sessions\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 13,
+          "mirrors": "exact replay of the client call",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.attendee.group.CHILD_C(merge upsert)",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": "exact replay",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "replay.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "already_present"
+            }
+          ],
+          "rows_affected": 1
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000901",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.912348+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 1,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": null,
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": null,
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": "2026-11-02T08:00:00+00:00",
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000901",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000901"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S5b.sql"
+    },
+    {
+      "id": "S6a",
+      "title": "Academic-year rollover while EA_A is still assigned to C",
+      "claim": "A year flip alone does not refuse earlier-year work while current authority remains.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.year.deactivate_2026",
+          "returned": [
+            {
+              "label": "2026"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.year.activate_2027",
+          "returned": [
+            {
+              "label": "2027"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "d7000000-0000-0000-0000-000000000a01"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "returned": [
+            {
+              "outcome": "applied",
+              "confirmed": true,
+              "changed_at": "2026-10-28T07:00:00+00:00",
+              "changed_by": "EA_A",
+              "correction_id": "e7000000-0000-0000-0000-000000000a01"
+            }
+          ],
+          "rows_affected": 1
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000a01",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:08.97012+00:00",
+          "active_year": "2027",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": null,
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": null,
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000a01",
+            "items": 3,
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000a01",
+            "child_id": "CHILD_C",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "e7000000-0000-0000-0000-000000000a01"
+          }
+        ],
+        "letter_mastery": [
+          {
+            "child_id": "CHILD_C",
+            "programme": "literacy",
+            "correction_id": "d7000000-0000-0000-0000-000000000a01"
+          }
+        ],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000a01"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S6a.sql"
+    },
+    {
+      "id": "S6b",
+      "title": "Academic-year rollover after C's grants ended (previous-year assessment/run)",
+      "claim": "After the active year flips, an assessment/run dated in the previous year is refused when only historical (held) grants exist.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_ea_assignments.CA_C",
+          "returned": [
+            {
+              "id": "CA_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_class_memberships.CCM_C",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.end.child_group_memberships.CGM_C",
+          "returned": [
+            {
+              "id": "CGM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.year.deactivate_2026",
+          "returned": [
+            {
+              "label": "2026"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": null,
+          "mirrors": "Head Office SQL as postgres (superuser, bypasses RLS; triggers still fire)",
+          "ok": true,
+          "role": "postgres",
+          "actor": null,
+          "label": "ho.year.activate_2027",
+          "returned": [
+            {
+              "label": "2027"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore: .upsert(payload,{onConflict:'id',ignoreDuplicates:true}) (offlineSync.js:794-803, INSERT_OR_IGNORE_TABLES :224-227)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.group",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees merge upsert: .upsert(payloads,{onConflict:'id',ignoreDuplicates:false}) (offlineSync.js:806-818 batch / :794-803 single)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.group.CHILD_C",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_C",
+          "detail": null,
+          "message": "No authority to start run",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_C",
+          "detail": null,
+          "message": "No authority to submit assessment",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 17,
+          "mirrors": ".rpc('set_skill_mastery',args) (offlineSync.js:707-720)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.skill_mastery.CHILD_C",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": false,
+          "CHILD_D": true,
+          "CHILD_E": true
+        },
+        "delivers_to_child_C": false,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000b01",
+            "class_id": "CLASS_K",
+            "group_id": "GROUP_G",
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:09.029882+00:00",
+          "active_year": "2027",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": "2026-11-02T08:00:00+00:00",
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": "CLASS_K",
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CEA_K.unassigned_at": null,
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": null,
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [],
+        "battery_runs": [],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": []
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S6b.sql"
+    },
+    {
+      "id": "S7",
+      "title": "Class-only control child E: EA_A archives class K the Masi way",
+      "claim": "After archiveClass syncs, an attendee row for class-only child E is refused; the assessment lands via the held-grant arm.",
+      "setup": null,
+      "steps": [
+        {
+          "push_order": 1,
+          "mirrors": "outbox archive -> .update([\"archived_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.classes.CLASS_K",
+          "returned": [
+            {
+              "id": "CLASS_K"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 2,
+          "mirrors": "children 'update' (UPDATE_BY_ID_TABLES) -> .update(patch).eq('id').select('id') (offlineSync.js:769-792); archiveClass enqueues it for delivery children only (classesRepository.js:283-305)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "update.children.CHILD_C.class_id_null",
+          "returned": [
+            {
+              "id": "CHILD_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 4,
+          "mirrors": "outbox archive -> .update([\"exited_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.child_class_memberships.CCM_C.delivery_child_only",
+          "returned": [
+            {
+              "id": "CCM_C"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 6,
+          "mirrors": "outbox archive -> .update([\"unassigned_at\",\"row_version\"]).eq('id').select('id') (offlineSync.js:749-768, ARCHIVE_SERVER_COLUMNS :247-258, send-time row_version syncOutboxRepository.js:184-200)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "archive.class_ea_assignments.CEA_K",
+          "returned": [
+            {
+              "id": "CEA_K"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 12,
+          "mirrors": "sessions insert-or-ignore (offlineSync.js:794-803)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.session.class",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "session_attendees batched merge upsert (offlineSync.js:806-818)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendees.batch[C,E]",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 13,
+          "mirrors": "per-record fallback (offlineSync.js:1311-1400)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.class.CHILD_C(fallback single)",
+          "returned": [
+            {
+              "?column?": 1
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 13,
+          "mirrors": "per-record fallback (offlineSync.js:1311-1400)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.attendee.class.CHILD_E(fallback single)",
+          "detail": null,
+          "message": "new row violates row-level security policy for table \"session_attendees\"",
+          "sqlstate": "42501"
+        },
+        {
+          "push_order": 14,
+          "mirrors": ".rpc('save_battery_run',{p_run}) (offlineSync.js:678-689)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.battery_run.CHILD_E",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 15,
+          "mirrors": ".rpc('submit_assessment',{p_assessment,p_items}) (offlineSync.js:665-676)",
+          "ok": true,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.assessment.CHILD_E",
+          "returned": [
+            {
+              "result": "inserted"
+            }
+          ],
+          "rows_affected": 1
+        },
+        {
+          "push_order": 16,
+          "mirrors": ".rpc('set_letter_mastery',args) (offlineSync.js:691-704)",
+          "ok": false,
+          "hint": null,
+          "role": "authenticated",
+          "actor": "EA_A",
+          "label": "upload.letter_mastery.CHILD_E",
+          "detail": null,
+          "message": "Active child delivery assignment required",
+          "sqlstate": "42501"
+        }
+      ],
+      "ea_a_authority_after": {
+        "label": "__ea_a_authority_after__",
+        "write_for_child": {
+          "CHILD_C": true,
+          "CHILD_D": true,
+          "CHILD_E": false
+        },
+        "delivers_to_child_C": true,
+        "held_group_G_literacy": true
+      },
+      "state_after": {
+        "label": "__state_after__",
+        "sessions": [
+          {
+            "id": "87000000-0000-0000-0000-000000000c02",
+            "class_id": "CLASS_K",
+            "group_id": null,
+            "programme": "literacy"
+          }
+        ],
+        "lifecycle": {
+          "db_now": "2026-11-04T19:51:09.087812+00:00",
+          "active_year": "2026",
+          "SPA_NUM.open": 0,
+          "CPE_C.ended_at": null,
+          "CCM_C.exited_at": "2026-11-02T08:00:00+00:00",
+          "CCM_E.exited_at": null,
+          "CGM_C.removed_at": null,
+          "CGM_D.removed_at": null,
+          "CHILD_C.class_id": null,
+          "SPA_LIT.ended_at": null,
+          "CA_C.unassigned_at": null,
+          "CEA_K.unassigned_at": "2026-11-02T08:00:00+00:00",
+          "CHILD_C.archived_at": null,
+          "CLASS_K.archived_at": "2026-11-02T08:00:00+00:00",
+          "GEA_G.unassigned_at": null,
+          "GROUP_G.archived_at": null
+        },
+        "assessments": [
+          {
+            "id": "b7000000-0000-0000-0000-000000000c03",
+            "items": 3,
+            "child_id": "CHILD_E",
+            "programme": "literacy"
+          }
+        ],
+        "battery_runs": [
+          {
+            "id": "a7000000-0000-0000-0000-000000000c03",
+            "child_id": "CHILD_E",
+            "programme": "literacy"
+          }
+        ],
+        "skill_mastery": [],
+        "letter_mastery": [],
+        "session_attendees": [
+          {
+            "child_id": "CHILD_C",
+            "session_id": "87000000-0000-0000-0000-000000000c02"
+          }
+        ]
+      },
+      "sql_file": "/private/tmp/claude-501/-Users-jimmckeown-Development-masi-app/a4d0c187-1c32-4451-9054-fbfd3426b9d3/scratchpad/repro/repro-server-refusals/sql/S7.sql"
+    }
+  ]
+}

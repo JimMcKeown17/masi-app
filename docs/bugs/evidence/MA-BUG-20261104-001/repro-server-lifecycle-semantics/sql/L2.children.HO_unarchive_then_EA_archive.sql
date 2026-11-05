@@ -1,0 +1,14 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO un-archives C_EA after an earlier archive', $dml$UPDATE public.children SET archived_at = NULL, archived_by_user_id = NULL, archive_reason = NULL WHERE id = '5a000000-0000-0000-0000-000000000004' RETURNING id$dml$);
+SELECT harness.try_dml('HO un-archives C_DIRECT', $dml$UPDATE public.children SET archived_at = NULL WHERE id = '5a000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A queued archive C_EA', $dml$UPDATE public.children SET archived_at = TIMESTAMPTZ '2026-11-02 10:00:00+02', row_version = '2' WHERE id = '5a000000-0000-0000-0000-000000000004' RETURNING id$dml$);
+SELECT harness.try_dml('EA_A queued archive C_DIRECT', $dml$UPDATE public.children SET archived_at = TIMESTAMPTZ '2026-11-02 10:00:00+02', row_version = '2' WHERE id = '5a000000-0000-0000-0000-000000000001' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('C_EA', 'public.children', '5a000000-0000-0000-0000-000000000004', ARRAY['archived_at', 'row_version']);
+SELECT harness.peek('C_DIRECT', 'public.children', '5a000000-0000-0000-0000-000000000001', ARRAY['archived_at', 'row_version']);
+ROLLBACK;

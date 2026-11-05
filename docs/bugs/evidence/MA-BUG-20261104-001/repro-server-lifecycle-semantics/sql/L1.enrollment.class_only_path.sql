@@ -1,0 +1,11 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends enrolment', $dml$UPDATE public.child_programme_enrollments SET ended_at = TIMESTAMPTZ '2026-11-03 09:00:00+02' WHERE id = 'e960924b-4786-577a-8df0-12f787c9cb02' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A queued archive', $dml$UPDATE public.child_programme_enrollments SET ended_at = TIMESTAMPTZ '2026-11-02 10:00:00+02', row_version = '2' WHERE id = 'e960924b-4786-577a-8df0-12f787c9cb02' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('final row', 'public.child_programme_enrollments', 'e960924b-4786-577a-8df0-12f787c9cb02', ARRAY['ended_at', 'row_version']);
+ROLLBACK;

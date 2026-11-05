@@ -1,0 +1,12 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends assignment (row_version omitted => stays 1)', $dml$UPDATE public.class_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02', handover_reason = 'HO handover' WHERE id = 'b593ffec-8582-5ad8-bec1-d586fdbe10a0' RETURNING id$dml$);
+SELECT harness.peek('after HO', 'public.class_ea_assignments', 'b593ffec-8582-5ad8-bec1-d586fdbe10a0', ARRAY['unassigned_at', 'row_version', 'handover_reason']);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A later-arriving archive with a different unassigned_at, row_version 2', $dml$UPDATE public.class_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-10-30 07:00:00+02', handover_reason = NULL, row_version = '2' WHERE id = 'b593ffec-8582-5ad8-bec1-d586fdbe10a0' RETURNING id$dml$);
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.peek('final', 'public.class_ea_assignments', 'b593ffec-8582-5ad8-bec1-d586fdbe10a0', ARRAY['unassigned_at', 'row_version', 'handover_reason']);
+ROLLBACK;

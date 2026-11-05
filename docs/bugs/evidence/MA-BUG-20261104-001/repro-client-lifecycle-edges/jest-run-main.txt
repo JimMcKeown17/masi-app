@@ -1,0 +1,292 @@
+  console.log
+    OBS {"scenario":"E1a","step":"before","readers":{"getClasses":["class-k"],"getMyChildren":["child-1"],"getAssessableChildren":["child-1(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"after-local-archive","outbox":[{"id":"child_class_memberships:ccm-1:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-1:update","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"class_ea_assignments:cea-a-k:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"classes:class-k:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}],"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"pass1","result":{"success":false,"totalTerminal":1,"totalRetriable":0},"calls":["update:classes:class-k [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":0}","update:children:child-1 [\"first_name\",\"last_name\",\"preferred_name\",\"date_of_birth\",\"age\",\"gender\",\"class_id\",\"hidden_at\",\"updated_at\",\"reading_level\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[{"id":"child_class_memberships:ccm-1:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"class_ea_assignments:cea-a-k:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"classes:class-k:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"classes archive did not acknowledge exactly one updated row"}],"server":{"class":{"row_version":1,"id":"class-k","school_id":"school-1","name":"Class class-k","grade":"2","academic_year_id":"year-2026","created_by":"head-office","archived_at":null},"ceaA":{"row_version":1,"id":"cea-a-k","class_id":"class-k","ea_user_id":"ea-a","programme_id":"programme-a","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-10-20T07:00:00.000Z","created_by":"head-office"},"child1ClassId":null,"ccm1ExitedAt":null}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"after-pull","pulled":{"scopes":{"programmeAssignment":[null],"children":["child-1"],"childEaAssignments":["cha-a-1"],"childProgrammeEnrollments":["cpe-1"],"childClassMemberships":["ccm-1"],"classes":["class-k"],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":[],"classes":[],"children":[],"memberships":[]}}},"localClass":{"archived_at":null,"sync_status":"synced","last_sync_error":"classes archive did not acknowledge exactly one updated row"},"outbox":[{"id":"child_class_memberships:ccm-1:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"class_ea_assignments:cea-a-k:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"classes:class-k:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"classes archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"forced-sync-now","result":{"success":false,"totalTerminal":1},"calls":["update:classes:class-k [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":0}"],"outbox":[{"id":"child_class_memberships:ccm-1:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"class_ea_assignments:cea-a-k:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"classes:class-k:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"classes archive did not acknowledge exactly one updated row"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"ordinary-pass-after","result":{"success":true,"totalTerminal":0},"calls":["update:child_class_memberships:ccm-1 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:class_ea_assignments:cea-a-k [\"unassigned_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[{"id":"classes:class-k:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"classes archive did not acknowledge exactly one updated row"}],"server":{"class":{"row_version":1,"id":"class-k","school_id":"school-1","name":"Class class-k","grade":"2","academic_year_id":"year-2026","created_by":"head-office","archived_at":null},"ccm1":{"row_version":2,"id":"ccm-1","child_id":"child-1","class_id":"class-k","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":"2026-11-04T19:55:25.982Z","created_by":"head-office"},"ceaA":{"row_version":2,"id":"cea-a-k","class_id":"class-k","ea_user_id":"ea-a","programme_id":"programme-a","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-11-04T19:55:25.982Z","created_by":"head-office"}}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"final-pull","pulled":{"scopes":{"programmeAssignment":[null],"children":["child-1"],"childEaAssignments":["cha-a-1"],"childProgrammeEnrollments":["cpe-1"],"childClassMemberships":[],"classes":[],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":[],"classes":[],"children":[],"memberships":[]}}},"localClass":{"archived_at":null,"sync_status":"terminal","last_sync_error":"classes archive did not acknowledge exactly one updated row"},"localChild":{"class_id":null,"archived_at":null,"sync_status":"synced"},"localCea":{"unassigned_at":"2026-11-04T19:55:25.982Z","sync_status":"synced"},"outbox":[{"id":"classes:class-k:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"classes archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"replay-ho-reassigns-then-pull","localClass":{"archived_at":null,"sync_status":"synced"},"localCea":{"unassigned_at":null,"sync_status":"synced"},"outbox":[{"id":"classes:class-k:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"classes archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":["class-k"],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"replay-sync-now","calls":["update:classes:class-k [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[],"serverClass":{"row_version":2,"id":"class-k","school_id":"school-1","name":"Class class-k","grade":"2","academic_year_id":"year-2026","created_by":"head-office","archived_at":"2026-11-04T19:55:25.982Z"},"serverCeaB":{"row_version":1,"id":"cea-b-k","class_id":"class-k","ea_user_id":"ea-b","programme_id":"programme-a","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":null,"created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1a","step":"replay-final-pull","localClass":{"archived_at":"2026-11-04T19:55:25.982Z","sync_status":"synced"},"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"after-local-delete","deleteIfNoHistory":false,"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_ea_assignments:cha-a-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"pass1","result":{"success":false,"totalTerminal":1,"totalRetriable":0},"calls":["update:children:child-2 [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":0}"],"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_ea_assignments:cha-a-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"cheaTableResult":{"success":false,"synced":0,"failed":0,"skipped":true,"skippedDependency":"children","skippedDependencyRecordId":"child-2"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"pass2","result":{"success":false,"totalTerminal":2},"calls":["update:child_programme_enrollments:cpe-2 [\"ended_at\",\"row_version\"] -> {\"rowsAffected\":0}","update:child_class_memberships:ccm-2 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":0}"],"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"},{"id":"child_ea_assignments:cha-a-2:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_programme_enrollments archive did not acknowledge exactly one updated row"},{"id":"children:child-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"serverAssignmentA":{"row_version":1,"id":"cha-a-2","user_id":"ea-a","child_id":"child-2","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-10-20T07:00:00.000Z","created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"pass3","result":{"success":true,"totalTerminal":0},"calls":["update:child_ea_assignments:cha-a-2 [\"unassigned_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"},{"id":"child_programme_enrollments:cpe-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_programme_enrollments archive did not acknowledge exactly one updated row"},{"id":"children:child-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"serverAssignmentA":{"row_version":2,"id":"cha-a-2","user_id":"ea-a","child_id":"child-2","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-10-20T08:00:00.000Z","created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"after-pull","pulled":{"scopes":{"programmeAssignment":[null],"children":[],"childEaAssignments":[],"childProgrammeEnrollments":[],"childClassMemberships":[],"classes":[],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":[],"classes":[],"children":[],"memberships":[]}}},"localChild":{"archived_at":"2026-10-20T08:00:00.000Z","sync_status":"terminal"},"serverChild":{"row_version":1,"id":"child-2","first_name":"Child","last_name":"child-2","class_id":"class-k2","created_by":"head-office","archived_at":null},"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"},{"id":"child_programme_enrollments:cpe-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_programme_enrollments archive did not acknowledge exactly one updated row"},{"id":"children:child-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"forced-sync-now","calls":["update:children:child-2 [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":0}"],"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"},{"id":"child_programme_enrollments:cpe-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_programme_enrollments archive did not acknowledge exactly one updated row"},{"id":"children:child-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"replay-ho-reassigns-then-pull","localChild":{"archived_at":null,"sync_status":"synced"},"outbox":[{"id":"child_class_memberships:ccm-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"},{"id":"child_programme_enrollments:cpe-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"child_programme_enrollments archive did not acknowledge exactly one updated row"},{"id":"children:child-2:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":[],"getMyChildren":["child-2"],"getAssessableChildren":["child-2(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"replay-sync-now","calls":["update:children:child-2 [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_programme_enrollments:cpe-2 [\"ended_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_class_memberships:ccm-2 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[],"server":{"child":{"row_version":2,"id":"child-2","first_name":"Child","last_name":"child-2","class_id":"class-k2","created_by":"head-office","archived_at":"2026-10-20T08:00:00.000Z"},"assignmentA":{"row_version":3,"id":"cha-a-2","user_id":"ea-a","child_id":"child-2","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":null,"created_by":"head-office"},"enrollment":{"row_version":2,"id":"cpe-2","child_id":"child-2","programme_id":"programme-a","enrolled_at":"2026-10-01T08:00:00.000Z","ended_at":"2026-10-20T08:00:00.000Z","created_by":"head-office"},"membership":{"row_version":2,"id":"ccm-2","child_id":"child-2","class_id":"class-k2","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":"2026-10-20T08:00:00.000Z","created_by":"head-office"}}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1c","step":"replay-final-pull","localChild":{"archived_at":"2026-10-20T08:00:00.000Z","sync_status":"synced"},"localAssignment":{"unassigned_at":null,"sync_status":"synced"},"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1d","step":"pass1","result":{"success":false,"totalTerminal":1,"totalRetriable":0},"calls":["update:children:child-3 [\"archived_at\",\"row_version\"] -> {\"data\":[],\"error\":null}"],"outbox":[{"id":"child_class_memberships:ccm-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_ea_assignments:cha-a-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-3:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1d","step":"pull-between-passes","pulled":{"scopes":{"programmeAssignment":[null],"children":["child-3"],"childEaAssignments":["cha-a-3"],"childProgrammeEnrollments":["cpe-3"],"childClassMemberships":["ccm-3"],"classes":["class-k"],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-a-k"],"classes":["class-k"],"children":["child-3"],"memberships":["ccm-3"]}}},"localChild":{"archived_at":null,"sync_status":"synced"},"localAssignment":{"unassigned_at":"2026-10-20T08:00:00.000Z","sync_status":"pending"},"localMembership":{"exited_at":"2026-10-20T08:00:00.000Z","sync_status":"pending"},"outbox":[{"id":"child_class_memberships:ccm-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_ea_assignments:cha-a-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-3:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":["class-k"],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E1d","step":"pass2-then-pull","calls":["update:child_programme_enrollments:cpe-3 [\"ended_at\",\"row_version\"] -> \"\"","update:child_class_memberships:ccm-3 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":1}","rpc:get_reconcile_acknowledgments -> \"\"","rpc:get_reconcile_acknowledgments -> \"\""],"pulled":{"scopes":{"programmeAssignment":[null],"children":["child-3"],"childEaAssignments":["cha-a-3"],"childProgrammeEnrollments":["cpe-3"],"childClassMemberships":[],"classes":[],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-a-k"],"classes":["class-k"],"children":[],"memberships":[]}}},"localChild":{"archived_at":null,"sync_status":"synced"},"serverChild":{"row_version":1,"id":"child-3","first_name":"Child","last_name":"child-3","class_id":"class-k","created_by":"head-office","archived_at":null},"outbox":[{"id":"child_ea_assignments:cha-a-3:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-3:archive","status":"failed","error_class":"retryable","error_code":"TRANSPORT","retry_count":1,"last_error":"Network request failed"},{"id":"children:child-3:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":0,"last_error":"children archive did not acknowledge exactly one updated row"}],"readers":{"getClasses":["class-k"],"getMyChildren":[],"getAssessableChildren":[]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"before","readers":{"getClasses":["class-k"],"getMyChildren":["child-4"],"getAssessableChildren":["child-4(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"after-local-delete","deleteIfNoHistory":true,"outbox":[{"id":"children:child-4:hard_delete","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}],"readers":{"getClasses":["class-k"],"getMyChildren":[],"getAssessableChildren":[]},"localChildCount":{"n":0}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"pass1","result":{"success":false,"totalTerminal":1},"calls":["rpc:delete_child_if_no_history(child-4) -> {\"data\":false}"],"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"after-pull","getPendingHardDeleteIds":[],"pulled":{"scopes":{"programmeAssignment":[null],"children":["child-4"],"childEaAssignments":["cha-a-4"],"childProgrammeEnrollments":["cpe-4"],"childClassMemberships":["ccm-4"],"classes":["class-k"],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-a-k"],"classes":["class-k"],"children":["child-4"],"memberships":["ccm-4"]}}},"localChild":{"archived_at":null,"sync_status":"synced"},"localRelationships":[{"t":"child_ea_assignments","id":"cha-a-4","ended":null,"sync_status":"synced"},{"t":"child_programme_enrollments","id":"cpe-4","ended":null,"sync_status":"synced"},{"t":"child_class_memberships","id":"ccm-4","ended":null,"sync_status":"synced"}],"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}],"readers":{"getClasses":["class-k"],"getMyChildren":["child-4"],"getAssessableChildren":["child-4(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"ordinary-pass","calls":[],"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"forced-sync-now","calls":["rpc:delete_child_if_no_history(child-4) -> {\"data\":false}"],"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}],"readers":{"getClasses":["class-k"],"getMyChildren":["child-4"],"getAssessableChildren":["child-4(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"after-retryFailedItem","outbox":[{"id":"children:child-4:hard_delete","status":"pending","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":null}],"localChild":{"archived_at":null,"sync_status":"pending"},"getPendingHardDeleteIds":["child-4"]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"retry-forced-pass","calls":["rpc:delete_child_if_no_history(child-4) -> {\"data\":false}"],"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}],"localChild":{"archived_at":null,"sync_status":"terminal"},"readers":{"getClasses":["class-k"],"getMyChildren":["child-4"],"getAssessableChildren":["child-4(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"second-delete-tap","deleteIfNoHistory":true,"outbox":[{"id":"children:child-4:hard_delete","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"second-delete-pass","calls":["rpc:delete_child_if_no_history(child-4) -> {\"data\":false}"],"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E2","step":"pull-after-second-delete","pulled":{"scopes":{"programmeAssignment":[null],"children":["child-4"],"childEaAssignments":["cha-a-4"],"childProgrammeEnrollments":["cpe-4"],"childClassMemberships":["ccm-4"],"classes":["class-k"],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-a-k"],"classes":["class-k"],"children":["child-4"],"memberships":["ccm-4"]}}},"outbox":[{"id":"children:child-4:hard_delete","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_REQUIRED","retry_count":0,"last_error":"Child has history and must be archived instead of hard-deleted"}],"readers":{"getClasses":["class-k"],"getMyChildren":["child-4"],"getAssessableChildren":["child-4(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3a","step":"after-local-delete","deleteIfNoHistory":false,"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_ea_assignments:cha-a-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3a","step":"pass1@08:00:00","result":{"success":true,"totalRetriable":1,"totalTerminal":0},"calls":["update:children:child-5 [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_programme_enrollments:cpe-5 [\"ended_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_class_memberships:ccm-5 [\"exited_at\",\"row_version\"] -> \"\""],"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"failed","error_class":"retryable","error_code":"TRANSPORT","retry_count":1,"last_error":"Network request failed"},{"id":"child_ea_assignments:cha-a-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}],"next_retry_at":[{"id":"child_ea_assignments:cha-a-5:archive","next_retry_at":null},{"id":"child_class_memberships:ccm-5:archive","next_retry_at":"2026-10-20T08:00:05.000Z"}],"cheaTableResult":{"success":false,"synced":0,"failed":0,"skipped":true,"skippedDependency":"child_class_memberships","skippedDependencyRecordId":"ccm-5"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3a","step":"pass2@08:00:02(non-forced,inside-backoff)","result":{"success":true,"totalTerminal":0},"calls":["update:child_ea_assignments:cha-a-5 [\"unassigned_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"failed","error_class":"retryable","error_code":"TRANSPORT","retry_count":1,"last_error":"Network request failed"}],"serverAssignment":{"row_version":2,"id":"cha-a-5","user_id":"ea-a","child_id":"child-5","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-10-20T08:00:00.000Z","created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3a","step":"pass3@08:01:00(backoff-elapsed)","result":{"success":true,"totalTerminal":0},"calls":["update:child_class_memberships:ccm-5 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[],"serverMembership":{"row_version":3,"id":"ccm-5","child_id":"child-5","class_id":"class-k3","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":"2026-10-20T08:00:00.000Z","created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3a","step":"forced-sync-now","calls":[],"outbox":[]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3b","step":"after-local-delete","deleteIfNoHistory":false,"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_ea_assignments:cha-a-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_programme_enrollments:cpe-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3b","step":"pass1@08:00:00","result":{"success":true,"totalRetriable":1,"totalTerminal":0},"calls":["update:children:child-5 [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_programme_enrollments:cpe-5 [\"ended_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_class_memberships:ccm-5 [\"exited_at\",\"row_version\"] -> \"\""],"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"failed","error_class":"retryable","error_code":"TRANSPORT","retry_count":1,"last_error":"Network request failed"},{"id":"child_ea_assignments:cha-a-5:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}],"next_retry_at":[{"id":"child_ea_assignments:cha-a-5:archive","next_retry_at":null},{"id":"child_class_memberships:ccm-5:archive","next_retry_at":"2026-10-20T08:00:05.000Z"}],"cheaTableResult":{"success":false,"synced":0,"failed":0,"skipped":true,"skippedDependency":"child_class_memberships","skippedDependencyRecordId":"ccm-5"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3b","step":"pass2@08:00:02(non-forced,inside-backoff)","result":{"success":true,"totalTerminal":0},"calls":["update:child_ea_assignments:cha-a-5 [\"unassigned_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"failed","error_class":"retryable","error_code":"TRANSPORT","retry_count":1,"last_error":"Network request failed"}],"serverAssignment":{"row_version":2,"id":"cha-a-5","user_id":"ea-a","child_id":"child-5","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-10-20T08:00:00.000Z","created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3b","step":"pass3@08:01:00(backoff-elapsed)","result":{"success":false,"totalTerminal":1},"calls":["update:child_class_memberships:ccm-5 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":0}"],"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":1,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"}],"serverMembership":{"row_version":1,"id":"ccm-5","child_id":"child-5","class_id":"class-k3","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":null,"created_by":"head-office"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E3b","step":"forced-sync-now","calls":["update:child_class_memberships:ccm-5 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":0}"],"outbox":[{"id":"child_class_memberships:ccm-5:archive","status":"terminal","error_class":"terminal","error_code":"ARCHIVE_NOT_APPLIED","retry_count":1,"last_error":"child_class_memberships archive did not acknowledge exactly one updated row"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E4","step":"after-offline-edits","outbox":[{"id":"child_group_memberships:cgm-m1:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_group_memberships:cgm-m1:insert","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_group_memberships:cgm-m2:insert","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}],"localMemberships":[{"id":"cgm-m1","grouping_version_id":"gv-1","removed_at":"2026-10-20T08:00:01.000Z","sync_status":"pending"},{"id":"cgm-m2","grouping_version_id":"gv-1","removed_at":null,"sync_status":"pending"}],"visible":["cgm-m2"]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E4","step":"pass1","result":{"success":false,"totalTerminal":1},"calls":["upsert:child_group_memberships:cgm-m1 -> {\"applied\":1}","upsert:child_group_memberships:cgm-m2 -> {\"error\":{\"code\":\"23505\",\"message\":\"duplicate key value violates unique constraint \\\"idx_child_group_memberships_active_by_version\\\"\"}}"],"outbox":[{"id":"child_group_memberships:cgm-m1:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"child_group_memberships:cgm-m2:insert","status":"terminal","error_class":"terminal","error_code":"23505","retry_count":0,"last_error":"duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\""}],"cgmTableResult":{"success":false,"synced":1,"failed":1,"skipped":true,"skippedDependency":"child_group_memberships","skippedDependencyRecordId":"cgm-m1"},"serverMemberships":[{"row_version":2,"id":"cgm-m1","joined_at":"2026-10-20T08:00:00.000Z","child_id":"child-6","group_id":"group-seeded","created_by":"ea-a","created_at":"2026-10-20T08:00:00.000Z","grouping_version_id":"gv-1","updated_at":"2026-10-20T08:00:00.000Z"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E4","step":"pass2","result":{"success":true,"totalTerminal":0},"calls":["update:child_group_memberships:cgm-m1 [\"removed_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[{"id":"child_group_memberships:cgm-m2:insert","status":"terminal","error_class":"terminal","error_code":"23505","retry_count":0,"last_error":"duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\""}],"serverMemberships":[{"row_version":3,"id":"cgm-m1","joined_at":"2026-10-20T08:00:00.000Z","child_id":"child-6","group_id":"group-seeded","created_by":"ea-a","created_at":"2026-10-20T08:00:00.000Z","grouping_version_id":"gv-1","updated_at":"2026-10-20T08:00:00.000Z","removed_at":"2026-10-20T08:00:01.000Z"}],"localMemberships":[{"id":"cgm-m1","removed_at":"2026-10-20T08:00:01.000Z","sync_status":"synced"},{"id":"cgm-m2","removed_at":null,"sync_status":"terminal"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E4","step":"pull","pulled":{"scopes":{"programmeAssignment":[null],"children":["child-6"],"childEaAssignments":["cha-a-6"],"childProgrammeEnrollments":["cpe-6"],"childClassMemberships":["ccm-6"],"classes":["class-k"],"groups":["group-seeded"],"groupEaAssignments":["gea-1"],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-a-k"],"classes":["class-k"],"children":["child-6"],"memberships":["ccm-6"]}}},"localMemberships":[{"id":"cgm-m1","removed_at":"2026-10-20T08:00:01.000Z","sync_status":"synced"},{"id":"cgm-m2","removed_at":null,"sync_status":"terminal"}],"visible":["cgm-m2"],"outbox":[{"id":"child_group_memberships:cgm-m2:insert","status":"terminal","error_class":"terminal","error_code":"23505","retry_count":0,"last_error":"duplicate key value violates unique constraint \"idx_child_group_memberships_active_by_version\""}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E4","step":"forced-sync-now","calls":["upsert:child_group_memberships:cgm-m2 -> {\"applied\":1}"],"outbox":[],"serverMemberships":[{"row_version":3,"id":"cgm-m1","joined_at":"2026-10-20T08:00:00.000Z","child_id":"child-6","group_id":"group-seeded","created_by":"ea-a","created_at":"2026-10-20T08:00:00.000Z","grouping_version_id":"gv-1","updated_at":"2026-10-20T08:00:00.000Z","removed_at":"2026-10-20T08:00:01.000Z"},{"row_version":3,"id":"cgm-m2","joined_at":"2026-10-20T08:00:02.000Z","child_id":"child-6","group_id":"group-seeded","created_by":"ea-a","created_at":"2026-10-20T08:00:02.000Z","grouping_version_id":"gv-1","updated_at":"2026-10-20T08:00:02.000Z"}]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E5","step":"EA_B-before","readers":{"getClasses":["class-shared"],"getMyChildren":["child-7"],"getAssessableChildren":["child-7(delivery)","child-8(class-only)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E5","step":"EA_A-pass","result":{"success":true,"totalTerminal":0},"calls":["update:classes:class-shared [\"archived_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:children:child-8 [\"first_name\",\"last_name\",\"preferred_name\",\"date_of_birth\",\"age\",\"gender\",\"class_id\",\"hidden_at\",\"updated_at\",\"reading_level\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_class_memberships:ccm-child-8 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":1}","update:class_ea_assignments:cea-a-s [\"unassigned_at\",\"row_version\"] -> {\"rowsAffected\":1}"],"outbox":[],"server":{"class":{"row_version":2,"id":"class-shared","school_id":"school-1","name":"Class class-shared","grade":"2","academic_year_id":"year-2026","created_by":"head-office","archived_at":"2026-11-04T19:55:26.440Z"},"ceaA":{"row_version":2,"id":"cea-a-s","class_id":"class-shared","ea_user_id":"ea-a","programme_id":"programme-a","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":"2026-11-04T19:55:26.440Z","created_by":"head-office"},"ceaB":{"row_version":1,"id":"cea-b-s","class_id":"class-shared","ea_user_id":"ea-b","programme_id":"programme-a","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":null,"created_by":"head-office"},"ccm7":{"row_version":1,"id":"ccm-child-7","child_id":"child-7","class_id":"class-shared","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":null,"created_by":"head-office"},"ccm8":{"row_version":2,"id":"ccm-child-8","child_id":"child-8","class_id":"class-shared","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":"2026-11-04T19:55:26.440Z","created_by":"head-office"},"cha7":{"row_version":1,"id":"cha-child-7","user_id":"ea-b","child_id":"child-7","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":null,"created_by":"head-office"}}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E5","step":"EA_B-after-pull","pulled":{"scopes":{"programmeAssignment":[null],"children":["child-7"],"childEaAssignments":["cha-child-7"],"childProgrammeEnrollments":["cpe-child-7"],"childClassMemberships":["ccm-child-7"],"classes":["class-shared"],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-b-s"],"classes":["class-shared"],"children":["child-7"],"memberships":["ccm-child-7"]}}},"localClass":{"archived_at":"2026-11-04T19:55:26.440Z","sync_status":"synced"},"localCeaB":{"unassigned_at":null,"sync_status":"synced"},"localCha7":{"unassigned_at":null,"sync_status":"synced"},"localCcm7":{"exited_at":null,"sync_status":"synced"},"readers":{"getClasses":[],"getMyChildren":[],"getAssessableChildren":[]},"getClassById":"2026-11-04T19:55:26.440Z","getChildren_all":["child-7","child-8"],"outbox":[]}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E6","step":"before","readers":{"getClasses":["class-k"],"getMyChildren":["child-9"],"getAssessableChildren":["child-9(delivery)"]}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E6","step":"after-no-class","outbox":[{"id":"child_class_memberships:ccm-9:archive","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null},{"id":"children:child-9:update","status":"pending","error_class":null,"error_code":null,"retry_count":0,"last_error":null}],"readers":{"getClasses":["class-k"],"getMyChildren":[],"getAssessableChildren":[]},"localAssignment":{"unassigned_at":null,"sync_status":"synced"},"localEnrollment":{"ended_at":null,"sync_status":"synced"},"localMembership":{"exited_at":"2026-11-04T19:55:26.493Z","sync_status":"pending"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+  console.log
+    OBS {"scenario":"E6","step":"after-sync-and-pull","result":{"success":true,"totalTerminal":0},"calls":["update:children:child-9 [\"first_name\",\"last_name\",\"preferred_name\",\"date_of_birth\",\"age\",\"gender\",\"class_id\",\"hidden_at\",\"updated_at\",\"reading_level\",\"row_version\"] -> {\"rowsAffected\":1}","update:child_class_memberships:ccm-9 [\"exited_at\",\"row_version\"] -> {\"rowsAffected\":1}","rpc:get_reconcile_acknowledgments -> \"\"","rpc:get_reconcile_acknowledgments -> \"\""],"pulled":{"scopes":{"programmeAssignment":[null],"children":["child-9"],"childEaAssignments":["cha-a-9"],"childProgrammeEnrollments":["cpe-9"],"childClassMemberships":[],"classes":[],"groups":[],"groupEaAssignments":[],"childrenGroups":[],"classRoster":{"classEaAssignments":["cea-a-k"],"classes":["class-k"],"children":[],"memberships":[]}}},"outbox":[],"readers":{"getClasses":["class-k"],"getMyChildren":[],"getAssessableChildren":[]},"server":{"child":{"row_version":2,"id":"child-9","first_name":"Child","last_name":"child-9","class_id":null,"created_by":"head-office","archived_at":null,"preferred_name":null,"date_of_birth":null,"age":null,"gender":null,"hidden_at":null,"updated_at":"2026-11-04T19:55:26.493Z","reading_level":null},"assignment":{"row_version":1,"id":"cha-a-9","user_id":"ea-a","child_id":"child-9","assigned_at":"2026-10-01T08:00:00.000Z","unassigned_at":null,"created_by":"head-office"},"enrollment":{"row_version":1,"id":"cpe-9","child_id":"child-9","programme_id":"programme-a","enrolled_at":"2026-10-01T08:00:00.000Z","ended_at":null,"created_by":"head-office"},"membership":{"row_version":2,"id":"ccm-9","child_id":"child-9","class_id":"class-k","academic_year_id":"year-2026","enrolled_at":"2026-10-01T08:00:00.000Z","exited_at":"2026-11-04T19:55:26.493Z","created_by":"head-office"}},"localChildRow":{"class_id":null,"archived_at":null,"sync_status":"synced"}}
+
+      at log (__tests__/reproLifecycleEdges.integration.test.js:37:11)
+
+PASS __tests__/reproLifecycleEdges.integration.test.js
+  E1 terminal archive then pull
+    ✓ E1a class: realistic Head Office handover (EA class assignment ended on server), EA archives class offline (166 ms)
+    ✓ E1c child: realistic Head Office handover (direct assignment ended on server, no class path), EA deletes child with local history (67 ms)
+    ✓ E1d child: forced zero-row answer on the child archive, pull lands while the delivery assignment archive is still owed (58 ms)
+  E2 hard delete refused
+    ✓ E2 EA-created child with no local history but server history: hard delete -> ARCHIVE_REQUIRED, then pull (60 ms)
+  E3 cross-pass cleanup gate
+    ✓ E3a: EA holds the class assignment for the child class; class-membership exit fails retryably in pass 1 (50 ms)
+    ✓ E3b: EA delivers to the child but does not hold its class; class-membership exit fails retryably in pass 1 (53 ms)
+  E4 seeded group remove then re-add offline
+    ✓ E4 group with non-null grouping_version_id: add -> remove -> add again offline, then sync (66 ms)
+  E5 shared class archived by a co-EA
+    ✓ E5 EA_A archives shared class; EA_B phone pulls while EA_B class assignment is still active (72 ms)
+  E6 "No class" orphaning
+    ✓ E6 EditChild sets class to "No class" for a delivery child (52 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       9 passed, 9 total
+Snapshots:   0 total
+Time:        1.909 s, estimated 2 s
+Ran all test suites.

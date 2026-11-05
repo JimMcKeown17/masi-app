@@ -1,0 +1,195 @@
+
+=== S0: Baseline control: no lifecycle change
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [14] upload.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000001"}]
+  [17] upload.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000001"}]
+  [13] upload.attendee.group.CHILD_D (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [15] upload.assessment.CHILD_D (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_D (EA_A): ERR 42501 Active child delivery assignment required
+  [12] upload.session.class (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.class.CHILD_E (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [15] upload.assessment.CHILD_E (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_E (EA_A): ERR 42501 Active child delivery assignment required
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=2 attendees=["CHILD_C","CHILD_D","CHILD_E"] runs=1 assessments=3 letter=[{"child_id":"CHILD_C","programme":"literacy","correction_id":"d7000000-0000-0000-0000-000000000001"}] skill=1
+
+=== S1: EA's own archive of child C uploads before C's earlier history (Masi push order)
+  [2] archive.children.CHILD_C (EA_A): OK rows=1 returned=[{"id":"CHILD_C"}]
+  [3] archive.child_programme_enrollments.CPE_C (EA_A): OK rows=1 returned=[{"id":"CPE_C"}]
+  [4] archive.child_class_memberships.CCM_C (EA_A): OK rows=1 returned=[{"id":"CCM_C"}]
+  [5] archive.child_group_memberships.CGM_C (EA_A): OK rows=1 returned=[{"id":"CGM_C"}]
+  [7] archive.child_ea_assignments.CA_C (EA_A): OK rows=1 returned=[{"id":"CA_C"}]
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  [17] upload.skill_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  [12] upload.session.class (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.class.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":false,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":false,"held_group_G_literacy":true}
+  landed: sessions=2 attendees=[] runs=1 assessments=1 letter=[] skill=0
+
+=== S1-control: Same work and archive, but history uploads BEFORE the archive
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [14] upload.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000201"}]
+  [17] upload.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000201"}]
+  [12] upload.session.class (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.class.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [2] archive.children.CHILD_C (EA_A): OK rows=1 returned=[{"id":"CHILD_C"}]
+  [3] archive.child_programme_enrollments.CPE_C (EA_A): OK rows=1 returned=[{"id":"CPE_C"}]
+  [4] archive.child_class_memberships.CCM_C (EA_A): OK rows=1 returned=[{"id":"CCM_C"}]
+  [5] archive.child_group_memberships.CGM_C (EA_A): OK rows=1 returned=[{"id":"CGM_C"}]
+  [7] archive.child_ea_assignments.CA_C (EA_A): OK rows=1 returned=[{"id":"CA_C"}]
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":false,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":false,"held_group_G_literacy":true}
+  landed: sessions=2 attendees=["CHILD_C","CHILD_C"] runs=1 assessments=1 letter=[{"child_id":"CHILD_C","programme":"literacy","correction_id":"d7000000-0000-0000-0000-000000000201"}] skill=1
+
+=== S1b: S1 with child C created by EA_A (creator arm)
+  [2] archive.children.CHILD_C (EA_A): OK rows=1 returned=[{"id":"CHILD_C"}]
+  [3] archive.child_programme_enrollments.CPE_C (EA_A): OK rows=1 returned=[{"id":"CPE_C"}]
+  [4] archive.child_class_memberships.CCM_C (EA_A): OK rows=1 returned=[{"id":"CCM_C"}]
+  [5] archive.child_group_memberships.CGM_C (EA_A): OK rows=1 returned=[{"id":"CGM_C"}]
+  [7] archive.child_ea_assignments.CA_C (EA_A): OK rows=1 returned=[{"id":"CA_C"}]
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  [17] upload.skill_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":false,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":false,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=[] runs=1 assessments=1 letter=[] skill=0
+
+=== S2: Head Office ends C's direct assignment and memberships; EA_A then uploads earlier work
+  [--] ho.end.child_ea_assignments.CA_C (postgres): OK rows=1 returned=[{"id":"CA_C"}]
+  [--] ho.end.child_class_memberships.CCM_C (postgres): OK rows=1 returned=[{"id":"CCM_C"}]
+  [--] ho.end.child_group_memberships.CGM_C (postgres): OK rows=1 returned=[{"id":"CGM_C"}]
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  [17] upload.skill_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  [12] upload.session.class (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.class.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":false,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":false,"held_group_G_literacy":true}
+  landed: sessions=2 attendees=[] runs=1 assessments=1 letter=[] skill=0
+
+=== S3: Group-only child D: EA_A archives group G, then uploads the earlier group session
+  [1] archive.groups.GROUP_G (EA_A): OK rows=1 returned=[{"id":"GROUP_G"}]
+  [5] archive.child_group_memberships.CGM_C (EA_A): OK rows=1 returned=[{"id":"CGM_C"}]
+  [5] archive.child_group_memberships.CGM_D (EA_A): OK rows=1 returned=[{"id":"CGM_D"}]
+  [6] archive.group_ea_assignments.GEA_G (EA_A): OK rows=1 returned=[{"id":"GEA_G"}]
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendees.batch[C,D] (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [13] upload.attendee.group.CHILD_C(fallback single) (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_D(fallback single) (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_D (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_D (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":false,"CHILD_E":true},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=["CHILD_C"] runs=1 assessments=1 letter=[] skill=0
+
+=== S4: Programme switch: Head Office ends EA_A's literacy programme assignment and opens numeracy
+  [--] ho.end.staff_programme_assignments.SPA_LIT (postgres): OK rows=1 returned=[{"id":"SPA_LIT"}]
+  [--] ho.open.staff_programme_assignments.SPA_NUM (postgres): OK rows=1 returned=[{"id":"SPA_NUM"}]
+  [12] upload.session.group (EA_A): ERR 42501 new row violates row-level security policy for table "sessions"
+  [13] upload.attendee.group.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_C (EA_A): ERR 42501 No authority to start run
+  [15] upload.assessment.CHILD_C (EA_A): ERR 42501 No authority to submit assessment
+  [16] upload.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000601"}]
+  [17] upload.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000601"}]
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=0 attendees=[] runs=0 assessments=0 letter=[{"child_id":"CHILD_C","programme":"numeracy","correction_id":"d7000000-0000-0000-0000-000000000601"}] skill=1
+
+=== S4b: Programme switch after the session already landed: attendee and RPC uploads only
+  [12] upload.session.group(before switch) (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [--] ho.end.staff_programme_assignments.SPA_LIT (postgres): OK rows=1 returned=[{"id":"SPA_LIT"}]
+  [--] ho.open.staff_programme_assignments.SPA_NUM (postgres): OK rows=1 returned=[{"id":"SPA_NUM"}]
+  [13] upload.attendee.group.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [14] upload.battery_run.CHILD_C (EA_A): ERR 42501 No authority to start run
+  [15] upload.assessment.CHILD_C (EA_A): ERR 42501 No authority to submit assessment
+  [16] upload.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000701"}]
+  [17] upload.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000701"}]
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=["CHILD_C"] runs=0 assessments=0 letter=[{"child_id":"CHILD_C","programme":"numeracy","correction_id":"d7000000-0000-0000-0000-000000000701"}] skill=1
+
+=== S5: Lost-response replay after C's grants end (row already on the server)
+  [12] first.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] first.attendee.group.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [14] first.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] first.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] first.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000801"}]
+  [17] first.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000801"}]
+  [--] ho.end.child_ea_assignments.CA_C (postgres): OK rows=1 returned=[{"id":"CA_C"}]
+  [--] ho.end.child_class_memberships.CCM_C (postgres): OK rows=1 returned=[{"id":"CCM_C"}]
+  [--] ho.end.child_group_memberships.CGM_C (postgres): OK rows=1 returned=[{"id":"CGM_C"}]
+  [12] replay.session.group(insert-or-ignore) (EA_A): OK rows=0 returned=[]
+  [13] replay.attendee.group.CHILD_C(merge upsert) (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] replay.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"unchanged"}]
+  [15] replay.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"already_present"}]
+  [16] replay.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000801"}]
+  [17] replay.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000801"}]
+  [--] VARIANT(not client).attendee merge upsert without RETURNING (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [--] VARIANT(not client).session insert-or-ignore without RETURNING (EA_A): OK rows=0 returned=null
+  [--] VARIANT(not client).attendee insert-or-ignore (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":false,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":false,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=["CHILD_C"] runs=1 assessments=1 letter=[{"child_id":"CHILD_C","programme":"literacy","correction_id":"d7000000-0000-0000-0000-000000000801"}] skill=1
+
+=== S5b: Lost-response replay after a programme switch
+  [12] first.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] first.attendee.group.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [15] first.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [--] ho.end.staff_programme_assignments.SPA_LIT (postgres): OK rows=1 returned=[{"id":"SPA_LIT"}]
+  [--] ho.open.staff_programme_assignments.SPA_NUM (postgres): OK rows=1 returned=[{"id":"SPA_NUM"}]
+  [12] replay.session.group(insert-or-ignore) (EA_A): ERR 42501 new row violates row-level security policy for table "sessions"
+  [13] replay.attendee.group.CHILD_C(merge upsert) (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [15] replay.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"already_present"}]
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=["CHILD_C"] runs=0 assessments=1 letter=[] skill=0
+
+=== S6a: Academic-year rollover while EA_A is still assigned to C
+  [--] ho.year.deactivate_2026 (postgres): OK rows=1 returned=[{"label":"2026"}]
+  [--] ho.year.activate_2027 (postgres): OK rows=1 returned=[{"label":"2027"}]
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [14] upload.battery_run.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_C (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"d7000000-0000-0000-0000-000000000a01"}]
+  [17] upload.skill_mastery.CHILD_C (EA_A): OK rows=1 returned=[{"outcome":"applied","confirmed":true,"changed_at":"2026-10-28T07:00:00+00:00","changed_by":"EA_A","correction_id":"e7000000-0000-0000-0000-000000000a01"}]
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=["CHILD_C"] runs=1 assessments=1 letter=[{"child_id":"CHILD_C","programme":"literacy","correction_id":"d7000000-0000-0000-0000-000000000a01"}] skill=1
+
+=== S6b: Academic-year rollover after C's grants ended (previous-year assessment/run)
+  [--] ho.end.child_ea_assignments.CA_C (postgres): OK rows=1 returned=[{"id":"CA_C"}]
+  [--] ho.end.child_class_memberships.CCM_C (postgres): OK rows=1 returned=[{"id":"CCM_C"}]
+  [--] ho.end.child_group_memberships.CGM_C (postgres): OK rows=1 returned=[{"id":"CGM_C"}]
+  [--] ho.year.deactivate_2026 (postgres): OK rows=1 returned=[{"label":"2026"}]
+  [--] ho.year.activate_2027 (postgres): OK rows=1 returned=[{"label":"2027"}]
+  [12] upload.session.group (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.group.CHILD_C (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_C (EA_A): ERR 42501 No authority to start run
+  [15] upload.assessment.CHILD_C (EA_A): ERR 42501 No authority to submit assessment
+  [16] upload.letter_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  [17] upload.skill_mastery.CHILD_C (EA_A): ERR 42501 Active child delivery assignment required
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":false,"CHILD_D":true,"CHILD_E":true},"delivers_to_child_C":false,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=[] runs=0 assessments=0 letter=[] skill=0
+
+=== S7: Class-only control child E: EA_A archives class K the Masi way
+  [1] archive.classes.CLASS_K (EA_A): OK rows=1 returned=[{"id":"CLASS_K"}]
+  [2] update.children.CHILD_C.class_id_null (EA_A): OK rows=1 returned=[{"id":"CHILD_C"}]
+  [4] archive.child_class_memberships.CCM_C.delivery_child_only (EA_A): OK rows=1 returned=[{"id":"CCM_C"}]
+  [6] archive.class_ea_assignments.CEA_K (EA_A): OK rows=1 returned=[{"id":"CEA_K"}]
+  [12] upload.session.class (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendees.batch[C,E] (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [13] upload.attendee.class.CHILD_C(fallback single) (EA_A): OK rows=1 returned=[{"?column?":1}]
+  [13] upload.attendee.class.CHILD_E(fallback single) (EA_A): ERR 42501 new row violates row-level security policy for table "session_attendees"
+  [14] upload.battery_run.CHILD_E (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [15] upload.assessment.CHILD_E (EA_A): OK rows=1 returned=[{"result":"inserted"}]
+  [16] upload.letter_mastery.CHILD_E (EA_A): ERR 42501 Active child delivery assignment required
+  authority: {"label":"__ea_a_authority_after__","write_for_child":{"CHILD_C":true,"CHILD_D":true,"CHILD_E":false},"delivers_to_child_C":true,"held_group_G_literacy":true}
+  landed: sessions=1 attendees=["CHILD_C"] runs=1 assessments=1 letter=[] skill=0

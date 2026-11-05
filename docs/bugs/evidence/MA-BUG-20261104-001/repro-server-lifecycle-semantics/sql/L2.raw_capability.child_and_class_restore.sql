@@ -1,0 +1,10 @@
+BEGIN;
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '';
+SELECT harness.try_dml('HO ends child assignment', $dml$UPDATE public.child_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02' WHERE id = '0988d63d-a3ce-5ea8-9f06-6a21d0a828e5' RETURNING id$dml$);
+SELECT harness.try_dml('HO ends class assignment', $dml$UPDATE public.class_ea_assignments SET unassigned_at = TIMESTAMPTZ '2026-11-03 09:00:00+02' WHERE id = 'b593ffec-8582-5ad8-bec1-d586fdbe10a0' RETURNING id$dml$);
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '1a000000-0000-0000-0000-000000000002';
+SELECT harness.try_dml('EA_A un-ends child assignment', $dml$UPDATE public.child_ea_assignments SET unassigned_at = NULL, row_version = '2' WHERE id = '0988d63d-a3ce-5ea8-9f06-6a21d0a828e5' RETURNING id$dml$);
+SELECT harness.try_dml('EA_A un-ends class assignment', $dml$UPDATE public.class_ea_assignments SET unassigned_at = NULL, handover_reason = NULL, row_version = '2' WHERE id = 'b593ffec-8582-5ad8-bec1-d586fdbe10a0' RETURNING id$dml$);
+ROLLBACK;
