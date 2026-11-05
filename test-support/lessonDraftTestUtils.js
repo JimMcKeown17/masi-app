@@ -8,7 +8,7 @@ export const deferred = () => {
 };
 export const observe = promise => promise.then(value => ({ value }), error => ({ error }));
 export const draftStart = (overrides = {}) => lessonDraftInput({
-  plan_fixed_at: null, ticks: { letters: [], blends: [], books: [], noOneNew: [], blendTierShown: null },
+  plan_fixed_at: null, ticks: { letters: [], blends: [], books: [], blendTierShown: null },
   tracker_changes: {}, reading_level_changes: {}, notes: null, ...overrides,
 });
 // Pause at the native adapter, below the real handle, transaction and repository layers.

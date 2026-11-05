@@ -56,13 +56,13 @@ test('session_reading_level is the highest tier among blends ticked, top-up item
     expect(build(draft).session.activities.session_reading_level).toBe(expected);
   }
 });
-test('tracker_check: marked, none (every present child "No one new yet"), null', () => {
+test('tracker_check is marked when a present child has a tracker change, else null', () => {
+  // The key stays in the record for older readers; 'none' came from the removed None yet answer.
   const draft = mondayDraft();
   expect(build(draft).session.activities.lesson.tracker_check).toBe('marked');
-  draft.tracker_changes = {}; draft.ticks.noOneNew = ['c1', 'c2'];
-  expect(build(draft).session.activities.lesson.tracker_check).toBe('none');
-  draft.ticks.noOneNew = ['c1'];
+  draft.tracker_changes = {};
   expect(build(draft).session.activities.lesson.tracker_check).toBeNull();
-  draft.attendance.absentChildIds = ['c2'];
-  expect(build(draft).session.activities.lesson.tracker_check).toBe('none');
+  // A draft saved by an older build may still carry the old answer; it is ignored.
+  draft.ticks.noOneNew = ['c1', 'c2'];
+  expect(build(draft).session.activities.lesson.tracker_check).toBeNull();
 });

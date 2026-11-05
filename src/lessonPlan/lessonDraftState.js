@@ -8,7 +8,7 @@ export const newLessonDraftInput = ({ group, members, programmeId, classId = nul
   class_id: classId, language_code: languageCode, pack_id: packId, lesson_date: lessonDate,
   attendance: { childIds: [...new Set(members.map(child => child.id))], absentChildIds: [], addedChildIds: [] },
   plan: null, plan_fixed_at: null,
-  ticks: { letters: [], blends: [], books: [], noOneNew: [], blendTierShown: null },
+  ticks: { letters: [], blends: [], books: [], blendTierShown: null },
   tracker_changes: {}, reading_level_changes: {}, notes: null,
 });
 export const toggleAbsent = (draft, childId) => ({
@@ -43,16 +43,7 @@ export const setBlendTierShown = (draft, tier) => ({ ticks: { ...draft.ticks, bl
 // when its change is undone, so it replaces the stored map rather than merging into it.
 export const setTrackerChanges = (draft, childId, changes) => (Object.keys(changes ?? {}).length === 0
   ? { tracker_changes: without(draft.tracker_changes, childId) }
-  : {
-    tracker_changes: { ...draft.tracker_changes, [childId]: { ...changes } },
-    ticks: { ...draft.ticks, noOneNew: (draft.ticks.noOneNew ?? []).filter(id => id !== childId) },
-  });
-export const toggleNoOneNew = (draft, childId) => ({
-  ticks: { ...draft.ticks, noOneNew: toggle(draft.ticks.noOneNew ?? [], childId) },
-  tracker_changes: { ...draft.tracker_changes, [childId]: Object.fromEntries(
-    Object.entries(draft.tracker_changes[childId] ?? {}).filter(([letter]) => !draft.ticks.letters.includes(letter))
-  ) },
-});
+  : { tracker_changes: { ...draft.tracker_changes, [childId]: { ...changes } } });
 export const setReadingLevel = (draft, childId, level, currentLevel) => ({
   reading_level_changes: level === currentLevel ? without(draft.reading_level_changes, childId)
     : { ...draft.reading_level_changes, [childId]: level },
@@ -62,7 +53,6 @@ export const setNotes = (draft, text) => ({ notes: text });
 export const clearChildChanges = (draft, childId) => ({
   tracker_changes: without(draft.tracker_changes, childId),
   reading_level_changes: without(draft.reading_level_changes, childId),
-  ticks: { ...draft.ticks, noOneNew: (draft.ticks.noOneNew ?? []).filter(id => id !== childId) },
 });
 export const chooseClass = (draft, { classId, languageCode, packId, plan }) => ({
   class_id: classId, language_code: languageCode, pack_id: packId, plan,

@@ -124,18 +124,13 @@ test('an assessment-mastered letter is locked', async () => {
   const tile = await row(view).findByRole('button', { name: 'm, mastered from assessment, locked' });
   expect(tile).toBeDisabled(); fireEvent.press(tile); expect(mockApply).not.toHaveBeenCalled();
 });
-test("None yet clears the child's chips", async () => {
-  mockInitial.tracker_changes = { c1: { a: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' },
-    z: { mastered: true, languageCode: 'en', madeAt: '2026-10-22T09:00:00.000Z' } } };
+test('the letter row has only the letter tiles: no None yet answer', async () => {
+  // Jim, 2026-11-05: nothing read the "None of these yet" answer, so it was removed.
   const view = mount(); await ready(view);
-  expect(row(view).getByText('None yet')).toBeTruthy();
-  expect(row(view, 'c2').getByRole('checkbox', { name: 'Lulu, none of these yet' })).not.toBeChecked();
-  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' })).not.toBeChecked();
-  fireEvent.press(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' }));
-  await waitFor(() => expect(mockDraft.ticks.noOneNew).toEqual(['c1']));
-  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' })).toBeChecked();
-  expect(row(view).getByRole('checkbox', { name: 'Amahle, none of these yet' }).findAll(node => node.props.name === 'checkmark').length).toBeGreaterThan(0);
-  expect(Object.keys(mockDraft.tracker_changes.c1)).toEqual(['z']);
+  const tiles = within(row(view).getByTestId('wrap-up-letter-chips'));
+  expect(tiles.getAllByRole('button').map(tile => tile.props.accessibilityLabel.split(',')[0])).toEqual(['a', 'm']);
+  expect(view.queryByText('None yet')).toBeNull();
+  expect(view.queryAllByRole('checkbox')).toHaveLength(0);
 });
 test("the tracker sheet opens in the lesson language with the child's marks", async () => {
   mockInitial.language_code = 'xh';

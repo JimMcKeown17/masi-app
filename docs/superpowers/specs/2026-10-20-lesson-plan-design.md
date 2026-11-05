@@ -398,7 +398,8 @@ One scrolling screen, kept open for the whole session.
 - Heading: "Who knows **k u** without help?" with "Teaching it today doesn't count." (today's letters
   are the letters the EA ticked; if none were ticked, this section is skipped).
 - Per present child: one chip per ticked letter (assessment-mastered letters show locked), a
-  "None of these yet" button (Jim, 2026-10-28), the child's reading-level pill (opens the existing ladder sheet), and
+  "None of these yet" button (Jim, 2026-10-28; removed 2026-11-05 because nothing read it, see
+  `docs/superpowers/plans/2026-11-05-wrap-up-child-cards.md`), the child's reading-level pill (opens the existing ladder sheet), and
   "7/26 ›" opening the full `LetterTrackerBottomSheet` in the language's teaching order.
 - **Date**: a calendar button beside the Wrap up title (Jim, 2026-10-28): today for a new lesson,
   the day it started for a resumed one. When it is not today, "Lesson on Mon 19 Oct" shows under
