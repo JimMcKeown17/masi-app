@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Executed in real SQLite (E4: the phone sends the re-add before the removal and 23505 is recorded terminal) and in disposable Postgres 17 (L5: the same order is refused by idx_child_group_memberships_active_by_version, the reverse order succeeds); the unmerged queued insert in removeChildFromGroup is read in source, but no field phone has produced it."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:55:33Z
 
@@ -56,7 +56,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L5.move_to_sibling_group_before_removal.sql
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L5.reverse_order_removal_first.sql
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L5.HO_seeded_handover_vs_phone.sql
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/156
 
 data_safety_status: "no data lost: the refused re-add stays on the phone (terminal outbox row, local row visible) and a later forced pass delivered it in E4; the risk is a stuck Needs attention item and, if nobody forces a pass, a child missing from the group on the server"
 workaround_status: "a forced sync (Sync now, pull-to-refresh or sign-out) re-sends the terminal insert after the removal has landed (E4 forced-sync-now); Head Office group seeds can leave the grouping version empty until the OTA ships"
@@ -175,6 +176,9 @@ Approved (fix step 8, OTA): `removeChildFromGroup` merges or drops a membership 
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | E4, L5.readd_same_group_before_removal, L5.move_to_sibling_group_before_removal, L5.reverse_order_removal_first, L5.HO_seeded_handover_vs_phone; docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #156; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ota-removal |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ota: real-SQLite regressions red-first; combined tree tmp/lifecycle-integration 3e487fda unit 8,355/8,355, integration 1,555/1,555. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | App update published to channel `preview`, runtime 1.5.0, update group `8addaae6` from `feat/lifecycle-ota` fd053cfc (PR #163). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 

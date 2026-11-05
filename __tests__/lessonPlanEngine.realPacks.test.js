@@ -64,15 +64,19 @@ test('isiXhosa all letters known: nothing needs a sound step', () => {
   for (const tier of choicesFor(input({ known, level: 'Word Reading' })).tiers)
     for (const item of tier.pool) expect(analyzeToken(item.text, pack).step).toBeLessThanOrEqual(12);
 });
-test.each([['xh', ['o', 'm', 'l', 'a']], ['en', ['s', 'a', 'n', 'd']], ['af', ['a', 'e', 'k', 'n']]])(
-  '%s release pack (interim, letters only): step-1 letters, no blend or book content', (languageCode, step1) => {
+test.each([
+  ['xh', ['o', 'm', 'l', 'a'], ['la', 'mo', 'ma', 'lo'], 'xh-int-v1-r01', true],
+  ['en', ['s', 'a', 'n', 'd'], ['as', 'ad', 'an'], null, false],
+  ['af', ['a', 'e', 'k', 'n'], ['ne', 'na', 'ka', 'ke'], null, false],
+])('%s release pack (draft content): first session suggests step-1 letters, blends and any book',
+  (languageCode, step1, blends, book, hasBooks) => {
     const release = { languageCode, pack: currentPack(languageCode), known: [] };
     const plan = planFor(input(release));
     expect(plan.reason).toBe('first_session');
     expect(plan.suggested_letters).toEqual(step1);
-    expect(plan.suggested_blends).toEqual([]);
-    expect(plan.suggested_book).toBeNull();
-    expect(choicesFor(input(release)).contentAvailable).toEqual({ blends: false, books: false });
+    expect(plan.suggested_blends).toEqual(blends);
+    expect(plan.suggested_book).toBe(book);
+    expect(choicesFor(input(release)).contentAvailable).toEqual({ blends: true, books: hasBooks });
   });
 test.each(Object.entries(engine.PACK_LANGUAGE_BY_CODE))(
   "the engine's %s matches the language of A1's release and preview packs", (languageCode, packLanguage) => {

@@ -319,13 +319,18 @@ const runCases = async (databaseUrl, v5) => {
     ${sqlAssert(`(SELECT count(*) = 1 FROM public.children WHERE id = '${c.child}')`, 'Child survives')}
     ${sqlAssert(`(SELECT count(*) = 1 ${record(c)})`, 'Tick survives')}
     ${sqlAssert(`(SELECT count(*) = 1 ${receipt(c)})`, 'Receipt survives')}`;
-  check('delete-guard-skill-history', asActor(EA_A, sqlAssert(`NOT public.delete_child_if_no_history('${guarded.child}')`, 'Skill-only history blocks delete'), { commit: true }));
+  // Lifecycle safety S3 (20261105120300): Delete child acknowledges true and never hard-deletes;
+  // its sole holder archives the child, and every tick and receipt survives.
+  check('delete-guard-skill-history', asActor(EA_A, sqlAssert(`public.delete_child_if_no_history('${guarded.child}')`, 'Delete child acknowledges'), { commit: true }));
   check('delete-guard-skill-history', survives(guarded));
-  const empty = seed();
-  check('delete-guard-unchanged', asActor(EA_A, sqlAssert(`public.delete_child_if_no_history('${empty}')`, 'History-free child deleted'), { commit: true }));
-  check('delete-guard-unchanged', sqlAssert(`NOT EXISTS (SELECT 1 FROM public.children WHERE id = '${empty}')`, 'Empty child gone'));
+  // EA_B also delivers to this child (seed's default actors), so EA_A's Delete child means leave.
+  check('delete-guard-skill-history', sqlAssert(`(SELECT archived_at IS NULL FROM public.children WHERE id = '${guarded.child}')`, 'Another deliverer keeps the child live'));
+  check('delete-guard-skill-history', sqlAssert(`NOT EXISTS (SELECT 1 FROM public.child_ea_assignments WHERE child_id = '${guarded.child}' AND user_id = '${EA_A}' AND unassigned_at IS NULL)`, 'EA_A left'));
+  const empty = seed([EA_A]);
+  check('delete-guard-unchanged', asActor(EA_A, sqlAssert(`public.delete_child_if_no_history('${empty}')`, 'History-free child acknowledged'), { commit: true }));
+  check('delete-guard-unchanged', sqlAssert(`EXISTS (SELECT 1 FROM public.children WHERE id = '${empty}' AND archived_at IS NOT NULL)`, 'Sole holder archives the child, never deletes it'));
   const letterOnly = seed();
-  check('delete-guard-unchanged', asActor(EA_A, `SELECT * FROM public.set_letter_mastery('${randomUUID()}','${letterOnly}','k','xh',true,'${MON}'); ${sqlAssert(`NOT public.delete_child_if_no_history('${letterOnly}')`, 'Letter-only history still blocks delete')}`));
+  check('delete-guard-unchanged', asActor(EA_A, `SELECT * FROM public.set_letter_mastery('${randomUUID()}','${letterOnly}','k','xh',true,'${MON}'); ${sqlAssert(`public.delete_child_if_no_history('${letterOnly}')`, 'Letter-only history: acknowledged')} ${sqlAssert(`(SELECT count(*) = 1 FROM public.letter_mastery WHERE child_id = '${letterOnly}')`, 'Letter tick survives')}`));
   // Bootstrap creates a plain service_role. Model hosted BYPASSRLS inside this
   // transaction only; the expected FK error rolls back the role alteration too.
   expectSqlState({ databaseUrl, label: 'delete-restrict', sql: `BEGIN; ALTER ROLE service_role BYPASSRLS; SET LOCAL ROLE service_role; DELETE FROM public.children WHERE id = '${guarded.child}'; COMMIT;`, sqlState: '23503' });

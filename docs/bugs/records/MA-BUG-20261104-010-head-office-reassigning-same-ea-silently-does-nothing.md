@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: FIXED_IN_CODE
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Executed in disposable PostgreSQL 17 with all 41 migrations: an insert-or-ignore of the deterministic assignment id after an end returned 0 rows and left the row ended with no error, for child and class assignments and for a phone replay after a Head Office end, while an insert with a different id for the same pair was accepted. The deterministic-id rule and insert-or-ignore are read in the contract map and the sync engine."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T09:00:00Z
 first_observed_at: 2026-11-04T19:49:55Z
 last_observed_at: 2026-11-04T19:49:55Z
 
@@ -53,7 +53,8 @@ evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L7.class_ea_reassign_after_end.sql
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/sql/L7.HO_ended_then_phone_resends_insert.sql
   - docs/bugs/evidence/MA-BUG-20261104-001/SHA256SUMS.txt
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/154
 
 data_safety_status: "No data lost: the earlier ended row stays correct history, but a new grant of access silently fails, so the EA stays without access Head Office thinks it gave. Never seen in the field."
 workaround_status: "Insert the assignment with a different id by hand, or clear the end in place on the deterministic row (what the planned Head Office script does). Nothing in the app warns."
@@ -167,6 +168,8 @@ the script (service role) is the single reopen path. The daily invariant check i
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | L7.*, `docs/bugs/evidence/MA-BUG-20261104-001/repro-server-lifecycle-semantics/` |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #154; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-ho-tools |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-ho-tools: ho-lifecycle harness 34/34 on all 46 migrations incl. the guard, 107 unit tests. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
 
 ## Open questions
 

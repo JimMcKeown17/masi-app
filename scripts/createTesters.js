@@ -149,6 +149,15 @@ async function ensureActiveProgrammeAssignment(admin, row, lookupMaps, userId, e
   return 'created';
 }
 
+// Undo an account this run just created. History and authority rows reference public.users with
+// ON DELETE RESTRICT (20261105120000), so delete the account's own rows children first, as the
+// service role, before the auth user; a lost insert response can leave the assignment behind.
+async function rollbackCreatedTester(admin, userId) {
+  await admin.from('staff_programme_assignments').delete().eq('user_id', userId);
+  await admin.from('users').delete().eq('id', userId);
+  await admin.auth.admin.deleteUser(userId);
+}
+
 async function processRow(admin, row, lookupMaps, organisationId, { dryRun = false } = {}) {
   let existingUser;
   try {
@@ -204,7 +213,7 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
     .upsert(profile, { onConflict: 'id', ignoreDuplicates: true });
 
   if (profileErr) {
-    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    if (createdNow) await rollbackCreatedTester(admin, userId);
     return { status: 'error', reason: `profile upsert failed: ${profileErr.message}` };
   }
 
@@ -223,7 +232,7 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
     .eq('organization_id', organisationId)
     .select('id');
   if (updateError) {
-    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    if (createdNow) await rollbackCreatedTester(admin, userId);
     return { status: 'error', reason: `profile update failed: ${updateError.message}` };
   }
   if (!updated?.length) {
@@ -242,7 +251,7 @@ async function processRow(admin, row, lookupMaps, organisationId, { dryRun = fal
       existingProgrammeAssignment
     );
   } catch (error) {
-    if (createdNow) await admin.auth.admin.deleteUser(userId);
+    if (createdNow) await rollbackCreatedTester(admin, userId);
     return { status: 'error', reason: `programme assignment failed: ${error.message}` };
   }
 

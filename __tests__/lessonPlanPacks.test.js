@@ -20,7 +20,14 @@ const RELEASE_PACK_SHA256 = {
   'isixhosa-interim-letters-v2': '45e0d71f045124572058e24d6d065e26754cacd6baa370220f9d6851fd4980c7',
   'english-interim-letters-v2': '54a73d3ccc783136565db39eb6baae4274db991debf694b907faa35eaaf3ae49',
   'afrikaans-interim-letters-v2': '92d837fde5fd89c7703fb65980fe05aab2af8dbbda23b47938200779213b3b16',
+  // Draft words (25 per step), blends and books: books commit fbe909f, npm run app-pack.
+  'isixhosa-draft-content-v3': 'c4e150f4bfbc4d483b6501d655351d8a9fee11fcb9df83390430063b03db921d',
+  'english-draft-content-v2': '870bb192b715fa1b8561d3950e04dd60a97229560c71324ad93118363e27c2fa',
+  'afrikaans-draft-content-v2': '2eedf3f3af969636f31cafaad010c7f4eb5e624b6320e4b1e550d68f55566c4b',
 };
+
+// The current draft content release per language; trimmed to 25 words per step on 2026-11-05.
+const DRAFT_CONTENT = { isixhosa: 'isixhosa-draft-content-v3', english: 'english-draft-content-v2', afrikaans: 'afrikaans-draft-content-v2' };
 
 const PREVIEW_PACK_SHA256 = {
   'isixhosa-candidates-preview-v2': '7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366',
@@ -31,16 +38,45 @@ const PREVIEW_PACK_SHA256 = {
 test('current packs are selected by letter order', () => {
   expect(CURRENT_PACK_IDS).toEqual({
     release: {
-      'isixhosa-order-2026-10-23': 'isixhosa-interim-letters-v2',
-      'english-order-2026-10-23': 'english-interim-letters-v2',
-      'afrikaans-order-2026-10-23': 'afrikaans-interim-letters-v2',
+      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v3',
+      'english-order-2026-10-23': 'english-draft-content-v2',
+      'afrikaans-order-2026-10-23': 'afrikaans-draft-content-v2',
     },
-    preview: {
-      'isixhosa-order-2026-10-23': 'isixhosa-candidates-preview-v2',
-      'english-order-2026-10-23': 'english-candidates-preview-v1',
-      'afrikaans-order-2026-10-23': 'afrikaans-candidates-preview-v1',
-    },
+    preview: {},
   });
+});
+
+test.each([['xh', 'isixhosa'], ['en', 'english'], ['af', 'afrikaans']])(
+  'a pilot build teaches %s from the draft content release pack, with words and blends', (code, name) => {
+    const teachingOrder = resolveTeachingOrder('2026-10-23', code);
+    const pack = getPackForOrder(teachingOrder.id);
+    expect(pack).toMatchObject({ id: DRAFT_CONTENT[name], language: name, channel: 'release',
+      letter_order: teachingOrder.id });
+    expect(order(pack)).toBe(teachingOrder.letters.join(' '));
+    // At most 25 words per step (Jim, 2026-11-05), all of them in the preview's candidate list.
+    const perStep = {};
+    for (const entry of pack.word_bank) perStep[entry.step] = (perStep[entry.step] ?? 0) + 1;
+    expect(Math.max(...Object.values(perStep))).toBeLessThanOrEqual(25);
+    expect(pack.word_bank.length).toBeGreaterThan(300);
+    expect(pack.letter_steps[0].blends.length).toBeGreaterThan(0);
+    expect(pack.letter_steps[0].words.length).toBeGreaterThan(0);
+    // Words are a subset of the preview it was built from; blends are unchanged.
+    const preview = getPackById(pack.generated_from.from_preview.file.replace(/\.json$/, ''), { allowPreview: true });
+    const candidates = new Set(preview.word_bank.map(entry => `${entry.step}:${entry.text}`));
+    expect(pack.word_bank.every(entry => candidates.has(`${entry.step}:${entry.text}`))).toBe(true);
+    expect(pack.letter_steps.map(s => s.blends)).toEqual(preview.letter_steps.map(s => s.blends));
+    expect(pack.generated_from.curation).toMatchObject({ words_per_step: 25, kept: pack.word_bank.length });
+  }
+);
+
+test('a pilot build has two isiXhosa books at each of steps 1 to 3', () => {
+  const pack = getPackForOrder('isixhosa-order-2026-10-23');
+  expect(pack.letter_steps.slice(0, 3).map(step => step.readers)).toEqual([
+    ['xh-int-v1-r01', 'xh-int-v1-r02'], ['xh-int-v1-r03', 'xh-int-v1-r04'], ['xh-int-v1-r05', 'xh-int-v1-r06'],
+  ]);
+  expect(pack.letter_steps.slice(3).every(step => step.readers.length === 0)).toBe(true);
+  expect(pack.readers['xh-int-v1-r01']).toMatchObject({ title: 'Molo, Lolo!', step: 1 });
+  for (const id of Object.keys(pack.readers)) expect(pack.reader_details[id].retired).toBe(false);
 });
 
 test.each([['xh', 'isixhosa'], ['en', 'english'], ['af', 'afrikaans']])(
@@ -86,18 +122,33 @@ test('a legacy order has no current pack', () => {
 });
 
 test.each([['isixhosa', 2], ['english', 1], ['afrikaans', 1]])(
-  '%s previews require explicit permission on order and id lookups', (name, version) => {
+  '%s previews resolve by id only with explicit permission; every build teaches the release', (name, version) => {
     const orderId = `${name}-order-2026-10-23`;
     const previewId = `${name}-candidates-preview-v${version}`;
-    const release = getPackById(`${name}-interim-letters-v2`);
+    const release = getPackById(DRAFT_CONTENT[name]);
     for (const options of [undefined, null, { allowPreview: false }, { allowPreview: 'yes' }, { allowPreview: 1 }]) {
       expect(getPackForOrder(orderId, options)).toBe(release);
       expect(getPackById(previewId, options)).toBeNull();
     }
-    expect(getPackForOrder(orderId, { allowPreview: true })).toBe(getPackById(previewId, { allowPreview: true }));
-    expect(getPackForOrder(orderId, { allowPreview: true })).toMatchObject({ id: previewId, channel: 'preview' });
+    expect(getPackForOrder(orderId, { allowPreview: true })).toBe(release);
+    expect(getPackById(previewId, { allowPreview: true })).toMatchObject({ id: previewId, channel: 'preview' });
   }
 );
+
+test('a mapped preview is chosen only with explicit permission (registry fixture)', () => {
+  // No order has a preview mapping today; keep the selection rule tested for the next one.
+  const release = getPackById('isixhosa-draft-content-v3');
+  const preview = getPackById('isixhosa-candidates-preview-v2', { allowPreview: true });
+  const registry = createPackRegistry([release, preview], {
+    release: { 'isixhosa-order-2026-10-23': release.id },
+    preview: { 'isixhosa-order-2026-10-23': preview.id },
+  });
+  for (const options of [undefined, null, { allowPreview: false }, { allowPreview: 'yes' }, { allowPreview: 1 }]) {
+    expect(registry.getPackForOrder('isixhosa-order-2026-10-23', options)).toBe(release);
+    expect(registry.getPackById(preview.id, options)).toBeNull();
+  }
+  expect(registry.getPackForOrder('isixhosa-order-2026-10-23', { allowPreview: true })).toBe(preview);
+});
 
 test('pack letter order ids use the explicit field before the frozen legacy mapping', () => {
   const { LEGACY_PACK_LETTER_ORDERS } = require('../src/lessonPlan/packs/packLetterOrder');
