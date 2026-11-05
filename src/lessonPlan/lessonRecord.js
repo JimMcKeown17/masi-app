@@ -8,8 +8,8 @@ export const buildLessonRecord = ({ draft, userId, currentLevels, sessionTypeFie
   const readingLevelChanges = Object.fromEntries(Object.entries(draft.reading_level_changes).filter(([id]) => present.has(id)));
   const blendTierShown = draft.ticks.blendTierShown ?? draft.plan.blend_tier ?? null;
   const { plan, plan_reason } = planForSave({ plan: draft.plan, lessonDate: draft.lesson_date });
-  const trackerCheck = Object.values(trackerChanges).some(changes => Object.keys(changes).length > 0)
-    ? 'marked' : childIds.every(id => draft.ticks.noOneNew?.includes(id)) ? 'none' : null;
+  // Kept for readers of older sessions; 'none' came from the removed "None of these yet" answer.
+  const trackerCheck = Object.values(trackerChanges).some(changes => Object.keys(changes).length > 0) ? 'marked' : null;
   const activities = {
     letters_focused: draft.ticks.letters,
     session_reading_level: deriveSessionReadingLevel(draft.ticks.blends),

@@ -604,8 +604,8 @@ the current-state model better than Zazi's per-session carry-forward.
   ADR 0010 records "advice from the children, record with the group".
   [Device gates V1–V8](./device-gates-sqlite-backend-2026-07.md#v-lesson-flow-c2c3-2026-10): the A03
   passed all eight, and Jim's iPhone pass on build 24 passed V3's swipe, V5's keyboard, V6, V7 and
-  V8. Still to check on the 1.4.0 pilot build: Wrap up's "None of these yet" and header date
-  button, and lesson advice after the known-letters fix (both postdate build 24); iPhone V1, V2
+  V8. Still to check on the 1.4.0 pilot build: Wrap up's header date
+  button ("None of these yet" was removed 2026-11-05), and lesson advice after the known-letters fix (both postdate build 24); iPhone V1, V2
   and V4; ECD (no ECD class on staging). v1 has no timer. C4/C5 reader/receipt work remains
   separate; release packs were letters-only (P11) until the draft content packs of 2026-11-05 added draft words, blends and books. The build log holds implementation and review
   evidence.

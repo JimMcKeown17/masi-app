@@ -88,13 +88,14 @@ screenTest('a chip EGMA already shows is fixed, and a known step shows ticked', 
   expect(await changes()).toEqual({});
 });
 screenTest('the row opens the tracker sheet where a stored tick can be unticked', async () => {
-  await tick('c1','count.5'); await tick('c1','finger_flash.5'); await tick('c1','read_numbers.5'); const v=mount(); await ready(v); expect(childRow(v).getByText('3 / 37 ›')).toBeTruthy(); open(v);
+  await tick('c1','count.5'); await tick('c1','finger_flash.5'); await tick('c1','read_numbers.5'); const v=mount(); await ready(v); const tracker = childRow(v).getByRole('button', { name: 'Sipho, number tracker, 3 of 37 steps' });
+  expect(within(tracker).getByText('Number tracker')).toBeTruthy(); expect(within(tracker).getByText('3 / 37')).toBeTruthy(); open(v);
   fireEvent.press(await v.findByLabelText(`${stepPhrase(curriculum,'count.5')}, Ticked`)); done(v);
   await waitFor(async()=>expect((await changes()).c1['count.5']).toMatchObject({mastered:false}));
 });
 screenTest('a removal in the sheet shows on the chip and the chip can cancel it', async () => {
   await tick('c1','add.5'); const v=mount(); await ready(v); open(v); fireEvent.press(await v.findByLabelText(`${stepPhrase(curriculum,'add.5')}, Ticked`)); done(v);
-  await waitFor(()=>expect(chip(v)).toBeTruthy()); expect(childRow(v).getByText('0 / 37 ›')).toBeTruthy(); fireEvent.press(chip(v));
+  await waitFor(()=>expect(chip(v)).toBeTruthy()); expect(childRow(v).getByText('0 / 37')).toBeTruthy(); fireEvent.press(chip(v));
   await waitFor(async()=>expect(await changes()).toEqual({})); expect(chip(v,'Ticked')).toBeTruthy();
 });
 screenTest('removing a higher tick in the sheet clears the chips it implied', async () => {
