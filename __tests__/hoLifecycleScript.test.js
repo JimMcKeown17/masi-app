@@ -110,14 +110,21 @@ describe('SQL programs', () => {
     expect(sql.trim()).toMatch(/COMMIT;$/);
     expect(sql).toContain("SET LOCAL lock_timeout = '10s';");
     const children = sql.indexOf('FROM public.children WHERE id = ANY');
-    const classes = sql.indexOf('FROM public.classes WHERE id = v_class ORDER BY id FOR UPDATE');
-    const groups = sql.indexOf('FROM public.groups WHERE id = v_group ORDER BY id FOR UPDATE');
+    const classes = sql.indexOf('FROM public.classes WHERE id = ANY (v_lock_classes) ORDER BY id FOR UPDATE');
+    const groups = sql.indexOf('FROM public.groups WHERE id = ANY (v_lock_groups) ORDER BY id FOR UPDATE');
     const firstWrite = Math.min(...['UPDATE public.', 'INSERT INTO public.']
       .map(statement => sql.indexOf(statement)).filter(index => index >= 0));
     expect(children).toBeGreaterThan(0);
     expect(classes).toBeGreaterThan(children);
     expect(groups).toBeGreaterThan(classes);
     expect(firstWrite).toBeGreaterThan(groups);
+    // The server's archive decisions rely on these locks: the named class, the group's class, and
+    // the classes and groups of every child whose delivery the command opens.
+    const lockSection = sql.slice(children, groups);
+    expect(lockSection).toContain('SELECT g.class_id FROM public.groups g WHERE g.id = v_group');
+    expect(lockSection).toContain('SELECT m.class_id FROM public.child_class_memberships m');
+    expect(lockSection).toContain('SELECT m.group_id FROM public.child_group_memberships m');
+    expect(lockSection).toMatch(/v_opening := CASE WHEN v_scope = 'child' AND v_command IN \('handover', 'reopen'\) THEN v_children ELSE v_moving END;/);
   });
 
   test('never writes row_version', () => {

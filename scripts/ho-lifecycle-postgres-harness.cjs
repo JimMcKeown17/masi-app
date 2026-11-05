@@ -31,6 +31,8 @@ const C = id('1b', 4);
 const S = id('1b', 5);
 const SCHOOL = id('2b', 1);
 const K = id('4b', 1);
+const K2 = id('4b', 2);
+const YEAR_2027 = id('3b', 1);
 const X1 = id('5b', 1);
 const X2 = id('5b', 2);
 const X3 = id('5b', 3);
@@ -62,14 +64,19 @@ INSERT INTO public.users (id, first_name, last_name, school_id, organization_id)
 INSERT INTO public.staff_programme_assignments (user_id, programme_id, school_id, created_by) VALUES
   ('${A}', ${programme('literacy')}, '${SCHOOL}', '${HO}'), ('${B}', ${programme('literacy')}, '${SCHOOL}', '${HO}'),
   ('${C}', ${programme('numeracy')}, '${SCHOOL}', '${HO}'), ('${S}', ${programme('literacy')}, '${SCHOOL}', '${HO}');
+INSERT INTO public.academic_years (id, label, starts_on, ends_on, is_active) VALUES
+  ('${YEAR_2027}', 'harness-2027', '2027-01-15', '2027-12-15', false);
 INSERT INTO public.classes (id, school_id, name, grade, academic_year_id, created_by) VALUES
-  ('${K}', '${SCHOOL}', 'Harness class K', '1', ${activeYear}, '${HO}');
+  ('${K}', '${SCHOOL}', 'Harness class K', '1', ${activeYear}, '${HO}'),
+  ('${K2}', '${SCHOOL}', 'Harness class K2 (2027)', '2', '${YEAR_2027}', '${HO}');
 INSERT INTO public.children (id, first_name, last_name, class_id, created_by, archived_at) VALUES
   ('${X1}', 'Child', 'One', '${K}', '${HO}', NULL), ('${X2}', 'Child', 'Two', '${K}', '${HO}', NULL),
   ('${X3}', 'Child', 'Three', '${K}', '${HO}', NULL), ('${XA}', 'Child', 'Archived', '${K}', '${HO}', now() - interval '1 day');
 INSERT INTO public.child_class_memberships (child_id, class_id, academic_year_id, enrolled_at, created_by)
 SELECT c, '${K}', ${activeYear}, TIMESTAMPTZ '2026-02-01 08:00:00+02', '${HO}'
 FROM unnest(ARRAY['${X1}', '${X2}', '${X3}']::uuid[]) c;
+INSERT INTO public.child_class_memberships (child_id, class_id, academic_year_id, enrolled_at, created_by) VALUES
+  ('${X2}', '${K2}', '${YEAR_2027}', TIMESTAMPTZ '2026-11-01 08:00:00+02', '${HO}');
 INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by, created_at, row_version) VALUES
   ('${DET.childA1}', '${A}', '${X1}', TIMESTAMPTZ '2026-02-01 08:00:00+02', '${HO}', TIMESTAMPTZ '2026-02-01 08:00:00+02', 3),
   ('${DET.childA2}', '${A}', '${X2}', TIMESTAMPTZ '2026-02-01 08:00:00+02', '${HO}', TIMESTAMPTZ '2026-02-01 08:00:00+02', 3),
@@ -269,6 +276,32 @@ const runCommandCases = (databaseUrl, summary) => {
     return result;
   };
   const kinds = actions => actions.map(action => `${action.action}:${action.table}`).sort();
+  // A second session holds one row lock for 4 s. The dry run must not wait for it; apply must,
+  // because the server's archive decisions (private.other_active_holder) rely on every Head
+  // Office grant locking the classes and groups whose holders it can change.
+  let holders = 0;
+  const underHeldLock = (table, rowId, argv, label) => {
+    holders += 1;
+    const name = `ho-lock-holder-${holders}`;
+    const holder = spawn('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-Atq', databaseUrl, '-c',
+      `BEGIN; SELECT 1 FROM public.${table} WHERE id = '${rowId}' FOR UPDATE; SELECT pg_sleep(4); COMMIT;`],
+    { env: buildPsqlEnv(name), stdio: 'ignore' });
+    holder.unref();
+    let held = false;
+    for (let attempt = 0; attempt < 100 && !held; attempt += 1) {
+      held = sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name = 'masi-history-rls-${name}'
+        AND wait_event = 'PgSleep';`, 'lock-holder-ready') === '1';
+      if (!held) sleep(100);
+    }
+    assert.ok(held, `${label}: lock holder did not start`);
+    const started = Date.now();
+    ok(cli(argv), `${label}-dry-run-under-lock`);
+    assert.ok(Date.now() - started < 1500, `${label}: the dry run waited for a row lock`);
+    const result = ok(cli(apply(argv)), label);
+    const waited = Date.now() - started;
+    assert.ok(waited >= 2500, `${label}: apply did not wait for the held ${table} row lock (${waited} ms)`);
+    return result;
+  };
   const versionsSql = `SELECT jsonb_object_agg(id, row_version) FROM (
     SELECT id, row_version FROM public.child_ea_assignments UNION ALL SELECT id, row_version FROM public.class_ea_assignments
     UNION ALL SELECT id, row_version FROM public.group_ea_assignments) v;`;
@@ -320,7 +353,8 @@ const runCommandCases = (databaseUrl, summary) => {
     pass('child-handover-rerun-after-lost-response-is-idempotent');
 
     // B -> A: A's deterministic row is reopened in place (identity and start kept), gap reported.
-    const back = ok(cli(apply(handoverChild(EMAIL.B, EMAIL.A, X1))), 'child-handover-back');
+    const back = underHeldLock('classes', K, handoverChild(EMAIL.B, EMAIL.A, X1), 'child-handover-back');
+    pass('child-handover-waits-for-the-child-class-lock');
     assert.ok(back.confirmed);
     const reopened = back.applied.actions.find(action => action.action === 'reopen');
     assert.equal(reopened.id, DET.childA1);
@@ -339,7 +373,8 @@ const runCommandCases = (databaseUrl, summary) => {
 
     // Class handover A -> B with delivery: class row and A's delivery rows for the class move.
     // B's ended deterministic row for X1 is reopened; X2 gets B's deterministic row.
-    const classMove = ok(cli(apply(handoverClass(EMAIL.A, EMAIL.B, 'move'))), 'class-handover-move');
+    const classMove = underHeldLock('classes', K2, handoverClass(EMAIL.A, EMAIL.B, 'move'), 'class-handover-move');
+    pass('class-handover-move-waits-for-a-moved-child-other-class-lock');
     assert.ok(classMove.confirmed);
     DET.classB = classMove.applied.actions.find(action => action.table === 'class_ea_assignments' && action.action === 'insert').id;
     assert.equal(DET.classB, deterministicId('class_ea_assignments', K, B, literacy));
@@ -381,7 +416,8 @@ const runCommandCases = (databaseUrl, summary) => {
     assert.ok(groupRows[0].unassigned_at);
     assert.notEqual(groupRows[1].id, DET.group);
     assert.deepEqual([groupRows[1].ea_user_id, groupRows[1].unassigned_at, groupRows[1].created_by], [B, null, null]);
-    const groupBack = ok(cli(apply(handoverGroup(EMAIL.B, EMAIL.A))), 'group-handover-back');
+    const groupBack = underHeldLock('classes', K, handoverGroup(EMAIL.B, EMAIL.A), 'group-handover-back');
+    pass('group-handover-waits-for-the-group-class-lock');
     assert.ok(groupBack.confirmed);
     groupRows = rows('group_ea_assignments', `group_id = '${G}'`);
     assert.equal(groupRows.length, 3);
@@ -391,23 +427,8 @@ const runCommandCases = (databaseUrl, summary) => {
     pass('group-handover-uses-fresh-successor-ids-and-is-idempotent');
 
     // end-delivery waits for a held child-row lock (the dry run does not), then ends only X1.
-    const holder = spawn('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-Atq', databaseUrl, '-c',
-      `BEGIN; SELECT 1 FROM public.children WHERE id = '${X1}' FOR UPDATE; SELECT pg_sleep(4); COMMIT;`],
-    { env: buildPsqlEnv('ho-lock-holder'), stdio: 'ignore' });
-    let held = false;
-    for (let attempt = 0; attempt < 100 && !held; attempt += 1) {
-      held = sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name = 'masi-history-rls-ho-lock-holder'
-        AND wait_event = 'PgSleep';`, 'lock-holder-ready') === '1';
-      if (!held) sleep(100);
-    }
-    assert.ok(held, 'lock holder did not start');
-    const started = Date.now();
-    ok(cli(endDelivery(EMAIL.B, X1)), 'end-delivery-dry-run-under-lock');
-    assert.ok(Date.now() - started < 1500, 'the dry run took no row lock');
-    const ended = ok(cli(apply(endDelivery(EMAIL.B, X1))), 'end-delivery');
-    assert.ok(Date.now() - started >= 2500, `apply did not wait for the child-row lock (${Date.now() - started} ms)`);
+    const ended = underHeldLock('children', X1, endDelivery(EMAIL.B, X1), 'end-delivery');
     assert.ok(ended.confirmed);
-    holder.unref();
     const b1Ended = row('child_ea_assignments', DET.childB1);
     assert.ok(b1Ended.unassigned_at);
     assert.equal(row('child_ea_assignments', DET.childB2).unassigned_at, null);
@@ -419,7 +440,8 @@ const runCommandCases = (databaseUrl, summary) => {
     pass('end-delivery-locks-ends-only-named-children-idempotently');
 
     // reopen clears the end in place on the deterministic rows and reports the gap.
-    const reopenedChild = ok(cli(apply(reopenChild(EMAIL.B, X1))), 'reopen-child');
+    const reopenedChild = underHeldLock('groups', G, reopenChild(EMAIL.B, X1), 'reopen-child');
+    pass('reopen-child-waits-for-the-child-group-lock');
     assert.ok(reopenedChild.confirmed);
     assert.equal(reopenedChild.applied.actions[0].gap.from, b1Ended.unassigned_at);
     assert.equal(row('child_ea_assignments', DET.childB1).unassigned_at, null);

@@ -8821,7 +8821,7 @@ Supabase CLI or `.env.local` was touched; everything ran on a disposable local P
   group arm from "held") first survived; class-only and group-only held children were added to the
   clean fixture, after which dropping either arm failed it.
 - `npx jest __tests__/hoLifecycleScript.test.js __tests__/eaAccessScript.test.js`: 2 suites /
-  105 tests passed (61 in the new suite).
+  107 tests passed (61 in the new suite).
 - `npm run verify:ho-lifecycle:postgres` (disposable `postgres:17-alpine`, PGTZ=UTC): 30 checks
   passed over 42 migrations through `20261104132732`: invariant query empty on reference data and on
   a clean fixture, exactly one hit per check on a seeded fixture, the no-receipt case, and the file
@@ -8848,3 +8848,28 @@ through `supabase db query` (the staging helper) is untested here. Until the ser
 live, a 1.5.0 phone's stale archive or restore can still undo a Head Office end or reopen
 (MA-BUG-20261104-006); the runbook keeps the interim upload-first rule and the no-reopen rule
 for phones with refused archives.
+
+**Follow-up 2026-11-05: lock the classes and groups a grant can change.** The server batch's
+`private.other_active_holder('classes')` now treats a class as held when another EA holds one of
+its children directly or through a group of the class. It reads those children and groups
+unlocked, relying on every Head Office grant that can make someone a holder in class K locking
+K's row first. Apply locked only the named class and group, so `handover child`/`reopen child`
+(no class at all), `handover group` (not the group's class) and a class delivery move (not the
+moved children's other open-membership classes) could race an EA's Delete class. Apply now locks,
+children → classes → groups and ids ascending: the named children; the named class, the group's
+class, and the open-membership classes and groups of every child whose delivery the command
+opens; the named group. It recomputes those sets after locking and asks for a rerun if one grew.
+`end-delivery` opens nothing and still locks only its children.
+- RED: the new harness case `child-handover-waits-for-the-child-class-lock` failed with "apply did
+  not wait for the held classes row lock (203 ms)". GREEN after the change. Mutations dropping the
+  group's class, or the children's groups, fail `group-handover-waits-for-the-group-class-lock`
+  (220 ms) and `reopen-child-waits-for-the-child-group-lock` (201 ms).
+- The fixture adds a 2027 class K2 holding a second open membership for X2 (the year-rollover
+  shape) for `class-handover-move-waits-for-a-moved-child-other-class-lock`.
+- `npm run verify:ho-lifecycle:postgres`: 34 checks passed over the same 42 migrations. The lock
+  cases are lock-level (a second psql session holds the row lock), so they do not depend on the
+  server migration being present.
+- `npx jest __tests__/hoLifecycleScript.test.js __tests__/eaAccessScript.test.js`: 107/107. Full unit
+  suite: 517/518 suites, 8,243/8,244 tests (the worktree's `node_modules` is now complete);
+  `CreateClassScreen` failed once under parallel load and passed alone (12/12). Integration suite:
+  111/111 suites, 1,530/1,530 tests.

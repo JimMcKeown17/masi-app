@@ -97,7 +97,11 @@ to localhost PostgreSQL, so these cases are not yet verified. See the
 as postgres on the same fixed pooler target as `ea-access.cjs`, adds no server function, table,
 policy or grant, and changes no phone payload or outbox operation. One anonymous PL/pgSQL block per
 command: the dry run is READ ONLY with no lock or write statement; apply locks children → classes →
-groups (ids ascending, the order the server's archive decisions use), recomputes the plan, then
+groups (ids ascending, the order the server's archive decisions use): the named children; the named
+class, the group's class, and the open-membership classes and groups of every child whose delivery
+the command opens; the named group. `private.other_active_holder('classes')` reads a class's
+children and groups unlocked and relies on exactly this. It then recomputes those sets and the plan
+(a grown set is a retry), then
 ends rows at `greatest(now(), assigned_at)`, reopens deterministic rows in place (clears
 `unassigned_at`, and `handover_reason` on class rows; identity columns and `assigned_at`
 untouched, so `<table>_prevent_identity_change` passes) or inserts them. It never writes

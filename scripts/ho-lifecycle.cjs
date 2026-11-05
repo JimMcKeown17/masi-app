@@ -180,6 +180,9 @@ DECLARE
     FROM pg_catalog.jsonb_array_elements_text(coalesce(a -> 'child_ids', '[]'::jsonb)) x ORDER BY 1);
   v_moving uuid[] := '{}';
   v_moving_locked uuid[];
+  v_opening uuid[];
+  v_lock_classes uuid[];
+  v_lock_groups uuid[];
   v_staying uuid[];
   v_end jsonb := '[]';
   v_open jsonb := '[]';
@@ -202,10 +205,30 @@ BEGIN
   END IF;
 `;
 
+// The classes and groups whose holders a command can change. The server's archive decisions
+// (private.other_active_holder) read the holders of a class's children and groups without
+// locking them, and rely on every Head Office grant locking that class row first: the named
+// class, the group's class, and the classes and groups of every child whose delivery this
+// command opens (v_opening). Taken children -> classes -> groups, ids ascending.
+const GRANT_CLASSES = `ARRAY(SELECT DISTINCT s.id FROM (
+      SELECT v_class AS id
+      UNION ALL SELECT g.class_id FROM public.groups g WHERE g.id = v_group
+      UNION ALL SELECT m.class_id FROM public.child_class_memberships m
+        WHERE m.child_id = ANY (v_opening) AND m.exited_at IS NULL) s
+    WHERE s.id IS NOT NULL ORDER BY 1)`;
+const GRANT_GROUPS = `ARRAY(SELECT DISTINCT s.id FROM (
+      SELECT v_group AS id
+      UNION ALL SELECT m.group_id FROM public.child_group_memberships m
+        WHERE m.child_id = ANY (v_opening) AND m.removed_at IS NULL) s
+    WHERE s.id IS NOT NULL ORDER BY 1)`;
+
 const PLAN_LOCKS = `
   PERFORM 1 FROM public.children WHERE id = ANY (v_children || v_moving) ORDER BY id FOR UPDATE;
-  PERFORM 1 FROM public.classes WHERE id = v_class ORDER BY id FOR UPDATE;
-  PERFORM 1 FROM public.groups WHERE id = v_group ORDER BY id FOR UPDATE;
+  v_opening := CASE WHEN v_scope = 'child' AND v_command IN ('handover', 'reopen') THEN v_children ELSE v_moving END;
+  v_lock_classes := ${GRANT_CLASSES};
+  PERFORM 1 FROM public.classes WHERE id = ANY (v_lock_classes) ORDER BY id FOR UPDATE;
+  v_lock_groups := ${GRANT_GROUPS};
+  PERFORM 1 FROM public.groups WHERE id = ANY (v_lock_groups) ORDER BY id FOR UPDATE;
   IF v_move THEN
     v_moving_locked := v_moving;
     v_moving := ${DELIVERY_IN_CLASS};
@@ -213,6 +236,10 @@ const PLAN_LOCKS = `
       RAISE EXCEPTION 'ho_lifecycle_retry: the class delivery roster changed while locking; run the command again'
         USING ERRCODE = '40001';
     END IF;
+  END IF;
+  IF NOT (${GRANT_CLASSES} <@ v_lock_classes AND ${GRANT_GROUPS} <@ v_lock_groups) THEN
+    RAISE EXCEPTION 'ho_lifecycle_retry: the classes or groups of these children changed while locking; run the command again'
+      USING ERRCODE = '40001';
   END IF;
 `;
 

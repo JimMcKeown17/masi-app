@@ -194,8 +194,9 @@ unknown programme code.
 ### Apply, failures and reruns
 
 `--apply` prints the same plan, then in one transaction: locks the rows in the fixed order
-children → classes → groups, works the plan out again from the locked rows, stops if anything is
-refused or changed, makes the changes and commits. It then reads every changed row back by id and
+children → classes → groups (the named children; the named class, the group's class, and the
+classes and groups of every child given a delivery row; the named group), works the plan out again
+from the locked rows, stops if anything is refused or changed, makes the changes and commits. It then reads every changed row back by id and
 prints `confirmed: true` only when each end is set, each opened row is open, and no `row_version`
 moved. The script never deletes and never bumps `row_version`.
 
