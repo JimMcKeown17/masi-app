@@ -132,13 +132,19 @@ The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
    - **The group has a commit C:** publishing passes when C is in HEAD's history
      (`git merge-base --is-ancestor C HEAD`; C equal to HEAD counts), or when HEAD already has C's
      changes under another commit, as after a squash merge: `git merge-tree --write-tree HEAD C`
-     would change nothing but documentation (`documentation/`, `docs/`, top-level `*.md`). If later
-     work on the same lines makes that merge conflict, the check walks back along HEAD's
-     first-parent line (up to 200 commits) and passes at the first commit that already had C's
-     changes. Otherwise publishing is refused. The refusal names C, the group and its release (from
-     its `OTA <version>+N:` message) and the files the merge would change, and says to merge the
-     branch that contains C first (`git branch -r --contains C` lists it). If this clone does not
-     have C, it says to `git fetch origin` first. In a shallow clone (a CI checkout, say) the script
+     would change only files that never reach phones (`documentation/`, `docs/`, top-level `*.md`,
+     `__tests__/` at any depth, `test-support/`, `scripts/`, `supabase/`, `supabase-migrations/`,
+     `.github/`, `.agents/`, `.claude/`; everything else counts). If later work on the same lines
+     makes that merge conflict, the check walks back along HEAD's first-parent line (up to 200
+     commits) and passes at the first commit that already had C's changes. If C still fails, the
+     same check runs for each branch tip that has C in its history (`git for-each-ref --contains C
+     refs/heads refs/remotes`, the newest 20): phones can run a commit mid-way along a branch
+     (`1.5.0+4` ran `b759128f`), and that branch's squash merge has the tip's changes, which
+     conflict with C's own on the lines later commits changed. Otherwise publishing is refused. The
+     refusal names C, the group and its release (from its `OTA <version>+N:` message), the files the
+     merge would change and the branch tips checked, and says to merge the branch that contains C
+     first (`git branch -r --contains C` lists it). If this clone does not have C, it says to
+     `git fetch origin` first. In a shallow clone (a CI checkout, say) the script
      cannot tell, so it refuses with `git fetch --unshallow`, even with `--allow-rollback`.
    - **The group rolls phones back to their built-in bundle, records no commit (published before
      commits were recorded), or there is no update for this runtime yet:** there is no commit to

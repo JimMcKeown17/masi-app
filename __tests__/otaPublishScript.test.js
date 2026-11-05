@@ -75,6 +75,7 @@ const MERGED_TREE = '7d3c1f0e9b8a7c6d5e4f30211a2b3c4d5e6f7a8b';
 const fakeGit = ({
   status = '', remoteBranches = '  origin/feat/app-release-card\n  origin/HEAD -> origin/main\n',
   head = HEAD, ancestors = [head], unrelated = [], shallow = false, missing = ['src/services/lifecycle/restore.js'],
+  branchTips = '',
 } = {}) => {
   const calls = [];
   const git = (args) => {
@@ -97,6 +98,8 @@ const fakeGit = ({
     if (args[0] === 'rev-list' && args[1] === '--first-parent' && args[3] === head && unrelated.includes(args[4].slice(1))) return `${head}\n`;
     if (args[0] === 'merge-tree' && args[4] === head && unrelated.includes(args[5])) return `${MERGED_TREE}\n`;
     if (key === `diff-tree -r --name-only -z ${head} ${MERGED_TREE}`) return missing.map(file => `${file}\0`).join('');
+    // The branch tips that contain the commit (none by default): real-git tests below cover them.
+    if (args[0] === 'for-each-ref' && args.includes('--contains')) return branchTips;
     throw new Error(`unexpected git ${key}`);
   };
   return { git, calls };
@@ -447,7 +450,7 @@ describe('the update phones run now', () => {
     const error = attempt(['--message', 'Draft content packs', ...(dryRun ? [] : ['--publish'])], d);
     expect(error.message).toContain(`phones on preview run update group ${GROUP_2} (release 1.5.0+2) from commit ${RELEASE_2}`);
     expect(error.message).toContain('this commit (9f6b0f9) does not contain it: it is not in its history, and merging it '
-      + 'would change more than documentation (1 file: src/services/lifecycle/restore.js).');
+      + 'would change files that reach phones (1 file: src/services/lifecycle/restore.js).');
     expect(error.message).toContain('Publishing would roll phones back to code without it.');
     expect(error.message).toContain(`Merge the branch that contains e9a4360 into this one (git branch -r --contains ${RELEASE_2} lists it)`);
     expect(error.message).toContain('To roll phones back on purpose, add --allow-rollback "why".');
@@ -500,11 +503,36 @@ describe('the update phones run now', () => {
     expect(viewCalls(d).map(([, args]) => args[3])).toEqual([GROUP_2]);
   });
 
-  test('the refusal names what merging would change, src/ first, at most three files', () => {
-    const missing = ['scripts/x.cjs', '__tests__/a.test.js', 'src/b.js', 'App.js', 'src/a.js'];
+  test('the refusal names the files merging would change that reach phones, src/ first, at most three files', () => {
+    const missing = ['scripts/x.cjs', '__tests__/a.test.js', 'src/b.js', 'App.js', 'src/a.js', 'package.json', 'assets/icon.png'];
     const d = incident({ git: fakeGit({ head: MAIN_AT_165, unrelated: [RELEASE_2], missing }).git });
     expect(attempt(['--message', 'x'], d).message)
-      .toContain('merging it would change more than documentation (5 files: src/a.js, src/b.js, App.js and 2 more).');
+      .toContain('merging it would change files that reach phones (5 files: src/a.js, src/b.js, App.js and 2 more).');
+  });
+
+  // Paths that never reach the app bundle: nothing in src/, App.js, index.js, config/ or
+  // app.config.js imports from them (only tests import test-support/). Everything else counts.
+  const NEVER_REACH_PHONES = [
+    '__tests__/otaPublishScript.test.js', 'src/assessment-questions/egra/__tests__/egra.test.ts', 'test-support/fixtures/x.json',
+    'scripts/ota-publish.cjs', 'supabase/migrations/20261105_x.sql', 'supabase-migrations/13_x.sql', '.github/workflows/ci.yml',
+    '.agents/skills/tdd/SKILL.md', '.claude/settings.json', 'documentation/build-log.md', 'docs/bugs/README.md', 'DEPLOYMENT.md',
+  ];
+  test('a merge that would change only files that never reach phones passes: tests at any depth, test support, scripts, '
+    + 'Supabase, CI and agent files, documentation', () => {
+    const d = incident({ git: fakeGit({ head: MAIN_AT_165, unrelated: [RELEASE_2], missing: NEVER_REACH_PHONES }).git });
+    expect(main(['--message', 'x'], d)).toMatchObject({ releaseLabel: '1.5.0+3' });
+    expect(d.lines.join('\n')).toContain('Check passed: commit e9a4360 is not in this commit\'s (9f6b0f9) history, but this commit '
+      + 'already has its changes (a squash merge, for example): merging it would change only files that never reach phones.');
+  });
+
+  test.each([
+    'src/a.js', 'App.js', 'index.js', 'app.config.js', 'app.json', 'config/supabaseProjectConfig.js', 'content/x.json',
+    'assets/icon.png', 'plugins/withX.js', 'package.json', 'package-lock.json',
+    // Only the top-level folders are left out; the same names inside src/ reach phones.
+    'src/scripts/x.js', 'src/supabase/x.js', 'src/test-support/x.js', 'src/__tests__helpers/x.js',
+  ])('a merge that would also change %s, which reaches phones, is refused', (file) => {
+    const d = incident({ git: fakeGit({ head: MAIN_AT_165, unrelated: [RELEASE_2], missing: [...NEVER_REACH_PHONES, file] }).git });
+    expect(attempt(['--message', 'x'], d).message).toContain(`merging it would change files that reach phones (1 file: ${file}).`);
   });
 
   test('a commit this repository does not have is refused: fetch first', () => {
@@ -709,9 +737,8 @@ describe('the content check, with real git', () => {
   beforeAll(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'ota-publish-git-')); });
   afterAll(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
-  // base: src/app.js and documentation/build-log.md on main. feat's tip C adds the lifecycle line
-  // phones run, and a build-log entry; main then gets its own build-log entry.
-  const repoWithFeature = (name) => {
+  // An empty repository with a bare origin.
+  const newRepo = (name) => {
     const origin = path.join(root, `${name}-origin.git`);
     const dir = path.join(root, name);
     gitIn(root)(['init', '-q', '--bare', '-b', 'main', origin]);
@@ -727,13 +754,59 @@ describe('the content check, with real git', () => {
       git(['commit', '-q', '-m', message]);
       return git(['rev-parse', 'HEAD']).trim();
     };
+    const head = () => git(['rev-parse', 'HEAD']).trim();
+    return { origin, git, commit, head };
+  };
+  // base: src/app.js and documentation/build-log.md on main. feat's tip C adds the lifecycle line
+  // phones run, and a build-log entry; main then gets its own build-log entry.
+  const repoWithFeature = (name) => {
+    const repo = newRepo(name);
+    const { git, commit } = repo;
     commit({ 'src/app.js': 'base\n', 'documentation/build-log.md': 'log\n' }, 'Base');
     git(['checkout', '-q', '-b', 'feat']);
     const feature = commit({ 'src/app.js': 'base\nlifecycle\n', 'documentation/build-log.md': 'log\nfeat entry\n' }, 'Lifecycle');
     git(['checkout', '-q', 'main']);
     commit({ 'documentation/build-log.md': 'log\nmain entry\n' }, 'Main build log');
-    const head = () => git(['rev-parse', 'HEAD']).trim();
-    return { origin, git, commit, feature, head, push: () => git(['push', '-q', 'origin', 'main', 'feat']) };
+    return { ...repo, feature, push: () => git(['push', '-q', 'origin', 'main', 'feat']) };
+  };
+  // Phones run C, a commit in the middle of feat (1.5.0+4 runs b759128f, mid-way along
+  // feat/app-release-card, whose later commits change the publish script and its test, which C also
+  // changed). C changes a src/ line, a script line and a test line. A later feat commit edits the
+  // same script and test lines, and with `laterSrc` the same src/ line too. main gets unrelated work
+  // and is merged into feat; then feat is squash-merged onto main (`git merge --squash`), unless
+  // `squash` is false (the #165 shape: main never got C). main and feat are pushed.
+  const midBranchUpdate = (name, { laterSrc, squash = true }) => {
+    const repo = newRepo(name);
+    const { git, commit } = repo;
+    commit({
+      'src/app.js': 'base\n', 'src/other.js': 'other\n', 'scripts/publish.cjs': 'guard 1\n',
+      'src/screens/__tests__/app.test.js': 'test 1\n', 'documentation/build-log.md': 'log\n',
+    }, 'Base');
+    git(['checkout', '-q', '-b', 'feat']);
+    const phonesRunCommit = commit({
+      'src/app.js': 'base\nlifecycle\n', 'scripts/publish.cjs': 'guard 2\n', 'src/screens/__tests__/app.test.js': 'test 2\n',
+      'documentation/build-log.md': 'log\nfeat entry\n',
+    }, 'Lifecycle (phones run this)');
+    commit({
+      'scripts/publish.cjs': 'guard 3\n', 'src/screens/__tests__/app.test.js': 'test 3\n',
+      ...(laterSrc ? { 'src/app.js': 'base\nlifecycle, later\n' } : {}),
+    }, 'Later work on the same lines');
+    git(['checkout', '-q', 'main']);
+    commit({ 'src/other.js': 'other, on main\n' }, 'Unrelated work on main');
+    git(['checkout', '-q', 'feat']);
+    git(['merge', '-q', '--no-edit', 'main']);
+    const branchTip = repo.head();
+    git(['checkout', '-q', 'main']);
+    if (squash) {
+      git(['merge', '-q', '--squash', 'feat']);
+      git(['commit', '-q', '-m', 'Lifecycle (#167)']);
+    }
+    git(['push', '-q', 'origin', 'main', 'feat']);
+    const deleteBranch = () => {
+      git(['branch', '-q', '-D', 'feat']);
+      git(['push', '-q', 'origin', '--delete', 'feat']);
+    };
+    return { ...repo, phonesRunCommit, branchTip, deleteBranch };
   };
   // Phones run update group 2ed208c1 (1.5.0+2), published from `commit`.
   const GROUP_2_ID = '2ed208c1-1760-4c1d-b450-0844d4eeb7f0';
@@ -756,7 +829,7 @@ describe('the content check, with real git', () => {
     const { output, error } = dryRun(repo.git, repo.feature);
     expect(error).toBeUndefined();
     expect(output).toContain(`Check passed: commit ${short(repo.feature)} is not in this commit's (${short(squash)}) history, but this `
-      + 'commit already has its changes (a squash merge, for example): merging it would change only documentation.');
+      + 'commit already has its changes (a squash merge, for example): merging it would change only files that never reach phones.');
     expect(output).toContain('Next release: 1.5.0+3');
   });
 
@@ -776,9 +849,83 @@ describe('the content check, with real git', () => {
     repo.push();
     const { error } = dryRun(repo.git, repo.feature);
     expect(error?.message).toContain(`Refusing to publish: phones on preview run update group ${GROUP_2_ID} (release 1.5.0+2) from commit ${repo.feature}, `
-      + `and this commit (${short(repo.head())}) does not contain it: it is not in its history, and merging it would change more `
-      + 'than documentation (1 file: src/app.js).');
+      + `and this commit (${short(repo.head())}) does not contain it: it is not in its history, and merging it would change `
+      + 'files that reach phones (1 file: src/app.js).');
     expect(error.message).toContain('Publishing would roll phones back to code without it.');
+  });
+
+  // 1.5.0+4 runs b759128f, mid-way along feat/app-release-card. The squash merge of the branch has
+  // b759128f's changes plus the later ones, so merging b759128f into it conflicts on the lines the
+  // later commits changed, and no commit on main's first-parent line has b759128f's exact content.
+  test('a squash merge of a branch phones run mid-way, with later work on the same src/ lines: passes, '
+    + 'because this commit has the changes of the branch tip, which has the commit phones run in its history', () => {
+    const repo = midBranchUpdate('mid-branch', { laterSrc: true });
+    const squash = repo.head();
+    const { output, error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: commit ${short(repo.phonesRunCommit)} is not in this commit's (${short(squash)}) history, `
+      + `but this commit already has the changes of branch feat (${short(repo.branchTip)}), which has commit `
+      + `${short(repo.phonesRunCommit)} in its history (a squash merge, for example).`);
+    expect(output).toContain('Next release: 1.5.0+3');
+  });
+
+  test('the same squash merge followed by later work on main on the same src/ line: passes at the squash, which has '
+    + 'the changes of the branch tip', () => {
+    const repo = midBranchUpdate('mid-branch-later-main', { laterSrc: true });
+    const squash = repo.head();
+    const later = repo.commit({ 'src/app.js': 'base\nlifecycle, later, on main\n' }, 'Later work on main on the lifecycle line');
+    repo.git(['push', '-q', 'origin', 'main']);
+    const { output, error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: commit ${short(repo.phonesRunCommit)} is not in this commit's (${short(later)}) history, `
+      + `but commit ${short(squash)} before it already had the changes of branch feat (${short(repo.branchTip)}), which has commit `
+      + `${short(repo.phonesRunCommit)} in its history (a squash merge, for example).`);
+  });
+
+  test('the same squash merge with the branch deleted passes when the later work touched only files that never reach '
+    + 'phones (a script and a test)', () => {
+    const repo = midBranchUpdate('mid-branch-deleted', { laterSrc: false });
+    repo.deleteBranch();
+    expect(repo.git(['for-each-ref', '--contains', repo.phonesRunCommit, 'refs/heads', 'refs/remotes'])).toBe('');
+    const { output, error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: commit ${short(repo.phonesRunCommit)} is not in this commit's (${short(repo.head())}) `
+      + 'history, but this commit already has its changes (a squash merge, for example): merging it would change only files '
+      + 'that never reach phones.');
+  });
+
+  test('the same squash merge with the branch deleted is refused when the later work also changed the src/ lines '
+    + 'the commit phones run changed: nothing shows this commit has them', () => {
+    const repo = midBranchUpdate('mid-branch-deleted-src', { laterSrc: true });
+    repo.deleteBranch();
+    const { error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`from commit ${repo.phonesRunCommit}, and this commit (${short(repo.head())}) does not contain it: `
+      + 'it is not in its history, and merging it would change files that reach phones (1 file: src/app.js).');
+    expect(error.message).not.toContain('branch tip');
+    expect(error.message).toContain('Publishing would roll phones back to code without it.');
+  });
+
+  test('the #165 shape stays refused: main never got the commit phones run, though a branch that contains it exists', () => {
+    const repo = midBranchUpdate('mid-branch-unmerged', { laterSrc: true, squash: false });
+    const { error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`from commit ${repo.phonesRunCommit}, and this commit (${short(repo.head())}) does not contain it: `
+      + 'it is not in its history, and merging it would change files that reach phones (1 file: src/app.js). '
+      + `This commit does not have the changes of a branch that contains ${short(repo.phonesRunCommit)} either `
+      + '(checked 1 branch tip: feat). Publishing would roll phones back to code without it.');
+  });
+
+  test('at most 20 branch tips are checked, newest first, and the refusal says how many were not', () => {
+    const repo = midBranchUpdate('mid-branch-many', { laterSrc: true, squash: false });
+    repo.git(['checkout', '-q', 'feat']);
+    for (let index = 1; index <= 22; index += 1) {
+      repo.git(['checkout', '-q', '-b', `stack-${index}`]);
+      repo.commit({ 'documentation/stack.md': `${index}\n` }, `Stack ${index}`);
+    }
+    repo.git(['checkout', '-q', 'main']);
+    const { error } = dryRun(repo.git, repo.phonesRunCommit);
+    expect(error?.message).toContain(`This commit does not have the changes of a branch that contains ${short(repo.phonesRunCommit)} `
+      + 'either (checked the newest 20 of 23 branch tips: ');
+    expect(error.message).toContain('the other 3 were not checked).');
   });
 
   test('a revert in this commit\'s history passes, since reverting is deliberate; the line says only that the commit is in the history', () => {

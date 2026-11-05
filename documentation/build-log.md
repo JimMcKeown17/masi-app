@@ -9482,3 +9482,73 @@ The review of the guard above found two medium and two low problems. All four ar
 control update, which is not checked; Masi does not use rollouts. A squash merge more than 200
 first-parent commits back, with later conflicting work on top, is refused. The refusal is safe,
 and the rollback label stays available.
+
+### 2026-11-05 — `ota:publish` guard: the squash of a branch phones run mid-way (`feat/app-release-card`, work order 10)
+
+Phones run `1.5.0+4` from `b759128f`, which sits mid-way along this branch. Later branch commits
+(`a0bf5639`, `880287dc`) change `scripts/ota-publish.cjs` and its test, two files that `b759128f`
+also changed. A squash merge of the branch holds all of those changes. So
+`git merge-tree <squash> b759128f` conflicts (add/add) on those two files, and no commit on main's
+first-parent line has `b759128f`'s exact content. The orchestrator reproduced this with real git on
+a simulated squash (`e796a55e`, in a scratch bare clone). After #167 merged, the first normal
+`ota:publish` from main would have been refused, and the only way out was a false
+`--allow-rollback` label. Two fixes, both test first:
+
+- **A branch tip with C in its history counts.** C's own checks are: in history, merge into HEAD,
+  and the first-parent walk. When they fail, the script lists the local and remote-tracking branch
+  tips that contain C (`git for-each-ref --contains C --sort=-committerdate refs/heads
+  refs/remotes`), newest first and at most 20. Each tip appears once, under its first branch name.
+  Symbolic refs such as `origin/HEAD` are skipped, and so is C itself. Each tip gets the same
+  content check, starting with one `merge-tree` into HEAD per tip. The first-parent walk runs only
+  if no tip passes at HEAD. The pass line names the tip: "this commit already has the changes of
+  branch feat (abc1234), which has commit c0ffee1 in its history". The refusal lists the tips it
+  checked, and says how many it skipped when more than 20 contain C. The #165 shape (a branch
+  contains C, main does not) is still refused.
+- **Files that never reach phones do not count.** `OUTSIDE_THE_APP` already held
+  `documentation/`, `docs/` and top-level `*.md`. It now also holds `__tests__/` at any depth,
+  `test-support/`, `scripts/`, `supabase/`, `supabase-migrations/`, `.github/`, `.agents/` and
+  `.claude/`. Checked with grep: nothing in `src/`, `config/`, `plugins/`, `content/`, `App.js`,
+  `index.js`, `app.config.js` or `metro.config.js` imports from them. The `supabase` hits are the
+  `@supabase/supabase-js` package, and `tokens.ts` mentions `__tests__` only in a comment.
+  Everything else still counts, including the same folder names inside `src/` (`src/scripts/`).
+  The output now says "files that reach phones" / "only files that never reach phones" instead of
+  "documentation".
+
+Why both fixes: on today's simulated squash, the second fix alone passes, because the conflicts
+are only the script and its test. It would not pass a later branch whose later commits rework
+`src/` lines changed by the commit phones run. The first fix covers that case while a ref to the
+branch tip exists. With the branch deleted, the script refuses (fails safe).
+
+Real history (scratch bare clone; merge-tree objects are written only there):
+- `sim.cjs`: the simulated squash `e796a55e` PASSED ("merging it would change only files that never
+  reach phones"). The branch tip `880287dc` PASSED on history.
+- `git merge-tree e796a55e 880287dc` changes 25 paths, all under `docs/` and `documentation/`. So
+  the first fix alone also passes once `origin/feat/app-release-card` points at `880287dc`.
+- Against `b759128f`, main before the squash (`f0a34da3`) and #165's main (`9f6b0f96`) were both
+  REFUSED: 32 files reach phones, after checking 2 branch tips
+  (`feat/app-release-card`, `origin/feat/app-release-card`). The check took 453 ms and 148 ms.
+
+**Verification (Node 20).**
+- RED: with the tests written and the script unchanged, `npx jest __tests__/otaPublishScript.test.js`
+  failed 26 of 127. The new real-git cases failed as follows:
+  - the mid-branch squash with later `src/` work: `Refusing to publish … would change more than
+    documentation (3 files: src/app.js, src/screens/__tests__/app.test.js, scripts/publish.cjs)`;
+  - the branch-deleted, tests-and-scripts-only case: refused on 2 files;
+  - the fail-safe case, the #165 shape and the cap case: the old text without the "files that
+    reach phones" wording or the branch tips checked;
+  - the path cases (fake git): refused on scripts and tests, or the old wording.
+
+  A 128th case (a tip passing on the first-parent walk: the squash, then later work on main on the
+  same `src/` line) was added after that run. Against the old script it also failed (`Refusing to
+  publish … more than documentation`). GREEN: 128/128.
+- `npx jest`: 526 suites / 8,483 tests passed, exit 0. `npx jest -c jest.integration.config.js`:
+  114 suites / 1,568 tests passed, exit 0. No SQL, sync or
+  RLS change, so no PostgreSQL harness and no contract-map change. There is no lint script, and EAS
+  was not called.
+
+**Still open.** The tip check needs a ref to the branch tip. If the branch is deleted on GitHub
+and pruned locally, only the files rule helps. A publish from main is then refused if later branch
+commits reworked `src/` lines changed by the commit phones run (safe; `git branch <name> <tip>`
+restores the ref while the commit is still in the clone). On a refusal, the check runs up to 20
+`merge-tree`s at HEAD plus a first-parent walk per tip. Each walk is short when the tip has merged
+main recently (148–453 ms on the real history).

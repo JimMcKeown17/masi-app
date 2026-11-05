@@ -14,7 +14,9 @@
 //
 // It never rolls phones back by accident. Before counting, it finds the updates phones on the
 // channel run now (per platform, the newest update group for this runtime) and refuses unless HEAD
-// contains each one's commit, in its history or as the same changes (a squash merge), so a tree
+// contains each one's commit: in its history, or as the same changes (a squash merge), or as the
+// changes of a branch tip that has the commit in its history (a squash merge of a branch phones ran
+// mid-way). Files that never reach phones (tests, scripts, documentation) do not count. So a tree
 // that lacks it (main behind an unmerged branch, 2026-11-05) cannot replace it. A rollback on
 // purpose needs --allow-rollback "why", which goes into the message.
 //
@@ -258,10 +260,16 @@ const gitAnswers = (git, args) => {
   }
 };
 
-// Paths that never reach the app bundle, so a difference only there is not code phones run.
-const OUTSIDE_THE_APP = /^(?:documentation\/|docs\/|[^/]+\.md$)/;
+// Paths that never reach the app bundle, so a difference only there is not code phones run: tests
+// (__tests__/ at any depth, test-support/), scripts/, Supabase migrations and functions, CI and agent
+// files, and documentation. Nothing in src/, App.js, index.js, config/ or app.config.js imports from
+// them (only tests import test-support/). Everything else counts, to stay on the safe side: src/,
+// config/, content/, assets/, plugins/, package.json, the lockfile, top-level .js and .json files.
+const OUTSIDE_THE_APP = new RegExp('^(?:(?:documentation|docs|test-support|scripts|supabase|supabase-migrations|'
+  + '\\.github|\\.agents|\\.claude)/|[^/]+\\.md$)|(?:^|/)__tests__/');
 const TREE_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const MAX_LINE_COMMITS = 200;
+const MAX_BRANCH_TIPS = 20;
 
 // What merging `commit` into `at` would change: { app, other } paths. git merge-tree exits 1 on
 // conflicts and still prints the merged tree, then the conflicted paths (--name-only); a conflict
@@ -281,29 +289,64 @@ const mergeChanges = ({ git, at, commit }) => {
   return { app: paths.filter(file => !OUTSIDE_THE_APP.test(file)), other: paths.filter(file => OUTSIDE_THE_APP.test(file)) };
 };
 
-// Whether HEAD has `commit`'s changes although `commit` is not in its history: a squash merge
-// copies a branch's changes into one new commit. HEAD has them when merging `commit` would change
-// nothing but documentation. Later work on the same lines makes that merge conflict, so the check
-// walks back along HEAD's first-parent line (to where it meets `commit`'s history) and passes at
-// the first commit that already had them. Returns { at, other } or { missing } (what merging into
-// HEAD would change beyond documentation; tests and scripts count, to stay on the safe side).
-const findAppCode = ({ git, commit, head }) => {
-  const atHead = mergeChanges({ git, at: head, commit });
-  if (atHead.app.length === 0) return { at: head, other: atHead.other };
-  const line = git(['rev-list', '--first-parent', `--max-count=${MAX_LINE_COMMITS}`, head, `^${commit}`])
-    .split('\n').filter(Boolean);
-  for (const at of line) {
-    if (at !== head && mergeChanges({ git, at, commit }).app.length === 0) return { at };
+// Whether HEAD has the changes of one of `commits` although none is in its history: a squash merge
+// copies a branch's changes into one new commit. HEAD has a commit's changes when merging it would
+// change only files that never reach phones. Later work on the same lines makes that merge
+// conflict, so when no commit passes at HEAD, the check walks back along HEAD's first-parent line
+// (to where it meets that commit's history) and passes at the first commit that already had them.
+// Every commit is merged into HEAD first (one merge-tree each), so a walk runs only when none passes
+// there. Returns { commit, at, other } or { missing } (what merging the first commit into HEAD would
+// change in files that reach phones).
+const findAppCode = ({ git, commits, head }) => {
+  let missing;
+  for (const commit of commits) {
+    const atHead = mergeChanges({ git, at: head, commit });
+    if (atHead.app.length === 0) return { commit, at: head, other: atHead.other };
+    if (!missing) missing = atHead.app;
   }
-  return { missing: atHead.app };
+  for (const commit of commits) {
+    const line = git(['rev-list', '--first-parent', `--max-count=${MAX_LINE_COMMITS}`, head, `^${commit}`])
+      .split('\n').filter(Boolean);
+    const at = line.find(candidate => candidate !== head && mergeChanges({ git, at: candidate, commit }).app.length === 0);
+    if (at) return { commit, at };
+  }
+  return { missing };
+};
+
+// The local and remote-tracking branch tips whose history has `commit`, newest first: one entry per
+// tip (named after its first branch; symbolic refs such as origin/HEAD skipped), `commit` itself
+// left out, at most MAX_BRANCH_TIPS checked. HEAD has `commit`'s changes when it has the changes of
+// such a tip: phones can run a commit mid-way along a branch (1.5.0+4 ran b759128f, mid-way along
+// feat/app-release-card), and the branch's squash merge also has the later commits' changes, so it
+// conflicts with `commit` on the lines they changed, but not with the tip.
+const branchTipsContaining = ({ git, commit }) => {
+  const tips = new Map();
+  git(['for-each-ref', '--contains', commit, '--sort=-committerdate',
+    '--format=%(objectname) %(refname:short) %(symref)', 'refs/heads', 'refs/remotes'])
+    .split('\n').forEach((line) => {
+      const [tip, name, symref] = line.split(' ');
+      if (tip && name && !symref && tip !== commit && !tips.has(tip)) tips.set(tip, name);
+    });
+  const all = [...tips].map(([tip, name]) => ({ commit: tip, name }));
+  return { checked: all.slice(0, MAX_BRANCH_TIPS), total: all.length };
 };
 
 const short = commit => commit.slice(0, 7);
+// "a, b, c and 2 more": at most three named.
+const someOf = items => (items.length > 3 ? `${items.slice(0, 3).join(', ')} and ${items.length - 3} more` : items.join(', '));
 // "2 files: src/a.js, src/b.js", src/ first, at most three named.
 const someFiles = (files) => {
   const named = [...files].sort((x, y) => (y.startsWith('src/') - x.startsWith('src/')) || (x < y ? -1 : Number(x > y)));
-  const list = named.length > 3 ? `${named.slice(0, 3).join(', ')} and ${named.length - 3} more` : named.join(', ');
-  return `${files.length} file${files.length === 1 ? '' : 's'}: ${list}`;
+  return `${files.length} file${files.length === 1 ? '' : 's'}: ${someOf(named)}`;
+};
+// " This commit does not have the changes of a branch that contains C either (checked …)." or ''.
+const tipsChecked = ({ tips, commit }) => {
+  if (tips.total === 0) return '';
+  const { length } = tips.checked;
+  const checked = tips.total > length ? `the newest ${length} of ${tips.total} branch tips` : `${length} branch tip${length === 1 ? '' : 's'}`;
+  const rest = tips.total > length ? `; the other ${tips.total - length} were not checked` : '';
+  return ` This commit does not have the changes of a branch that contains ${short(commit)} either `
+    + `(checked ${checked}: ${someOf(tips.checked.map(tip => tip.name))}${rest}).`;
 };
 
 // Whether publishing HEAD keeps the code one set of phones runs. Returns what they run (`runs`) and
@@ -356,27 +399,41 @@ const checkRunningUpdate = ({ running, version, channel, head, git, isShallow })
       rollback: `This repository does not have ${short(commit)}, so ${who} may go back to code without it.`,
     };
   }
-  const found = findAppCode({ git, commit, head });
+  const notInHistory = `Check passed: commit ${short(commit)} is not in this commit's (${short(head)}) history, but`;
+  const found = findAppCode({ git, commits: [commit], head });
   if (found.at === head) {
     return {
       runs,
       why: `this commit (${short(head)}) already has the changes of commit ${short(commit)}`,
-      note: `Check passed: commit ${short(commit)} is not in this commit's (${short(head)}) history, but this commit already has `
-        + `its changes (a squash merge, for example): merging it would change ${found.other.length ? 'only documentation' : 'nothing'}.`,
+      note: `${notInHistory} this commit already has its changes (a squash merge, for example): merging it would change `
+        + `${found.other.length ? 'only files that never reach phones' : 'nothing'}.`,
     };
   }
   if (found.at) {
     return {
       runs,
       why: `commit ${short(found.at)} before this one already had the changes of commit ${short(commit)}`,
-      note: `Check passed: commit ${short(commit)} is not in this commit's (${short(head)}) history, but commit ${short(found.at)} `
-        + 'before it already had its changes (a squash merge, for example).',
+      note: `${notInHistory} commit ${short(found.at)} before it already had its changes (a squash merge, for example).`,
     };
+  }
+  // C's own changes conflict with later work on the same lines; a branch tip whose history has C
+  // carries that later work too.
+  const tips = branchTipsContaining({ git, commit });
+  const viaTip = findAppCode({ git, commits: tips.checked.map(tip => tip.commit), head });
+  if (viaTip.at) {
+    const tip = tips.checked.find(entry => entry.commit === viaTip.commit);
+    const branch = `branch ${tip.name} (${short(tip.commit)}), which has commit ${short(commit)} in its history`;
+    return viaTip.at === head
+      ? { runs, why: `this commit (${short(head)}) already has the changes of ${branch}`,
+        note: `${notInHistory} this commit already has the changes of ${branch} (a squash merge, for example).` }
+      : { runs, why: `commit ${short(viaTip.at)} before this one already had the changes of ${branch}`,
+        note: `${notInHistory} commit ${short(viaTip.at)} before it already had the changes of ${branch} (a squash merge, for example).` };
   }
   return {
     runs,
     refusal: `${phones}, and this commit (${short(head)}) does not contain it: it is not in its history, and merging it would `
-      + `change more than documentation (${someFiles(found.missing)}). Publishing would roll ${who} back to code without it.\n`
+      + `change files that reach phones (${someFiles(found.missing)}).${tipsChecked({ tips, commit })} `
+      + `Publishing would roll ${who} back to code without it.\n`
       + `Merge the branch that contains ${short(commit)} into this one (git branch -r --contains ${commit} lists it), `
       + 'then publish again. To roll phones back on purpose, add --allow-rollback "why".',
     rollback: `This commit (${short(head)}) does not contain ${short(commit)}, so ${who} go back to code without it.`,
