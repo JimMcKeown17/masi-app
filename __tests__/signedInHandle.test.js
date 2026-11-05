@@ -1003,6 +1003,13 @@ test('a non-trivial disposal rollback failure closes both sides but fences the f
 });
 
 test('a startup repair failure closes the unpublished handle and permits a clean retry', async () => {
+  // The default recipe list is empty since version 1 retired (plan O2 item 4). Inject one recipe so
+  // the open path's repair-failure handling stays covered.
+  const startupRepairs = require('../src/services/startupRepairs');
+  const createRunner = startupRepairs.createStartupRepairRunner;
+  const runnerSpy = jest.spyOn(startupRepairs, 'createStartupRepairRunner').mockImplementation((options) => (
+    createRunner({ ...options, repairs: [{ version: 2, name: 'test_repair', run: async () => true }] })
+  ));
   const failing = async (name, options) => {
     const db = await openDatabase(name, options);
     const run = db.runAsync.bind(db);
@@ -1018,7 +1025,8 @@ test('a startup repair failure closes the unpublished handle and permits a clean
   expect(connections.map((db) => db.isOpen)).toEqual([false, false]);
   const a = await requestOpen({ userId: A, openDatabase });
   expect(await (await a.getReader()).getFirstAsync("select value from local_state where key = 'startup_repair_version'"))
-    .toEqual({ value: '1' });
+    .toEqual({ value: '2' });
+  runnerSpy.mockRestore();
 });
 
 test('open adopts legacy work and quarantines foreign work before recovering the file owner’s in-flight rows', async () => {
