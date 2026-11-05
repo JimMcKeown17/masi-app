@@ -9097,6 +9097,7 @@ Office scripts do with `--apply`. A run is a dry run unless `--publish` is given
 unknown argument, and the `npm_config_dryrun` typo case published. Green: 58/58. DEPLOYMENT.md,
 CONTEXT.md and the `releaseMetadata.js` comment now say that only updates of this code published
 without the script show `1.5.0+?`; older bundles show the old footer.
+
 ### 2026-11-05 — Lifecycle OTA: a child Head Office restores comes back on the phone (`feat/lifecycle-ota`, work order 6)
 
 Head Office is getting `restore child` (work order 5, HO branch): it reopens in place, with the same
