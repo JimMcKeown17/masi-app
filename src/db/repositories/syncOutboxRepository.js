@@ -42,14 +42,45 @@ export const outboxRecordId = (tableName, recordId, operation) => (
 // edit is never sent again: it could land on newer server state (MA-BUG-20261104-011, -018). It
 // leaves the phone only through its delivered receipt (services/deliveredReceipt.js).
 const HISTORY_RPC_UPDATE_TABLES = ['battery_runs', 'letter_mastery', 'skill_mastery'];
+const HISTORY_UPDATE_TABLES = HISTORY_RPC_UPDATE_TABLES;
+// The child's relationship family a Delete child ends (plan O2 item 2).
+export const CHILD_RELATIONSHIP_TABLES = Object.freeze([
+  'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships', 'child_group_memberships',
+]);
+const inList = (values) => values.map((value) => `'${value}'`).join(', ');
+
+// Combined-OTA review (2026-11-05): a refused relationship INSERT of a child this EA removed (the
+// removal is queued, or done: archived locally as 'removed_by_ea') is never sent again, by any
+// path, so it can never land after the removal and re-create a grant. It clears under the
+// delivered-receipt rule like a refused lifecycle row. `alias` names the outbox row being judged.
+export const removedChildRelationshipInsertSql = (alias = 'sync_outbox') => `(${alias}.operation = 'insert'
+  and ${alias}.table_name in (${inList(CHILD_RELATIONSHIP_TABLES)})
+  and (exists (select 1 from children removed_child
+        where removed_child.id = json_extract(${alias}.payload, '$.child_id')
+          and removed_child.archive_reason = 'removed_by_ea')
+    or exists (select 1 from sync_outbox removal
+        where removal.table_name = 'children' and removal.operation = 'hard_delete'
+          and removal.record_id = json_extract(${alias}.payload, '$.child_id'))))`;
+export const isRemovedChildRelationshipInsert = (row, removedChildIds) => {
+  if (row?.operation !== 'insert' || !CHILD_RELATIONSHIP_TABLES.includes(row.table_name)) return false;
+  const payload = typeof row.payload === 'string' ? decodeJson(row.payload, null) : row.payload;
+  return Boolean(payload?.child_id) && removedChildIds.has(payload.child_id);
+};
+// The children this EA removed, for the in-memory form of the rule above.
+export const readRemovedChildIds = async (db) => new Set((await db.getAllAsync(`
+  select id from children where archive_reason = 'removed_by_ea'
+  union select record_id from sync_outbox where table_name = 'children' and operation = 'hard_delete'
+`)).map((row) => row.id));
+
 export const isResendableRefusal = ({ table_name: tableName, operation } = {}) => (
   operation === 'insert'
-  || (operation === 'update' && HISTORY_RPC_UPDATE_TABLES.includes(tableName))
+  || (operation === 'update' && HISTORY_UPDATE_TABLES.includes(tableName))
   || (operation === 'hard_delete' && tableName === 'children')
 );
-export const RESENDABLE_REFUSAL_SQL = `(operation = 'insert'
-  or (operation = 'update' and table_name in (${HISTORY_RPC_UPDATE_TABLES.map((table) => `'${table}'`).join(', ')}))
-  or (operation = 'hard_delete' and table_name = 'children'))`;
+export const RESENDABLE_REFUSAL_SQL = `((operation = 'insert'
+  or (operation = 'update' and table_name in (${inList(HISTORY_UPDATE_TABLES)}))
+  or (operation = 'hard_delete' and table_name = 'children'))
+  and not ${removedChildRelationshipInsertSql()})`;
 
 // Spec §7.2: the one definition of unsent work. The sign-out warning, the left-behind report
 // and any future deletion rule all read it through readUnsentSummary.

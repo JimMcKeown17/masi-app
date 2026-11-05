@@ -20,9 +20,12 @@ import {
   timestamp,
 } from '../db/repositories/sqliteRepositoryUtils';
 import {
+  CHILD_RELATIONSHIP_TABLES,
   createSyncOutboxRepository,
+  isRemovedChildRelationshipInsert,
   isResendableRefusal,
   outboxRecordId,
+  readRemovedChildIds,
   RESENDABLE_REFUSAL_SQL,
 } from '../db/repositories/syncOutboxRepository';
 import {
@@ -563,9 +566,15 @@ const SELF_CLEARING_REFUSAL_CODES = Object.freeze([
   'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED', 'MV001', 'UPDATE_NOT_APPLIED', '42501',
 ]);
 // No retry entry point re-sends a refused archive, restore or edit (the auth-restore heal included),
-// so an unmarked 42501 on one clears like a marked one.
-export const refusalExit = (row) => {
+// so an unmarked 42501 on one clears like a marked one. A refused relationship INSERT of a child
+// this EA removed is never sent again either, and clears the same way whatever its code.
+// `removedChildIds` comes from readRemovedChildIds.
+export const isResendableRefusalHere = (row, removedChildIds = new Set()) => (
+  isResendableRefusal(row) && !isRemovedChildRelationshipInsert(row, removedChildIds)
+);
+export const refusalExit = (row, removedChildIds = new Set()) => {
   if (row?.status !== 'terminal' || row.error_code === 'FOREIGN_OWNER') return null;
+  if (isRemovedChildRelationshipInsert(row, removedChildIds)) return 'clears_itself';
   if (!isResendableRefusal(row) && SELF_CLEARING_REFUSAL_CODES.includes(row.error_code)) return 'clears_itself';
   return 'ea_removes';
 };
@@ -1631,6 +1640,8 @@ export const createOutboxSyncEngine = ({
       durationMs: 0,
     };
     const failedRecordsByTable = new Map();
+    // Children this EA removed, read when the pass selects its rows (see refusalExit).
+    let removedChildIds = new Set();
     const fieldResolversByOutboxId = new Map();
     const blockedSubjectIndexes = new Map();
 
@@ -1642,10 +1653,6 @@ export const createOutboxSyncEngine = ({
     const isChildHardDelete = (record) => (
       record.operation === 'hard_delete' && normalizeTableName(record.table_name) === 'children'
     );
-    // The child's own relationship family the deletion waits for (findBlockingDependency).
-    const CHILD_RELATIONSHIP_INSERT_TABLES = [
-      'child_ea_assignments', 'child_programme_enrollments', 'child_class_memberships', 'child_group_memberships',
-    ];
     const rememberBlockedRecord = (record) => {
       if (isChildHardDelete(record)) return;
       const tableKey = normalizeTableName(record.table_name);
@@ -1692,23 +1699,25 @@ export const createOutboxSyncEngine = ({
       if (record.operation === 'hard_delete' && tableNameForRecord === 'children') {
         // Deletion retained a possibly-committed INSERT. Do not let deletion
         // finish before its retry, including a terminal insert retried manually.
-        // Plan O2 item 2: the deletion also waits for the child's own relationship INSERTs, in any
-        // status, so they land open with the authority the rest of the family and the queued
-        // history need, and the server's actor-scoped removal then ends them. History never waits
-        // here. A terminal relationship INSERT releases the deletion when it leaves the outbox
-        // through O1's receipt-gated exit. The waiting deletion is never a parent: see
-        // isChildHardDelete above.
+        // Plan O2 item 2: the deletion also waits for the child's own owed relationship INSERTs,
+        // so they land open with the authority the rest of the family and the queued history need,
+        // and the server's actor-scoped removal then ends them. History never waits here. A
+        // refused (terminal) relationship INSERT does not hold it (combined-OTA review): once the
+        // child is being removed such an INSERT is never sent again (RESENDABLE_REFUSAL_SQL), so it
+        // cannot land after the removal, and it clears through its receipt. Only this EA's rows
+        // count. The waiting deletion is never a parent: see isChildHardDelete above.
         const resolvedDatabase = await resolveDatabase(database);
         const retainedInsert = await resolvedDatabase.getFirstAsync(`
           select id from sync_outbox
-          where operation = 'insert'
+          where operation = 'insert' and owner_user_id = ?
             and (
               (table_name = 'children' and record_id = ?)
-              or (table_name in (${CHILD_RELATIONSHIP_INSERT_TABLES.map(() => '?').join(', ')})
-                and json_extract(payload, '$.child_id') = ?)
+              or (table_name in (${CHILD_RELATIONSHIP_TABLES.map(() => '?').join(', ')})
+                and json_extract(payload, '$.child_id') = ?
+                and status in ('pending', 'failed', 'in_flight'))
             )
           limit 1
-        `, record.record_id, ...CHILD_RELATIONSHIP_INSERT_TABLES, record.record_id);
+        `, passUserId, record.record_id, ...CHILD_RELATIONSHIP_TABLES, record.record_id);
         if (retainedInsert) return { tableName: tableNameForRecord, recordId: record.record_id };
       }
       // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
@@ -1821,8 +1830,9 @@ export const createOutboxSyncEngine = ({
         result.tableResults[tableKey].failed += 1;
         result.failedRecords.push(recordResult.failedRecord);
         // A refused archive, restore or edit says nothing about whether its row exists on the
-        // server, and it is never sent again, so it must not hold back anything (O1).
-        if (!(recordResult.terminal && !isResendableRefusal(outboxRecord))) {
+        // server, and it is never sent again, so it must not hold back anything (O1). Nor does a
+        // refused relationship INSERT of a child this EA removed.
+        if (!(recordResult.terminal && !isResendableRefusalHere(outboxRecord, removedChildIds))) {
           rememberBlockedRecord(outboxRecord);
         }
       }
@@ -1846,6 +1856,7 @@ export const createOutboxSyncEngine = ({
         }
       }
 
+      removedChildIds = await readRemovedChildIds(await resolveDatabase(database));
       const readyRecords = sortByPushOrder(
         await outboxRepository.getReadyRecords({
           limit: 1000,
@@ -2028,8 +2039,8 @@ export const createOutboxSyncEngine = ({
   // row whose own insert is still queued is 'held': it never leaves while that insert could still
   // land with older content (combined-OTA review, 2026-11-05). It is sent again if the insert
   // lands (releaseRefusalsAfterOwnInsert), and resolves normally once the insert has left.
-  const readRefusalExit = async (db, row) => {
-    const exit = refusalExit(row);
+  const readRefusalExit = async (db, row, removedChildIds) => {
+    const exit = refusalExit(row, removedChildIds ?? await readRemovedChildIds(db));
     if (!exit) return { exit: null, delivery: null, incidentId: null };
     if (row.operation !== 'insert') {
       const ownInsert = await db.getFirstAsync(`
@@ -2043,9 +2054,10 @@ export const createOutboxSyncEngine = ({
   const resolveDeliveredRefusals = async (ownerUserId) => runRepositoryTransaction(database, async (txn) => {
     const refused = await txn.getAllAsync(
       "select * from sync_outbox where status = 'terminal' and owner_user_id = ?", ownerUserId);
+    const removedChildIds = await readRemovedChildIds(txn);
     let cleared = 0;
     for (const row of refused) {
-      const { exit, delivery, incidentId } = await readRefusalExit(txn, row);
+      const { exit, delivery, incidentId } = await readRefusalExit(txn, row, removedChildIds);
       if (exit !== 'clears_itself' || delivery !== 'delivered') continue;
       await outboxRepository.deleteRecord(row.id, { transaction: txn });
       await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
@@ -2086,17 +2098,18 @@ export const createOutboxSyncEngine = ({
     if (!items?.length) return items || [];
     try {
       const db = await resolveDatabase(database);
+      const removedChildIds = await readRemovedChildIds(db);
       const described = [];
       for (const item of items) {
         const row = item.outboxId
           ? await db.getFirstAsync('select * from sync_outbox where id = ?', item.outboxId) : null;
-        const { exit, delivery } = await readRefusalExit(db, row);
+        const { exit, delivery } = await readRefusalExit(db, row, removedChildIds);
         described.push({
           ...item,
           delivery,
           clearsItself: exit === 'clears_itself' && delivery !== 'held',
           canRemove: exit === 'ea_removes' && delivery === 'delivered',
-          canRetry: exit !== null && isResendableRefusal(row),
+          canRetry: exit !== null && isResendableRefusalHere(row, removedChildIds),
         });
       }
       return described;
@@ -2143,10 +2156,11 @@ export const createOutboxSyncEngine = ({
     if (!userId) return 0;
     // Lifecycle safety O1: a heal is a retry, so it keeps the no-replay rule. A refused archive,
     // restore or edit is never requeued; it leaves through its delivered receipt.
+    const removedChildIds = await readRemovedChildIds(await resolveDatabase(database));
     const heals = (await outboxRepository.getTerminalRecords()).filter(record => (
       record.owner_user_id === userId
       && record.last_error !== 'foreign_owner'
-      && isResendableRefusal(record)
+      && isResendableRefusalHere(record, removedChildIds)
       && isHealableRlsError(record)
     ));
     if (heals.length === 0) return 0;

@@ -337,7 +337,14 @@ test('repeated ordinary and forced passes: the family and history progress while
   expect(server.all('session_attendees').map(row => row.child_id)).toEqual([C]);
 });
 
-test('a relationship INSERT the server keeps refusing holds the deletion only until it leaves the outbox', async () => {
+// Combined-OTA review (2026-11-05, MEDIUM): the deletion waits only for owed (non-terminal)
+// relationship INSERTs. A refused one of a removed child is never sent again by any path, so it
+// cannot land after the removal and re-create a grant; it blocks nothing, and it clears under the
+// delivered-receipt rule like a refused lifecycle row.
+const statusItems = async () => (await handle.services.syncEngine.getSyncStatus()).needsAttentionItems;
+
+test('a relationship INSERT the server keeps refusing does not hold the deletion, and is never sent again', async () => {
+  await repos.localState.set('support_auto_bundle_last_at', '2099-01-01T00:00:00.000Z');
   await buildOfflineChain();
   // The programme enrollment INSERT is refused every time (42501), with no pending evidence left.
   server.state.refuse = ({ method, target }) => (
@@ -350,25 +357,32 @@ test('a relationship INSERT the server keeps refusing holds the deletion only un
     elapseBackoff();
     await sync({ force });
   }
-  const refusedInsert = (await outbox()).find(row => row.table_name === 'child_programme_enrollments');
-  expect(refusedInsert).toMatchObject({ operation: 'insert', status: 'terminal', error_code: '42501' });
-  expect((await outbox()).map(row => `${row.table_name}:${row.operation}:${row.status}`).sort()).toEqual([
-    'child_programme_enrollments:insert:terminal', 'children:hard_delete:pending',
+  // The removal ran once the INSERT was refused; everything else for the child landed.
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> ok`,
   ]);
-  expect(server.summary().some(line => line.startsWith('rpc/delete_child_if_no_history'))).toBe(false);
-  // Everything else for the child landed while the deletion waited.
   expect(server.all('session_attendees').map(row => row.child_id)).toEqual([C]);
   expect(server.all('letter_mastery').map(row => row.child_id)).toEqual([C]);
+  const refusedInsert = (await outbox()).find(row => row.table_name === 'child_programme_enrollments');
+  expect(refusedInsert).toMatchObject({ operation: 'insert', status: 'terminal', error_code: '42501' });
+  // Once refused for good, forced passes never send it again.
+  const sends = () => server.summary().filter(line => line.startsWith('POST child_programme_enrollments')).length;
+  const sentBefore = sends();
+  await sync({ force: true });
+  await sync({ force: true });
+  expect(sends()).toBe(sentBefore);
 
-  // O1's exit removes the refused row once the office holds its receipt; then the deletion runs.
-  await repos.syncOutbox.deleteRecord(refusedInsert.id);
-  const mark = server.log.length;
+  // Its receipt is delivered, so it clears by itself.
+  await statusItems();
   await sync();
-  expect(passRequests(mark)).toEqual([`rpc/delete_child_if_no_history:${C} -> ok`]);
+  await statusItems();
+  await sync();
   expect(await outbox()).toEqual([]);
+  expect(activeServerRelationships(C)).toEqual([]);
 });
 
-test('an acknowledged child whose relationship INSERT is permanently refused: the INSERT turns terminal instead of retrying forever, then the deletion completes', async () => {
+test('an acknowledged child whose relationship INSERT is permanently refused: the deletion completes and the refused INSERT never re-creates a grant', async () => {
+  await repos.localState.set('support_auto_bundle_last_at', '2099-01-01T00:00:00.000Z');
   await seedBoth([...baseRows(), ...serverChildRows(C)]);
   // Offline, the EA puts the child in a group, records a lesson, then deletes the child.
   await repos.groups.addChildToGroup({ id: MEMBERSHIP, child_id: C, group_id: GROUP, created_by: USER, synced: false });
@@ -390,20 +404,51 @@ test('an acknowledged child whose relationship INSERT is permanently refused: th
     elapseBackoff();
     await sync({ force });
   }
-
-  const rows = await outbox();
-  expect(rows.map(row => `${row.table_name}:${row.operation}:${row.status}:${row.error_code ?? ''}`).sort()).toEqual([
-    'child_group_memberships:insert:terminal:42501', 'children:hard_delete:pending:',
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> ok`,
   ]);
-  expect(server.summary().some(line => line.startsWith('rpc/delete_child_if_no_history'))).toBe(false);
   // The lesson is history: it landed although access had ended (held on the day, S2).
   expect(server.all('session_attendees').map(row => row.child_id)).toEqual([C]);
+  expect(server.summary().filter(line => line.startsWith(`POST child_group_memberships:${MEMBERSHIP}`))).toHaveLength(1);
 
-  await repos.syncOutbox.deleteRecord(rows.find(row => row.table_name === 'child_group_memberships').id);
-  const mark = server.log.length;
-  await sync();
-  expect(passRequests(mark)).toEqual([`rpc/delete_child_if_no_history:${C} -> ok`]);
-  expect(await outbox()).toEqual([]);
+  // Head Office reopens access: a Sync now still does not send the refused membership INSERT.
+  server.t('child_ea_assignments').set(assignment.id, { ...server.t('child_ea_assignments').get(assignment.id), unassigned_at: null });
+  await sync({ force: true });
+  expect(server.summary().filter(line => line.startsWith(`POST child_group_memberships:${MEMBERSHIP}`))).toHaveLength(1);
+  expect(server.all('child_group_memberships').filter(row => row.child_id === C)).toEqual([]);
+});
+
+// Reviewer repro zzReviewX4: the receipt can never prove delivery (rejected as too large).
+test('a refused relationship INSERT whose receipt is rejected neither holds the deletion nor clears', async () => {
+  await repos.localState.set('support_auto_bundle_last_at', '2099-01-01T00:00:00.000Z');
+  await seedBoth([...baseRows(), ...serverChildRows(C)]);
+  await repos.groups.addChildToGroup({ id: MEMBERSHIP, child_id: C, group_id: GROUP, created_by: USER, synced: false });
+  tick();
+  await recordLesson(C);
+  tick();
+  expect(await repos.children.removeChild(C)).toBe(true);
+  const endedAt = '2026-10-21T08:00:00.000Z';
+  const assignment = server.t('child_ea_assignments').get(childEaAssignmentDomainId({ userId: USER, childId: C }));
+  server.t('child_ea_assignments').set(assignment.id, { ...assignment, unassigned_at: endedAt });
+  const classGrantId = classEaAssignmentDomainId({ classId: CLASS, eaUserId: USER, programmeId: PROG });
+  server.t('class_ea_assignments').set(classGrantId, { ...server.t('class_ea_assignments').get(classGrantId), unassigned_at: endedAt });
+  server.state.refuse = ({ target }) => (target === 'rpc/report_mobile_support_incident_v2'
+    ? { status: 400, code: '22023', message: 'Envelope exceeds 65536 bytes' } : null);
+  for (let pass = 0; pass < 10; pass += 1) {
+    elapseBackoff();
+    await sync({ force: pass % 2 === 1 });
+    await statusItems();
+  }
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> ok`,
+  ]);
+  // Nothing is left waiting; the refused INSERT stays visible as a support case.
+  expect((await outbox()).map(row => `${row.table_name}:${row.operation}:${row.status}`)).toEqual([
+    'child_group_memberships:insert:terminal',
+  ]);
+  expect((await handle.services.syncEngine.getSyncStatus()).waitingCount).toBe(0);
+  expect((await statusItems()).find(item => item.table === 'child_group_memberships'))
+    .toMatchObject({ delivery: 'support', canRemove: false, canRetry: false });
 });
 
 test.each([

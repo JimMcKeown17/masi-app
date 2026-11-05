@@ -210,6 +210,38 @@ describe('refused rows in a forced pass', () => {
     expect(refusalExit({ ...unmarked, table_name: 'time_entries', operation: 'insert' })).toBe('ea_removes');
   });
 
+  // Combined-OTA review: a removed child's refused relationship INSERT could otherwise land after
+  // the removal and re-create a grant.
+  test.each([
+    ['removal queued', async () => outbox.enqueue({ tableName: 'children', recordId: 'child-gone', operation: 'hard_delete', payload: { id: 'child-gone' } })],
+    ['removal done', async () => db.runAsync("update children set archived_at = '2026-11-04T08:00:00.000Z', archive_reason = 'removed_by_ea' where id = 'child-gone'")],
+  ])('no retry path re-sends a refused relationship INSERT of a removed child (%s)', async (_name, remove) => {
+    for (const id of ['child-gone', 'child-kept']) {
+      await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
+        values (?, 'Amahle', 'Dlamini', ?, 'synced')`, id, USER);
+      await outbox.enqueue({ tableName: 'child_ea_assignments', recordId: `cea-${id}`, operation: 'insert',
+        payload: { id: `cea-${id}`, user_id: USER, child_id: id, created_by: USER } });
+      await outbox.markTerminalFailure(`child_ea_assignments:cea-${id}:insert`, {
+        errorMessage: 'new row violates row-level security policy', errorCode: '42501' });
+    }
+    await remove();
+    const refusedIds = (await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true }))
+      .filter(row => row.table_name === 'child_ea_assignments').map(row => row.id);
+    expect(refusedIds).toEqual(['child_ea_assignments:cea-child-kept:insert']);
+    expect(await outbox.markInFlightAndGet(['child_ea_assignments:cea-child-gone:insert'])).toEqual([]);
+    expect(await outbox.requeueTerminalRows(['child_ea_assignments:cea-child-gone:insert'])).toBe(0);
+    const { supabaseClient } = createSupabaseMock();
+    const heal = engine(supabaseClient);
+    await heal.retryFailedItem('child_ea_assignments', 'cea-child-gone');
+    expect(await heal.requeueTerminalRlsFailures(USER)).toBe(1);
+    expect(await db.getAllAsync("select id, status from sync_outbox where table_name = 'child_ea_assignments' order by id")).toEqual([
+      { id: 'child_ea_assignments:cea-child-gone:insert', status: 'terminal' },
+      { id: 'child_ea_assignments:cea-child-kept:insert', status: 'pending' },
+    ]);
+    expect(refusalExit({ ...(await outbox.getById('child_ea_assignments:cea-child-gone:insert')) },
+      new Set(['child-gone']))).toBe('clears_itself');
+  });
+
   test('a refused archive, restore or edit is never claimed, even when asked directly', async () => {
     await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
       values ('child-a', 'Amahle', 'Dlamini', ?, 'terminal')`, USER);
