@@ -90,6 +90,75 @@ denials under permissive default ACLs, and service-role execution; this sandbox 
 to localhost PostgreSQL, so these cases are not yet verified. See the
 [operator runbook](./ea-access-runbook.md) and [verification register](./build-log.md#verification-register).
 
+### Head Office lifecycle script — built 2026-11-05; not yet run against hosted
+
+`scripts/ho-lifecycle.cjs` (lifecycle-safety plan H1) is the Head Office tool for ending, handing over and reopening
+`child_ea_assignments`, `class_ea_assignments` and `group_ea_assignments` rows. It runs
+as postgres on the same fixed pooler target as `ea-access.cjs`, adds no server function, table,
+policy or grant, and changes no phone payload or outbox operation. One anonymous PL/pgSQL block per
+command: the dry run is READ ONLY with no lock or write statement; apply locks children → classes →
+groups (ids ascending, the order the server's archive decisions use): the named children; the named
+class, the group's class, and the open-membership classes and groups of every child whose delivery
+the command opens; the named group. `private.other_active_holder('classes')` reads a class's
+children and groups unlocked and relies on exactly this. It then recomputes those sets and the plan
+(a grown set is a retry), then
+ends rows at `greatest(now(), assigned_at)`, reopens deterministic rows in place (clears
+`unassigned_at`, and `handover_reason` on class rows; identity columns and `assigned_at`
+untouched, so `<table>_prevent_identity_change` passes) or inserts them. It never writes
+`row_version`: an equal-version pull applies on the phone (Row versions, below). Child and class
+ids follow the Item 11 derivation in SQL (`extensions.uuid_generate_v5`, U+001F join); the CLI
+recomputes each with its parity-tested JS mirror and refuses on any mismatch. A group successor
+gets a fresh id, because `f(group_id)` stays with the first holder and `ea_user_id` is immutable;
+an earlier group row is never reopened for another EA. Daily read-only checks are
+`scripts/lifecycle-invariants.sql`. Proof: `npm run verify:ho-lifecycle:postgres`, all current
+migrations; runbook in
+[`ea-access-runbook.md`](./ea-access-runbook.md#head-office-lifecycle-changes-handover-end-delivery-reopen).
+
+**`restore child`** (added 2026-11-05, Jim; review fixes the same day) undoes one EA's mistaken
+Delete child, and is the only command that touches more than assignment rows. Both removal paths
+end every row they end at one instant T: the server's `private.delete_child_if_no_history` writes
+its `now()` in one transaction, and the 1.5.0 `archiveChild` chain stamps one phone time that the
+end guard keeps (`least(T, now())`). The exception is a 1.5.0 phone whose clock is ahead: the guard
+clamps each request as it lands, and the chain pushes the child's archive first and the EA's
+delivery row last (`ARCHIVE_PUSH_ORDER`), so its ends spread between those two. The removal window
+is therefore, for an archived child, `children.archived_at` up to the EA's delivery-row end when
+that is within an hour after it; the archive must be the EA's (`archived_by_user_id` is the EA, or
+it is unset and the EA's delivery row ended at exactly `archived_at`). For a live child it is the
+end of the EA's latest ended `child_ea_assignments` row. The removal must have ended that delivery
+row inside the window: an archive the EA's delivery row did not end, or (live child) a later end of
+a membership in a group the EA held at that moment (or created, with no other holder), is refused
+(`delivery_not_part_of_removal`; the plan's `removed_at` then shows that later end). That is the
+app's creator Delete child after Head Office moved or ended the EA's delivery, where taking the Head
+Office end for the removal would undo it. A delivery row that ended exactly when another EA's
+`child_ea_assignments` row for the child started is refused as `ended_by_handover`, naming the
+successor: Head Office's handover ends one and inserts the other at one `now()`, and a creator's
+Delete child after it can end nothing, which leaves no trace. A removal that ended nothing after an
+end-delivery cannot be detected; the runbook has the operator compare `removed_at` with the EA's
+account. Restore
+clears, in place, that delivery row, `ended_at`/`exited_at`/`removed_at` on every
+`child_programme_enrollments`, `child_class_memberships` and `child_group_memberships` row of the
+child ended inside the window, and `archived_at`, `archived_by_user_id` and `archive_reason` on the
+child when it is archived. It never touches another time or another EA's assignment and never
+writes `row_version`, a start or an identity column. As postgres it is outside the guard's EA rules
+(2a–2d), `enforce_row_version` sees an equal version and `<table>_set_updated_at` moves
+`updated_at`. Apply locks the child, then the classes of its open and in-window class memberships
+and of the groups of its open and in-window group memberships, then those groups (a reopened group
+membership makes the group's holder a holder of the group's class), rechecks the sets, and updates
+each row only while its end still equals the planned one (otherwise `ho_lifecycle_retry`). It
+refuses another EA's archive, an archived child the EA still holds (the removal is still syncing),
+an EA who never held the child, an enrolment or class membership ended within the hour on the side
+a fast clock spreads the chain but outside the window when, after the planned reopens, the child
+would have no open enrolment in that row's programme or no open membership in a live class
+(`nearby_end_not_restored`; otherwise, as for a class move just before the removal, a
+`near_miss_not_reopened` note), and a reopen that would make two open rows: one of
+`idx_child_programme_enrollments_active_unique`, `idx_child_class_memberships_active_unique`,
+`idx_child_group_memberships_active_by_version`, or a second open membership of the same (child,
+group), which no index enforces because groups made in the app have no grouping version (the daily
+check's `duplicate_active_group_membership`). A membership whose class or group is archived now
+stays ended, with a note. The restore cases of the same harness need the server lifecycle batch:
+until it is merged they run only when `HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR` names a directory holding
+`20261105120000`–`20261105120300`, and the harness reports when it skipped them.
+
 ## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 
 Read-only Gate 0 inspection on 2026-08-27 verified the live policies and helper bodies on

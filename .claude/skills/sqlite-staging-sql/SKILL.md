@@ -14,7 +14,10 @@ Always verify the target before any write: the command summary prints `project_r
 ```
 npm run sqlite:staging:query -- "select count(*) from letter_mastery;"
 # or:  node scripts/sqlite-staging.cjs query "delete from letter_mastery;"
+# a file:  npm run sqlite:staging:query -- "$(cat scripts/lifecycle-invariants.sql)"
 ```
+
+The helper hands the SQL to the CLI as a file (`supabase db query --linked --file <path>`), never as a positional argument: the CLI parses an argument that starts with `-`, such as SQL that opens with a `--` comment, as a flag and prints its help instead of running it (seen on staging 2026-11-05). The file is `query.sql`, owner-only, in its own fresh temporary directory under `os.tmpdir()`, separate from the CLI cwd below, and is removed with it in `finally`.
 
 The `query` action (in `scripts/sqlite-staging.cjs`) reads `.env` then `.env.local`, validates the SQLite project ID/URL, and maps only the staging values into its command environment. It uses `--linked`, so verify the checkout's link as well as the printed target before operational work. It never sources the files or injects their unrelated values, legacy connection settings, or file-stored access tokens.
 
