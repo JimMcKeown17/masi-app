@@ -223,7 +223,7 @@ open the app, close it fully, and open it again; Release should then read the ne
 When you bump `expo.version` (e.g., `1.1.0` → `1.2.0`), the runtime version changes too. This means:
 - OTA updates pushed for `1.2.0` will NOT apply to builds made at `1.1.0`
 - You need a full native build after bumping the marketing version
-- This is a safety feature, but a partial one: it separates *marketing versions*, not native fingerprints. Two binaries built at the same `expo.version` share a runtime even if their native modules differ, so every native dependency/config change MUST come with a version bump or OTA can deliver JS that assumes native code the installed binary lacks. There is also no guard yet for an OTA *rollback* landing an older bundle on a device whose local SQLite schema is newer (`user_version` > the bundle's `CURRENT_SCHEMA_VERSION`); harmless while migrations stay additive, tracked as audit finding #21 in `documentation/archive/codebase-audit-2026-07-12.md`
+- This is a safety feature, but a partial one: it separates *marketing versions*, not native fingerprints. Two binaries built at the same `expo.version` share a runtime even if their native modules differ, so every native dependency/config change MUST come with a version bump or OTA can deliver JS that assumes native code the installed binary lacks. An OTA *rollback* that lands an older bundle on a device whose local SQLite schema is newer (`user_version` > the bundle's `CURRENT_SCHEMA_VERSION`) refuses to open the database (`SchemaTooNewError`, `src/db/migrations.js`) and shows the database error screen instead of running on a schema it does not know (audit finding #21 in `documentation/archive/codebase-audit-2026-07-12.md`). Keep local migrations additive so a rollback never needs that screen.
 
 ### First Time Setup (already done)
 
@@ -428,6 +428,17 @@ From the November 2026 EA retest on, several app versions will be in use at once
 1. **Database changes**: Add nullable columns first → deploy app → drop old columns only after all users update
 2. **API changes**: Old app versions will keep calling old endpoints/shapes until users update
 3. **TestFlight/Play Store**: Users don't auto-update immediately. Expect 1–2 weeks of mixed versions.
+4. **Absorb, don't refuse (ADR-0014).** A Supabase migration reaches every installed phone at
+   once, with no update step. A server change may only relax a rule, or turn a refusal into an
+   answer the oldest installed client already acknowledges (for 1.5.0, `f002e08`: a one-row
+   archive acknowledgement, `true` from `delete_child_if_no_history`, or an RPC literal its
+   parsers accept). It never adds a SQLSTATE, a refusal or a unique constraint for a request shape
+   a shipped client sends: 1.5.0 retries unknown codes forever and treats `23505` as terminal.
+   `npm run verify:lifecycle-compat:postgres` enforces this in CI against the frozen 1.5.0
+   dispositions and wire corpus. When a newer client becomes the oldest one in the field,
+   regenerate the disposition fixture from that client's commit
+   (`scripts/fixtures/lifecycle-compat/generate-1.5.0-dispositions.cjs` shows how) and keep the
+   old one until no phone runs it.
 
 See CLAUDE.md "Deployment Status" section for full details on backwards-compatible migration patterns.
 

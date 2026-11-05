@@ -337,6 +337,60 @@ describe('sqlite staging command execution (offline)', () => {
     expect(fs.readFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'utf8')).toBe('preserve-checkout');
   });
 
+  // The CLI reads a positional argument that starts with "-" as a flag: SQL that opens with a
+  // comment, such as scripts/lifecycle-invariants.sql, printed the CLI help instead of running
+  // (staging, 2026-11-05). The helper hands every query over as a file named with --file, in its
+  // own owner-only temporary directory, so the CLI cwd still holds only the supabase symlink.
+  test.each([
+    ['the daily lifecycle check (opens with a comment)', fs.readFileSync(path.join(__dirname, '../scripts/lifecycle-invariants.sql'), 'utf8')],
+    ['a leading dash', '-1'],
+    ['a flag-shaped string', '--help'],
+    ['plain SQL', 'select 1'],
+  ])('query hands %s to the CLI as SQL through --file', (_label, sql) => {
+    let cliCwd;
+    let file;
+    spawnSync.mockImplementation((command, args, options) => {
+      cliCwd = options.cwd;
+      file = args[4];
+      expect(command).toBe('supabase');
+      expect(args).toEqual(['db', 'query', '--linked', '--file', file]);
+      expect(path.isAbsolute(file)).toBe(true);
+      expect(fs.readFileSync(file, 'utf8')).toBe(sql);
+      expect(fs.readdirSync(path.dirname(file))).toEqual(['query.sql']);
+      expect(fs.realpathSync(path.dirname(path.dirname(file)))).toBe(fs.realpathSync(os.tmpdir()));
+      expect(fs.statSync(path.dirname(file)).mode & 0o077).toBe(0);
+      expect(fs.statSync(file).mode & 0o077).toBe(0);
+      expect(fs.readdirSync(cliCwd)).toEqual(['supabase']);
+      return { status: 0, stdout: 'rows\n', stderr: '' };
+    });
+    expect(runAction('query', { cwd, sql })).toBe(0);
+    expect([fs.existsSync(cliCwd), fs.existsSync(path.dirname(file))]).toEqual([false, false]);
+    expect(output.join('\n')).toContain('rows');
+    expect(output.join('\n')).not.toContain('query.sql');
+    expect(fs.readFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'utf8')).toBe('preserve-checkout');
+  });
+
+  test('query removes both temporary directories if writing its SQL file fails before spawn', () => {
+    const mkdir = jest.spyOn(fs, 'mkdtempSync');
+    jest.spyOn(fs, 'writeFileSync').mockImplementation(() => { throw new Error('fixture write failure'); });
+    expect(() => runAction('query', { cwd, sql: '-- comment\nselect 1' })).toThrow('fixture write failure');
+    expect(spawnSync).not.toHaveBeenCalled();
+    expect(mkdir).toHaveBeenCalledTimes(2);
+    mkdir.mock.results.forEach((result) => expect(fs.existsSync(result.value)).toBe(false));
+    expect(fs.readFileSync(path.join(cwd, 'supabase', 'checkout-marker'), 'utf8')).toBe('preserve-checkout');
+  });
+
+  test('query removes its SQL file when spawn throws', () => {
+    let file;
+    spawnSync.mockImplementation((command, args) => {
+      file = args[4];
+      expect(fs.readFileSync(file, 'utf8')).toBe('-- comment\nselect 1');
+      throw new Error('fixture spawn failure');
+    });
+    expect(() => runAction('query', { cwd, sql: '-- comment\nselect 1' })).toThrow('fixture spawn failure');
+    expect(fs.existsSync(path.dirname(file))).toBe(false);
+  });
+
   test('a relative invoking cwd still links to the correct checkout', () => {
     spawnSync.mockImplementation((command, args, options) => {
       expect(fs.realpathSync(path.join(options.cwd, 'supabase'))).toBe(fs.realpathSync(path.join(cwd, 'supabase')));

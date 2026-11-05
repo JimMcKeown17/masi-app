@@ -16,14 +16,14 @@ severity_override: none
 priority: P2
 
 diagnosis_state: CONFIRMED
-delivery_state: FIX_APPROVED
-verification_state: NOT_TESTED
+delivery_state: RELEASED
+verification_state: LOCAL_TESTED
 
 root_cause_confidence_pct: 85
 confidence_basis: "Controlled Postgres 17 pair: S6a (year flip alone, current access kept) accepts all earlier-year work, S6b (same flip, only past grants remain) refuses the run and the assessment that the same grants allowed without the flip (S2); the active-year clause in user_held_grant_on is the only difference. The approved fix is not yet tested."
 
 created_at_utc: 2026-11-05T01:00:00Z
-updated_at_utc: 2026-11-05T01:00:00Z
+updated_at_utc: 2026-11-05T15:44:00Z
 first_observed_at: 2026-11-04T19:51:09Z
 last_observed_at: 2026-11-04T19:51:09Z
 
@@ -49,7 +49,8 @@ support_incident_keys: []
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261104-001/repro-server-refusals/
-github_issues: []
+github_issues:
+  - https://github.com/JimMcKeown17/masi-app/issues/153
 
 data_safety_status: "Nothing lost on the phone while rows stay terminal there; the office copy would lack the refused assessments and runs (and, as in the sibling records, attendance and ticks). Never observed in the field."
 workaround_status: "Interim rule: do not activate the 2027 academic year until the fix is live. Past that point there is no safe repair from the phone."
@@ -157,6 +158,9 @@ Approved by Jim on 2026-11-04.
 | --- | --- | --- | --- |
 | 2026-11-05T01:00:00Z | Claude | Recorded from executed reproduction | S6a, S6b (contrast S2); docs/bugs/evidence/MA-BUG-20261104-001/ |
 | 2026-11-05T01:00:00Z | Jim | Fix approved | Jim approved the prevention plan and all ten design decisions on 2026-11-04 (local) |
+| 2026-11-05T02:30:00Z | Claude | Implementation started | Issues #153; plan passed five rounds of Codex adversarial review (round 5: approve); built on branches feat/lifecycle-safety-server |
+| 2026-11-05T09:00:00Z | Claude | Fixed in code, locally tested (not merged, not applied, not released) | feat/lifecycle-safety-server: lifecycle-compat harness 77/77 on disposable PG17 (red 13/68 before), all 14 PG harnesses green. Independent adversarial reviews of the server batch and the combined OTA; their findings fixed. Next: staging apply + two-phone 1.5.0 check (#157), OTA gate (#158) |
+| 2026-11-05T15:44:00Z | Claude | Released | Server batch applied to staging `segygjzpujphwvrubusm` at 15:39 UTC from `feat/lifecycle-safety-server` 09fb332a (PR #161; before/after checks in its build log, b15fb722). Not merged yet. Phones run the update from their second launch after it downloads. The device, uptake and field checks are still open (#157, #158, #159) |
 
 ## Open questions
 

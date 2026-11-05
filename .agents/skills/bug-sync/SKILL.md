@@ -89,6 +89,24 @@ re-review is harmless; this is a bounded late-commit convention. An arbitrarily
 long transaction can commit a receipt older than the overlap. This is not an
 unlimited completeness guarantee or a new watermark service.
 
+### Daily lifecycle invariant check (November 2026 retest)
+
+Every daily sweep during the retest (weekly after week 1) also runs the read-only
+lifecycle invariant query through the staging query helper
+(`.claude/skills/sqlite-staging-sql/SKILL.md`):
+
+```sh
+npm run sqlite:staging:query -- "$(cat scripts/lifecycle-invariants.sql)"
+```
+
+Each row is one hit: `check_name`, `entity_table`, `entity_id`, `detail`. Zero rows
+means every check passed. Record the time you ran it; it is not part of the
+reader's `snapshotAt` coverage. Turn each new hit into an MA-BUG record, or an
+occurrence on the record that already owns it, with the row as evidence. A hit is a
+lead like a receipt: read the live rows before calling it a defect. The sweep never
+repairs data; repairs use the Head Office lifecycle script with Jim's go-ahead. The
+check meanings are in `documentation/ea-access-runbook.md` ("Daily check").
+
 Inventory all conditions before investigating the first one. Inspect unrecorded
 **ea_report** first (people waiting), route those to `/bug-user`, then handle
 other unrecorded conditions, then recorded recurrences in the review window.
