@@ -114,7 +114,8 @@ export const observeStandingConditions = async handle => {
     (scope >= 'letter_mastery_pull:' and scope < 'letter_mastery_pull;')`);
   const conditions = terminal.map(row => ({ kind: 'upload_terminal',
     parts: uploadTerminalParts(row), payload: terminalPayload(row) }));
-  if (backlog.length && Date.parse(backlog[0].created_at) < Date.parse(now)-72*3600000 &&
+  // Lifecycle safety O1 item 6: 24 h, not 72 h, for the November retest.
+  if (backlog.length && Date.parse(backlog[0].created_at) < Date.parse(now)-24*3600000 &&
       Date.parse(handle.lastServerResponseAt) >= Date.parse(now)-86400000) {
     conditions.push({kind:'upload_backlog_stale',parts:['backlog'],payload:backlogPayload(backlog,now)});
   }
