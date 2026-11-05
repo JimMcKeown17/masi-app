@@ -9317,3 +9317,306 @@ ran. Without them (42 migrations): 34/34, restore cases skipped as reported. `np
 __tests__/sqliteStagingScript.test.js`: 85/85. `npx jest __tests__/hoLifecycleScript.test.js`: 82/82.
 `npx jest`: 518/518 suites, 8,271/8,271 tests. `npx jest -c jest.integration.config.js`: 111/111
 suites, 1,530/1,530 tests. No `lint` script exists.
+
+### 2026-11-04 — Lifecycle OTA, plan O2: Delete child through the server; no orphan-making UI (`feat/lifecycle-ota-removal`)
+
+Builder slice for work order 3 of `docs/superpowers/plans/2026-11-04-lifecycle-safety.md` (step O2,
+D3/D4/D5/D10; closes the phone side of MA-BUG-20261104-012, -013, -014, -015, -016). JS only for
+the 1.5.0 OTA: no SQLite migration, no new outbox operation. Hard gate before real lessons (D10).
+
+**What shipped.**
+- **"No class" removed** from Edit child (MA-BUG-015). The picker offers only real classes; with
+  none it shows "No classes available. Create a class first."
+- **Delete child = `childrenRepository.removeChild`**, one transaction that always queues the
+  existing children `hard_delete` (RPC `delete_child_if_no_history`; the server decides, D3). No
+  local history: deleted locally as before (`deleteIfNoHistory`), incl. the no-request purge of a
+  never-sent child. Local history: the child is archived on the phone only; only this EA's own
+  acknowledged direct assignment and memberships in groups they hold end, on the phone only; no
+  per-relationship archive rows, no children archive. Shared enrollments/class memberships and
+  other EAs' rows are never touched (B2). The old `archiveChild` cascade is deleted.
+- **Engine (only the O2-owned spots).** The children `hard_delete` gate also waits for the child's
+  own relationship INSERTs (`child_ea_assignments`, `child_programme_enrollments`,
+  `child_class_memberships`, `child_group_memberships`; any status; matched by payload
+  `child_id`). A children `hard_delete` is never a parent: one exclusion in
+  `rememberBlockedRecord`, and `hasPendingRecord` counts only a parent's `insert`/`update`. A
+  genuinely unacknowledged child INSERT keeps its blocker role while it backs off (owed child
+  INSERTs the pass will not send are registered as blockers).
+- **Pull filter** for a pending child `hard_delete` now also covers group memberships
+  (ChildrenContext and `persistPreloadedChildData`).
+- **Delete class** (`archiveClass`, MA-BUG-013): never exits a child's class membership or changes
+  `class_id`; ends only this EA's own class assignment. A known leave (another creator, or another
+  EA's active class assignment held locally; `classesRepository.isLeaveOnly`) queues no class
+  archive; otherwise the class archive is queued and the server decides (S1).
+- **Restore producer deleted** (D5): `createMissingGroupAssignment` reactivation,
+  `repairGroupOwnershipForSync` and startup repair v1, and `groupEaAssignmentsRepository.save`'s
+  restore branch (a local reopen is now refused). The engine still sends a queued 1.5.0 restore.
+- **E4** (MA-BUG-016): `removeChildFromGroup` rewrites a still-queued membership INSERT to carry
+  `removed_at` instead of queuing an archive behind it (re-add and sibling-group move).
+- **Sheets.** Delete child and Delete class confirm in a `ConfirmSheet` with draft plain-words copy
+  for Jim's wording pass ("Remove Thandi? …", "Leave 1A?" / "Delete 1A?").
+
+**Decisions and deviations (see the slice report for detail).**
+- Rows whose relationship INSERT is still queued are not ended on the phone at Delete child: an
+  ended local row stops counting as grant evidence (`hasPendingActiveAssignment` needs an open
+  row), and `applyAcknowledgedPayload` would reopen a stamped membership on acknowledgement. They
+  converge through the next pull after the removal lands.
+- A known-leave Delete class sends only the EA's class-assignment archive, so the EA's own
+  children never vanish while the class is still live (offline included).
+- E4 merges rather than drops: a queued membership INSERT may already have committed and only
+  children INSERTs record dispatch evidence.
+
+**Outbox-reader audit (Codex round 5 inventory, 16 items).** Changed: 2 (backoff blocker
+seeding), 3 (gate extension), 6/7/8/11 (central blocker exclusion), 9 (`hasPendingRecord`
+operation filter), 15 (filter extended to group memberships). Verified unchanged and safe: 1, 4,
+5, 10, 12, 13, 14, 16. New producer-side readers: `removeChild` (queued-INSERT check before a local
+end) and `removeChildFromGroup` (queued-INSERT merge); neither decides ordering or retry.
+
+**Evidence.** Real-SQLite tests through the real handle and supabase-js over
+`test-support/lifecycleServer.js` (post-batch contract): all-offline chain with a failed first
+pass, repeated ordinary and forced passes, permanently refused relationship INSERT before and after
+it leaves the outbox, acknowledged child refused 42501, class-path and other-programme co-held
+children, sole-holder hiding across pulls, Delete class shared/sole cases, E4 re-add and sibling
+move. Each engine change was reverted alone and its tests failed. The chain's wire is committed at
+`scripts/fixtures/lifecycle-ota/delete-child-offline-chain.wire.json`; replayed (GET filtered) by
+`docs/bugs/evidence/MA-BUG-20261104-001/repro-client-archive-chain/pg-replay.cjs` into disposable
+PG17 with all 42 current migrations: every replayed request agreed (relationship INSERTs, session,
+attendee, tick); the Battery Run, assessment and removal RPCs are not replayed by that tool (G1,
+with the server batch).
+
+**Residual risks.** A with-history child's local row stays `pending` after the removal lands when
+its own INSERT was still queued at Delete (the engine skips domain bookkeeping for `hard_delete`),
+so a later Head Office reopen of that same child would not un-archive it on this phone. A Delete
+class by the creator and only holder still leaves that class's delivery children in a closed class
+(same outcome as before; the sheet says to move them first). An acknowledged membership whose
+archive backs off can still meet a re-add 23505 (outside E4's still-queued case).
+
+**Verification (Node 20.19.4, 2026-11-04, branch head before this note).**
+- `npx jest`: **519 suites / 8203 tests passed** (baseline before the slice: 15 failures in 5
+  suites, all environmental — missing node_modules assets, since restored).
+- `npx jest -c jest.integration.config.js`: **113 suites / 1544 tests passed** (adds
+  `deleteChildChain` and `groupMembershipReAdd`).
+- Focused slice run (13 suites): **263 passed**.
+- `pg-replay.cjs` on the recorded O2 chain into disposable `postgres:17-alpine` (42 migrations):
+  all replayed requests agree. Container removed. No `lint` script exists. No live or staging access.
+
+### 2026-11-04 — Lifecycle safety O1: refused rows resolve and get a lossless exit (`feat/lifecycle-ota-stuck-items`)
+
+Work order 4 of the approved lifecycle-safety plan (`docs/superpowers/plans/2026-11-04-lifecycle-safety.md`,
+O1, both "Corrections adopted" sections, D6, D8). Closes, pending review, merge, OTA and device checks:
+MA-BUG-20261104-011, -018, -019, -020, -021. JS only under runtimeVersion 1.5.0: no SQLite migration,
+table, column or outbox op type. The contract is in `documentation/rls-sync-contract-map.md`,
+"Refused rows: forced passes and the delivered-receipt exit".
+
+**What changed.**
+- Forced passes (Sync now, Retry, pull-to-refresh, sign-out) re-send a refused row only when it is
+  idempotent history (every insert; the battery-run, letter- and skill-mastery RPC updates) or the
+  children `hard_delete` (`isResendableRefusal`). The claim and Retry apply the same rule, so a
+  refused archive, restore or edit can never be sent again (ends the MV001 forced override, D6). A
+  refused lifecycle or edit row no longer holds back its family in the same pass.
+- The exact-revision delivered-receipt rule: `markSent` writes `delivered_receipt:<incident id>` to
+  `local_state` from the accepted bounded snapshot (generation, outbox id, the row's `updated_at`, a
+  wire digest, and whether anything was cut). A refused row leaves only while its receipt is sent and
+  the proof matches the row as it is now, uncut; check and delete share one transaction. Refused
+  archives, restores and edits then clear by themselves after each pass's receipt drain; refused
+  history waits for "The office has a copy — remove from this phone". A receipt sent without a proof
+  is sent once more through `promote`. Proof keys leave with their row or receipt.
+- Needs attention: plain names for every outbox table, no ids or server errors, a per-item "what
+  happens next" line, Retry only for resendable rows, the exit behind a confirm sheet. Home's card can
+  be dismissed once every item has its office copy. The sign-out sheet promises an upload only for
+  waiting work (`countUnsent` now also returns `needsAttention`).
+- Hardening (MA-BUG-021): the claim records each row exactly as it was; a refused row that is then
+  deferred, switched away or thrown is put back unchanged (compare-and-set, domain version reverted
+  only from this claim's stamp). `markReady`, `markReadyMany` and the stale-finalize restore never
+  demote terminal. A claim that throws hands back only rows it left in flight. A dependency check
+  that throws fails only its row.
+- `upload_backlog_stale` at 24 h (was 72 h). The newer-data screen says to contact support instead
+  of sending the EA to an app store with nothing newer after a same-version OTA rollback.
+
+**Decisions and deviations.**
+- **Condition (a) drops `has_unsent_changes = 0`.** The observer re-records every live receipt on its
+  15-minute last-seen refresh, which sets `has_unsent_changes = 1` with no change to the work, so the
+  plan's literal rule would close the exit 15 minutes after each send. The proof is compared with the
+  row itself (id, `updated_at`, wire digest, cut), which is stronger. Pinned by
+  `refusedRowExit.test.js` "a last-seen refresh after delivery keeps the exit".
+- The receipt payload gains `outboxId` (the server accepts any payload object). On the OTA, every
+  live receipt is sent once more anyway (release change), now with its outbox id.
+- After an auto-clear the domain row keeps `sync_status = 'terminal'`, so any later pull converges it
+  whatever its version (a `synced` row would refuse a lower server version).
+- The exit removes only the stuck upload; the EA's local record stays.
+- Added copy for review: "Waiting for the office to get a copy." (online, not yet delivered) and the
+  Home subtitle "The office has a copy". The plan's "Connect to the internet so the office gets a
+  copy." is used offline.
+
+**Known limits.** A refused row whose content changes after its receipt was sent waits for the
+next receipt send (up to a day). A crash mid-pass
+leaves claimed refused rows in flight and the next pass makes them pending (one extra attempt). A
+schema-1 receipt can never prove delivery ("Send diagnostics, then contact support."). After a
+reinstall a trailing `class_grouping_state` regroup is no longer forced through.
+
+**Verification (Node 20).** RED before GREEN for each slice: the forced-pass contract (the rewritten
+`offlineSyncOutbox` and `rowVersionSend` cases re-sent `update:classes`, `update:children`,
+`update:group_ea_assignments` and returned `totalSynced: 1`), hardening (deferred refused rows came
+back `pending`, thrown ones `failed`), and the exit, display-name, Home, sign-out, 24 h and copy
+tests. Final: unit 519 suites / 8,232 tests passed (`npx jest`); integration 111 suites / 1,536 tests passed
+(`npx jest -c jest.integration.config.js`). No SQL changed, so no PostgreSQL harness was run.
+
+**Follow-up after orchestrator review (2026-11-05).**
+- The proof now matches content, not `updated_at`: a forced re-send refused again keeps the exit.
+  The digest also leaves out the claim's send-time `row_version` stamp, because resendable inserts
+  on versioned tables (children, enrollments, memberships) are stamped on every send.
+- Every retry entry point keeps the no-replay rule (Codex round-5 inventory item 14): the
+  auth-restore heal (`requeueTerminalRlsFailures` and `requeueTerminalRows`) and the reference-id
+  repair (`retargetOutboxPayloadReferences`) now leave refused archives, restores and edits alone,
+  in addition to the forced pass, the claim, Retry and the `markReady` paths. An unmarked 42501 on a
+  refused archive or edit therefore clears like a marked one. A `classes` hard_delete (no producer)
+  is no longer healed.
+
+### 2026-11-05 — Combined lifecycle OTA: review fixes (`feat/lifecycle-ota`)
+
+An independent adversarial review of the merged O1 + O2 OTA found one high regression from O1 and
+medium/low items. Each fix is test-first on real SQLite; reviewer repros zzUnitX7, zzReviewX2,
+X2b and X4 are ported as regression tests.
+
+- **HIGH — an edit or archive cleared ahead of its refused insert.** A child INSERT refused 23503,
+  then a rename: the update was refused as not applied, cleared under the receipt rule, and a later
+  Sync now landed the INSERT with the old name, overwriting the local row too. An UPDATE-by-id edit
+  or lifecycle row now waits while its own insert is queued in any status; waiting behind a refused
+  insert it is neither a blocker nor FK evidence, and never leaves through the exit (`held`). The
+  insert landing releases it (sent next; the insert's acknowledgement never overwrites it), or the
+  insert leaving through its exit does (sent, refused, clears). A not-applied edit sent ahead of its
+  insert before this fix is re-queued when the insert lands. Child edit, group archive and
+  class-membership exit variants (`refusedInsertOrdering.test.js`).
+- **MEDIUM — a Delete child held forever by a refused relationship INSERT.** The deletion now
+  waits only for this EA's owed relationship INSERTs. A removed child's refused relationship INSERT
+  is never resendable (forced pass, claim, Retry, heal, `requeueTerminalRows`, reference-id
+  repair), blocks nothing, and clears under the receipt rule, or stays a support case (X4: the
+  removal now completes and nothing is left waiting).
+- **Fake server (item 3).** `lifecycleServer.js` models the corrected S3 rule: memberships end in
+  groups the caller holds, or created and nobody else holds; it also models a group INSERT. X2/X2b
+  ported; all O2 tests pass against it. X2b deviation: with a co-held child the deleting EA still
+  reaches the child through their class assignment (D3 "leave" ends only the caller's own grants),
+  so the port asserts no direct or group path rather than `writeForChild === false`.
+- **LOW.** Home's dismissal signature is outbox id + content digest, not `failedAt`. Retry of a
+  children `hard_delete` no longer marks the child pending. Receipts meet a jsonb-text bound
+  (`jsonbTextBytes` ≤64,000) as well as the compact 56,000: measured on a disposable PostgreSQL
+  17.10, the estimator matched `octet_length(...::jsonb::text)` exactly on every sample, with worst
+  structural growth 1.5x (single-digit arrays: 10,001 compact → 15,000) and far more for exponent
+  numbers (154 → 836 for a sample with `5e-324`). A refused `time_entries` update (clock-out) is
+  resendable history with the EA exit and never clears itself.
+
+**Verification (Node 20).** `npx jest`: 522 suites / 8,285 tests passed. `npx jest -c
+jest.integration.config.js`: 113 suites / 1,554 tests passed. Container `wo4-jsonb-pg` removed.
+
+**Second review fixes (2026-11-05).**
+- MEDIUM (reviewer repro zzR2R1): the removed-child mark could be wiped by a pull, because it was
+  read from the local child's `archive_reason`, which a roster pull of a co-held child rewrites.
+  The mark now lives in the outbox: the `hard_delete` row while queued, and on its acknowledgement
+  the child's refused relationship INSERTs are stamped `REMOVED_WITH_CHILD` in the same
+  transaction (never resendable; clears under the receipt rule; Sync status says "You removed this
+  child, so this is no longer needed."). The `archive_reason` check is removed.
+- LOW: an exit that removes a record's last outbox row leaves a still-pending domain row terminal
+  so the next pull converges it.
+- Verification (Node 20): `npx jest` 522 suites / 8,293 tests passed; `npx jest -c
+  jest.integration.config.js` 113 suites / 1,555 tests passed.
+
+### 2026-11-05 — Lifecycle OTA: a child Head Office restores comes back on the phone (`feat/lifecycle-ota`, work order 6)
+
+Head Office is getting `restore child` (work order 5, HO branch): it reopens in place, with the same
+ids, starts and `row_version`, exactly what one Delete child ended. Before this OTA goes to every
+pilot phone we proved, through the real code paths, that the phone converges on its next normal
+pull with no help from the EA. New `__tests__/headOfficeRestore.integration.test.js`: real handle,
+real SQLite, real repositories, `lessonSave`, sync engine and the handle's pull services
+(`pullRoster`, `pullClasses`) over real supabase-js. `test-support/lifecycleServer.js` now answers
+the pull (`get_reconcile_acknowledgments` per `20261023120000`, and PostgREST GETs with embeds,
+`!inner`, eq/is/in filters, order and limit; every column returned, nulls included; an unmodelled
+query is a 500, never a plausible empty result), leaves `row_version` alone on server-side ends (as
+`20261105120300` does; it used to bump it), and has `restoreChild`, mirroring the work order 5 design.
+
+- **Passed first time:** a sole holder's child with local history (archived on the phone) and
+  without (deleted outright), and a co-held child this EA left (class-path and other-programme
+  co-holder): back in My Children with class and group, writable (an edit and a new lesson upload),
+  history still on the phone, the other EA's rows untouched. The pull reads full scope (no cursor),
+  so an in-place reopen without a version bump is seen; equal versions apply.
+- **Bug 1 (fixed): a refused relationship INSERT left a ghost row.** A membership INSERT refused
+  before the removal and stamped `REMOVED_WITH_CHILD` was never re-sent and blocked nothing, but its
+  local row stayed open (removeChild leaves rows with a queued INSERT open, and no pull or reconcile
+  ends a row that is not synced). After a restore the phone showed the child in a group the server
+  never held, even after the refused row left. RED: `expect(await groupsOf(C)).toEqual([])` received
+  `[GROUP]`. Fix: the `hard_delete` acknowledgement that stamps those rows also ends their local
+  rows (`stampRefusalsRemovedWithChild`); the outbox payload, and so the receipt digest, is unchanged.
+- **Bug 2 (fixed): a child added offline and deleted before its first upload never came back.**
+  Its INSERT was acknowledged while the removal waited, which leaves the row `pending`
+  (`hasRemainingOutbox`); the `hard_delete` acknowledgement never touched it, so the row stayed
+  `pending` with nothing queued and every pull refused the server's copy (pending-local-wins). RED:
+  after restore and pull, the local child still had `archived_at` and `archive_reason:
+  'removed_by_ea'`. Fix: `settleRemovedChildRow` sets such a row `synced` when the acknowledged
+  `hard_delete` was the child's last outbox row (same class as `beeea645`).
+- **Not supported, observed (throwaway probe, not committed):** a restore while the phone's
+  `hard_delete` is still queued. Lost response: the pull filter keeps the child hidden, and the
+  retried RPC removes it again at a new instant, undoing the restore. Never sent: the restore is
+  `already_active` and the later upload removes the child. Either way Head Office restores again
+  once the EA's receipt shows nothing waiting.
+- **1.5.0 (`f002e08`, read-only):** the pull code is the same; both Delete child paths converge
+  after an acknowledged removal, with two limits recorded in the contract map: a fast phone clock
+  splits a 1.5.0 archive chain across instants, and a 1.5.0 forced pass replays refused archives
+  (B3), so restore on a 1.5.0 phone needs the same precondition as a Head Office reopen.
+- Docs: contract map, Delete child paragraph (stamp ends local rows; settle rule) and new
+  "Head Office restore convergence" under Pull Persistence & Reconcile.
+- Verification (Node 20): `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js`
+  6/6 passed (the two bug tests RED before their fixes); `npx jest` 523 suites / 8,299 tests passed;
+  `npx jest -c jest.integration.config.js` 114 suites / 1,561 tests passed. No SQL or PostgreSQL
+  harness changed (client and fake server only); `npm run lint` does not exist.
+
+#### Review fixes (2026-11-05, same branch)
+
+An independent review of the work order 6 commits found one medium and three low defects. Each
+was reproduced in the repo's own suites first; the fixes keep to the Delete child and restore code.
+
+- **Medium (fixed, `e149a250`): a phone clock that ran ahead wedged the Delete child
+  acknowledgement and re-removed a restored child.** `stampRefusalsRemovedWithChild` ended each
+  refused relationship row at the acknowledgement time. A membership made while the clock ran ahead
+  starts after that, so the end failed the local CHECK `removed_at >= joined_at`, rolled back all of
+  `finalizeSuccess`, left the `hard_delete` `failed`, and re-sent `delete_child_if_no_history` on
+  every pass, so a child Head Office restored meanwhile was removed again. RED (new test in
+  `headOfficeRestore.integration.test.js`): three RPC calls, and the outbox showed `children
+  hard_delete failed SQLITE_CONSTRAINT_CHECK`. Fix: the end is the later of the acknowledgement time
+  and the row's start, the same as the server guard's rule 1 (`end := greatest(end, start)`). GREEN:
+  one RPC, the membership ends at its own start, and the restore sticks across later passes.
+- **Same cause, one step earlier (fixed, `9107d37c`):** `removeChild` ended this EA's assignment
+  and held-group memberships at the tap time, so the same clock skew refused the whole Delete child
+  (`CHECK constraint failed: unassigned_at is null or unassigned_at >= assigned_at`). It now uses the
+  same bound. New `deleteChildChain.integration.test.js` test: RED, then GREEN.
+- **Low (fixed, `941f53c2`):**
+  - New test for the commonest `settleRemovedChildRow` trigger: a Delete child request that fails
+    once on the network. Mutation-checked: removing the settle step, or narrowing it to `pending`
+    rows, fails this test, and no other test catches the narrowing.
+  - The fake `restoreChild` now follows RESTORE_BODY: its checks in order with their codes
+    (`removal_not_finished` while the child is archived but the EA still holds it;
+    `ea_never_held_child`), its choice of delivery row (open, then the app's deterministic id, then
+    latest ended), and `handover_reason` left alone. Each part failed against the old fake.
+  - Test claims corrected:
+    - A child added offline gets its ticks back through the mastery history walk, not the restore
+      pull. The test now asserts the server keeps the tick.
+    - The co-held test's check on the other EA is labelled as a premise check on the fake.
+    - The fake returns nulls only for the columns listed in `NULL_COLUMNS`.
+- **Noticed, not fixed (pre-existing on main, outside this slice):** the phone's other local end
+  writes are not bounded by the row's start either. These are pull reconcile at `pulledAt`
+  (`childrenRepository.js:163`, `:229`, `:284`, `classesRepository.js:270`, `groupsRepository.js:173`,
+  and others), Remove from group, and the class and group archive flows. Probe (throwaway, not
+  committed): an assignment whose start is 6h ahead and which Head Office ended. The pull logs
+  `Pulled child_ea_assignments batch transaction failed; retrying rows without reconcile: CHECK
+  constraint failed`, reports `reconcileCompleted: false`, and the assignment stays open on the
+  phone until real time passes its start. The same assignment without the skew ends normally. This
+  is the phone-side companion of MA-BUG-20261104-007, which guard rule 1 fixed on the server; it
+  needs its own record or an addendum to 007.
+- Docs: the contract map's Delete child paragraph (both start bounds; the settle trigger now
+  includes a failed request) and "Head Office restore convergence" (the fake's fidelity and what
+  it leaves out).
+- Verification (Node 20):
+  - `npx jest -c jest.integration.config.js __tests__/headOfficeRestore.integration.test.js
+    __tests__/deleteChildChain.integration.test.js __tests__/groupMembershipReAdd.integration.test.js`:
+    24/24.
+  - `npx jest`: 523 suites / 8,303 tests passed.
+  - `npx jest -c jest.integration.config.js`: 114 suites / 1,565 tests passed.
+  - No SQL changed, and the wire is unchanged (the `deleteChildChain` wire fixture still matches),
+    so no PostgreSQL harness applies. `npm run lint` does not exist.

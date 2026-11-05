@@ -202,7 +202,13 @@ test.each(['upsert', 'UPDATE', 'lifecycle archive'])('T5: abort and replay of %s
   await a.repositories.children.saveChildRecord({ ...child(), synced: operation !== 'upsert' });
   if (operation !== 'upsert') server.set(CHILD, child());
   if (operation === 'UPDATE') await a.repositories.children.updateChild(CHILD, { first_name: 'Edited' });
-  if (operation === 'lifecycle archive') await a.repositories.children.archiveChild(CHILD, { actorUserId: A, archivedAt: '2026-10-15T10:00:00.000Z' });
+  if (operation === 'lifecycle archive') {
+    // A children archive as queued by a pre-OTA build (1.5.0's archiveChild); Delete child no
+    // longer produces one (plan O2), but installed phones may still hold one.
+    const archivedAt = '2026-10-15T10:00:00.000Z';
+    await a.withTransaction(txn => txn.runAsync("update children set archived_at = ?, sync_status = 'pending' where id = ?", archivedAt, CHILD));
+    await a.repositories.syncOutbox.enqueue({ tableName: 'children', recordId: CHILD, operation: 'archive', payload: { id: CHILD, archived_at: archivedAt } });
+  }
   const pass = observe(a.services.syncEngine.syncAll());
   await within(entered.promise);
   const landed = { ...server.get(CHILD) };

@@ -118,6 +118,14 @@ test('old backlog needs recent actual server contact and carries distinct raw er
   await h.services.syncEngine.getSyncStatus();
   expect((await h.services.repositories.supportIncidents.listPending())[0]).toMatchObject({ kind: 'upload_backlog_stale', payload: { unsentByCode: {MV001:1}, sampleLastErrors: ['raw error'] } });
 });
+// Lifecycle safety O1 item 6: for the November retest a day-old backlog is already a lead.
+test.each([[23, 0], [25, 1]])('a %i-hour-old backlog with recent server contact gives %i stale-backlog receipts', async (hours, expected) => {
+  const h = await seed();
+  await h.withTransaction(txn => txn.runAsync("update sync_outbox set status = 'failed', created_at = ? where id = 'o'", new Date(Date.now()-hours*3600000).toISOString()));
+  h.lastServerResponseAt = new Date().toISOString();
+  await h.services.syncEngine.getSyncStatus();
+  expect((await h.services.repositories.supportIncidents.listPending()).filter(row => row.kind === 'upload_backlog_stale')).toHaveLength(expected);
+});
 test('empty-outbox history failures and breaker notes use actual scope families and raw stored evidence', async () => {
   const h = getDefaultTestHandle();
   const failure = { lastFailureAt: new Date(Date.now()-25*3600000).toISOString(), lastFailureKind: 'transport', lastFailureMessage: 'raw history error' };

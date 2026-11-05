@@ -252,3 +252,61 @@ describe.each([
     }
   });
 });
+
+// Lifecycle safety O1 item 3 (MA-BUG-20261104-019): Needs attention names items in plain words
+// and says what to do; never a table name, an id or a server error.
+describe('needs-attention items', () => {
+  const { PUSH_ORDER } = jest.requireActual('../src/services/offlineSync');
+  const { describeNeedsAttentionItem, syncItemName } = jest.requireActual('../src/utils/syncStatusPresenter');
+  const item = (overrides = {}) => ({
+    outboxId: 'session_attendees:abc12345ff:insert', table: 'session_attendees', id: 'abc12345ff',
+    operation: 'insert', reason: '42501-authenticated: new row violates row-level security policy',
+    delivery: 'waiting', clearsItself: false, canRemove: false, canRetry: true, ...overrides,
+  });
+
+  test('every table the outbox can hold has a plain name, never the raw table name', () => {
+    for (const table of PUSH_ORDER) {
+      expect(syncItemName(table)).toMatch(/^[A-Z][A-Za-z ]+$/);
+      expect(syncItemName(table)).not.toBe(table);
+    }
+    expect(syncItemName('session_attendees')).toBe('Attendance');
+    expect(syncItemName('sessions')).toBe('Lessons');
+    expect(syncItemName('letter_mastery')).toBe('Letter ticks');
+    expect(syncItemName('skill_mastery')).toBe('Maths ticks');
+    expect(syncItemName('assessments')).toBe('Assessments');
+    expect(syncItemName('children')).toBe('Children');
+    expect(syncItemName('child_class_memberships')).toBe('Class list');
+    expect(syncItemName('child_group_memberships')).toBe('Group list');
+    expect(syncItemName('some_future_table')).toBe('Saved work');
+  });
+
+  test.each([
+    ['delivered history', { delivery: 'delivered', canRemove: true }, true, 'The office has a copy.'],
+    ['delivered refusal that clears itself', { delivery: 'delivered', clearsItself: true, canRetry: false }, true,
+      'The office has a copy. This clears at the next sync.'],
+    ['an item waiting for its copy, offline', {}, false, 'Connect to the internet so the office gets a copy.'],
+    ['an item waiting for its copy, online', {}, true, 'Waiting for the office to get a copy.'],
+    ['an oversized or rejected copy', { delivery: 'support' }, true, 'Send diagnostics, then contact support.'],
+  ])('%s says what to do', (_name, overrides, isOnline, hint) => {
+    const described = describeNeedsAttentionItem(item(overrides), { isOnline });
+    expect(described).toMatchObject({ title: 'Attendance', detail: 'The office could not accept this.', hint });
+    expect(JSON.stringify(described)).not.toMatch(/abc12345|session_attendees|row-level|42501/);
+  });
+
+  test('a relationship row of a child the EA removed says so in plain words', () => {
+    const described = describeNeedsAttentionItem(item({ table: 'child_group_memberships', errorCode: 'REMOVED_WITH_CHILD',
+      clearsItself: true, canRetry: false }), { isOnline: true });
+    expect(described).toMatchObject({ title: 'Group list', detail: 'You removed this child, so this is no longer needed.',
+      hint: 'Waiting for the office to get a copy.', canRetry: false });
+    expect(JSON.stringify(described)).not.toMatch(/REMOVED_WITH_CHILD/);
+  });
+
+  test('only delivered history offers the exit, and only resendable rows offer Retry', () => {
+    expect(describeNeedsAttentionItem(item({ delivery: 'delivered', canRemove: true }), { isOnline: true })).toMatchObject({
+      canRemove: true, canRetry: true, removeLabel: 'Remove from this phone',
+      removeAccessibilityLabel: 'The office has a copy — remove from this phone',
+    });
+    expect(describeNeedsAttentionItem(item({ table: 'classes', operation: 'archive', clearsItself: true, canRetry: false }),
+      { isOnline: true })).toMatchObject({ title: 'Classes', canRemove: false, canRetry: false });
+  });
+});

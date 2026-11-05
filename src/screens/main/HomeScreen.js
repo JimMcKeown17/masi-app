@@ -26,7 +26,7 @@ import { useSessionHistoryStatus } from '../../services/sessionHistoryStatus';
 import { isStaleActorError } from '../../session/staleActor';
 import { LessonDraftCorruptError } from '../../db/repositories/lessonDraftsRepository';
 import { getCoverageFromCounts, getWeekSessionCounts } from '../../utils/dashboardStats';
-import { deriveHomeAttentionItems, lessonInProgressFromDraft } from '../../utils/homeAttention';
+import { deriveHomeAttentionItems, describeSyncAttention, lessonInProgressFromDraft } from '../../utils/homeAttention';
 import { lessonRouteForDraft } from '../../utils/lessonDraftRoutes';
 import { getGoalCopy } from '../../utils/sessionGoalPresentation';
 import { toLocalDateString } from '../../utils/localDate';
@@ -50,7 +50,7 @@ export default function HomeScreen({ navigation }) {
   const { all: assessableChildren } = useAssessableChildren();
   const { children: childrenList } = useChildren();
   const { classBootstrapStatus, incompleteOnboardingClassId } = useClasses();
-  const { needsAttentionCount = 0 } = useOffline();
+  const { needsAttentionCount = 0, syncStatus } = useOffline();
   const {
     isSignedIn, activeEntry, loadingLocation,
     handleSignIn, handleSignOut, autoClockOutNotice, dismissAutoClockOutNotice,
@@ -65,6 +65,7 @@ export default function HomeScreen({ navigation }) {
   const [hasActiveProgramme, setHasActiveProgramme] = useState(true);
   const [statsFailed, setStatsFailed] = useState(false); // the latest load rejected
   const [assessmentDismissedOn, setAssessmentDismissedOn] = useState(null);
+  const [syncAttentionDismissed, setSyncAttentionDismissed] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [subjectReady, setSubjectReady] = useState(false);
   const [isMaths, setIsMaths] = useState(false);
@@ -116,6 +117,15 @@ export default function HomeScreen({ navigation }) {
         else console.error('Error loading lesson in progress:', error);
       }
     })();
+    // The sync card's dismissal is independent of statistics and their failures.
+    void (async () => {
+      try {
+        const dismissed = await homeAttention.getSyncAttentionDismissed?.();
+        if (seq === loadSeqRef.current && dismissed !== undefined) setSyncAttentionDismissed(dismissed);
+      } catch (error) {
+        if (!isStaleActorError(error)) console.error('Error loading the sync card dismissal:', error);
+      }
+    })();
     // The initial load owns the skeleton; later loads update existing content in place.
     try {
       const recentCutoff = toLocalDateString(new Date(Date.now() - THIRTY_DAYS_MS));
@@ -159,23 +169,37 @@ export default function HomeScreen({ navigation }) {
       return () => sub.remove();
     }, [loadStats])
   );
+  const syncAttention = useMemo(() => describeSyncAttention({
+    needsAttentionCount,
+    needsAttentionItems: syncStatus?.needsAttentionItems,
+    reconcileBreakerNotes: syncStatus?.reconcileBreakerNotes,
+  }), [needsAttentionCount, syncStatus]);
   const attentionItems = useMemo(() => deriveHomeAttentionItems({
     lessonInProgress: !subjectReady || lessonDraft?.kind !== (isMaths ? 'numeracy' : 'literacy')
       ? null : lessonDraft instanceof LessonDraftCorruptError
       ? { draftId: lessonDraft.draftId, childNames: [], route: lessonRouteForDraft({ kind: lessonDraft.kind }) }
       : lessonInProgressFromDraft(lessonDraft, childrenList),
     needsAttentionCount,
+    syncAttention,
+    syncAttentionDismissed,
     autoClockOut: autoClockOutNotice,
     coverage: !subjectReady || isMaths ? null : coverage,
     assessmentDismissedOn,
     now,
-  }), [subjectReady, isMaths, lessonDraft, childrenList, needsAttentionCount, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
+  }), [subjectReady, isMaths, lessonDraft, childrenList, needsAttentionCount, syncAttention, syncAttentionDismissed, autoClockOutNotice, coverage, assessmentDismissedOn, now]);
 
   const openItem = useCallback((item) => item.params
     ? navigation.navigate(item.route, item.params) : navigation.navigate(item.route), [navigation]);
   const dismissItem = useCallback(async (item) => {
     if (item.kind === 'auto_clock_out') {
       await dismissAutoClockOutNotice(item.entryId);
+    } else if (item.kind === 'sync_attention' && item.signature) {
+      setSyncAttentionDismissed(item.signature);
+      try {
+        await homeAttention.dismissSyncAttention(item.signature);
+      } catch (error) {
+        if (!isStaleActorError(error)) console.error('Error dismissing the sync card:', error);
+      }
     } else if (item.kind === 'assessment_due') {
       const today = toLocalDateString(new Date());
       setAssessmentDismissedOn((current) => (current && current > today ? current : today));

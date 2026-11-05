@@ -77,4 +77,11 @@ describe('homeAttentionStore', () => {
     expect(await store.getAssessmentDismissedOn()).toBe('2026-10-17');
     expect(await db.getFirstAsync("select key from local_state where key = 'home_attention.assessment_due_dismissed_on'")).not.toBeNull();
   });
+
+  test('a dismissed sync card remembers exactly which items it covered', async () => {
+    expect(await store.getSyncAttentionDismissed()).toBeNull();
+    await store.dismissSyncAttention('sessions:s-1:insert@2026-10-15T07:00:00.000Z');
+    expect(await store.getSyncAttentionDismissed()).toBe('sessions:s-1:insert@2026-10-15T07:00:00.000Z');
+    expect(await db.getFirstAsync("select key from local_state where key = 'home_attention.sync_attention_dismissed'")).not.toBeNull();
+  });
 });

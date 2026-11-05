@@ -515,6 +515,12 @@ JS only, under runtimeVersion 1.5.0: no local SQLite migration and no new op typ
    existing `promote` path, which produces a proof. Proof keys are deleted with their outbox row or
    incident.
 
+   *Build note (2026-11-05, work order 4, accepted by the orchestrator):* (a) does not require
+   `has_unsent_changes = 0` (the observer sets it on every 15-minute last-seen refresh), and (c)
+   matches content, not `updated_at`: same outbox id, the same wire digest with the send-time
+   `row_version` stamp left out, and `cut = false`. `outboxUpdatedAt` stays in the proof for
+   diagnostics. Contract: `documentation/rls-sync-contract-map.md`, "Refused rows".
+
    The check and the delete run in one SQLite transaction. If any condition fails, the row stays and
    the card says what to do. Typically: "Connect to the internet so the office gets a copy." For an
    oversized row: "Send diagnostics, then contact support."

@@ -96,6 +96,58 @@ export const describeWaitingDetail = ({ waitingCount = 0, backedOffCount = 0, ne
   return { title, detail };
 };
 
+// Needs attention names an item by what the EA made, keyed by the outbox table name
+// (MA-BUG-20261104-019). An unknown table still never shows its raw name.
+const SYNC_ITEM_NAMES = {
+  time_entries: 'Time entries',
+  classes: 'Classes',
+  children: 'Children',
+  child_ea_assignments: 'My Children',
+  child_programme_enrollments: 'Programmes',
+  child_class_memberships: 'Class list',
+  class_ea_assignments: 'My classes',
+  grouping_versions: 'Groups',
+  class_grouping_state: 'Groups',
+  groups: 'Groups',
+  group_ea_assignments: 'My groups',
+  child_group_memberships: 'Group list',
+  sessions: 'Lessons',
+  session_attendees: 'Attendance',
+  battery_runs: 'Assessments',
+  assessments: 'Assessments',
+  letter_mastery: 'Letter ticks',
+  skill_mastery: 'Maths ticks',
+};
+export const syncItemName = (table) => SYNC_ITEM_NAMES[String(table || '').toLowerCase()] || 'Saved work';
+
+// Lifecycle safety O1: each refused item says what happens next, in plain words. `delivery`,
+// `clearsItself`, `canRemove` and `canRetry` come from the sync engine's delivered-receipt rule.
+export const describeNeedsAttentionItem = (item = {}, { isOnline = true } = {}) => {
+  let hint = null;
+  if (item.delivery === 'delivered') {
+    hint = item.clearsItself ? 'The office has a copy. This clears at the next sync.' : 'The office has a copy.';
+  } else if (item.delivery === 'support') {
+    hint = 'Send diagnostics, then contact support.';
+  } else if (item.delivery === 'held') {
+    hint = 'This waits for the record it changes to upload first.';
+  } else if (item.delivery === 'waiting') {
+    hint = isOnline ? 'Waiting for the office to get a copy.' : 'Connect to the internet so the office gets a copy.';
+  }
+  return {
+    title: syncItemName(item.table),
+    // A refused relationship row of a child this EA removed (REMOVED_WITH_CHILD) is not a failure
+    // the EA can act on: the removal made it unnecessary, and it clears once the office has a copy.
+    detail: item.errorCode === 'REMOVED_WITH_CHILD'
+      ? 'You removed this child, so this is no longer needed.'
+      : 'The office could not accept this.',
+    hint,
+    canRemove: Boolean(item.canRemove),
+    canRetry: Boolean(item.canRetry),
+    removeLabel: 'Remove from this phone',
+    removeAccessibilityLabel: 'The office has a copy — remove from this phone',
+  };
+};
+
 export const describeReconcileBreakerNote = ({ scope } = {}) => ({
   scope,
   title: 'Large roster change from Head Office is waiting',
