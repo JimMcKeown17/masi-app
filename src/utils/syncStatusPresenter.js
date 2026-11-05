@@ -128,6 +128,8 @@ export const describeNeedsAttentionItem = (item = {}, { isOnline = true } = {}) 
     hint = item.clearsItself ? 'The office has a copy. This clears at the next sync.' : 'The office has a copy.';
   } else if (item.delivery === 'support') {
     hint = 'Send diagnostics, then contact support.';
+  } else if (item.delivery === 'held') {
+    hint = 'This waits for the record it changes to upload first.';
   } else if (item.delivery === 'waiting') {
     hint = isOnline ? 'Waiting for the office to get a copy.' : 'Connect to the internet so the office gets a copy.';
   }

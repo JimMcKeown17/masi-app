@@ -148,9 +148,9 @@ describe('refused rows in a forced pass', () => {
     }
     const checking = {
       ...outbox,
-      hasPendingOperation: async (args) => {
+      getQueuedOperationStatus: async (args, options) => {
         if (args.recordId === 'time-a') throw new Error('dependency read failed');
-        return outbox.hasPendingOperation(args);
+        return outbox.getQueuedOperationStatus(args, options);
       },
     };
     const { supabaseClient, calls } = createSupabaseMock();

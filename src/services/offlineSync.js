@@ -877,6 +877,21 @@ const restorePendingAfterStaleFinalize = async (txn, outboxRecord, tableName) =>
   return true;
 };
 
+// When a record's insert lands, its edit or lifecycle row that was refused only because the row did
+// not exist yet (a phone that sent it ahead of the insert, before the combined-OTA fix) is sent
+// again: the cause of its refusal is gone. It then keeps the insert's acknowledgement from
+// overwriting the newer local content (hasRemainingOutbox below).
+const NOT_APPLIED_CODES = "('UPDATE_NOT_APPLIED', 'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED')";
+const releaseRefusalsAfterOwnInsert = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'insert') return;
+  await txn.runAsync(`
+    update sync_outbox
+    set status = 'pending', retry_count = 0, next_retry_at = null, last_error = null, updated_at = ?
+    where table_name = ? and record_id = ? and status = 'terminal'
+      and operation in ('update', 'archive', 'restore') and error_code in ${NOT_APPLIED_CODES}
+  `, timestamp(), tableName, outboxRecord.record_id);
+};
+
 const finalizeSuccess = async ({
   database,
   outboxRecord,
@@ -908,6 +923,7 @@ const finalizeSuccess = async ({
   }
 
   if (outboxRecord.operation !== 'hard_delete') {
+    await releaseRefusalsAfterOwnInsert(txn, outboxRecord, tableName);
     const hasRemainingOutbox = await txn.getFirstAsync(`
       select id
       from sync_outbox
@@ -1029,6 +1045,7 @@ const finalizeManySuccess = async ({ database, records, tableName, applyAcknowle
         }
 
         if (outboxRecord.operation !== 'hard_delete') {
+          await releaseRefusalsAfterOwnInsert(txn, outboxRecord, tableName);
           const hasRemainingOutbox = await txn.getFirstAsync(`
             select id from sync_outbox where table_name = ? and record_id = ? limit 1
           `, tableName, outboxRecord.record_id);
@@ -1696,19 +1713,20 @@ export const createOutboxSyncEngine = ({
       }
       // Same-record ordering: an acknowledged UPDATE-by-id edit or lifecycle UPDATE must not run
       // before its own insert has been acknowledged, or it cannot acknowledge a row that exists.
-      // A terminal insert does not block; the update then reaches its normal terminal classifier.
-      if (
-        (isLifecycle || (
-          record.operation === 'update'
-          && UPDATE_BY_ID_TABLES.has(tableNameForRecord)
-        ))
-        && await outboxRepository.hasPendingOperation({
+      // It waits while its own insert is queued in ANY status (combined-OTA review, 2026-11-05):
+      // sent ahead of a refused insert it is refused as not applied and could clear, and the
+      // insert could later land with the old content. Its release is the insert landing or
+      // leaving through its exit. Waiting behind a refused insert it holds nothing else back
+      // (`ownInsertRefused`), as the refused insert itself holds nothing in an ordinary pass.
+      if (isLifecycle || (record.operation === 'update' && UPDATE_BY_ID_TABLES.has(tableNameForRecord))) {
+        const ownInsert = await outboxRepository.getQueuedOperationStatus({
           tableName: tableNameForRecord,
           recordId: record.record_id,
           operation: 'insert',
-        })
-      ) {
-        return { tableName: tableNameForRecord, recordId: record.record_id };
+        });
+        if (ownInsert) {
+          return { tableName: tableNameForRecord, recordId: record.record_id, ownInsertRefused: ownInsert === 'terminal' };
+        }
       }
       if (
         isLifecycle
@@ -1884,8 +1902,9 @@ export const createOutboxSyncEngine = ({
           result.tableResults[outboxRecord.table_name] = tableResult;
           // Skipped rows stay pending for the next pass. Whether this pass "succeeded" is
           // decided by the blocking failure itself: terminal already flipped success in
-          // applyRecordResult; a retriable block leaves the pass successful.
-          rememberBlockedRecord(outboxRecord);
+          // applyRecordResult; a retriable block leaves the pass successful. An edit waiting behind
+          // its own refused insert blocks nothing: that would be a hold with no release.
+          if (!skippedDependency.ownInsertRefused) rememberBlockedRecord(outboxRecord);
           continue;
         }
 
@@ -2005,14 +2024,29 @@ export const createOutboxSyncEngine = ({
   // O1 item 2: after each pass's receipt drain, refused archives, restores and edits whose
   // exact current revision the office holds leave the phone. The check and the delete share one
   // transaction. Proof keys leave with their outbox row or receipt, whichever goes first.
+  // A refused row's way out and whether its receipt proves delivery. A refused edit or lifecycle
+  // row whose own insert is still queued is 'held': it never leaves while that insert could still
+  // land with older content (combined-OTA review, 2026-11-05). It is sent again if the insert
+  // lands (releaseRefusalsAfterOwnInsert), and resolves normally once the insert has left.
+  const readRefusalExit = async (db, row) => {
+    const exit = refusalExit(row);
+    if (!exit) return { exit: null, delivery: null, incidentId: null };
+    if (row.operation !== 'insert') {
+      const ownInsert = await db.getFirstAsync(`
+        select id from sync_outbox where table_name = ? and record_id = ? and operation = 'insert' limit 1
+      `, row.table_name, row.record_id);
+      if (ownInsert) return { exit, delivery: 'held', incidentId: null };
+    }
+    return { exit, ...await readDeliveredReceipt(db, row) };
+  };
+
   const resolveDeliveredRefusals = async (ownerUserId) => runRepositoryTransaction(database, async (txn) => {
     const refused = await txn.getAllAsync(
       "select * from sync_outbox where status = 'terminal' and owner_user_id = ?", ownerUserId);
     let cleared = 0;
     for (const row of refused) {
-      if (refusalExit(row) !== 'clears_itself') continue;
-      const { delivery, incidentId } = await readDeliveredReceipt(txn, row);
-      if (delivery !== 'delivered') continue;
+      const { exit, delivery, incidentId } = await readRefusalExit(txn, row);
+      if (exit !== 'clears_itself' || delivery !== 'delivered') continue;
       await outboxRepository.deleteRecord(row.id, { transaction: txn });
       await txn.runAsync('delete from local_state where key = ?', deliveredReceiptKey(incidentId));
       cleared += 1;
@@ -2033,8 +2067,8 @@ export const createOutboxSyncEngine = ({
     let outcome = { removed: false, delivery: null };
     await runRepositoryTransaction(database, async (txn) => {
       const row = await txn.getFirstAsync('select * from sync_outbox where id = ?', outboxId);
-      if (!refusalExit(row)) return;
-      const { delivery, incidentId } = await readDeliveredReceipt(txn, row);
+      const { exit, delivery, incidentId } = await readRefusalExit(txn, row);
+      if (!exit) return;
       if (delivery !== 'delivered') {
         outcome = { removed: false, delivery };
         return;
@@ -2056,12 +2090,11 @@ export const createOutboxSyncEngine = ({
       for (const item of items) {
         const row = item.outboxId
           ? await db.getFirstAsync('select * from sync_outbox where id = ?', item.outboxId) : null;
-        const exit = refusalExit(row);
-        const { delivery } = exit ? await readDeliveredReceipt(db, row) : { delivery: null };
+        const { exit, delivery } = await readRefusalExit(db, row);
         described.push({
           ...item,
           delivery,
-          clearsItself: exit === 'clears_itself',
+          clearsItself: exit === 'clears_itself' && delivery !== 'held',
           canRemove: exit === 'ea_removes' && delivery === 'delivered',
           canRetry: exit !== null && isResendableRefusal(row),
         });

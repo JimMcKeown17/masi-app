@@ -140,14 +140,35 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     // Only the parent's own insert or update is evidence that it is still awaiting the server
     // (plan O2 item 2, review round 4): a waiting children hard_delete is not, or a permanently
     // refused relationship INSERT would retry forever instead of reaching O1's exit.
+    // An edit waiting behind its own refused INSERT is not evidence either: nothing is coming until
+    // that INSERT lands or leaves (combined-OTA review, 2026-11-05).
     const row = await db.getFirstAsync(`
-      select id from sync_outbox
-      where table_name = ? and record_id = ?
-        and operation in ('insert', 'update')
-        and status in ('pending', 'failed', 'in_flight')
+      select o.id from sync_outbox o
+      where o.table_name = ? and o.record_id = ?
+        and o.operation in ('insert', 'update')
+        and o.status in ('pending', 'failed', 'in_flight')
+        and not (o.operation = 'update' and exists (
+          select 1 from sync_outbox i
+          where i.table_name = o.table_name and i.record_id = o.record_id
+            and i.operation = 'insert' and i.status = 'terminal'
+        ))
       limit 1
     `, tableName, recordId);
     return !!row;
+  };
+
+  // The status of this record's own queued row for the operation, in any status (null if none).
+  // An edit or lifecycle row waits while its own INSERT is queued at all, refused included.
+  const getQueuedOperationStatus = async ({ tableName, recordId, operation }, { transaction } = {}) => {
+    if (!tableName || !recordId || !operation) return null;
+    const db = transaction || await resolveDatabase(database);
+    const row = await db.getFirstAsync(`
+      select status from sync_outbox
+      where table_name = ? and record_id = ? and operation = ?
+      order by case status when 'terminal' then 1 else 0 end
+      limit 1
+    `, tableName, recordId, operation);
+    return row?.status ?? null;
   };
 
   // True while an outbox row for exactly this operation is still owed. Terminal rows do not count.
@@ -582,6 +603,7 @@ export const createSyncOutboxRepository = ({ database } = {}) => {
     getReadyRecords,
     hasPendingRecord,
     hasPendingOperation,
+    getQueuedOperationStatus,
     getPendingHardDeleteIds,
     getTerminalRecords,
     markInFlight,
