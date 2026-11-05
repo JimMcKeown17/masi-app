@@ -8881,3 +8881,49 @@ the contract map are updated (the "starts stay EA-writable" residual is gone).
   letter-order, reporting 181).
 - `npx jest`: **517 suites / 8,184 tests passed**; `npx jest -c jest.integration.config.js`:
   **111 suites / 1,530 tests passed**.
+
+### 2026-11-05 — Lifecycle safety server batch applied to staging (R1, `feat/lifecycle-safety-server` 09fb332a)
+
+Applied with Jim's go-ahead (2026-11-05) after CI `test` passed on PR #161 (17m39s; #160, #162 and
+#163 also green). Applied from the server worktree with the isolated helper, `project_ref`
+`segygjzpujphwvrubusm` confirmed on every call.
+
+- **Preflight.** `sqlite:staging:migrations`: staging held every migration through
+  `20261104132732`; only the four `20261105120*` files were local-only.
+  `sqlite:staging:dry-run`: "Would push" exactly those four.
+- **Quiet window.** 17:38 SAST. Every sign-in in the previous three hours was an
+  `is_test_account` login; the last write was 15:33 UTC (a test account), and no API query was
+  active in the minute before the push.
+- **Apply.** `sqlite:staging:push` 15:38:57–15:39:03 UTC: all four files applied, no lock
+  timeout.
+- **Before → after** (`r1-verify.sql`, run read-only both times):
+
+  | Check | Before | After |
+  | --- | --- | --- |
+  | lifecycle migrations recorded | 0 | 4 |
+  | public tables `authenticated`/`anon` can DELETE | 25 | 0 |
+  | public DELETE policies | 9 | 0 |
+  | `authenticated` UPDATE on `sessions` | true | false |
+  | history FKs (by name) still CASCADE | 24 | 1: `auth.sessions.sessions_user_id_fkey`, Supabase's own table sharing the name; not ours |
+  | the 23 history FKs ON DELETE RESTRICT, validated | 0 | 23 |
+  | `*_zz_lifecycle_guard` triggers enabled | 0 | 9 |
+  | new private functions / `can_modify_session_attendee` | 0 / 1 | 4 / 0 |
+  | held-at-time policies | 0 | 3 |
+  | `delete_child_if_no_history` free of `delete from public.children` | false | true |
+
+- **Behaviour probe on real data** (one DO block, ended with a deliberate RAISE so everything rolled
+  back): as the owning EA (`set local role authenticated`, JWT `sub`), clearing the newest ended
+  `child_ea_assignments` row returned 1 row (the acknowledgement 1.5.0 needs) and the end stayed
+  as written; `DELETE` of the same row was refused 42501.
+- **Daily invariant check** (`scripts/lifecycle-invariants.sql`, Head Office PR #162): the same
+  single pre-existing hit before and after (`upload_terminal_receipts`, an MV001 receipt from
+  2026-10-30). Its documented usage `npm run sqlite:staging:query -- "$(cat …)"` prints the CLI
+  help instead of running, because the SQL starts with `--` and the CLI reads it as a flag; run with
+  the comment lines stripped. The fix ships in PR #162.
+- **Two 1.5.0 build families.** iOS 26 / Android 55 come from `f002e08`, the client frozen in the
+  compat gate. iOS 28 / Android 58 come from `8b79eae5`, whose sync diff adds only `skill_mastery`
+  (via `set_skill_mastery`, covered by `verify:skill-mastery:postgres` on the combined tree), a
+  check of `error_code` before matching the error text in the RLS-repair path, and the
+  `skill_mastery` history check in `deleteIfNoHistory`. No lifecycle wire shape changed, so the gate
+  covers both.
+- **Open:** the two-phone check on installed 1.5.0 (#157) needs Jim's phones.
