@@ -9407,3 +9407,78 @@ refuses with the parse error and publishes nothing. The orchestrator's dry run c
 - `npx jest`: 526 suites / 8,442 tests passed, exit 0. `npx jest -c jest.integration.config.js`:
   114 suites / 1,568 tests passed, exit 0. No SQL, sync or RLS change, so no PostgreSQL harness
   and no contract-map change; no lint script.
+
+### 2026-11-05 — `ota:publish` rollback guard: review fixes (`feat/app-release-card`, work order 9)
+
+The review of the guard above found two medium and two low problems. All four are fixed here, test first.
+
+- **Squash merges (medium).** Masi squash-merges PRs, so a merged branch tip is never in main's
+  history. Once #167 is squash-merged while phones run `b759128f`, the first `ota:publish` from
+  main would have been refused, and the only way out stamped a false `(rollback: …)` label. Now,
+  when C is not in HEAD's history, the script checks content: `git merge-tree --write-tree
+  --name-only --no-messages HEAD C`, then `git diff-tree` of HEAD against the merged tree. It
+  passes when the merge would change nothing but documentation (`documentation/`, `docs/`,
+  top-level `*.md`). Tests and scripts still count, which keeps the check on the safe side. Two
+  cases the review's suggested fix (merge into HEAD only) would refuse:
+  (1) a build-log union conflicts in merge-tree even right after the squash merge, so conflicted
+  paths are filtered like any other change, not treated as a refusal;
+  (2) later work on main on lines the branch changed makes the merge into HEAD conflict in `src/`.
+  For (2) the script walks back along HEAD's first-parent line (`git rev-list --first-parent
+  --max-count=200 HEAD ^C`) and passes at the first commit that already had C's changes.
+  merge-tree writes the merged trees' objects into the repository. Nothing references them, and
+  git gc removes them. Real history, checked in a `--shared` bare clone so no objects were written
+  to the shared repository:
+  - #145 squash `a4d990bf` against `feat/numeracy-screens` tip `65ee53d1`: passes ("would change nothing").
+  - `origin/main` against `65ee53d1`: passes ("only documentation").
+  - The #165 incident (`9f6b0f96` against `e9a4360d`): refused, 87 files.
+  - `b759128f` against `e9a4360d`: passes on history.
+  - Today's `origin/main` against `b759128f` (phones now): refused, so a bare publish from main is still blocked.
+- **One-platform groups (medium).** EAS serves each platform the newest group for its runtime
+  that includes that platform; eas-cli reads it with limit 1 and a platform filter. The script
+  now takes the newest group per platform (android, ios) from the same `update:list` pages
+  (`platforms`, built by `formatPlatformForUpdateGroup` as `"android, ios"` or `"android"`), reads
+  each distinct group once with `update:view`, and checks each. When the two platforms run
+  different groups, the output prints one line per platform ("Android phones … / iOS phones …").
+  A refusal names the platform. A group whose `platforms` it cannot read is refused. The review's
+  three cases are now refused: an Android-only update from main, an Android-only roll back to
+  embedded, and an Android-only group with no commit, each newer than the both-platform group iOS
+  still runs. Its `platform-probe.cjs`, re-run against the fixed script, prints REFUSED for all
+  four scenarios.
+- **History, not content (low).** The pass line now says only what git checked: "this commit
+  (X) has commit C in its history", or "is the commit phones run". It no longer says "keeps the
+  code phones run now". The review expected the content check to catch a revert of C. It cannot:
+  when C is in HEAD's history, the merge base is C itself, so merge-tree returns HEAD unchanged.
+  Decided: a revert in HEAD's history passes, because a revert is a deliberate change. A test pins
+  this behaviour and DEPLOYMENT.md says it. A bare `eas update` from a dirty tree records HEAD while
+  publishing other code. `eas.json` sets no `cli.requireCommit`, and eas-cli 26 defaults it to
+  false (`resolveVcsClient(requireCommit = false)`), so `ensureRepoIsCleanAsync` returns early.
+  `update:view` does not show `isGitWorkingTreeDirty`, so the script cannot see this. DEPLOYMENT.md
+  now warns about it. `ota:publish` itself refuses a dirty tree.
+- **Shallow clones (low).** When the answer would be "no", the script asks `git rev-parse
+  --is-shallow-repository`. In a shallow clone it refuses with "Run git fetch --unshallow", even
+  with `--allow-rollback`, because it cannot tell whether the publish is a rollback. A "yes" from
+  `merge-base --is-ancestor` holds in a shallow clone too, so a pass there needs no unshallowing.
+
+**Verification (Node 20).**
+- RED: the new and changed tests against the HEAD script (a0bf5639): `npx jest
+  __tests__/otaPublishScript.test.js` failed 23 of 105. One-platform cases: `main did not refuse`.
+  Squash (real git): `Refusing to publish: … does not contain it`. Shallow: `Run git fetch origin`
+  where `git fetch --unshallow` was expected. Wording cases: the old `contains e9a4360, so this
+  update keeps the code phones run now`. GREEN: 106/106 (the 106th, added after the RED run,
+  covers `--allow-rollback` when only one platform rolls back).
+- The real-git tests build a bare origin and clones in a temp directory, with a squash merge plus
+  build-log union, later work on the same line, the incident shape, a merge-then-revert, and a
+  `--depth 1` clone that is refused, refused again after a shallow fetch of C, and passes after
+  `git fetch --unshallow`. They run through `main()` with EAS faked.
+- `npx jest`: 526 suites / 8,461 tests passed, exit 0. The first full run had one failure,
+  `AddChildScreen › stays on the form when local child save fails` ("Unable to find an element
+  with role: alert"). That test does not touch this change, passed 10/10 alone, and passed in the
+  rerun, so it looks like a timing flake under full parallel load. Recorded here, not fixed.
+  `npx jest -c jest.integration.config.js`: 114 suites / 1,568 tests passed, exit 0. No SQL, sync
+  or RLS change, so no PostgreSQL harness and no contract-map change; no lint script. EAS was not
+  called.
+
+**Still open.** A group in a partial rollout (`rolloutPercentage`) leaves the other phones on its
+control update, which is not checked; Masi does not use rollouts. A squash merge more than 200
+first-parent commits back, with later conflicting work on top, is refused. The refusal is safe,
+and the rollback label stays available.

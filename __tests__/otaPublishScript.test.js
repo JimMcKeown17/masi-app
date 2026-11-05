@@ -1,4 +1,8 @@
 global.__MASI_NO_DEFAULT_HANDLE__ = true;
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 // The fixture follows the JSON that eas-cli 26.0.0 prints for
 // `update:list --branch <b> --json --non-interactive`: `{ name, id, currentPage: [group] }`, built by
 // renderUpdateGroupsOnBranch / getUpdateGroupDescriptionsWithBranch (build/update/queries.js,
@@ -64,9 +68,13 @@ const fakeEas = ({ list = previewPage, views = viewFixtures } = {}) => jest.fn((
 // git exits 1 for "no" (`merge-base --is-ancestor`, `rev-parse --verify --quiet`) and 128 for an
 // error such as an unknown commit; execFileSync puts the exit code on error.status.
 const gitExit = (key, status) => Object.assign(new Error(`Command failed: git ${key}`), { status });
+const MERGED_TREE = '7d3c1f0e9b8a7c6d5e4f30211a2b3c4d5e6f7a8b';
+// A known commit that is not in HEAD's history gets the content check: merging it into HEAD
+// (merge-tree) would change `missing`, beyond documentation. Real-git tests below cover how
+// git itself answers; this fake only answers the commands.
 const fakeGit = ({
   status = '', remoteBranches = '  origin/feat/app-release-card\n  origin/HEAD -> origin/main\n',
-  head = HEAD, ancestors = [head], unrelated = [],
+  head = HEAD, ancestors = [head], unrelated = [], shallow = false, missing = ['src/services/lifecycle/restore.js'],
 } = {}) => {
   const calls = [];
   const git = (args) => {
@@ -75,6 +83,7 @@ const fakeGit = ({
     if (key === 'status --porcelain') return status;
     if (key === 'rev-parse HEAD') return head;
     if (key === 'branch -r --contains HEAD') return remoteBranches;
+    if (key === 'rev-parse --is-shallow-repository') return `${shallow}\n`;
     const known = (commit) => ancestors.includes(commit) || unrelated.includes(commit);
     if (args.length === 4 && args.slice(0, 3).join(' ') === 'rev-parse --verify --quiet' && args[3].endsWith('^{commit}')) {
       const commit = args[3].slice(0, -'^{commit}'.length);
@@ -85,6 +94,9 @@ const fakeGit = ({
       if (ancestors.includes(args[2])) return '';
       throw gitExit(key, known(args[2]) ? 1 : 128);
     }
+    if (args[0] === 'rev-list' && args[1] === '--first-parent' && args[3] === head && unrelated.includes(args[4].slice(1))) return `${head}\n`;
+    if (args[0] === 'merge-tree' && args[4] === head && unrelated.includes(args[5])) return `${MERGED_TREE}\n`;
+    if (key === `diff-tree -r --name-only -z ${head} ${MERGED_TREE}`) return missing.map(file => `${file}\0`).join('');
     throw new Error(`unexpected git ${key}`);
   };
   return { git, calls };
@@ -434,7 +446,8 @@ describe('the update phones run now', () => {
     const d = incident();
     const error = attempt(['--message', 'Draft content packs', ...(dryRun ? [] : ['--publish'])], d);
     expect(error.message).toContain(`phones on preview run update group ${GROUP_2} (release 1.5.0+2) from commit ${RELEASE_2}`);
-    expect(error.message).toContain('this commit (9f6b0f9) does not contain it');
+    expect(error.message).toContain('this commit (9f6b0f9) does not contain it: it is not in its history, and merging it '
+      + 'would change more than documentation (1 file: src/services/lifecycle/restore.js).');
     expect(error.message).toContain('Publishing would roll phones back to code without it.');
     expect(error.message).toContain(`Merge the branch that contains e9a4360 into this one (git branch -r --contains ${RELEASE_2} lists it)`);
     expect(error.message).toContain('To roll phones back on purpose, add --allow-rollback "why".');
@@ -455,7 +468,10 @@ describe('the update phones run now', () => {
     expect(main(['--message', 'Restore the lifecycle update'], d)).toMatchObject({ releaseLabel: '1.5.0+3', dryRun: true });
     const output = d.lines.join('\n');
     expect(output).toContain(`Phones on preview (runtime 1.5.0) run update group ${GROUP_2} (release 1.5.0+2), commit ${RELEASE_2}.`);
-    expect(output).toContain('Check passed: this commit (b759128) contains e9a4360, so this update keeps the code phones run now.');
+    // History, not content: a later revert of e9a4360 would still pass, so the line claims only
+    // what git checked.
+    expect(output).toContain('Check passed: this commit (b759128) has commit e9a4360 in its history.');
+    expect(output).not.toContain('keeps the code');
     expect(output.indexOf('Check passed')).toBeLessThan(output.indexOf('Next release: 1.5.0+3'));
     expect(git.calls).toEqual(expect.arrayContaining([
       ['rev-parse', '--verify', '--quiet', `${RELEASE_2}^{commit}`],
@@ -466,7 +482,7 @@ describe('the update phones run now', () => {
     expect(main(['--message', 'Restore the lifecycle update', '--publish'], published))
       .toMatchObject({ releaseLabel: '1.5.0+3', message: 'OTA 1.5.0+3: Restore the lifecycle update (b759128)' });
     expect(published.run).toHaveBeenCalledTimes(2);
-    expect(published.lines.join('\n')).toContain('Check passed: this commit (b759128) contains e9a4360');
+    expect(published.lines.join('\n')).toContain('Check passed: this commit (b759128) has commit e9a4360 in its history.');
   });
 
   test('republishing the commit phones already run counts as containing it', () => {
@@ -474,7 +490,7 @@ describe('the update phones run now', () => {
     expect(main(['--message', 'Same code again'], d)).toMatchObject({ releaseLabel: '1.5.0+2' });
     const output = d.lines.join('\n');
     expect(output).toContain(`Phones on preview (runtime 1.5.0) run update group ${LIFECYCLE} (not numbered), commit ${HEAD}.`);
-    expect(output).toContain('Check passed: this commit (fd053cf) contains fd053cf');
+    expect(output).toContain('Check passed: this commit (fd053cf) is the commit phones run.');
   });
 
   test('the newest group for this runtime is the one phones run, even when a newer group serves another runtime', () => {
@@ -482,6 +498,13 @@ describe('the update phones run now', () => {
     const d = incident({ runForOutput: fakeEas({ list }) });
     expect(attempt(['--message', 'x'], d).message).toContain(`update group ${GROUP_2} (release 1.5.0+2)`);
     expect(viewCalls(d).map(([, args]) => args[3])).toEqual([GROUP_2]);
+  });
+
+  test('the refusal names what merging would change, src/ first, at most three files', () => {
+    const missing = ['scripts/x.cjs', '__tests__/a.test.js', 'src/b.js', 'App.js', 'src/a.js'];
+    const d = incident({ git: fakeGit({ head: MAIN_AT_165, unrelated: [RELEASE_2], missing }).git });
+    expect(attempt(['--message', 'x'], d).message)
+      .toContain('merging it would change more than documentation (5 files: src/a.js, src/b.js, App.js and 2 more).');
   });
 
   test('a commit this repository does not have is refused: fetch first', () => {
@@ -515,7 +538,7 @@ describe('the update phones run now', () => {
     const d = deps();
     const error = attempt(['--message', 'x', '--allow-rollback', 'just in case', '--publish'], d);
     expect(error.message).toContain('--allow-rollback is only for a publish that rolls phones back, and this one does not: '
-      + 'this commit (fd053cf) contains fd053cf.');
+      + 'this commit (fd053cf) is the commit phones run.');
     expect(error.message).toContain('Nothing was published.');
     expect(d.run).not.toHaveBeenCalled();
   });
@@ -575,5 +598,216 @@ describe('the update phones run now', () => {
     const d = incident({ runForOutput: fakeEas({ list }) });
     expect(() => main(['--message', 'x'], d)).toThrow(/update group without a usable id[\s\S]*Nothing was published/);
     expect(viewCalls(d)).toEqual([]);
+  });
+
+  // EAS serves each platform the newest update for its runtime that has that platform; eas-cli
+  // reads it so (limit 1, offset 0, with a platform filter:
+  // selectRuntimeAndGetLatestUpdateGroupForEachPublishPlatformOnBranchAsync in build/update/queries.js).
+  // update:list's `platforms` is the group's platforms sorted and joined with ", "
+  // (formatPlatformForUpdateGroup, build/update/utils.js), so a group published with
+  // `--platform android` lists "android". The script publishes both platforms, so both are checked.
+  const ANDROID_ONLY = '7a7a7a7a-1111-4222-8333-944444444444';
+  const androidOnly = (extra = {}) => ({
+    ...pageAtRelease2.currentPage[0], group: ANDROID_ONLY, platforms: 'android',
+    message: '"Android hotfix" (5 minutes ago by jimmckeown)', ...extra,
+  });
+  const { gitCommitHash: _release2Commit, ...androidUpdateOf2 } = viewFixtures[GROUP_2].find(update => update.platform === 'android');
+  const androidOnlyView = commit => [{
+    ...androidUpdateOf2, id: '01a1ad00-0000-7000-8000-000000000001', group: ANDROID_ONLY, message: 'Android hotfix',
+    ...(commit ? { gitCommitHash: commit } : {}),
+  }];
+  const withNewest = (newest, views = {}) => fakeEas({
+    list: { ...pageAtRelease2, currentPage: [newest, ...pageAtRelease2.currentPage] }, views: { ...viewFixtures, ...views },
+  });
+
+  test.each([
+    ['an Android update from a commit this one contains', androidOnly(), { [ANDROID_ONLY]: androidOnlyView(MAIN_AT_165) }],
+    ['an Android roll back to the built-in bundle', androidOnly({ isRollBackToEmbedded: true }), {}],
+    ['an Android update that records no commit', androidOnly(), { [ANDROID_ONLY]: androidOnlyView() }],
+  ])('a newer one-platform group does not hide the other platform: with %s newest, iOS phones still run 1.5.0+2, so the publish is refused', (_case, newest, views) => {
+    const d = incident({ runForOutput: withNewest(newest, views) });
+    const error = attempt(['--message', 'Draft content packs', '--publish'], d);
+    expect(error.message).toContain(`Refusing to publish: iOS phones on preview run update group ${GROUP_2} (release 1.5.0+2) from commit ${RELEASE_2}`);
+    expect(error.message).toContain('this commit (9f6b0f9) does not contain it');
+    expect(error.message).not.toContain('Android phones');
+    expect(error.message).toContain('Nothing was published.');
+    expect(d.run).not.toHaveBeenCalled();
+  });
+
+  test('when the platforms run different groups, the dry run says what each runs and checks each', () => {
+    const git = fakeGit({ head: MERGE, ancestors: [MERGE, RELEASE_2, MAIN_AT_165] });
+    const d = incident({ git: git.git, runForOutput: withNewest(androidOnly(), { [ANDROID_ONLY]: androidOnlyView(MAIN_AT_165) }) });
+    expect(main(['--message', 'x'], d)).toMatchObject({ releaseLabel: '1.5.0+4', dryRun: true });
+    const output = d.lines.join('\n');
+    expect(output).toContain(`Android phones on preview (runtime 1.5.0) run update group ${ANDROID_ONLY} (not numbered), commit ${MAIN_AT_165}.`);
+    expect(output).toContain(`iOS phones on preview (runtime 1.5.0) run update group ${GROUP_2} (release 1.5.0+2), commit ${RELEASE_2}.`);
+    expect(output).toContain('Check passed: this commit (b759128) has commit 9f6b0f9 in its history.');
+    expect(output).toContain('Check passed: this commit (b759128) has commit e9a4360 in its history.');
+    expect(viewCalls(d).map(([, args]) => args[3])).toEqual([ANDROID_ONLY, GROUP_2]);
+  });
+
+  test('--allow-rollback when only one platform rolls back: that platform gets the rollback line, the other its check', () => {
+    const d = incident({ runForOutput: withNewest(androidOnly(), { [ANDROID_ONLY]: androidOnlyView(MAIN_AT_165) }) });
+    expect(main(['--message', 'Back', '--allow-rollback', 'iOS card crash', '--publish'], d))
+      .toMatchObject({ message: 'OTA 1.5.0+4: Back (rollback: iOS card crash) (9f6b0f9)' });
+    const output = d.lines.join('\n');
+    expect(output).toContain('Check passed: this commit (9f6b0f9) is the commit Android phones run.');
+    expect(output).toContain('Rollback allowed (--allow-rollback): iOS card crash. '
+      + 'This commit (9f6b0f9) does not contain e9a4360, so iOS phones go back to code without it.');
+    expect(d.run).toHaveBeenCalledTimes(2);
+  });
+
+  test('a platform with no update for this runtime runs its built-in bundle; a note says so', () => {
+    const list = { ...pageAtRelease2, currentPage: [androidOnly(), ...pageAtRelease2.currentPage.filter(g => g.runtimeVersion !== '1.5.0')] };
+    const d = incident({ runForOutput: fakeEas({ list, views: { [ANDROID_ONLY]: androidOnlyView(MAIN_AT_165) } }) });
+    expect(main(['--message', 'x'], d)).toMatchObject({ releaseLabel: '1.5.0+2' });
+    const output = d.lines.join('\n');
+    expect(output).toContain('iOS phones on preview (runtime 1.5.0) run their built-in bundle: branch preview has no iOS update for this runtime yet.');
+    expect(output).toContain('Note: iOS phones run their built-in bundle, so there is no update commit this publish must contain.');
+    expect(output).toContain('Check passed: this commit (9f6b0f9) is the commit Android phones run.');
+  });
+
+  test.each([[undefined], ['N/A'], ['android,ios'], [7]])('a group whose platforms cannot be read is refused: %p', (platforms) => {
+    const list = { ...pageAtRelease2, currentPage: [{ ...pageAtRelease2.currentPage[0], platforms }, ...pageAtRelease2.currentPage.slice(1)] };
+    const d = incident({ runForOutput: fakeEas({ list }) });
+    expect(() => main(['--message', 'x'], d))
+      .toThrow(new RegExp(`update group ${GROUP_2} with platforms .*, so which phones run it is unknown\\. Nothing was published\\.`));
+    expect(viewCalls(d)).toEqual([]);
+  });
+
+  test.each([false, true])('a shallow clone cannot tell whether it has the commit, so it is refused with --unshallow (--allow-rollback: %p)', (allow) => {
+    const d = incident({ git: fakeGit({ head: MAIN_AT_165, unrelated: [RELEASE_2], shallow: true }).git });
+    const error = attempt(['--message', 'x', ...(allow ? ['--allow-rollback', 'why'] : [])], d);
+    expect(error.message).toContain(`Refusing to publish: phones on preview run update group ${GROUP_2} (release 1.5.0+2) from commit ${RELEASE_2}, `
+      + 'and this clone is shallow (part of its history is missing), so the script cannot tell whether this commit (9f6b0f9) contains it. '
+      + 'Run git fetch --unshallow, then publish again.');
+    expect(error.message).not.toContain('Publishing would roll phones back');
+    expect(error.message).not.toContain('git fetch origin');
+    expect(d.lines.join('\n')).not.toContain('Next release');
+  });
+
+  test('a shallow clone that has the commit in its history passes', () => {
+    const d = incident({ git: fakeGit({ head: MERGE, ancestors: [MERGE, RELEASE_2], shallow: true }).git });
+    expect(main(['--message', 'x'], d)).toMatchObject({ releaseLabel: '1.5.0+3' });
+    expect(d.lines.join('\n')).toContain('Check passed: this commit (b759128) has commit e9a4360 in its history.');
+  });
+});
+
+describe('the content check, with real git', () => {
+  // Through main() against real repositories (a bare origin and clones in a temp directory), since
+  // what matters is how git answers: a squash merge (Masi squash-merges PRs, so a merged branch tip
+  // is never in main's history), a build-log union conflict, later work on the same lines, a revert,
+  // a shallow clone. EAS is faked as above, with phones running commit C, the feature branch tip.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  Object.assign(env, {
+    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.invalid',
+    GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid',
+  });
+  const gitIn = cwd => args => execFileSync('git', args, { cwd, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const short = commit => commit.slice(0, 7);
+  let root;
+  beforeAll(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'ota-publish-git-')); });
+  afterAll(() => { fs.rmSync(root, { recursive: true, force: true }); });
+
+  // base: src/app.js and documentation/build-log.md on main. feat's tip C adds the lifecycle line
+  // phones run, and a build-log entry; main then gets its own build-log entry.
+  const repoWithFeature = (name) => {
+    const origin = path.join(root, `${name}-origin.git`);
+    const dir = path.join(root, name);
+    gitIn(root)(['init', '-q', '--bare', '-b', 'main', origin]);
+    gitIn(root)(['init', '-q', '-b', 'main', dir]);
+    const git = gitIn(dir);
+    git(['remote', 'add', 'origin', origin]);
+    const commit = (files, message) => {
+      for (const [file, text] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+        fs.writeFileSync(path.join(dir, file), text);
+      }
+      git(['add', '-A']);
+      git(['commit', '-q', '-m', message]);
+      return git(['rev-parse', 'HEAD']).trim();
+    };
+    commit({ 'src/app.js': 'base\n', 'documentation/build-log.md': 'log\n' }, 'Base');
+    git(['checkout', '-q', '-b', 'feat']);
+    const feature = commit({ 'src/app.js': 'base\nlifecycle\n', 'documentation/build-log.md': 'log\nfeat entry\n' }, 'Lifecycle');
+    git(['checkout', '-q', 'main']);
+    commit({ 'documentation/build-log.md': 'log\nmain entry\n' }, 'Main build log');
+    const head = () => git(['rev-parse', 'HEAD']).trim();
+    return { origin, git, commit, feature, head, push: () => git(['push', '-q', 'origin', 'main', 'feat']) };
+  };
+  // Phones run update group 2ed208c1 (1.5.0+2), published from `commit`.
+  const GROUP_2_ID = '2ed208c1-1760-4c1d-b450-0844d4eeb7f0';
+  const phonesRun = commit => fakeEas({
+    list: pageAtRelease2, views: { ...viewFixtures, [GROUP_2_ID]: viewFixtures[GROUP_2_ID].map(update => ({ ...update, gitCommitHash: commit })) },
+  });
+  const dryRun = (git, commit) => {
+    const d = deps({ git, runForOutput: phonesRun(commit) });
+    let error;
+    try { main(['--message', 'x'], d); } catch (caught) { error = caught; }
+    return { output: d.lines.join('\n'), error };
+  };
+
+  test('a squash merge: main has the branch\'s code under another commit, so publishing from main passes', () => {
+    const repo = repoWithFeature('squash');
+    // GitHub's squash merge: the branch's changes as one new commit on main, the build log unioned.
+    const squash = repo.commit({ 'src/app.js': 'base\nlifecycle\n', 'documentation/build-log.md': 'log\nmain entry\nfeat entry\n' }, 'Lifecycle (#167)');
+    repo.push();
+    expect(() => repo.git(['merge-base', '--is-ancestor', repo.feature, squash])).toThrow();
+    const { output, error } = dryRun(repo.git, repo.feature);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: commit ${short(repo.feature)} is not in this commit's (${short(squash)}) history, but this `
+      + 'commit already has its changes (a squash merge, for example): merging it would change only documentation.');
+    expect(output).toContain('Next release: 1.5.0+3');
+  });
+
+  test('a squash merge followed by later work on the same lines still passes: an earlier commit on this line had the code', () => {
+    const repo = repoWithFeature('squash-later');
+    const squash = repo.commit({ 'src/app.js': 'base\nlifecycle\n', 'documentation/build-log.md': 'log\nmain entry\nfeat entry\n' }, 'Lifecycle (#167)');
+    const later = repo.commit({ 'src/app.js': 'base\nlifecycle, later\n' }, 'Later work on the lifecycle line');
+    repo.push();
+    const { output, error } = dryRun(repo.git, repo.feature);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: commit ${short(repo.feature)} is not in this commit's (${short(later)}) history, but commit `
+      + `${short(squash)} before it already had its changes (a squash merge, for example).`);
+  });
+
+  test('main without the branch\'s code (the #165 publish) is refused, naming what it lacks', () => {
+    const repo = repoWithFeature('behind');
+    repo.push();
+    const { error } = dryRun(repo.git, repo.feature);
+    expect(error?.message).toContain(`Refusing to publish: phones on preview run update group ${GROUP_2_ID} (release 1.5.0+2) from commit ${repo.feature}, `
+      + `and this commit (${short(repo.head())}) does not contain it: it is not in its history, and merging it would change more `
+      + 'than documentation (1 file: src/app.js).');
+    expect(error.message).toContain('Publishing would roll phones back to code without it.');
+  });
+
+  test('a revert in this commit\'s history passes, since reverting is deliberate; the line says only that the commit is in the history', () => {
+    const repo = repoWithFeature('revert');
+    repo.git(['merge', '-q', '--no-ff', '-X', 'ours', '-m', 'Merge feat', 'feat']);
+    repo.git(['revert', '--no-edit', '-m', '1', 'HEAD']);
+    repo.push();
+    expect(repo.git(['show', 'HEAD:src/app.js'])).toBe('base\n');
+    const { output, error } = dryRun(repo.git, repo.feature);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: this commit (${short(repo.head())}) has commit ${short(repo.feature)} in its history.`);
+    expect(output).not.toContain('keeps the code');
+  });
+
+  test('a shallow clone is refused with --unshallow, whether or not it has fetched the commit, and passes once unshallowed', () => {
+    const repo = repoWithFeature('shallow');
+    repo.git(['merge', '-q', '--no-ff', '-X', 'ours', '-m', 'Merge feat', 'feat']);
+    repo.push();
+    const clone = path.join(root, 'shallow-clone');
+    gitIn(root)(['clone', '-q', '--depth', '1', '--branch', 'main', `file://${repo.origin}`, clone]);
+    const git = gitIn(clone);
+    const refusal = 'this clone is shallow (part of its history is missing), so the script cannot tell whether this commit '
+      + `(${short(repo.head())}) contains it. Run git fetch --unshallow, then publish again.`;
+    expect(dryRun(git, repo.feature).error?.message).toContain(refusal);
+    git(['fetch', '-q', '--depth', '1', 'origin', 'feat']);
+    expect(dryRun(git, repo.feature).error?.message).toContain(refusal);
+    git(['fetch', '-q', '--unshallow']);
+    const { output, error } = dryRun(git, repo.feature);
+    expect(error).toBeUndefined();
+    expect(output).toContain(`Check passed: this commit (${short(repo.head())}) has commit ${short(repo.feature)} in its history.`);
   });
 });

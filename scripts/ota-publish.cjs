@@ -12,10 +12,11 @@
 // The number is not committed. It is counted from the EAS branch at publish time and stamped
 // into the update through app.config.js (MASI_OTA_RELEASE → extra.otaRelease).
 //
-// It never rolls phones back by accident. Before counting, it finds the update phones on the
-// channel run now (the newest update group for this runtime) and refuses unless that update's
-// commit is in HEAD, so a tree that lacks it (main behind an unmerged branch, 2026-11-05) cannot
-// replace it. A rollback on purpose needs --allow-rollback "why", which goes into the message.
+// It never rolls phones back by accident. Before counting, it finds the updates phones on the
+// channel run now (per platform, the newest update group for this runtime) and refuses unless HEAD
+// contains each one's commit, in its history or as the same changes (a squash merge), so a tree
+// that lacks it (main behind an unmerged branch, 2026-11-05) cannot replace it. A rollback on
+// purpose needs --allow-rollback "why", which goes into the message.
 //
 // Child processes are spawned with argument arrays: the message never passes through a shell.
 const { execFileSync, spawnSync } = require('child_process');
@@ -192,25 +193,60 @@ const parseUpdateGroupView = (raw, groupId) => {
   return commits[0].toLowerCase();
 };
 
-// The update phones on this channel and runtime run now: the newest update group for the runtime.
-// eas-cli lists a branch's groups newest first (it reads offset 0, limit 1 as the latest group:
-// channel:view's "most recent update group", selectRuntimeAndGetLatestUpdateGroupForEachPublishPlatformOnBranchAsync).
-// A group that rolls back to embedded runs the store build's own bundle; eas-cli records no
-// commit for it, so update:view is not asked.
-const findRunningUpdate = ({ groups, version, runForOutput }) => {
-  const newest = groups.find(group => group.runtimeVersion === version);
-  if (!newest) return { builtIn: true };
-  if (typeof newest.group !== 'string' || !GROUP_ID.test(newest.group)) {
-    throw new Error(`eas update:list returned an update group without a usable id (${JSON.stringify(newest.group)}). Nothing was published.`);
+// Phones are Android and iOS, and the script publishes both: `eas update` without --platform
+// publishes defaultPublishPlatforms ['android', 'ios'] (eas-cli 26.0.0 build/project/publish.js).
+const PHONE_PLATFORMS = [['android', 'Android'], ['ios', 'iOS']];
+// update:list's `platforms` is the group's platforms sorted and joined with ", "
+// (formatPlatformForUpdateGroup, build/update/utils.js): "android, ios", or "android" for a group
+// published with --platform android.
+const PLATFORMS_FIELD = /^[a-z]+(?:, [a-z]+)*$/;
+
+// What one update group means for the phones it serves. No group: their built-in bundle. A roll back
+// to embedded: also their built-in bundle; eas-cli records no commit for it, so update:view is not
+// asked. Otherwise the update and its commit, read with update:view.
+const describeRunningGroup = ({ group, version, runForOutput }) => {
+  if (!group) return { builtIn: true };
+  if (typeof group.group !== 'string' || !GROUP_ID.test(group.group)) {
+    throw new Error(`eas update:list returned an update group without a usable id (${JSON.stringify(group.group)}). Nothing was published.`);
   }
-  const running = { group: newest.group, release: releaseNumberIn(newest.message, version) };
-  if (newest.isRollBackToEmbedded === true) return { ...running, builtIn: true };
+  const running = { group: group.group, release: releaseNumberIn(group.message, version) };
+  if (group.isRollBackToEmbedded === true) return { ...running, builtIn: true };
   try {
-    const raw = runForOutput('npx', ['--yes', EAS_CLI, 'update:view', newest.group, '--json']);
-    return { ...running, commit: parseUpdateGroupView(raw, newest.group) };
+    const raw = runForOutput('npx', ['--yes', EAS_CLI, 'update:view', group.group, '--json']);
+    return { ...running, commit: parseUpdateGroupView(raw, group.group) };
   } catch (error) {
-    throw new Error(`Could not read update group ${newest.group}, so the code phones run is unknown. Nothing was published.\n${error.message}`);
+    throw new Error(`Could not read update group ${group.group}, so the code phones run is unknown. Nothing was published.\n${error.message}`);
   }
+};
+
+// The updates phones on this channel and runtime run now. EAS serves each platform the newest group
+// for its runtime that has that platform, so a group published for one platform leaves the other
+// platform's phones on an older group. eas-cli reads it the same way: offset 0, limit 1, with a
+// platform filter (selectRuntimeAndGetLatestUpdateGroupForEachPublishPlatformOnBranchAsync,
+// build/update/queries.js); the listing is newest first. Returns one entry per group phones run,
+// with the platforms that run it.
+const findRunningUpdates = ({ groups, version, runForOutput }) => {
+  const newest = new Map();
+  for (const group of groups) {
+    if (newest.size === PHONE_PLATFORMS.length) break;
+    if (group.runtimeVersion !== version) continue;
+    if (typeof group.platforms !== 'string' || !PLATFORMS_FIELD.test(group.platforms)) {
+      throw new Error(`eas update:list returned update group ${group.group} with platforms ${JSON.stringify(group.platforms)}, `
+        + 'so which phones run it is unknown. Nothing was published.');
+    }
+    const platforms = group.platforms.split(', ');
+    PHONE_PLATFORMS.forEach(([platform]) => {
+      if (platforms.includes(platform) && !newest.has(platform)) newest.set(platform, group);
+    });
+  }
+  const entries = [];
+  PHONE_PLATFORMS.forEach(([platform]) => {
+    const source = newest.get(platform);
+    const same = entries.find(entry => entry.source === source);
+    if (same) same.platforms.push(platform);
+    else entries.push({ source, platforms: [platform] });
+  });
+  return entries.map(({ source, platforms }) => ({ platforms, ...describeRunningGroup({ group: source, version, runForOutput }) }));
 };
 
 // git exits 1 for "no" (`merge-base --is-ancestor`, `rev-parse --verify --quiet`); any other
@@ -222,57 +258,158 @@ const gitAnswers = (git, args) => {
   }
 };
 
-// Publishing HEAD replaces the update phones run. Refuses when HEAD does not contain that update's
-// commit (C equal to HEAD counts), unless --allow-rollback gives a reason; refuses --allow-rollback
-// when the publish rolls nothing back, so no update is labelled a rollback by mistake. Returns the
-// lines to print: what phones run now, and the check result.
-const checkPhonesKeepTheirCode = ({ running, version, channel, head, git, allowRollback }) => {
-  const short = commit => commit.slice(0, 7);
+// Paths that never reach the app bundle, so a difference only there is not code phones run.
+const OUTSIDE_THE_APP = /^(?:documentation\/|docs\/|[^/]+\.md$)/;
+const TREE_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const MAX_LINE_COMMITS = 200;
+
+// What merging `commit` into `at` would change: { app, other } paths. git merge-tree exits 1 on
+// conflicts and still prints the merged tree, then the conflicted paths (--name-only); a conflict
+// counts as a change. Writes the merged tree's objects (unreferenced; git gc removes them).
+const mergeChanges = ({ git, at, commit }) => {
+  let out;
+  let conflicted = false;
+  try { out = git(['merge-tree', '--write-tree', '--name-only', '--no-messages', at, commit]); } catch (error) {
+    if (error?.status !== 1 || typeof error.stdout !== 'string') throw error;
+    out = error.stdout;
+    conflicted = true;
+  }
+  const [tree, ...conflicts] = out.split('\n').filter(Boolean);
+  if (!TREE_ID.test(tree ?? '')) throw new Error(`git merge-tree printed no tree for ${at} and ${commit}.`);
+  const changed = git(['diff-tree', '-r', '--name-only', '-z', at, tree]).split('\0').filter(Boolean);
+  const paths = [...new Set([...(conflicted ? conflicts : []), ...changed])].sort();
+  return { app: paths.filter(file => !OUTSIDE_THE_APP.test(file)), other: paths.filter(file => OUTSIDE_THE_APP.test(file)) };
+};
+
+// Whether HEAD has `commit`'s changes although `commit` is not in its history: a squash merge
+// copies a branch's changes into one new commit. HEAD has them when merging `commit` would change
+// nothing but documentation. Later work on the same lines makes that merge conflict, so the check
+// walks back along HEAD's first-parent line (to where it meets `commit`'s history) and passes at
+// the first commit that already had them. Returns { at, other } or { missing } (what merging into
+// HEAD would change beyond documentation; tests and scripts count, to stay on the safe side).
+const findAppCode = ({ git, commit, head }) => {
+  const atHead = mergeChanges({ git, at: head, commit });
+  if (atHead.app.length === 0) return { at: head, other: atHead.other };
+  const line = git(['rev-list', '--first-parent', `--max-count=${MAX_LINE_COMMITS}`, head, `^${commit}`])
+    .split('\n').filter(Boolean);
+  for (const at of line) {
+    if (at !== head && mergeChanges({ git, at, commit }).app.length === 0) return { at };
+  }
+  return { missing: atHead.app };
+};
+
+const short = commit => commit.slice(0, 7);
+// "2 files: src/a.js, src/b.js", src/ first, at most three named.
+const someFiles = (files) => {
+  const named = [...files].sort((x, y) => (y.startsWith('src/') - x.startsWith('src/')) || (x < y ? -1 : Number(x > y)));
+  const list = named.length > 3 ? `${named.slice(0, 3).join(', ')} and ${named.length - 3} more` : named.join(', ');
+  return `${files.length} file${files.length === 1 ? '' : 's'}: ${list}`;
+};
+
+// Whether publishing HEAD keeps the code one set of phones runs. Returns what they run (`runs`) and
+// either a pass (`why`, `note`) or a refusal (`refusal`, plus the `rollback` line --allow-rollback
+// prints instead; `final` when --allow-rollback cannot help either).
+const checkRunningUpdate = ({ running, version, channel, head, git, isShallow }) => {
+  const platforms = running.platforms ?? PHONE_PLATFORMS.map(([platform]) => platform);
+  const name = platforms.length === 1 ? PHONE_PLATFORMS.find(([platform]) => platform === platforms[0])[1] : '';
+  const who = name ? `${name} phones` : 'phones';
+  const Who = name ? who : 'Phones';
   const release = running.release ? `release ${version}+${running.release}` : 'not numbered';
-  const phonesRun = `Phones on ${channel} (runtime ${version}) run`;
-  let runs;
-  let fine;
+  const run = `${Who} on ${channel} (runtime ${version}) run`;
   if (running.builtIn) {
-    runs = running.group
-      ? `${phonesRun} their built-in bundle: update group ${running.group} (${release}) rolled them back to it.`
-      : `${phonesRun} their built-in bundle: branch ${channel} has no update for this runtime yet.`;
-    fine = { why: 'phones run their built-in bundle',
-      note: 'Note: phones run their built-in bundle, so there is no update commit this publish must contain.' };
-  } else if (!running.commit) {
-    runs = `${phonesRun} update group ${running.group} (${release}), no commit recorded.`;
-    fine = { why: `update group ${running.group} records no commit`,
+    return {
+      runs: running.group
+        ? `${run} their built-in bundle: update group ${running.group} (${release}) rolled them back to it.`
+        : `${run} their built-in bundle: branch ${channel} has no ${name ? `${name} ` : ''}update for this runtime yet.`,
+      why: `${who} run their built-in bundle`,
+      note: `Note: ${who} run their built-in bundle, so there is no update commit this publish must contain.`,
+    };
+  }
+  if (!running.commit) {
+    return {
+      runs: `${run} update group ${running.group} (${release}), no commit recorded.`,
+      why: `update group ${running.group} records no commit`,
       note: `Note: update group ${running.group} records no commit (published before commits were recorded), `
-        + 'so there is no commit this publish must contain.' };
-  } else {
-    const commit = running.commit;
-    runs = `${phonesRun} update group ${running.group} (${release}), commit ${commit}.`;
-    const known = gitAnswers(git, ['rev-parse', '--verify', '--quiet', `${commit}^{commit}`]);
-    if (known && gitAnswers(git, ['merge-base', '--is-ancestor', commit, head])) {
-      fine = { why: `this commit (${short(head)}) contains ${short(commit)}`,
-        note: `Check passed: this commit (${short(head)}) contains ${short(commit)}, so this update keeps the code phones run now.` };
-    } else {
-      const phones = `phones on ${channel} run update group ${running.group} (${release}) from commit ${commit}`;
-      if (allowRollback) {
-        return [runs, `Rollback allowed (--allow-rollback): ${allowRollback}. `
-          + (known ? `This commit (${short(head)}) does not contain ${short(commit)}, so phones go back to code without it.`
-            : `This repository does not have ${short(commit)}, so phones may go back to code without it.`)];
-      }
-      if (!known) {
-        throw new Error(`Refusing to publish: ${phones}, which this repository does not have, so the script cannot tell `
-          + 'whether publishing would roll phones back to code without it. Run git fetch origin, then publish again. '
-          + 'If that commit is gone from origin for good, --allow-rollback "why" publishes anyway. Nothing was published.');
-      }
-      throw new Error(`Refusing to publish: ${phones}, and this commit (${short(head)}) does not contain it. `
-        + 'Publishing would roll phones back to code without it.\n'
-        + `Merge the branch that contains ${short(commit)} into this one (git branch -r --contains ${commit} lists it), `
-        + 'then publish again. To roll phones back on purpose, add --allow-rollback "why". Nothing was published.');
+        + 'so there is no commit this publish must contain.',
+    };
+  }
+  const { commit } = running;
+  const runs = `${run} update group ${running.group} (${release}), commit ${commit}.`;
+  const pass = why => ({ runs, why, note: `Check passed: ${why}.` });
+  if (commit === head) return pass(`this commit (${short(head)}) is the commit ${who} run`);
+  const known = gitAnswers(git, ['rev-parse', '--verify', '--quiet', `${commit}^{commit}`]);
+  if (known && gitAnswers(git, ['merge-base', '--is-ancestor', commit, head])) {
+    return pass(`this commit (${short(head)}) has commit ${short(commit)} in its history`);
+  }
+  const phones = `Refusing to publish: ${who} on ${channel} run update group ${running.group} (${release}) from commit ${commit}`;
+  // A shallow clone lacks history, so "not in its history" and "not in this repository" mean nothing.
+  if (isShallow()) {
+    return { runs, final: true, refusal: `${phones}, and this clone is shallow (part of its history is missing), so the script `
+      + `cannot tell whether this commit (${short(head)}) contains it. Run git fetch --unshallow, then publish again.` };
+  }
+  if (!known) {
+    return {
+      runs,
+      refusal: `${phones}, which this repository does not have, so the script cannot tell whether publishing would roll `
+        + `${who} back to code without it. Run git fetch origin, then publish again. If that commit is gone from origin `
+        + 'for good, --allow-rollback "why" publishes anyway.',
+      rollback: `This repository does not have ${short(commit)}, so ${who} may go back to code without it.`,
+    };
+  }
+  const found = findAppCode({ git, commit, head });
+  if (found.at === head) {
+    return {
+      runs,
+      why: `this commit (${short(head)}) already has the changes of commit ${short(commit)}`,
+      note: `Check passed: commit ${short(commit)} is not in this commit's (${short(head)}) history, but this commit already has `
+        + `its changes (a squash merge, for example): merging it would change ${found.other.length ? 'only documentation' : 'nothing'}.`,
+    };
+  }
+  if (found.at) {
+    return {
+      runs,
+      why: `commit ${short(found.at)} before this one already had the changes of commit ${short(commit)}`,
+      note: `Check passed: commit ${short(commit)} is not in this commit's (${short(head)}) history, but commit ${short(found.at)} `
+        + 'before it already had its changes (a squash merge, for example).',
+    };
+  }
+  return {
+    runs,
+    refusal: `${phones}, and this commit (${short(head)}) does not contain it: it is not in its history, and merging it would `
+      + `change more than documentation (${someFiles(found.missing)}). Publishing would roll ${who} back to code without it.\n`
+      + `Merge the branch that contains ${short(commit)} into this one (git branch -r --contains ${commit} lists it), `
+      + 'then publish again. To roll phones back on purpose, add --allow-rollback "why".',
+    rollback: `This commit (${short(head)}) does not contain ${short(commit)}, so ${who} go back to code without it.`,
+  };
+};
+
+// Publishing HEAD replaces the updates phones run (one per platform). Refuses when HEAD does not
+// contain an update's commit, in its history or as the same changes (a squash merge), unless
+// --allow-rollback gives a reason; refuses --allow-rollback when the publish rolls nothing back, so
+// no update is labelled a rollback by mistake. Returns the lines to print: what phones run now, and
+// the check results.
+const checkPhonesKeepTheirCode = ({ running, version, channel, head, git, allowRollback }) => {
+  let shallow;
+  const isShallow = () => {
+    if (shallow === undefined) shallow = git(['rev-parse', '--is-shallow-repository']).trim() === 'true';
+    return shallow;
+  };
+  const checks = (Array.isArray(running) ? running : [running])
+    .map(entry => checkRunningUpdate({ running: entry, version, channel, head, git, isShallow }));
+  const runs = checks.map(check => check.runs);
+  const refused = checks.filter(check => check.refusal);
+  if (refused.length > 0) {
+    if (!allowRollback || refused.some(check => check.final)) {
+      throw new Error(`${[...new Set(refused.map(check => check.refusal))].join('\n')} Nothing was published.`);
     }
+    return [...runs, ...checks.map(check => (check.refusal
+      ? `Rollback allowed (--allow-rollback): ${allowRollback}. ${check.rollback}` : check.note))];
   }
   if (allowRollback) {
-    throw new Error(`--allow-rollback is only for a publish that rolls phones back, and this one does not: ${fine.why}. `
-      + 'Run again without it. Nothing was published.');
+    throw new Error('--allow-rollback is only for a publish that rolls phones back, and this one does not: '
+      + `${checks.map(check => check.why).join('; ')}. Run again without it. Nothing was published.`);
   }
-  return [runs, fine.note];
+  return [...runs, ...checks.map(check => check.note)];
 };
 
 const formatUpdateMessage = ({ version, release, message, commit, rollbackReason }) => (
@@ -317,7 +454,7 @@ const main = (argv, { git, runForOutput, run, loadConfig, env = process.env, now
   const head = assertReleaseReady({ git });
   assertChannelBranch({ channel, runForOutput });
   const groups = listUpdateGroups({ branch: channel, runForOutput });
-  const running = findRunningUpdate({ groups, version, runForOutput });
+  const running = findRunningUpdates({ groups, version, runForOutput });
   checkPhonesKeepTheirCode({ running, version, channel, head, git, allowRollback }).forEach(line => log(line));
   const release = nextReleaseNumber({ groups, version });
   const releaseLabel = `${version}+${release}`;

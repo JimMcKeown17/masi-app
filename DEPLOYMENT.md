@@ -123,24 +123,35 @@ The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
 3. Checks that the update keeps the code phones run now, so it cannot roll them back by accident.
    It lists the update groups on the channel's EAS branch
    (`npx eas-cli@26.0.0 update:list --branch <channel> --json --non-interactive`, page by page,
-   newest first). The newest group for this runtime is the one phones run. `update:list` does not
-   carry commits, so the script reads that group's commit with `npx eas-cli@26.0.0 update:view
+   newest first). EAS gives each platform the newest group for its runtime that includes that
+   platform, so the script finds that group for Android and for iOS. They differ only after a
+   one-platform publish (`eas update --platform android`, or a one-platform republish or roll back
+   to embedded); then each is checked, because this publish replaces both. `update:list` does not
+   carry commits, so the script reads each group's commit with `npx eas-cli@26.0.0 update:view
    <group> --json` (`gitCommitHash`), then:
-   - **The group has a commit C:** publishing is refused unless C is in HEAD
-     (`git merge-base --is-ancestor C HEAD`; C equal to HEAD counts). The refusal names C, the
-     group and its release (from its `OTA <version>+N:` message), and says to merge the branch that
-     contains C first (`git branch -r --contains C` lists it). If this clone does not have C, it
-     says to `git fetch origin` first.
+   - **The group has a commit C:** publishing passes when C is in HEAD's history
+     (`git merge-base --is-ancestor C HEAD`; C equal to HEAD counts), or when HEAD already has C's
+     changes under another commit, as after a squash merge: `git merge-tree --write-tree HEAD C`
+     would change nothing but documentation (`documentation/`, `docs/`, top-level `*.md`). If later
+     work on the same lines makes that merge conflict, the check walks back along HEAD's
+     first-parent line (up to 200 commits) and passes at the first commit that already had C's
+     changes. Otherwise publishing is refused. The refusal names C, the group and its release (from
+     its `OTA <version>+N:` message) and the files the merge would change, and says to merge the
+     branch that contains C first (`git branch -r --contains C` lists it). If this clone does not
+     have C, it says to `git fetch origin` first. In a shallow clone (a CI checkout, say) the script
+     cannot tell, so it refuses with `git fetch --unshallow`, even with `--allow-rollback`.
    - **The group rolls phones back to their built-in bundle, records no commit (published before
      commits were recorded), or there is no update for this runtime yet:** there is no commit to
      contain, and the script prints a note saying so.
 
-   Both a dry run and a publish print what phones run now (group, release, commit) and the result
-   of the check. To roll phones back on purpose (the newest update is broken and you publish older
-   code over it), add `--allow-rollback "why"`: the script prints the reason and adds
-   `(rollback: <why>)` to the update message, so the EAS history shows it. It also lets through a
-   commit this clone does not have (fetch first if you can). `--allow-rollback` on a publish that
-   rolls nothing back is refused, so no update is labelled a rollback by mistake.
+   Both a dry run and a publish print what phones run now (group, release, commit; per platform
+   when they differ) and the result of the check. "In its history" is all a pass claims: a HEAD
+   that has C in its history but later reverted it passes, because a revert is a deliberate change.
+   To roll phones back on purpose (the newest update is broken and you publish older code over it),
+   add `--allow-rollback "why"`: the script prints the reason and adds `(rollback: <why>)` to the
+   update message, so the EAS history shows it. It also lets through a commit this clone does not
+   have (fetch first if you can). `--allow-rollback` on a publish that rolls nothing back is
+   refused, so no update is labelled a rollback by mistake.
 
    Why: on 2026-11-05 phones ran `1.5.0+2` from an unmerged branch, and a bare `eas update` from
    `main`, which lacked it, rolled every phone back for 13 minutes until `1.5.0+4` replaced it.
@@ -166,7 +177,10 @@ The script ([`scripts/ota-publish.cjs`](scripts/ota-publish.cjs)):
 
 Child processes get argument arrays, so a message with quotes or `$( )` is never run by a shell.
 Do not publish with a bare `eas update`: the phone would show the update as `<version>+?`, and
-nothing would check that the update keeps the code phones run now (step 3).
+nothing would check that the update keeps the code phones run now (step 3). A bare `eas update`
+also publishes from a tree with uncommitted changes and records HEAD as its commit (`eas.json`
+does not set `cli.requireCommit`), so that update's code may not match its recorded commit; the
+script refuses a dirty tree, so its own updates always match.
 
 ### Release numbers: what the phone shows
 
