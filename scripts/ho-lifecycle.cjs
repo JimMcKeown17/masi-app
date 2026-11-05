@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 // Head Office lifecycle operator script (lifecycle-safety plan step H1, ADR-0014).
-// handover (child | class | group), end-delivery and reopen. Dry run by default; --apply
+// handover (child | class | group), end-delivery, reopen, and restore child (undo an EA's
+// mistaken Delete child). Dry run by default; --apply
 // changes the masi-app-sqlite database in one transaction per command, as postgres, then
 // confirms through a separate read-back. Runbook: documentation/ea-access-runbook.md.
 
@@ -43,6 +44,7 @@ const SHAPES = {
   'end-delivery child': ['--ea', '--children'],
   'reopen child': ['--ea', '--children'],
   'reopen class': ['--ea', '--class', '--programme'],
+  'restore child': ['--ea', '--children'],
 };
 const USAGE = `Usage (dry run unless --apply; reason and operator are always required):
   handover child --from <email> --to <email> --children <uuid[,uuid...]>
@@ -51,6 +53,7 @@ const USAGE = `Usage (dry run unless --apply; reason and operator are always req
   end-delivery   --ea <email> --children <uuid[,uuid...]>
   reopen child   --ea <email> --children <uuid[,uuid...]>
   reopen class   --ea <email> --class <uuid> --programme <code>
+  restore child  --ea <email> --children <uuid[,uuid...]>   (undo that EA's Delete child)
   ... --reason <text> --operator <name> [--apply]`;
 
 const uuidValue = (flag, value) => {
@@ -501,16 +504,322 @@ SELECT pg_catalog.jsonb_build_object(
       FROM public.group_ea_assignments WHERE id IN (SELECT id FROM ids)) r), '[]'::jsonb));
 ROLLBACK;`;
 
+// ---------------------------------------------------------------- restore child
+// Undo an EA's mistaken Delete child by reopening, in place, exactly the rows that removal
+// ended. Both removal paths end every row at one instant T: the server's Delete child
+// (private.delete_child_if_no_history) writes its now() in one transaction, and the 1.5.0
+// phone's archiveChild chain stamps one phone time that the end guard keeps (least(T, now())).
+// T is the child's archive instant when it is archived (the archive must be this EA's), else
+// the end of the EA's most recent ended delivery row. Restore reopens the EA's own delivery row,
+// every enrolment and class or group membership of the child ended at exactly T, and the child
+// when it is archived. It never touches a row ended at another instant or another EA's
+// assignment, and never writes row_version, an identity column or a start.
+const RESTORE_INSTANTS = `SELECT c.id AS child_id, coalesce(c.archived_at, (
+        SELECT max(e.unassigned_at) FROM public.child_ea_assignments e
+        WHERE e.child_id = c.id AND e.user_id = v_ea AND NOT EXISTS (
+          SELECT 1 FROM public.child_ea_assignments o
+          WHERE o.child_id = c.id AND o.user_id = v_ea AND o.unassigned_at IS NULL))) AS t
+      FROM public.children c WHERE c.id = ANY (v_children)`;
+
+// The classes and groups whose holders a restore can change (the same reason as GRANT_CLASSES):
+// those of the child's open memberships, those of the memberships ended at T (the ones it
+// reopens), and the class of each such group, because a reopened group membership makes the
+// group's holder a holder of the group's class (private.other_active_holder('classes')).
+const RESTORE_CLASSES = `ARRAY(SELECT DISTINCT s.id FROM (
+      SELECT m.class_id AS id FROM public.child_class_memberships m
+        JOIN (${RESTORE_INSTANTS}) r ON r.child_id = m.child_id
+        WHERE m.exited_at IS NULL OR m.exited_at = r.t
+      UNION ALL SELECT g.class_id FROM public.child_group_memberships m
+        JOIN (${RESTORE_INSTANTS}) r ON r.child_id = m.child_id
+        JOIN public.groups g ON g.id = m.group_id
+        WHERE m.removed_at IS NULL OR m.removed_at = r.t) s
+    WHERE s.id IS NOT NULL ORDER BY 1)`;
+const RESTORE_GROUPS = `ARRAY(SELECT DISTINCT m.group_id FROM public.child_group_memberships m
+      JOIN (${RESTORE_INSTANTS}) r ON r.child_id = m.child_id
+      WHERE m.removed_at IS NULL OR m.removed_at = r.t ORDER BY 1)`;
+
+const RESTORE_HEAD = `DO $ho$
+DECLARE
+  a constant jsonb := pg_catalog.current_setting('masi_ho.args')::jsonb;
+  v_ea constant uuid := (a ->> 'ea_id')::uuid;
+  v_ns constant uuid := '09dcf4b2-6c53-4c46-917f-33bc7f2df4d2';
+  v_children constant uuid[] := ARRAY(SELECT DISTINCT x::uuid
+    FROM pg_catalog.jsonb_array_elements_text(coalesce(a -> 'child_ids', '[]'::jsonb)) x ORDER BY 1);
+  v_lock_classes uuid[];
+  v_lock_groups uuid[];
+  v_removals jsonb := '[]';
+  v_actions jsonb := '[]';
+  v_notes jsonb := '[]';
+  v_refusals jsonb := '[]';
+  v_planned jsonb;
+  v_action jsonb;
+  v_row jsonb;
+  v_near jsonb;
+  v_child uuid;
+  v_c public.children%ROWTYPE;
+  v_t timestamptz;
+  v_det uuid;
+  v_conflict uuid;
+  v_key text;
+  v_n integer;
+BEGIN
+`;
+
+const RESTORE_LOCKS = `
+  PERFORM 1 FROM public.children WHERE id = ANY (v_children) ORDER BY id FOR UPDATE;
+  v_lock_classes := ${RESTORE_CLASSES};
+  PERFORM 1 FROM public.classes WHERE id = ANY (v_lock_classes) ORDER BY id FOR UPDATE;
+  v_lock_groups := ${RESTORE_GROUPS};
+  PERFORM 1 FROM public.groups WHERE id = ANY (v_lock_groups) ORDER BY id FOR UPDATE;
+  IF NOT (${RESTORE_CLASSES} <@ v_lock_classes AND ${RESTORE_GROUPS} <@ v_lock_groups) THEN
+    RAISE EXCEPTION 'ho_lifecycle_retry: the classes or groups of these children changed while locking; run the command again'
+      USING ERRCODE = '40001';
+  END IF;
+`;
+
+// A reopened row must not break an active-row unique index: one open delivery row per (EA,
+// child) (always true here: there is none), one open enrolment per (child, programme), one open
+// class membership per (child, academic year), one open group membership per (child, grouping
+// version). v_planned catches two rows of the plan with the same key.
+const restoreConflict = (table, keyExpr, otherSql, indexName) => `
+      v_key := '${table}:' || (${keyExpr});
+      v_conflict := NULL;
+      IF (${keyExpr}) IS NOT NULL THEN
+        SELECT o.id INTO v_conflict FROM public.${table} o WHERE ${otherSql} ORDER BY o.id LIMIT 1;
+        v_conflict := coalesce(v_conflict, (v_planned ->> v_key)::uuid);
+      END IF;
+      IF v_conflict IS NOT NULL THEN
+        v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'active_row_conflict', 'child_id', v_child,
+          'table', '${table}', 'id', v_row -> 'id', 'conflicting_id', v_conflict, 'unique_index', '${indexName}'));
+        CONTINUE;
+      END IF;
+      IF v_key IS NOT NULL THEN
+        v_planned := v_planned || jsonb_build_object(v_key, v_row -> 'id');
+      END IF;`;
+
+const RESTORE_BODY = `
+  FOREACH v_child IN ARRAY v_children LOOP
+    SELECT * INTO v_c FROM public.children WHERE id = v_child;
+    IF NOT FOUND THEN
+      v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'child_not_found', 'child_id', v_child));
+      CONTINUE;
+    END IF;
+    SELECT r.t INTO v_t FROM (${RESTORE_INSTANTS}) r WHERE r.child_id = v_child;
+    v_removals := v_removals || jsonb_build_array(jsonb_build_object('child_id', v_child,
+      'name', concat_ws(' ', v_c.first_name, v_c.last_name), 'removed_at', v_t,
+      'archived', v_c.archived_at IS NOT NULL, 'archived_by_user_id', v_c.archived_by_user_id,
+      'archive_reason', v_c.archive_reason));
+
+    -- The EA's delivery row: the open one (at most one), else the app's deterministic row, else
+    -- the most recently ended one.
+    v_det := extensions.uuid_generate_v5(v_ns, pg_catalog.concat_ws(pg_catalog.chr(31),
+      'child_ea_assignments', v_ea::text, v_child::text));
+    SELECT to_jsonb(r) INTO v_row FROM (
+      SELECT id, user_id AS ea_user_id, child_id, assigned_at AS started_at, unassigned_at AS ended_at, row_version
+      FROM public.child_ea_assignments WHERE user_id = v_ea AND child_id = v_child
+      ORDER BY unassigned_at IS NOT NULL, id <> v_det, unassigned_at DESC, id LIMIT 1) r;
+    IF v_row IS NULL THEN
+      v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'ea_never_held_child',
+        'child_id', v_child, 'ea_user_id', v_ea));
+      CONTINUE;
+    END IF;
+
+    -- An archive is undone only for the EA whose removal made it: archived_by_user_id is that
+    -- EA, or (data from before the server batch) it is unset and that EA's delivery row ended
+    -- at exactly the archive instant.
+    IF v_c.archived_at IS NOT NULL AND v_c.archived_by_user_id IS DISTINCT FROM v_ea
+      AND NOT (v_c.archived_by_user_id IS NULL AND EXISTS (SELECT 1 FROM public.child_ea_assignments e
+        WHERE e.child_id = v_child AND e.user_id = v_ea AND e.unassigned_at = v_c.archived_at)) THEN
+      v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'archived_by_another_ea',
+        'child_id', v_child, 'archived_at', v_c.archived_at, 'archived_by_user_id', v_c.archived_by_user_id,
+        'hint', CASE WHEN v_c.archived_by_user_id IS NULL
+          THEN 'this archive is not this EA''s removal; record an MA-BUG and ask Jim'
+          ELSE 'that EA''s Delete child archived it: restore that EA first, then this one' END));
+      CONTINUE;
+    END IF;
+
+    IF v_row ->> 'ended_at' IS NULL THEN
+      IF v_c.archived_at IS NOT NULL THEN
+        -- Archived while the EA still holds it: the phone has not finished sending the removal.
+        v_refusals := v_refusals || jsonb_build_array(jsonb_build_object('code', 'removal_not_finished',
+          'child_id', v_child, 'archived_at', v_c.archived_at,
+          'hint', 'wait until the EA''s phone has synced the removal, then run the dry run again'));
+      ELSE
+        -- Nothing to undo (or a rerun after a lost response).
+        v_actions := v_actions || jsonb_build_array(v_row || jsonb_build_object('action', 'already_active',
+          'table', 'child_ea_assignments', 'det_id', v_det));
+      END IF;
+      CONTINUE;
+    END IF;
+
+    v_actions := v_actions || jsonb_build_array(v_row || jsonb_build_object('action', 'reopen',
+      'table', 'child_ea_assignments', 'det_id', v_det,
+      'gap', jsonb_build_object('from', v_row -> 'ended_at', 'to', pg_catalog.now(),
+        'hours', round((extract(epoch FROM pg_catalog.now() - (v_row ->> 'ended_at')::timestamptz) / 3600)::numeric, 1))));
+    IF (v_row ->> 'ended_at')::timestamptz IS DISTINCT FROM v_t THEN
+      v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'assignment_ended_at_another_time',
+        'child_id', v_child, 'id', v_row -> 'id', 'ended_at', v_row -> 'ended_at', 'removed_at', v_t,
+        'hint', 'the delivery row ended at a different time from the removal (for example a Head Office end); it is reopened anyway'));
+    END IF;
+    IF v_c.archived_at IS NOT NULL THEN
+      v_actions := v_actions || jsonb_build_array(jsonb_build_object('action', 'unarchive', 'table', 'children',
+        'id', v_child, 'child_id', v_child, 'archived_at', v_c.archived_at,
+        'archived_by_user_id', v_c.archived_by_user_id, 'archive_reason', v_c.archive_reason, 'row_version', v_c.row_version));
+    END IF;
+
+    -- Every enrolment and class or group membership of the child ended at exactly T.
+    v_planned := '{}';
+    FOR v_row IN
+      SELECT jsonb_build_object('action', 'reopen', 'table', 'child_programme_enrollments', 'id', e.id,
+        'child_id', e.child_id, 'programme_id', e.programme_id, 'programme_code', p.code,
+        'started_at', e.enrolled_at, 'ended_at', e.ended_at, 'row_version', e.row_version)
+      FROM public.child_programme_enrollments e JOIN public.programmes p ON p.id = e.programme_id
+      WHERE e.child_id = v_child AND e.ended_at = v_t ORDER BY e.id
+    LOOP${restoreConflict('child_programme_enrollments', "v_row ->> 'programme_id'",
+    "o.child_id = v_child AND o.programme_id = (v_row ->> 'programme_id')::uuid AND o.ended_at IS NULL",
+    'idx_child_programme_enrollments_active_unique')}
+      v_actions := v_actions || jsonb_build_array(v_row);
+    END LOOP;
+    FOR v_row IN
+      SELECT jsonb_build_object('action', 'reopen', 'table', 'child_class_memberships', 'id', m.id,
+        'child_id', m.child_id, 'class_id', m.class_id, 'class_name', cl.name, 'academic_year_id', m.academic_year_id,
+        'started_at', m.enrolled_at, 'ended_at', m.exited_at, 'row_version', m.row_version,
+        'archived', cl.archived_at IS NOT NULL)
+      FROM public.child_class_memberships m JOIN public.classes cl ON cl.id = m.class_id
+      WHERE m.child_id = v_child AND m.exited_at = v_t ORDER BY m.id
+    LOOP
+      IF (v_row ->> 'archived')::boolean THEN
+        v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'class_archived_skipped', 'child_id', v_child,
+          'table', 'child_class_memberships', 'id', v_row -> 'id', 'class_id', v_row -> 'class_id',
+          'class_name', v_row -> 'class_name'));
+        CONTINUE;
+      END IF;${restoreConflict('child_class_memberships', "v_row ->> 'academic_year_id'",
+    "o.child_id = v_child AND o.academic_year_id = (v_row ->> 'academic_year_id')::uuid AND o.exited_at IS NULL",
+    'idx_child_class_memberships_active_unique')}
+      v_actions := v_actions || jsonb_build_array(v_row - 'archived');
+    END LOOP;
+    FOR v_row IN
+      SELECT jsonb_build_object('action', 'reopen', 'table', 'child_group_memberships', 'id', m.id,
+        'child_id', m.child_id, 'group_id', m.group_id, 'group_name', g.name, 'grouping_version_id', m.grouping_version_id,
+        'started_at', m.joined_at, 'ended_at', m.removed_at, 'row_version', m.row_version,
+        'archived', g.archived_at IS NOT NULL)
+      FROM public.child_group_memberships m JOIN public.groups g ON g.id = m.group_id
+      WHERE m.child_id = v_child AND m.removed_at = v_t ORDER BY m.id
+    LOOP
+      IF (v_row ->> 'archived')::boolean THEN
+        v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'group_archived_skipped', 'child_id', v_child,
+          'table', 'child_group_memberships', 'id', v_row -> 'id', 'group_id', v_row -> 'group_id',
+          'group_name', v_row -> 'group_name'));
+        CONTINUE;
+      END IF;${restoreConflict('child_group_memberships', "v_row ->> 'grouping_version_id'",
+    "o.child_id = v_child AND o.grouping_version_id = (v_row ->> 'grouping_version_id')::uuid AND o.removed_at IS NULL",
+    'idx_child_group_memberships_active_by_version')}
+      v_actions := v_actions || jsonb_build_array(v_row - 'archived');
+    END LOOP;
+
+    -- Rows ended within an hour of T but not at T: a phone with a wrong clock (the guard clamps
+    -- each of its ends to the server's now as it lands) or a separate change. Listed, never reopened.
+    SELECT coalesce(jsonb_agg(jsonb_build_object('table', n.tbl, 'id', n.id, 'ended_at', n.ended_at,
+        'seconds_from_t', round(extract(epoch FROM n.ended_at - v_t)::numeric, 1)) ORDER BY n.ended_at, n.id), '[]'::jsonb)
+      INTO v_near
+      FROM (
+        SELECT 'child_programme_enrollments' AS tbl, e.id, e.ended_at FROM public.child_programme_enrollments e
+          WHERE e.child_id = v_child AND e.ended_at <> v_t
+            AND e.ended_at BETWEEN v_t - interval '1 hour' AND v_t + interval '1 hour'
+        UNION ALL SELECT 'child_class_memberships', m.id, m.exited_at FROM public.child_class_memberships m
+          WHERE m.child_id = v_child AND m.exited_at <> v_t
+            AND m.exited_at BETWEEN v_t - interval '1 hour' AND v_t + interval '1 hour'
+        UNION ALL SELECT 'child_group_memberships', m.id, m.removed_at FROM public.child_group_memberships m
+          WHERE m.child_id = v_child AND m.removed_at <> v_t
+            AND m.removed_at BETWEEN v_t - interval '1 hour' AND v_t + interval '1 hour') n;
+    IF jsonb_array_length(v_near) > 0 THEN
+      v_notes := v_notes || jsonb_build_array(jsonb_build_object('code', 'near_miss_not_reopened', 'child_id', v_child,
+        'removed_at', v_t, 'rows', v_near,
+        'hint', 'ended within an hour of the removal but not at the same instant; check each one, restore does not reopen them'));
+    END IF;
+  END LOOP;
+`;
+
+const RESTORE_CHANGES = `
+  IF jsonb_array_length(v_refusals) > 0 THEN
+    RAISE EXCEPTION 'ho_lifecycle_refused' USING DETAIL = v_refusals::text;
+  END IF;
+  FOR v_action IN SELECT value FROM pg_catalog.jsonb_array_elements(v_actions) WHERE value ->> 'action' = 'unarchive' LOOP
+    UPDATE public.children SET archived_at = NULL, archived_by_user_id = NULL, archive_reason = NULL
+      WHERE id = (v_action ->> 'id')::uuid AND archived_at = (v_action ->> 'archived_at')::timestamptz;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    IF v_n <> 1 THEN
+      RAISE EXCEPTION 'ho_lifecycle_retry: children % changed while applying; run the command again',
+        v_action ->> 'id' USING ERRCODE = '40001';
+    END IF;
+  END LOOP;
+  FOR v_action IN SELECT value FROM pg_catalog.jsonb_array_elements(v_actions) WHERE value ->> 'action' = 'reopen' LOOP
+    IF v_action ->> 'table' = 'child_ea_assignments' THEN
+      UPDATE public.child_ea_assignments SET unassigned_at = NULL
+        WHERE id = (v_action ->> 'id')::uuid AND unassigned_at = (v_action ->> 'ended_at')::timestamptz;
+    ELSIF v_action ->> 'table' = 'child_programme_enrollments' THEN
+      UPDATE public.child_programme_enrollments SET ended_at = NULL
+        WHERE id = (v_action ->> 'id')::uuid AND ended_at = (v_action ->> 'ended_at')::timestamptz;
+    ELSIF v_action ->> 'table' = 'child_class_memberships' THEN
+      UPDATE public.child_class_memberships SET exited_at = NULL
+        WHERE id = (v_action ->> 'id')::uuid AND exited_at = (v_action ->> 'ended_at')::timestamptz;
+    ELSE
+      UPDATE public.child_group_memberships SET removed_at = NULL
+        WHERE id = (v_action ->> 'id')::uuid AND removed_at = (v_action ->> 'ended_at')::timestamptz;
+    END IF;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    IF v_n <> 1 THEN
+      RAISE EXCEPTION 'ho_lifecycle_retry: % % changed while applying; run the command again',
+        v_action ->> 'table', v_action ->> 'id' USING ERRCODE = '40001';
+    END IF;
+  END LOOP;
+`;
+
+const RESTORE_TAIL = `
+  PERFORM pg_catalog.set_config('masi_ho.result', jsonb_build_object(
+    'server_now', pg_catalog.now(), 'read_only', pg_catalog.current_setting('transaction_read_only'),
+    'removals', v_removals, 'actions', v_actions, 'notes', v_notes, 'refusals', v_refusals)::text, true);
+END
+$ho$;`;
+
+const RESTORE_READBACK_SQL = `BEGIN READ ONLY;
+SET LOCAL statement_timeout = '30s';
+WITH ids AS (SELECT x::uuid AS id FROM pg_catalog.jsonb_array_elements_text((:'args')::jsonb -> 'ids') x)
+SELECT pg_catalog.jsonb_build_object(
+  'read_only', pg_catalog.current_setting('transaction_read_only'),
+  'rows', coalesce((SELECT pg_catalog.jsonb_agg(r ORDER BY r."table", r.id) FROM (
+    SELECT 'children' AS "table", id, NULL::timestamptz AS started_at, archived_at AS ended_at,
+      archived_by_user_id, archive_reason, row_version
+      FROM public.children WHERE id IN (SELECT id FROM ids)
+    UNION ALL
+    SELECT 'child_ea_assignments', id, assigned_at, unassigned_at, NULL::uuid, NULL::text, row_version
+      FROM public.child_ea_assignments WHERE id IN (SELECT id FROM ids)
+    UNION ALL
+    SELECT 'child_programme_enrollments', id, enrolled_at, ended_at, NULL::uuid, NULL::text, row_version
+      FROM public.child_programme_enrollments WHERE id IN (SELECT id FROM ids)
+    UNION ALL
+    SELECT 'child_class_memberships', id, enrolled_at, exited_at, NULL::uuid, NULL::text, row_version
+      FROM public.child_class_memberships WHERE id IN (SELECT id FROM ids)
+    UNION ALL
+    SELECT 'child_group_memberships', id, joined_at, removed_at, NULL::uuid, NULL::text, row_version
+      FROM public.child_group_memberships WHERE id IN (SELECT id FROM ids)) r), '[]'::jsonb));
+ROLLBACK;`;
+
 const buildProgram = (kind, { apply = false } = {}) => {
   if (kind === 'resolve') return RESOLVE_SQL;
   if (kind === 'readback') return READBACK_SQL;
-  if (kind !== 'plan') throw new Error(`Unknown program ${kind}.`);
+  if (kind === 'restore_readback') return RESTORE_READBACK_SQL;
+  const parts = {
+    plan: [PLAN_HEAD, apply ? PLAN_LOCKS : '', PLAN_BODY, apply ? PLAN_CHANGES : '', PLAN_TAIL],
+    restore: [RESTORE_HEAD, apply ? RESTORE_LOCKS : '', RESTORE_BODY, apply ? RESTORE_CHANGES : '', RESTORE_TAIL],
+  }[kind];
+  if (!parts) throw new Error(`Unknown program ${kind}.`);
   return [
     apply ? 'BEGIN;' : 'BEGIN READ ONLY;',
     ...(apply ? ["SET LOCAL lock_timeout = '10s';"] : []),
     "SET LOCAL statement_timeout = '30s';",
     "SET LOCAL masi_ho.args = :'args';",
-    [PLAN_HEAD, apply ? PLAN_LOCKS : '', PLAN_BODY, apply ? PLAN_CHANGES : '', PLAN_TAIL].join(''),
+    parts.join(''),
     "SELECT pg_catalog.current_setting('masi_ho.result');",
     apply ? 'COMMIT;' : 'ROLLBACK;',
   ].join('\n');
@@ -530,9 +839,14 @@ const single = (matches, label) => {
 const assertDeterministicIds = (plan) => {
   for (const action of plan.actions) {
     const keys = DETERMINISTIC_KEYS[action.table];
-    if (!keys || !['insert', 'reopen'].includes(action.action)) continue;
-    if (action.id !== deterministicId(action.table, ...keys(action))) {
-      throw new Error(`deterministic_id_mismatch: ${action.table} ${action.id} is not the app's id for this pair; nothing was applied by this check.`);
+    if (!keys) continue;
+    const expected = deterministicId(action.table, ...keys(action));
+    // restore child reports the id its SQL derived (det_id) and prefers that row; it may reopen
+    // an older row with its own id when the app's row never existed.
+    const derived = action.det_id !== undefined ? action.det_id
+      : (['insert', 'reopen'].includes(action.action) ? action.id : expected);
+    if (derived !== expected) {
+      throw new Error(`deterministic_id_mismatch: ${action.table} ${derived} is not the app's id for this pair; nothing was applied by this check.`);
     }
   }
 };
@@ -547,6 +861,18 @@ const isConfirmed = (actions, rows) => actions.filter(action => CHANGE_ACTIONS.i
   }
   if (action.action === 'insert') return row.unassigned_at === null && row.row_version === 1;
   return row.unassigned_at === null;
+});
+
+// restore child: every reopened row is open with its start and row_version unchanged, and an
+// unarchived child has no archive left.
+const RESTORE_CHANGE_ACTIONS = ['reopen', 'unarchive', 'already_active'];
+const isRestoreConfirmed = (actions, rows) => actions.filter(action => RESTORE_CHANGE_ACTIONS.includes(action.action)).every((action) => {
+  const row = rows.find(candidate => candidate.table === action.table && candidate.id === action.id);
+  if (!row || row.ended_at !== null) return false;
+  if (action.action === 'already_active') return true;
+  if (row.row_version !== action.row_version) return false;
+  if (action.action === 'unarchive') return row.archived_by_user_id === null && row.archive_reason === null;
+  return row.started_at === action.started_at;
 });
 
 const runCli = (argv, {
@@ -595,7 +921,9 @@ const runCli = (argv, {
     const resolved = query(RESOLVE_SQL, { emails, programme_code: options.programme ?? null, ids: entityIds });
     const users = Object.fromEntries(Object.keys(emails).map(key => [key, single(resolved.users?.[key], key)]));
     if (users.from && users.from.id === users.to.id) throw new Error('--from and --to resolve to the same EA.');
-    const opener = options.command === 'handover' ? users.to : (options.command === 'reopen' ? users.ea : null);
+    const restore = options.command === 'restore';
+    const program = restore ? 'restore' : 'plan';
+    const opener = options.command === 'handover' ? users.to : (['reopen', 'restore'].includes(options.command) ? users.ea : null);
     if (opener?.suspended) throw new Error(`${opener.email} is suspended; restore them before granting access.`);
     let programme = null;
     if (options.programme) {
@@ -614,7 +942,7 @@ const runCli = (argv, {
       from_id: users.from?.id, to_id: users.to?.id, ea_id: users.ea?.id, child_ids: options.children,
       class_id: options.class, programme_id: programme?.id, group_id: options.group, delivery: options.delivery,
     };
-    const plan = query(buildProgram('plan', { apply: false }), args);
+    const plan = query(buildProgram(program, { apply: false }), args);
     assertDeterministicIds(plan);
     print({ plan });
     if (plan.refusals.length) {
@@ -622,15 +950,16 @@ const runCli = (argv, {
     }
     if (!options.apply) return 0;
 
-    const applied = query(buildProgram('plan', { apply: true }), {
+    const applied = query(buildProgram(program, { apply: true }), {
       ...args, ...(options.scope === 'group' ? { fresh_id: randomUUID() } : {}),
     }, { readOnly: false });
     print({ applied });
     assertDeterministicIds(applied);
-    const ids = applied.actions.filter(action => CHANGE_ACTIONS.includes(action.action)).map(action => action.id);
-    const after = query(READBACK_SQL, { ids });
+    const changes = restore ? RESTORE_CHANGE_ACTIONS : CHANGE_ACTIONS;
+    const ids = applied.actions.filter(action => changes.includes(action.action)).map(action => action.id);
+    const after = query(restore ? RESTORE_READBACK_SQL : READBACK_SQL, { ids });
     print({ after: after.rows });
-    if (applied.refusals.length || !isConfirmed(applied.actions, after.rows)) {
+    if (applied.refusals.length || !(restore ? isRestoreConfirmed : isConfirmed)(applied.actions, after.rows)) {
       throw new Error('read_back_unconfirmed: rerun this command without --apply and inspect the plan; the transaction may have committed.');
     }
     print({ confirmed: true });

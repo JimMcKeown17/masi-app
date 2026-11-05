@@ -39,6 +39,7 @@
     "ho:handover": "node scripts/ho-lifecycle.cjs handover",
     "ho:end-delivery": "node scripts/ho-lifecycle.cjs end-delivery",
     "ho:reopen": "node scripts/ho-lifecycle.cjs reopen",
+    "ho:restore": "node scripts/ho-lifecycle.cjs restore",
     "testers:provision": "node scripts/createTesters.js",
     "content:xh-test-pack": "node scripts/build-isixhosa-test-pack.cjs",
     "sentry:sourcemaps": "sentry-expo-upload-sourcemaps dist",

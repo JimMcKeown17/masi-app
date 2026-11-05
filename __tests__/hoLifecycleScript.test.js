@@ -30,6 +30,8 @@ describe('argument parsing', () => {
       { command: 'reopen', scope: 'child', ea: 'a@example.test', children: [CHILD_A] }],
     [['reopen', 'class', '--ea', 'a@example.test', '--class', CLASS, '--programme', 'numeracy', ...reasonFlags],
       { command: 'reopen', scope: 'class', ea: 'a@example.test', class: CLASS, programme: 'numeracy' }],
+    [['restore', 'child', '--ea', 'a@example.test', '--children', `${CHILD_B},${CHILD_A}`, ...reasonFlags],
+      { command: 'restore', scope: 'child', ea: 'a@example.test', children: [CHILD_A, CHILD_B] }],
   ])('%j is a dry run with an explicit target and audit details', (argv, expected) => {
     expect(parseArgs(argv)).toEqual({
       ...expected, reason: "Handover 'quoted' reason", operator: 'Operator', apply: false,
@@ -67,6 +69,10 @@ describe('argument parsing', () => {
     [...handoverChild, '--reason', 'x'.repeat(1001), '--operator', 'Operator'],
     [...handoverChild, '--reason', 'Review', '--operator', 'x'.repeat(201)],
     [...handoverChild, '--reason', '--apply', '--operator', 'Operator'],
+    ['restore', 'class', '--ea', 'a@example.test', '--class', CLASS, ...reasonFlags],
+    ['restore', 'child', '--ea', 'a@example.test', ...reasonFlags],
+    ['restore', 'child', '--from', 'a@example.test', '--children', CHILD_A, ...reasonFlags],
+    ['restore', 'child', '--ea', 'a@example.test', '--children', CHILD_A, '--programme', 'literacy', ...reasonFlags],
   ])('rejects invalid or incomplete arguments: %j', (...argv) => {
     expect(() => parseArgs(argv)).toThrow();
   });
@@ -129,6 +135,48 @@ describe('SQL programs', () => {
 
   test('never writes row_version', () => {
     expect(buildProgram('plan', { apply: true })).not.toMatch(/row_version\s*=/);
+    expect(buildProgram('restore', { apply: true })).not.toMatch(/row_version\s*=/);
+  });
+
+  test('the restore dry run is read-only with no lock or write statement', () => {
+    const sql = buildProgram('restore', { apply: false });
+    expect(sql).toMatch(/^BEGIN READ ONLY;/);
+    expect(sql.trim()).toMatch(/ROLLBACK;$/);
+    expect(sql).not.toMatch(/\bCOMMIT\b|FOR UPDATE|UPDATE public\.|INSERT INTO public\./);
+    expect(sql).toContain("SET LOCAL masi_ho.args = :'args';");
+    expect(buildProgram('restore_readback')).toMatch(/^BEGIN READ ONLY;[\s\S]*ROLLBACK;$/);
+  });
+
+  test('restore apply locks children -> classes -> groups, including the memberships it reopens, before any write', () => {
+    const sql = buildProgram('restore', { apply: true });
+    expect(sql).toMatch(/^BEGIN;/);
+    expect(sql.trim()).toMatch(/COMMIT;$/);
+    const children = sql.indexOf('FROM public.children WHERE id = ANY (v_children) ORDER BY id FOR UPDATE');
+    const classes = sql.indexOf('FROM public.classes WHERE id = ANY (v_lock_classes) ORDER BY id FOR UPDATE');
+    const groups = sql.indexOf('FROM public.groups WHERE id = ANY (v_lock_groups) ORDER BY id FOR UPDATE');
+    const firstWrite = Math.min(...['UPDATE public.', 'INSERT INTO public.']
+      .map(statement => sql.indexOf(statement)).filter(index => index >= 0));
+    expect(children).toBeGreaterThan(0);
+    expect(classes).toBeGreaterThan(children);
+    expect(groups).toBeGreaterThan(classes);
+    expect(firstWrite).toBeGreaterThan(groups);
+    // The classes and groups of the child's open memberships AND of the memberships ended at the
+    // removal instant (the ones restore reopens), plus the class of each such group.
+    const lockSection = sql.slice(children, groups);
+    expect(lockSection).toContain('m.exited_at IS NULL OR m.exited_at = r.t');
+    expect(lockSection).toContain('m.removed_at IS NULL OR m.removed_at = r.t');
+    expect(lockSection).toContain('SELECT g.class_id FROM public.child_group_memberships m');
+    expect(sql).toMatch(/ho_lifecycle_retry[^\n]*\n\s*USING ERRCODE = '40001'/);
+    expect(sql).not.toMatch(/\bINSERT INTO public\./);
+  });
+
+  test('restore reopens only rows still ended at the planned instant', () => {
+    const sql = buildProgram('restore', { apply: true });
+    for (const [table, column] of [['child_ea_assignments', 'unassigned_at'], ['child_programme_enrollments', 'ended_at'],
+      ['child_class_memberships', 'exited_at'], ['child_group_memberships', 'removed_at']]) {
+      expect(sql).toContain(`UPDATE public.${table} SET ${column} = NULL\n        WHERE id = (v_action ->> 'id')::uuid AND ${column} = (v_action ->> 'ended_at')::timestamptz;`);
+    }
+    expect(sql).toContain('UPDATE public.children SET archived_at = NULL, archived_by_user_id = NULL, archive_reason = NULL');
   });
 });
 
@@ -331,6 +379,116 @@ describe('operator execution', () => {
     expect(options.env.PGSERVICE).toBeUndefined();
     expect(args.join(' ')).not.toContain(password);
     expect(log.mock.calls.flat().join('\n')).not.toContain(password);
+  });
+
+  describe('restore child', () => {
+    const T = '2026-11-05T08:00:00+00:00';
+    const restoreArgv = (apply = false) => ['restore', 'child', '--ea', A.email, '--children', CHILD_A,
+      ...reasonFlags, ...(apply ? ['--apply'] : [])];
+    const assignmentId = deterministicId('child_ea_assignments', A.id, CHILD_A);
+    const reopenAssignment = {
+      action: 'reopen', table: 'child_ea_assignments', id: assignmentId, det_id: assignmentId, ea_user_id: A.id,
+      child_id: CHILD_A, started_at: '2026-02-01T06:00:00+00:00', ended_at: T, row_version: 3,
+      gap: { from: T, to: NOW, hours: 2 },
+    };
+    const unarchive = {
+      action: 'unarchive', table: 'children', id: CHILD_A, child_id: CHILD_A, archived_at: T,
+      archived_by_user_id: A.id, archive_reason: 'removed_by_ea', row_version: 2,
+    };
+    const reopenMembership = {
+      action: 'reopen', table: 'child_group_memberships', id: 'cf000000-0000-0000-0000-000000000001', child_id: CHILD_A,
+      group_id: GROUP, group_name: 'Group', started_at: '2026-02-01T06:00:00+00:00', ended_at: T, row_version: 1,
+    };
+    const restorePlan = (overrides = {}) => plan({
+      removals: [{ child_id: CHILD_A, name: 'Child A', removed_at: T, archived: true, archived_by_user_id: A.id }],
+      actions: [reopenAssignment, unarchive, reopenMembership], ...overrides,
+    });
+    const readBack = (overrides = {}) => after([
+      { table: 'child_ea_assignments', id: assignmentId, started_at: reopenAssignment.started_at, ended_at: null, row_version: 3 },
+      { table: 'children', id: CHILD_A, started_at: null, ended_at: null, archived_by_user_id: null, archive_reason: null, row_version: 2 },
+      { table: 'child_group_memberships', id: reopenMembership.id, started_at: reopenMembership.started_at, ended_at: null, row_version: 1 },
+    ].map(row => ({ ...row, ...(overrides[row.table] ?? {}) })));
+
+    test('a dry run resolves one EA and plans the restore read-only', () => {
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] }))).mockReturnValueOnce(reply(restorePlan()));
+      expect(run(restoreArgv())).toBe(0);
+      expect(spawnSync).toHaveBeenCalledTimes(2);
+      expect(variables(spawnSync.mock.calls[0]).args).toEqual(expect.objectContaining({ emails: { ea: A.email }, ids: [CHILD_A] }));
+      expect(variables(spawnSync.mock.calls[1]).args).toEqual(expect.objectContaining({
+        command: 'restore', scope: 'child', ea_id: A.id, child_ids: [CHILD_A] }));
+      const input = spawnSync.mock.calls[1][2].input;
+      expect(input).toMatch(/^BEGIN READ ONLY;/);
+      expect(input).not.toMatch(/FOR UPDATE|UPDATE public\.|\bCOMMIT\b/);
+      const output = printed();
+      expect(output[0]).toEqual({ project_ref: PROJECT_REF, command: 'restore child', mode: 'dry_run' });
+      expect(output.find(value => value.plan).plan.removals[0].removed_at).toBe(T);
+      expect(output.some(value => value.confirmed)).toBe(false);
+    });
+
+    test('a suspended EA is refused before planning', () => {
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [{ ...A, suspended: true }] })));
+      expect(() => run(restoreArgv(true))).toThrow('suspended');
+      expect(spawnSync).toHaveBeenCalledTimes(1);
+    });
+
+    test('refusals stop the command before anything is applied', () => {
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] })))
+        .mockReturnValueOnce(reply(restorePlan({ refusals: [{ code: 'archived_by_another_ea', child_id: CHILD_A }] })));
+      expect(() => run(restoreArgv(true))).toThrow('refused: archived_by_another_ea');
+      expect(spawnSync).toHaveBeenCalledTimes(2);
+    });
+
+    test('the deterministic id the SQL computed must match the app derivation', () => {
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] })))
+        .mockReturnValueOnce(reply(restorePlan({ actions: [{ ...reopenAssignment, det_id: '00000000-0000-4000-8000-000000000000' }] })));
+      expect(() => run(restoreArgv(true))).toThrow('deterministic_id_mismatch');
+      expect(spawnSync).toHaveBeenCalledTimes(2);
+    });
+
+    test('an older assignment row with its own id may be reopened when the app id never existed', () => {
+      const legacy = { ...reopenAssignment, id: 'ce000000-0000-0000-0000-000000000001' };
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] }))).mockReturnValueOnce(reply(restorePlan({ actions: [legacy] })));
+      expect(run(restoreArgv())).toBe(0);
+    });
+
+    test('apply locks, recomputes, reopens, then confirms each row by a separate read-back', () => {
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] })))
+        .mockReturnValueOnce(reply(restorePlan()))
+        .mockReturnValueOnce(reply(restorePlan({ read_only: 'off' })))
+        .mockReturnValueOnce(reply(readBack()));
+      expect(run(restoreArgv(true))).toBe(0);
+      expect(spawnSync).toHaveBeenCalledTimes(4);
+      expect(spawnSync.mock.calls[2][2].input).toMatch(/^BEGIN;[\s\S]*FOR UPDATE[\s\S]*UPDATE public\.[\s\S]*COMMIT;$/);
+      expect(variables(spawnSync.mock.calls[3]).args.ids).toEqual([assignmentId, CHILD_A, reopenMembership.id]);
+      expect(spawnSync.mock.calls[3][2].input).toMatch(/^BEGIN READ ONLY;[\s\S]*public\.child_group_memberships/);
+      expect(printed().at(-1)).toEqual({ confirmed: true });
+    });
+
+    test('a rerun where the EA already holds the child confirms without changing anything', () => {
+      const active = { ...reopenAssignment, action: 'already_active', ended_at: null };
+      delete active.gap;
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] })))
+        .mockReturnValueOnce(reply(restorePlan({ actions: [active] })))
+        .mockReturnValueOnce(reply(restorePlan({ read_only: 'off', actions: [active] })))
+        .mockReturnValueOnce(reply(after([{ table: 'child_ea_assignments', id: assignmentId, started_at: active.started_at, ended_at: null, row_version: 3 }])));
+      expect(run(restoreArgv(true))).toBe(0);
+      expect(printed().at(-1)).toEqual({ confirmed: true });
+    });
+
+    test.each([
+      ['the assignment is still ended', { child_ea_assignments: { ended_at: T } }],
+      ['the child is still archived', { children: { ended_at: T } }],
+      ['the archiver was not cleared', { children: { archived_by_user_id: A.id } }],
+      ['a membership is still ended', { child_group_memberships: { ended_at: T } }],
+      ['a row_version moved', { child_group_memberships: { row_version: 2 } }],
+      ['a start moved', { child_ea_assignments: { started_at: NOW } }],
+    ])('a read-back where %s never reports confirmation', (_label, overrides) => {
+      spawnSync.mockReturnValueOnce(reply(resolved({ ea: [A] }))).mockReturnValueOnce(reply(restorePlan()))
+        .mockReturnValueOnce(reply(restorePlan({ read_only: 'off' })))
+        .mockReturnValueOnce(reply(readBack(overrides)));
+      expect(() => run(restoreArgv(true))).toThrow('read_back_unconfirmed');
+      expect(printed().some(value => value.confirmed)).toBe(false);
+    });
   });
 
   test('an inherited password cannot replace the required local file', () => {

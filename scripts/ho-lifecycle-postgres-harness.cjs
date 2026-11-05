@@ -244,6 +244,41 @@ const makeCli = (databaseUrl) => {
   return cli;
 };
 
+const ok = (result, label) => {
+  assert.equal(result.error, null, `${label}: ${result.error?.message}`);
+  return result;
+};
+
+// A second session holds one row lock for 4 s. The dry run must not wait for it; apply must,
+// because the server's archive decisions (private.other_active_holder) rely on every Head
+// Office grant locking the classes and groups whose holders it can change.
+const makeLockProbe = (databaseUrl, cli, prefix) => {
+  let holders = 0;
+  return (table, rowId, argv, label) => {
+    holders += 1;
+    const name = `${prefix}-lock-holder-${holders}`;
+    const holder = spawn('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-Atq', databaseUrl, '-c',
+      `BEGIN; SELECT 1 FROM public.${table} WHERE id = '${rowId}' FOR UPDATE; SELECT pg_sleep(4); COMMIT;`],
+    { env: buildPsqlEnv(name), stdio: 'ignore' });
+    holder.unref();
+    let held = false;
+    for (let attempt = 0; attempt < 100 && !held; attempt += 1) {
+      held = runPsql({ databaseUrl, label: 'lock-holder-ready',
+        sql: `SELECT count(*) FROM pg_stat_activity WHERE application_name = 'masi-history-rls-${name}'
+        AND wait_event = 'PgSleep';` }) === '1';
+      if (!held) sleep(100);
+    }
+    assert.ok(held, `${label}: lock holder did not start`);
+    const started = Date.now();
+    ok(cli(argv), `${label}-dry-run-under-lock`);
+    assert.ok(Date.now() - started < 1500, `${label}: the dry run waited for a row lock`);
+    const result = ok(cli([...argv, '--apply']), label);
+    const waited = Date.now() - started;
+    assert.ok(waited >= 2500, `${label}: apply did not wait for the held ${table} row lock (${waited} ms)`);
+    return result;
+  };
+};
+
 const runCommandCases = (databaseUrl, summary) => {
   const pass = label => { summary[label] = 'passed'; };
   const sql = (text, label) => runPsql({ databaseUrl, sql: text, label });
@@ -271,37 +306,8 @@ const runCommandCases = (databaseUrl, summary) => {
   const reopenChild = (ea, children) => ['reopen', 'child', '--ea', ea, '--children', children, ...reason];
   const reopenClass = ea => ['reopen', 'class', '--ea', ea, '--class', K, '--programme', 'literacy', ...reason];
   const apply = argv => [...argv, '--apply'];
-  const ok = (result, label) => {
-    assert.equal(result.error, null, `${label}: ${result.error?.message}`);
-    return result;
-  };
   const kinds = actions => actions.map(action => `${action.action}:${action.table}`).sort();
-  // A second session holds one row lock for 4 s. The dry run must not wait for it; apply must,
-  // because the server's archive decisions (private.other_active_holder) rely on every Head
-  // Office grant locking the classes and groups whose holders it can change.
-  let holders = 0;
-  const underHeldLock = (table, rowId, argv, label) => {
-    holders += 1;
-    const name = `ho-lock-holder-${holders}`;
-    const holder = spawn('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-Atq', databaseUrl, '-c',
-      `BEGIN; SELECT 1 FROM public.${table} WHERE id = '${rowId}' FOR UPDATE; SELECT pg_sleep(4); COMMIT;`],
-    { env: buildPsqlEnv(name), stdio: 'ignore' });
-    holder.unref();
-    let held = false;
-    for (let attempt = 0; attempt < 100 && !held; attempt += 1) {
-      held = sql(`SELECT count(*) FROM pg_stat_activity WHERE application_name = 'masi-history-rls-${name}'
-        AND wait_event = 'PgSleep';`, 'lock-holder-ready') === '1';
-      if (!held) sleep(100);
-    }
-    assert.ok(held, `${label}: lock holder did not start`);
-    const started = Date.now();
-    ok(cli(argv), `${label}-dry-run-under-lock`);
-    assert.ok(Date.now() - started < 1500, `${label}: the dry run waited for a row lock`);
-    const result = ok(cli(apply(argv)), label);
-    const waited = Date.now() - started;
-    assert.ok(waited >= 2500, `${label}: apply did not wait for the held ${table} row lock (${waited} ms)`);
-    return result;
-  };
+  const underHeldLock = makeLockProbe(databaseUrl, cli, 'ho');
   const versionsSql = `SELECT jsonb_object_agg(id, row_version) FROM (
     SELECT id, row_version FROM public.child_ea_assignments UNION ALL SELECT id, row_version FROM public.class_ea_assignments
     UNION ALL SELECT id, row_version FROM public.group_ea_assignments) v;`;
@@ -484,6 +490,449 @@ const runCommandCases = (databaseUrl, summary) => {
   }
 };
 
+// ---------------------------------------------------------------- restore child
+// Undo a mistaken Delete child. Each removal is produced through the real path, as the EA
+// (role authenticated with the EA's JWT claims): the server's Delete child
+// (public.delete_child_if_no_history, lifecycle migration 20261105120300) or the 1.5.0 phone's
+// archiveChild chain (one UPDATE ... RETURNING id per row, in its push order, all stamped with
+// the same phone time). These cases need the server lifecycle batch (20261105120000-120300);
+// see collectMigrations.
+const rid = (prefix, n) => id(prefix, n);
+const RHO = rid('1d', 1); const RX = rid('1d', 2); const RY = rid('1d', 3); const RS = rid('1d', 4); const RN = rid('1d', 5);
+const R_EMAIL = { X: 'restore.x@example.test', Y: 'restore.y@example.test', S: 'restore.s@example.test', N: 'restore.n@example.test' };
+const R_SCHOOL = rid('2d', 1);
+const R_YEAR_2028 = rid('3d', 1);
+const RK = rid('4d', 1); const RKB = rid('4d', 2); const RK5 = rid('4d', 5);
+const R1 = rid('5d', 1); const R2 = rid('5d', 2); const R3 = rid('5d', 3); const R4 = rid('5d', 4);
+const R5 = rid('5d', 5); const R7 = rid('5d', 7); const R_MISSING = rid('5d', 99);
+const V7 = rid('6d', 7);
+const G1 = rid('7d', 1); const G2 = rid('7d', 2); const GB = rid('7d', 3); const GY = rid('7d', 4);
+const G5E = rid('7d', 5); const G5A = rid('7d', 6); const G5N = rid('7d', 7); const G7A = rid('7d', 8);
+const G7B = rid('7d', 9); const G3F = rid('7d', 10);
+const enrolment = n => rid('ad', n);
+const classMembership = (n, k = 0) => rid('bd', n * 10 + k);
+const groupMembership = (n, k) => rid('cd', n * 10 + k);
+const R_GRANT_START = '2026-09-01T07:00:00+02:00';
+const restoreDet = (ea, child) => deterministicId('child_ea_assignments', ea, child);
+
+const restoreFixtureSql = () => `
+INSERT INTO auth.users (id, email, banned_until) VALUES
+  ('${RHO}', 'restore.ho@example.test', NULL), ('${RX}', '${R_EMAIL.X}', NULL), ('${RY}', '${R_EMAIL.Y}', NULL),
+  ('${RS}', '${R_EMAIL.S}', now() + interval '876000 hours'), ('${RN}', '${R_EMAIL.N}', NULL);
+INSERT INTO public.schools (id, name) VALUES ('${R_SCHOOL}', 'Restore harness school');
+INSERT INTO public.users (id, first_name, last_name, school_id, organization_id) VALUES
+  ('${RHO}', 'Restore', 'Office', '${R_SCHOOL}', '${ORG}'), ('${RX}', 'EA', 'X', '${R_SCHOOL}', '${ORG}'),
+  ('${RY}', 'EA', 'Y', '${R_SCHOOL}', '${ORG}'), ('${RS}', 'EA', 'Suspended', '${R_SCHOOL}', '${ORG}'),
+  ('${RN}', 'EA', 'Never', '${R_SCHOOL}', '${ORG}');
+INSERT INTO public.staff_programme_assignments (user_id, programme_id, school_id, assigned_at, created_by)
+SELECT u, ${programme('literacy')}, '${R_SCHOOL}', TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
+FROM unnest(ARRAY['${RX}', '${RY}', '${RS}', '${RN}']::uuid[]) u;
+INSERT INTO public.academic_years (id, label, starts_on, ends_on, is_active) VALUES
+  ('${R_YEAR_2028}', 'restore-harness-2028', '2028-01-15', '2028-12-15', false);
+INSERT INTO public.classes (id, school_id, name, grade, academic_year_id, created_by) VALUES
+  ('${RK}', '${R_SCHOOL}', 'Restore class K', '1', ${activeYear}, '${RHO}'),
+  ('${RKB}', '${R_SCHOOL}', 'Restore class KB', '2', ${activeYear}, '${RHO}'),
+  ('${RK5}', '${R_SCHOOL}', 'Restore class K5 (2028)', '3', '${R_YEAR_2028}', '${RHO}');
+INSERT INTO public.class_ea_assignments (class_id, ea_user_id, programme_id, assigned_at, created_by) VALUES
+  ('${RK}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${RKB}', '${RY}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${RK5}', '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
+INSERT INTO public.grouping_versions (id, class_id, academic_year_id, version_number) VALUES
+  ('${V7}', '${RK}', ${activeYear}, 1);
+INSERT INTO public.groups (id, name, programme_id, class_id, grouping_version_id, created_by) VALUES
+  ('${G1}', 'Restore group 1 (no class)', ${programme('literacy')}, NULL, NULL, '${RHO}'),
+  ('${G2}', 'Restore group 2 (X created, unheld)', ${programme('literacy')}, '${RKB}', NULL, '${RX}'),
+  ('${GB}', 'Restore group B (class KB)', ${programme('literacy')}, '${RKB}', NULL, '${RHO}'),
+  ('${GY}', 'Restore group Y', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G5E}', 'Restore group 5E (ended earlier)', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G5A}', 'Restore group 5A (archived later)', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G5N}', 'Restore group 5N (unheld)', ${programme('literacy')}, '${RK}', NULL, '${RHO}'),
+  ('${G7A}', 'Restore group 7A', ${programme('literacy')}, '${RK}', '${V7}', '${RHO}'),
+  ('${G7B}', 'Restore group 7B', ${programme('literacy')}, '${RK}', '${V7}', '${RHO}'),
+  ('${G3F}', 'Restore group 3F (fast clock)', ${programme('literacy')}, '${RK}', NULL, '${RHO}');
+INSERT INTO public.group_ea_assignments (group_id, ea_user_id, programme_id, assigned_at, created_by)
+SELECT g, '${RX}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
+FROM unnest(ARRAY['${G1}', '${GB}', '${G3F}', '${G5E}', '${G5A}', '${G7A}']::uuid[]) g;
+INSERT INTO public.group_ea_assignments (group_id, ea_user_id, programme_id, assigned_at, created_by)
+SELECT g, '${RY}', ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
+FROM unnest(ARRAY['${GY}', '${G7B}']::uuid[]) g;
+INSERT INTO public.children (id, first_name, last_name, class_id, created_by) VALUES
+  ('${R1}', 'Restore', 'One', '${RK}', '${RHO}'), ('${R2}', 'Restore', 'Two', '${RK}', '${RHO}'),
+  ('${R3}', 'Restore', 'Three', '${RK}', '${RHO}'), ('${R4}', 'Restore', 'Four', '${RK}', '${RHO}'),
+  ('${R5}', 'Restore', 'Five', '${RK}', '${RHO}'), ('${R7}', 'Restore', 'Seven', '${RK}', '${RHO}');
+-- Seeded row_versions above 1 make "restore never writes row_version" observable.
+INSERT INTO public.child_ea_assignments (id, user_id, child_id, assigned_at, created_by, row_version)
+SELECT d.id, d.ea, d.child, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}', 3
+FROM (VALUES ('${restoreDet(RX, R1)}'::uuid, '${RX}'::uuid, '${R1}'::uuid), ('${restoreDet(RX, R2)}', '${RX}', '${R2}'),
+  ('${restoreDet(RY, R2)}', '${RY}', '${R2}'), ('${restoreDet(RX, R3)}', '${RX}', '${R3}'),
+  ('${restoreDet(RX, R4)}', '${RX}', '${R4}'), ('${restoreDet(RY, R4)}', '${RY}', '${R4}'),
+  ('${restoreDet(RX, R5)}', '${RX}', '${R5}'), ('${restoreDet(RX, R7)}', '${RX}', '${R7}'),
+  ('${restoreDet(RY, R7)}', '${RY}', '${R7}')) d(id, ea, child);
+INSERT INTO public.child_programme_enrollments (id, child_id, programme_id, enrolled_at, created_by, row_version)
+SELECT ('ad000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid, ('5d000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
+  ${programme('literacy')}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}', 2
+FROM unnest(ARRAY[1, 2, 3, 4, 5, 7]) n;
+INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by)
+SELECT ('bd000000-0000-0000-0000-' || lpad((n * 10)::text, 12, '0'))::uuid, ('5d000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
+  '${RK}', ${activeYear}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'
+FROM unnest(ARRAY[1, 2, 3, 5, 7]) n;
+-- R4's class is taught by Y, so after X leaves, Y is R4's last holder and Y's Delete child archives it.
+INSERT INTO public.child_class_memberships (id, child_id, class_id, academic_year_id, enrolled_at, created_by) VALUES
+  ('${classMembership(4)}', '${R4}', '${RKB}', ${activeYear}, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${classMembership(5, 1)}', '${R5}', '${RK5}', '${R_YEAR_2028}', TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
+INSERT INTO public.child_group_memberships (id, child_id, group_id, grouping_version_id, joined_at, created_by) VALUES
+  ('${groupMembership(1, 1)}', '${R1}', '${G1}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(1, 2)}', '${R1}', '${G2}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RX}'),
+  ('${groupMembership(2, 1)}', '${R2}', '${GB}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(2, 2)}', '${R2}', '${GY}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(3, 1)}', '${R3}', '${G1}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(3, 2)}', '${R3}', '${G3F}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(4, 1)}', '${R4}', '${G1}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(4, 2)}', '${R4}', '${GY}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(5, 1)}', '${R5}', '${G1}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(5, 2)}', '${R5}', '${G5E}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(5, 3)}', '${R5}', '${G5A}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(5, 4)}', '${R5}', '${G5N}', NULL, TIMESTAMPTZ '${R_GRANT_START}', '${RHO}'),
+  ('${groupMembership(7, 1)}', '${R7}', '${G7A}', '${V7}', TIMESTAMPTZ '${R_GRANT_START}', '${RHO}');
+`;
+
+// Extra migrations (the server lifecycle batch, before it is merged) come from a directory
+// named in HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR. They are merged with supabase/migrations by file
+// name and replayed in one sorted order; a file present in both must be byte-identical, so the
+// variable stays harmless once the batch is merged.
+const collectMigrations = () => {
+  const byName = new Map(fs.readdirSync(MIGRATIONS_DIR).filter(name => name.endsWith('.sql'))
+    .map(name => [name, path.join(MIGRATIONS_DIR, name)]));
+  const extraDir = process.env.HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR;
+  if (extraDir) {
+    for (const name of fs.readdirSync(extraDir).filter(entry => entry.endsWith('.sql'))) {
+      const file = path.join(extraDir, name);
+      if (byName.has(name)) {
+        assert.ok(fs.readFileSync(byName.get(name)).equals(fs.readFileSync(file)),
+          `${name} differs between supabase/migrations and HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR`);
+      } else {
+        byName.set(name, file);
+      }
+    }
+  }
+  return [...byName.keys()].sort().map(name => ({ name, file: byName.get(name) }));
+};
+
+const serverBatchApplied = databaseUrl => runPsql({ databaseUrl, label: 'server-batch-probe', sql: `SELECT
+  to_regprocedure('private.other_active_holder(text,uuid,uuid,boolean)') IS NOT NULL
+  AND to_regprocedure('private.guard_lifecycle_row()') IS NOT NULL;` }) === 't';
+
+const runRestoreCases = (databaseUrl, summary) => {
+  const pass = label => { summary[label] = 'passed'; };
+  const sql = (text, label) => runPsql({ databaseUrl, sql: text, label });
+  const json = (text, label) => JSON.parse(sql(text, label));
+  const asEa = (actor, statements, label) => psqlScript(databaseUrl, `BEGIN;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '${actor}';
+SET LOCAL request.jwt.claims = '${JSON.stringify({ sub: actor, role: 'authenticated' })}';
+${statements}
+COMMIT;`, label);
+  // supabase-js .rpc('delete_child_if_no_history', { p_child_id }) as PostgREST runs it.
+  const serverDeleteChild = (actor, child) => {
+    assert.equal(asEa(actor, `SELECT public.delete_child_if_no_history(p_child_id := '${child}'::uuid);`,
+      `delete-child-${child}`), 't');
+  };
+  // 1.5.0 archive request: .update({ <end>: <phone time>, row_version }).eq('id', id).select('id').
+  // The phone needs exactly one returned id.
+  const phoneArchive = (actor, table, rowId, patch) => {
+    const set = Object.entries(patch).map(([column, value]) => `${column} = ${typeof value === 'number' ? value : `'${value}'`}`).join(', ');
+    assert.equal(asEa(actor, `WITH r AS (UPDATE public.${table} SET ${set} WHERE id = '${rowId}' RETURNING id) SELECT count(*) FROM r;`,
+      `phone-archive-${table}`), '1', `${table} ${rowId}: the 1.5.0 archive was not acknowledged`);
+  };
+  // 1.5.0 session (insert or ignore) and attendee (merge upsert) for a group lesson.
+  const recordLesson = (actor, sessionId, attendeeId, child, group, day) => {
+    const session = `WITH r AS (INSERT INTO public.sessions (id, user_id, programme_id, class_id, group_id, session_date,
+      started_at, ended_at, activities, notes, created_at, updated_at) VALUES ('${sessionId}', '${actor}', ${programme('literacy')},
+      '${RK}', '${group}', DATE '${day}', TIMESTAMPTZ '${day} 09:00:00+02', TIMESTAMPTZ '${day} 09:40:00+02', '{}', '',
+      TIMESTAMPTZ '${day} 09:00:00+02', TIMESTAMPTZ '${day} 09:40:00+02') ON CONFLICT (id) DO NOTHING RETURNING 1)
+      SELECT count(*) FROM r;`;
+    const attendee = `WITH r AS (INSERT INTO public.session_attendees (id, session_id, child_id, group_id, attendance_status,
+      created_at, updated_at) VALUES ('${attendeeId}', '${sessionId}', '${child}', '${group}', 'present',
+      TIMESTAMPTZ '${day} 09:00:00+02', TIMESTAMPTZ '${day} 09:40:00+02') ON CONFLICT (id) DO UPDATE SET
+      attendance_status = EXCLUDED.attendance_status, updated_at = EXCLUDED.updated_at RETURNING 1) SELECT count(*) FROM r;`;
+    assert.equal(asEa(actor, session, `lesson-session-${sessionId}`), '1', 'the session was refused');
+    assert.equal(asEa(actor, attendee, `lesson-attendee-${attendeeId}`), '1', 'the attendee was refused');
+  };
+  const canWrite = (actor, child) => asEa(actor, `SELECT private.current_user_can_write_for_child('${child}');`, 'can-write');
+  const eaEditsChild = (actor, child) => asEa(actor,
+    `WITH r AS (UPDATE public.children SET first_name = first_name WHERE id = '${child}' RETURNING id) SELECT count(*) FROM r;`,
+    'ea-edit-child');
+  // Every row of one child in the tables a restore can touch, plus its history. Row counts and
+  // an md5 of every row, so "nothing changed" is exact.
+  const childRows = child => json(`SELECT jsonb_build_object(
+    'children', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM public.children t WHERE t.id = '${child}'),
+    'child_ea_assignments', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM public.child_ea_assignments t WHERE t.child_id = '${child}'),
+    'child_programme_enrollments', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM public.child_programme_enrollments t WHERE t.child_id = '${child}'),
+    'child_class_memberships', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM public.child_class_memberships t WHERE t.child_id = '${child}'),
+    'child_group_memberships', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM public.child_group_memberships t WHERE t.child_id = '${child}'),
+    'session_attendees', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM public.session_attendees t WHERE t.child_id = '${child}'));`,
+  `child-rows-${child}`);
+  const digest = () => sql(`SELECT string_agg(format('%s:%s:%s', x.t, x.n, x.h), ' ' ORDER BY x.t) FROM (
+    SELECT 'children' AS t, count(*) AS n, md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) AS h FROM public.children r
+    UNION ALL SELECT 'child_ea_assignments', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.child_ea_assignments r
+    UNION ALL SELECT 'child_programme_enrollments', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.child_programme_enrollments r
+    UNION ALL SELECT 'child_class_memberships', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.child_class_memberships r
+    UNION ALL SELECT 'child_group_memberships', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.child_group_memberships r
+    UNION ALL SELECT 'classes', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.classes r
+    UNION ALL SELECT 'groups', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.groups r
+    UNION ALL SELECT 'sessions', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.sessions r
+    UNION ALL SELECT 'session_attendees', count(*), md5(coalesce(string_agg(to_jsonb(r)::text, '' ORDER BY r.id), '')) FROM public.session_attendees r) x;`,
+  'restore-digest');
+  const ends = child => json(`SELECT jsonb_build_object(
+    'archived', (SELECT to_jsonb(c) - 'updated_at' - 'created_at' FROM (SELECT archived_at, archived_by_user_id, archive_reason, row_version FROM public.children WHERE id = '${child}') c),
+    'rows', (SELECT jsonb_object_agg(x.id, jsonb_build_object('end', x.end_at, 'start', x.start_at, 'row_version', x.row_version)) FROM (
+      SELECT id, unassigned_at AS end_at, assigned_at AS start_at, row_version FROM public.child_ea_assignments WHERE child_id = '${child}'
+      UNION ALL SELECT id, ended_at, enrolled_at, row_version FROM public.child_programme_enrollments WHERE child_id = '${child}'
+      UNION ALL SELECT id, exited_at, enrolled_at, row_version FROM public.child_class_memberships WHERE child_id = '${child}'
+      UNION ALL SELECT id, removed_at, joined_at, row_version FROM public.child_group_memberships WHERE child_id = '${child}') x));`,
+  `ends-${child}`);
+  const cli = makeCli(databaseUrl);
+  const underHeldLock = makeLockProbe(databaseUrl, cli, 'ho-restore');
+  const restore = (ea, children) => ['restore', 'child', '--ea', ea, '--children', children,
+    '--reason', 'Harness: undo a mistaken Delete child', '--operator', OPERATOR];
+  const kinds = actions => actions.map(action => `${action.action}:${action.table}`).sort();
+  const reopened = actions => actions.filter(action => action.action === 'reopen').map(action => action.id).sort();
+  const sqlNowMinus = minutes => JSON.parse(sql(`SELECT to_jsonb(now() - interval '${minutes} minutes');`, 'phone-time'));
+
+  sql(restoreFixtureSql(), 'restore-fixture');
+  try {
+    // ---- Case 1 (+6, +8): sole holder, server Delete child -> restore.
+    recordLesson(RX, rid('e1', 1), rid('e2', 1), R1, G1, '2026-10-28');
+    const lessonRow = () => sql(`SELECT to_jsonb(s)::text FROM public.sessions s WHERE id = '${rid('e1', 1)}';`, 'r1-session');
+    const r1Session = lessonRow();
+    assert.ok(r1Session, 'the lesson landed');
+    const r1Before = childRows(R1);
+    const r1Lesson = r1Before.session_attendees;
+    serverDeleteChild(RX, R1);
+    const r1Removed = ends(R1);
+    const t1 = r1Removed.archived.archived_at;
+    assert.ok(t1, 'the sole holder archived the child');
+    assert.deepEqual([r1Removed.archived.archived_by_user_id, r1Removed.archived.archive_reason], [RX, 'removed_by_ea']);
+    for (const rowId of [restoreDet(RX, R1), enrolment(1), classMembership(1), groupMembership(1, 1), groupMembership(1, 2)]) {
+      assert.equal(r1Removed.rows[rowId].end, t1, `${rowId} ended at the removal instant`);
+    }
+    assert.deepEqual([canWrite(RX, R1), eaEditsChild(RX, R1)], ['f', '0'], 'the removal took the child away from X');
+    pass('restore-setup-server-delete-child-archives-sole-holder-child');
+
+    // Case 6: the dry run changes nothing and plans every row ended at T.
+    const beforeDry = digest();
+    const dry = ok(cli(restore(R_EMAIL.X, R1)), 'restore-dry-run');
+    assert.equal(digest(), beforeDry, 'the restore dry run changed the database');
+    assert.ok(dry.calls.every(input => /^BEGIN READ ONLY;/.test(input) && !/\bCOMMIT\b/.test(input)));
+    assert.equal(dry.plan.read_only, 'on');
+    assert.deepEqual(dry.targets.entities, [{ kind: 'child', id: R1, name: 'Restore One', archived: true }]);
+    assert.deepEqual(dry.plan.removals.map(removal => [removal.child_id, removal.removed_at, removal.archived, removal.archived_by_user_id]),
+      [[R1, t1, true, RX]]);
+    assert.deepEqual(kinds(dry.plan.actions), ['reopen:child_class_memberships', 'reopen:child_ea_assignments',
+      'reopen:child_group_memberships', 'reopen:child_group_memberships', 'reopen:child_programme_enrollments', 'unarchive:children']);
+    assert.deepEqual(dry.plan.notes, []);
+    assert.deepEqual(dry.plan.actions.filter(action => action.table === 'child_group_memberships').map(action => action.group_name).sort(),
+      ['Restore group 1 (no class)', 'Restore group 2 (X created, unheld)']);
+    pass('restore-dry-run-changes-nothing-and-plans-the-removal');
+
+    // Case 8: apply waits for the lock on the class of a membership it reopens (R1 has no open
+    // membership left, so only the ended-at-T arm puts class K in the lock set).
+    const applied1 = underHeldLock('classes', RK, restore(R_EMAIL.X, R1), 'restore-sole-holder');
+    pass('restore-waits-for-the-class-of-a-membership-it-reopens');
+    assert.ok(applied1.confirmed);
+    const r1After = childRows(R1);
+    assert.deepEqual([r1After.children[0].archived_at, r1After.children[0].archived_by_user_id, r1After.children[0].archive_reason,
+      r1After.children[0].row_version], [null, null, null, r1Before.children[0].row_version]);
+    const sameRow = (table, before, after, endColumn) => {
+      const { updated_at: _b, [endColumn]: _e, ...keep } = before;
+      const { updated_at: _a, [endColumn]: end, ...kept } = after;
+      assert.equal(end, null, `${table} ${before.id} reopened`);
+      assert.deepEqual(kept, keep, `${table} ${before.id}: identity, start and row_version unchanged`);
+    };
+    for (const [table, endColumn] of [['child_ea_assignments', 'unassigned_at'], ['child_programme_enrollments', 'ended_at'],
+      ['child_class_memberships', 'exited_at'], ['child_group_memberships', 'removed_at']]) {
+      assert.equal(r1After[table].length, r1Before[table].length, `${table}: no row added`);
+      r1Before[table].forEach((row, index) => sameRow(table, row, r1After[table][index], endColumn));
+    }
+    assert.deepEqual(r1After.session_attendees, r1Lesson, 'attendance untouched');
+    assert.equal(lessonRow(), r1Session, 'session untouched');
+    pass('restore-sole-holder-reopens-everything-in-place');
+
+    // X has the child back: write access, an edit, and a new lesson.
+    assert.deepEqual([canWrite(RX, R1), eaEditsChild(RX, R1)], ['t', '1']);
+    recordLesson(RX, rid('e1', 2), rid('e2', 2), R1, G1, '2026-10-29');
+    pass('restore-ea-can-record-a-lesson-again');
+
+    // The daily invariant check has nothing to say about the restored child.
+    const hits = invariantRows(databaseUrl, '', 'invariants-after-restore');
+    assert.deepEqual(hits.filter(hit => hit.entity_id === R1 || JSON.stringify(hit.detail ?? {}).includes(R1)), []);
+    pass('restore-invariants-report-nothing-for-the-restored-child');
+
+    // Case 6 continued: rerun after apply (or after a lost response) is a no-op success.
+    const beforeRerun = digest();
+    const rerun = ok(cli([...restore(R_EMAIL.X, R1), '--apply']), 'restore-rerun');
+    assert.ok(rerun.confirmed);
+    assert.deepEqual(kinds(rerun.applied.actions), ['already_active:child_ea_assignments']);
+    assert.equal(digest(), beforeRerun, 'the rerun changed something');
+    pass('restore-rerun-is-a-no-op-success');
+
+    // ---- Case 2: co-held, X's Delete child is a leave; restore gives X back only X's rows.
+    serverDeleteChild(RX, R2);
+    const r2Removed = ends(R2);
+    const t2 = r2Removed.rows[restoreDet(RX, R2)].end;
+    assert.ok(t2);
+    assert.equal(r2Removed.archived.archived_at, null, 'a co-held child is never archived');
+    assert.equal(r2Removed.rows[groupMembership(2, 1)].end, t2, "X's group membership removed");
+    for (const rowId of [restoreDet(RY, R2), enrolment(2), classMembership(2), groupMembership(2, 2)]) {
+      assert.equal(r2Removed.rows[rowId].end, null, `${rowId} untouched by the leave`);
+    }
+    const r2Before = childRows(R2);
+    // Group B's class KB holds no membership of R2: only the "class of a group" arm locks it.
+    const applied2 = underHeldLock('classes', RKB, restore(R_EMAIL.X, R2), 'restore-co-held');
+    pass('restore-waits-for-the-class-of-a-group-membership-it-reopens');
+    assert.ok(applied2.confirmed);
+    assert.deepEqual(reopened(applied2.applied.actions), [restoreDet(RX, R2), groupMembership(2, 1)].sort());
+    assert.ok(!applied2.applied.actions.some(action => action.action === 'unarchive'));
+    const r2After = childRows(R2);
+    assert.deepEqual(r2After.children, r2Before.children, 'the child row is untouched');
+    const r2Ends = ends(R2);
+    for (const rowId of [restoreDet(RX, R2), restoreDet(RY, R2), enrolment(2), classMembership(2), groupMembership(2, 1), groupMembership(2, 2)]) {
+      assert.equal(r2Ends.rows[rowId].end, null, `${rowId} open after restore`);
+    }
+    for (const table of ['child_programme_enrollments', 'child_class_memberships']) {
+      assert.deepEqual(r2After[table], r2Before[table], `${table} untouched`);
+    }
+    assert.deepEqual(r2After.child_ea_assignments.find(row => row.user_id === RY),
+      r2Before.child_ea_assignments.find(row => row.user_id === RY), "the co-holder's assignment untouched");
+    assert.deepEqual(r2After.child_group_memberships.find(row => row.id === groupMembership(2, 2)),
+      r2Before.child_group_memberships.find(row => row.id === groupMembership(2, 2)), "the co-holder's group membership untouched");
+    pass('restore-co-held-gives-back-only-the-eas-own-rows');
+
+    // ---- Case 3: the 1.5.0 phone's archiveChild chain by the sole holder -> restore.
+    const t3 = sqlNowMinus(10);
+    phoneArchive(RX, 'children', R3, { archived_at: t3, row_version: 2 });
+    phoneArchive(RX, 'child_programme_enrollments', enrolment(3), { ended_at: t3, row_version: 3 });
+    phoneArchive(RX, 'child_class_memberships', classMembership(3), { exited_at: t3, row_version: 2 });
+    phoneArchive(RX, 'child_group_memberships', groupMembership(3, 1), { removed_at: t3, row_version: 2 });
+    // One request in the chain landed with a fast phone clock: the end guard clamps it to the
+    // server's now, so it is not at T (a near miss, listed and left ended).
+    phoneArchive(RX, 'child_group_memberships', groupMembership(3, 2), { removed_at: '2099-01-01T00:00:00+00:00', row_version: 2 });
+    phoneArchive(RX, 'child_ea_assignments', restoreDet(RX, R3), { unassigned_at: t3, row_version: 4 });
+    const r3Removed = ends(R3);
+    assert.deepEqual([r3Removed.archived.archived_at, r3Removed.archived.archived_by_user_id, r3Removed.archived.archive_reason],
+      [t3, RX, null], 'the phone archive applied for the sole holder');
+    for (const rowId of [restoreDet(RX, R3), enrolment(3), classMembership(3), groupMembership(3, 1)]) {
+      assert.equal(r3Removed.rows[rowId].end, t3, `${rowId} ended at the phone time`);
+    }
+    assert.notEqual(r3Removed.rows[groupMembership(3, 2)].end, t3);
+    const applied3 = underHeldLock('groups', G1, restore(R_EMAIL.X, R3), 'restore-phone-archive');
+    pass('restore-waits-for-a-group-whose-membership-it-reopens');
+    assert.ok(applied3.confirmed);
+    assert.deepEqual(reopened(applied3.applied.actions),
+      [restoreDet(RX, R3), enrolment(3), classMembership(3), groupMembership(3, 1)].sort());
+    const nearMiss = applied3.applied.notes.find(note => note.code === 'near_miss_not_reopened');
+    assert.deepEqual(nearMiss?.rows.map(entry => [entry.table, entry.id]), [['child_group_memberships', groupMembership(3, 2)]]);
+    assert.ok(nearMiss.rows[0].seconds_from_t > 0 && nearMiss.rows[0].seconds_from_t < 3600);
+    const r3Ends = ends(R3);
+    assert.deepEqual([r3Ends.archived.archived_at, r3Ends.archived.archived_by_user_id, r3Ends.archived.row_version], [null, null, 2]);
+    for (const rowId of [restoreDet(RX, R3), enrolment(3), classMembership(3), groupMembership(3, 1)]) {
+      assert.equal(r3Ends.rows[rowId].end, null, `${rowId} reopened`);
+      assert.equal(r3Ends.rows[rowId].row_version, r3Removed.rows[rowId].row_version, `${rowId} row_version kept`);
+    }
+    assert.equal(r3Ends.rows[groupMembership(3, 2)].end, r3Removed.rows[groupMembership(3, 2)].end, 'the near miss stays ended');
+    pass('restore-after-a-1-5-0-phone-archive-reopens-everything-ended-at-t');
+
+    // ---- Case 4: the archive is another EA's -> refused; restore that EA first, then X.
+    serverDeleteChild(RX, R4); // leave: Y still holds
+    serverDeleteChild(RY, R4); // last holder: archives for everyone
+    const r4Removed = ends(R4);
+    assert.equal(r4Removed.archived.archived_by_user_id, RY);
+    const beforeRefusal = digest();
+    for (const argv of [restore(R_EMAIL.X, R4), [...restore(R_EMAIL.X, R4), '--apply']]) {
+      const refused = cli(argv);
+      assert.match(refused.error?.message ?? '', /refused: archived_by_another_ea/);
+      const refusal = refused.plan.refusals.find(entry => entry.code === 'archived_by_another_ea');
+      assert.equal(refusal.archived_by_user_id, RY);
+      assert.ok(refused.calls.every(input => !/\bCOMMIT\b/.test(input)));
+    }
+    assert.equal(digest(), beforeRefusal);
+    pass('restore-refuses-another-eas-archive-and-changes-nothing');
+    assert.ok(ok(cli([...restore(R_EMAIL.Y, R4), '--apply']), 'restore-y').confirmed);
+    let r4Ends = ends(R4);
+    assert.equal(r4Ends.archived.archived_at, null);
+    for (const rowId of [restoreDet(RY, R4), enrolment(4), classMembership(4), groupMembership(4, 2)]) {
+      assert.equal(r4Ends.rows[rowId].end, null, `${rowId} back with Y`);
+    }
+    assert.equal(r4Ends.rows[restoreDet(RX, R4)].end, r4Removed.rows[restoreDet(RX, R4)].end, "X's rows wait for X's own restore");
+    assert.equal(r4Ends.rows[groupMembership(4, 1)].end, r4Removed.rows[groupMembership(4, 1)].end);
+    // R4 is live now, so nothing restore writes touches the child row: only its own child-row
+    // lock makes apply wait. The server's Delete child and a phone's child archive lock that row
+    // first, so a restore never interleaves with a removal still landing.
+    assert.ok(underHeldLock('children', R4, restore(R_EMAIL.X, R4), 'restore-x-after-y').confirmed);
+    pass('restore-waits-for-the-child-row-lock');
+    r4Ends = ends(R4);
+    assert.deepEqual([r4Ends.rows[restoreDet(RX, R4)].end, r4Ends.rows[groupMembership(4, 1)].end], [null, null]);
+    pass('restore-the-archiving-ea-first-then-the-earlier-leaver');
+
+    // ---- Case 5: an earlier removal stays; archived group and class are skipped with a note.
+    sql(`UPDATE public.child_group_memberships SET removed_at = TIMESTAMPTZ '2026-10-01T08:00:00+02:00' WHERE id = '${groupMembership(5, 2)}';`, 'r5-earlier');
+    serverDeleteChild(RX, R5);
+    const t5 = ends(R5).archived.archived_at;
+    sql(`UPDATE public.groups SET archived_at = now() WHERE id = '${G5A}';
+      UPDATE public.classes SET archived_at = now() WHERE id = '${RK5}';
+      UPDATE public.child_group_memberships SET removed_at = TIMESTAMPTZ '${t5}' - interval '5 minutes' WHERE id = '${groupMembership(5, 4)}';`,
+    'r5-after-removal');
+    const r5Removed = ends(R5);
+    const dry5 = ok(cli(restore(R_EMAIL.X, R5)), 'restore-r5-dry-run');
+    assert.deepEqual(dry5.plan.notes.map(note => note.code).sort(),
+      ['class_archived_skipped', 'group_archived_skipped', 'near_miss_not_reopened']);
+    assert.equal(dry5.plan.notes.find(note => note.code === 'group_archived_skipped').id, groupMembership(5, 3));
+    assert.equal(dry5.plan.notes.find(note => note.code === 'class_archived_skipped').id, classMembership(5, 1));
+    assert.deepEqual(dry5.plan.notes.find(note => note.code === 'near_miss_not_reopened').rows.map(entry => [entry.id, entry.seconds_from_t]),
+      [[groupMembership(5, 4), -300]]);
+    const applied5 = ok(cli([...restore(R_EMAIL.X, R5), '--apply']), 'restore-r5');
+    assert.ok(applied5.confirmed);
+    assert.deepEqual(reopened(applied5.applied.actions), [restoreDet(RX, R5), enrolment(5), classMembership(5), groupMembership(5, 1)].sort());
+    const r5Ends = ends(R5);
+    for (const rowId of [groupMembership(5, 2), groupMembership(5, 3), groupMembership(5, 4), classMembership(5, 1)]) {
+      assert.equal(r5Ends.rows[rowId].end, r5Removed.rows[rowId].end, `${rowId} stays ended`);
+    }
+    assert.equal(r5Ends.archived.archived_at, null);
+    pass('restore-leaves-other-instants-and-skips-archived-groups-and-classes');
+
+    // ---- Case 7: reopening would break an active-row unique index -> refused, nothing changed.
+    serverDeleteChild(RX, R7); // leave: Y still holds; X's group 7A membership ends
+    sql(`INSERT INTO public.child_group_memberships (id, child_id, group_id, grouping_version_id, joined_at)
+      VALUES ('${groupMembership(7, 2)}', '${R7}', '${G7B}', '${V7}', now());`, 'r7-regrouped');
+    const beforeConflict = digest();
+    const conflict = cli([...restore(R_EMAIL.X, R7), '--apply']);
+    assert.match(conflict.error?.message ?? '', /refused: active_row_conflict/);
+    assert.deepEqual(conflict.plan.refusals.map(entry => [entry.code, entry.table, entry.id, entry.conflicting_id]),
+      [['active_row_conflict', 'child_group_memberships', groupMembership(7, 1), groupMembership(7, 2)]]);
+    assert.ok(conflict.calls.every(input => !/\bCOMMIT\b/.test(input)));
+    assert.equal(digest(), beforeConflict);
+    pass('restore-refuses-a-unique-index-conflict-and-changes-nothing');
+
+    // ---- Other refusals change nothing and never reach a COMMIT.
+    const beforeOther = digest();
+    for (const [label, argv, message] of [
+      ['never-held', restore(R_EMAIL.N, R1), /refused: ea_never_held_child/],
+      ['child-not-found', restore(R_EMAIL.X, R_MISSING), /refused: child_not_found/],
+      ['suspended-ea', restore(R_EMAIL.S, R1), /suspended/],
+      ['unknown-email', restore('nobody@example.test', R1), /No Auth user matches/],
+    ]) {
+      const result = cli([...argv, '--apply']);
+      assert.match(result.error?.message ?? '', message, label);
+      assert.ok(result.calls.every(input => !/\bCOMMIT\b/.test(input)), `${label} reached an apply`);
+      pass(`restore-refuse-${label}`);
+    }
+    assert.equal(digest(), beforeOther);
+    pass('restore-refusals-change-nothing');
+  } finally {
+    cli.cleanup();
+  }
+};
+
 const main = () => {
   const databaseName = process.env.HISTORY_RLS_DATABASE_NAME && `${process.env.HISTORY_RLS_DATABASE_NAME}_ho_lifecycle`;
   const adminUrl = assertDisposableAdminTarget({
@@ -497,14 +946,24 @@ const main = () => {
   runPsql({ databaseUrl: adminDatabaseUrl, sql: `CREATE DATABASE ${quotedDatabase};`, label: 'create-database' });
   try {
     runPsql({ databaseUrl, sql: bootstrapSql, label: 'bootstrap' });
-    const migrations = fs.readdirSync(MIGRATIONS_DIR).filter(name => name.endsWith('.sql')).sort();
-    for (const filename of migrations) {
-      runPsql({ databaseUrl, file: path.join(MIGRATIONS_DIR, filename), label: `migration-${filename}` });
+    const migrations = collectMigrations();
+    for (const { name, file } of migrations) {
+      runPsql({ databaseUrl, file, label: `migration-${name}` });
     }
     const summary = {};
     runInvariantCases(databaseUrl, summary);
     runCommandCases(databaseUrl, summary);
-    process.stdout.write(`${JSON.stringify({ migrations: migrations.length, latestMigration: migrations.at(-1),
+    // restore child undoes the server batch's removal paths, so its cases need that batch. Until
+    // it is merged they run only with HO_LIFECYCLE_EXTRA_MIGRATIONS_DIR; the skip is reported.
+    const restoreCases = serverBatchApplied(databaseUrl);
+    if (restoreCases) {
+      runRestoreCases(databaseUrl, summary);
+    } else {
+      process.stderr.write('restore child cases SKIPPED: the server lifecycle batch (20261105120000-120300) is not in the migration set\n');
+    }
+    process.stdout.write(`${JSON.stringify({ migrations: migrations.length, latestMigration: migrations.at(-1).name,
+      extraMigrations: migrations.filter(({ file }) => path.dirname(file) !== MIGRATIONS_DIR).map(({ name }) => name),
+      restoreCases: restoreCases ? 'ran' : 'skipped (server lifecycle batch not applied)',
       checks: Object.keys(summary).length, results: summary })}\n`);
   } finally {
     runPsql({ databaseUrl: adminDatabaseUrl, sql: `DROP DATABASE IF EXISTS ${quotedDatabase} WITH (FORCE);`, label: 'drop-database' });
