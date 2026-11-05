@@ -10256,3 +10256,22 @@ the merge's own `merge-tree` into HEAD, and its walk.
   - #154 stays open until the Head Office script's first live use.
   - Docs updated: the interim field rules, the contract map, and the ROADMAP.
   - Status comments posted on #153–#158.
+
+### 2026-11-05 — isiXhosa draft content v4: book 3 is "Molo, mama!" (`feat/xh-content-v4`)
+
+- **Why:** Jim found book 3, "Ukulala", confusing: its joke played *kulula* ("it's easy") against the title
+  *ukulala* ("to sleep"), one vowel apart. He picked a new story from a fresh stories run, approved the
+  round-2 pictures of all six books, and the books repo released `isixhosa-draft-content-v4.json`
+  (books #2 and #3, built from 4665444, sha256 `5463646c…d328`).
+- **Change:** v4 is vendored unchanged and is now the current release for `isixhosa-order-2026-10-23`.
+  v3 stays bundled because lesson drafts saved today may name it; a new test row pins that a v3 draft
+  still resolves to v3. Compared with v3, only `readers`/`reader_details` for `xh-int-v1-r03` (and the id
+  and `generated_from`) differ; the word bank, blends and steps are identical.
+- **Behaviour change, recorded in `lessonPlanEngine.realPacks`:** the new book 3 uses step-1 letters only,
+  so the book rule (the highest-step readable book) suggests it first to a new step-1 group, ahead of
+  "Molo, Lolo!". In practice the series now has three books readable from step 1 and one k/u book at step 2.
+- **Verification:** `npx jest` (Node 20.19.4): 8588 of 8589 passed; the one failure,
+  `EditChildScreen › stays on the form when local child update fails`, passes alone (23/23, twice): the
+  known timing failure under a full parallel run.
+- **Not published.** No OTA was made from this branch; publishing stays with `npm run ota:publish` and its
+  rollback guard, after merge.

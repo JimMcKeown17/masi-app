@@ -65,7 +65,9 @@ test('isiXhosa all letters known: nothing needs a sound step', () => {
     for (const item of tier.pool) expect(analyzeToken(item.text, pack).step).toBeLessThanOrEqual(12);
 });
 test.each([
-  ['xh', ['o', 'm', 'l', 'a'], ['la', 'mo', 'ma', 'lo'], 'xh-int-v1-r01', true],
+  // v4's book 3 ("Molo, mama!", step 2) uses step-1 letters only, so it is the highest-step book a
+  // new group can read and comes first.
+  ['xh', ['o', 'm', 'l', 'a'], ['la', 'mo', 'ma', 'lo'], 'xh-int-v1-r03', true],
   ['en', ['s', 'a', 'n', 'd'], ['as', 'ad', 'an'], null, false],
   ['af', ['a', 'e', 'k', 'n'], ['ne', 'na', 'ka', 'ke'], null, false],
 ])('%s release pack (draft content): first session suggests step-1 letters, blends and any book',
