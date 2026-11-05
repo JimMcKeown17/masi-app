@@ -410,3 +410,56 @@ test('a relationship INSERT refused before the removal and stamped REMOVED_WITH_
   expect(await myChildren()).toEqual([C]);
   expect(await groupsOf(C)).toEqual([]);
 });
+
+// A phone whose clock ran ahead when the EA added the child to the group, then was corrected by
+// network time before the removal was acknowledged: the refused membership starts after the
+// acknowledgement. Ending it at the acknowledgement time would break the phone's end-not-before-
+// start rule and undo the whole acknowledgement, so it ends at its own start, as the server's
+// rule 1 does (end := greatest(end, start)). The removal is acknowledged once and never sent again,
+// so a restore sticks.
+test('a refused relationship INSERT that starts after the acknowledgement (phone clock was ahead): the removal is acknowledged once and a restore sticks', async () => {
+  await repos.localState.set('support_auto_bundle_last_at', '2099-01-01T00:00:00.000Z');
+  await seedBoth([...baseRows(), ...serverChildRows(C)]);
+  await pull();
+  const realNow = Date.now();
+  jest.setSystemTime(realNow + 6 * 3600 * 1000);
+  await repos.groups.addChildToGroup({ id: MEMBERSHIP, child_id: C, group_id: GROUP, created_by: USER, synced: false });
+  const [{ joined_at: joinedAt }] = await read('select joined_at from child_group_memberships where id = ?', MEMBERSHIP);
+  jest.setSystemTime(realNow + 1000);
+  expect(await repos.children.removeChild(C)).toBe(true);
+  tick();
+  let refusedOnce = false;
+  server.state.refuse = ({ method, target }) => {
+    if (method === 'POST' && target === 'child_group_memberships' && !refusedOnce) {
+      refusedOnce = true;
+      return { status: 403, code: '42501', message: 'new row violates row-level security policy for table "child_group_memberships"' };
+    }
+    if (target === 'rpc/report_mobile_support_incident_v2') {
+      return { status: 503, code: '54000', message: 'Incident receipt allowance exhausted' };
+    }
+    return null;
+  };
+  await syncPasses([false, false, false, false]);
+
+  const removals = () => server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'));
+  expect(removals()).toEqual([`rpc/delete_child_if_no_history:${C} -> ok`]);
+  expect((await outbox()).map(row => `${row.table_name}:${row.operation}:${row.status}:${row.error_code}`)).toEqual([
+    'child_group_memberships:insert:terminal:REMOVED_WITH_CHILD',
+  ]);
+  expect(await read('select removed_at from child_group_memberships where id = ?', MEMBERSHIP))
+    .toEqual([{ removed_at: joinedAt }]);
+  expect(server.t('children').get(C).archive_reason).toBe('removed_by_ea');
+
+  expect(server.restoreChild({ eaUserId: USER, childId: C })).toMatchObject({ outcome: 'restored' });
+  tick();
+  await pull();
+  expect(await myChildren()).toEqual([C]);
+  expect(await groupsOf(C)).toEqual([]);
+  // The restore sticks: no later sync sends the removal again.
+  await syncPasses([false, true]);
+  expect(removals()).toHaveLength(1);
+  expect(server.t('children').get(C).archived_at ?? null).toBeNull();
+  expect(serverOpen('child_ea_assignments', 'unassigned_at').map(row => row.user_id)).toEqual([USER]);
+  await pull();
+  expect(await myChildren()).toEqual([C]);
+});

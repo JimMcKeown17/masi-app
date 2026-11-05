@@ -901,6 +901,16 @@ const NOT_APPLIED_CODES = "('UPDATE_NOT_APPLIED', 'ARCHIVE_NOT_APPLIED', 'RESTOR
 // child Head Office later restores would show this EA a membership or grant the server never
 // accepted. Ending changes only the local row: the outbox payload, and so the delivered-receipt
 // exit, is untouched, and a server row under the same id still replaces it on the next pull.
+// The end never precedes the row's start (the local CHECKs, and the server guard's rule 1:
+// end := greatest(end, start)). A row made while the phone's clock ran ahead can start after the
+// acknowledgement; ending it then would fail the CHECK, undo the whole acknowledgement and send
+// the Delete child again on every pass, re-removing a child Head Office restored meanwhile.
+const RELATIONSHIP_START_COLUMNS = {
+  child_ea_assignments: 'assigned_at',
+  child_programme_enrollments: 'enrolled_at',
+  child_class_memberships: 'enrolled_at',
+  child_group_memberships: 'joined_at',
+};
 const stampRefusalsRemovedWithChild = async (txn, outboxRecord, tableName) => {
   if (outboxRecord.operation !== 'hard_delete' || tableName !== 'children') return;
   const at = timestamp();
@@ -913,7 +923,8 @@ const stampRefusalsRemovedWithChild = async (txn, outboxRecord, tableName) => {
     at, ...familyParams);
   for (const row of refused) {
     const endColumn = quoteIdentifier(ARCHIVE_SERVER_COLUMNS[row.table_name][0]);
-    await txn.runAsync(`update ${quoteIdentifier(row.table_name)} set ${endColumn} = ?, updated_at = ?
+    const startColumn = quoteIdentifier(RELATIONSHIP_START_COLUMNS[row.table_name]);
+    await txn.runAsync(`update ${quoteIdentifier(row.table_name)} set ${endColumn} = max(?, ${startColumn}), updated_at = ?
       where id = ? and ${endColumn} is null`, at, at, row.record_id);
   }
 };
