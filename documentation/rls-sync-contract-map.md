@@ -19,7 +19,7 @@ authenticated-denial prefix continues to exclude genuine denials.
 - Historical migrations: `supabase-migrations/` is old-backend reference only
 - Sync engine: `src/services/offlineSync.js`
 - Local write boundary: repository methods under `src/db/repositories/`
-- Durable queue: `sync_outbox`; local-only `owner_user_id` is never included in server payloads. Every enqueue stamps the signed-in EA from the connection-to-actor WeakMap, including transaction facades. Record provenance (`created_by`, domain `user_id`) never determines the mutation owner. Missing actors fail before the outbox write; SQLite v12 (`sync_outbox_owner_required`) also rejects raw inserts with a NULL owner. Existing rows and indexes are preserved. Owner-scoped readiness, pending hard-delete, and reset queries use strict equality with no NULL wildcard; omitting the owner scope remains file-wide. Legacy NULL-owner rows (queued before v12) are adopted for the file owner by the integrity scan, never left stranded (see "Signed-in EA handle"). `getSyncStatus()` always counts the whole file. `countUnsent()` returns `{ total, byTable }` across `pending`, `failed`, `in_flight`, and `terminal`, including foreign/NULL-owned work so it cannot disappear from status. It delegates to `readUnsentSummary(db)`, the single `UNSENT_STATUSES` definition used for file-wide summaries. The standalone reader also returns `oldestId` / `oldestCreatedAt` (null for an empty outbox), ordered by `(created_at, id)`, and accepts raw read-only connections without opening or migrating a database.
+- Durable queue: `sync_outbox`; local-only `owner_user_id` is never included in server payloads. Every enqueue stamps the signed-in EA from the connection-to-actor WeakMap, including transaction facades. Record provenance (`created_by`, domain `user_id`) never determines the mutation owner. Missing actors fail before the outbox write; SQLite v12 (`sync_outbox_owner_required`) also rejects raw inserts with a NULL owner. Existing rows and indexes are preserved. Owner-scoped readiness, pending hard-delete, and reset queries use strict equality with no NULL wildcard; omitting the owner scope remains file-wide. Legacy NULL-owner rows (queued before v12) are adopted for the file owner by the integrity scan, never left stranded (see "Signed-in EA handle"). `getSyncStatus()` always counts the whole file. `countUnsent()` returns `{ total, byTable, needsAttention }` across `pending`, `failed`, `in_flight`, and `terminal`, including foreign/NULL-owned work so it cannot disappear from status; `needsAttention` is the `terminal` share of the same rows, so the sign-out sheet promises an upload only for the rest (lifecycle safety O1, MA-BUG-20261104-020). It delegates to `readUnsentSummary(db)`, the single `UNSENT_STATUSES` definition used for file-wide summaries. The standalone reader also returns `oldestId` / `oldestCreatedAt` (null for an empty outbox), ordered by `(created_at, id)`, and accepts raw read-only connections without opening or migrating a database.
 - Server payload allowlist: `SERVER_COLUMNS` in `src/services/offlineSync.js`
 - Insert order: `PUSH_ORDER` in `src/services/offlineSync.js`
 - Archive order: `ARCHIVE_PUSH_ORDER` plus `ARCHIVE_TABLE_DEPENDENCIES` in `src/services/offlineSync.js`
@@ -209,7 +209,7 @@ Before a mobile session-history pull can ship:
 7. Reference/admin tables are pulled from the server and are not mobile-writable through app-role DML.
 8. Server pulls must not overwrite pending local rows (pending-local-wins, issue #42 / ZZ F7). See "Pull Persistence & Reconcile" below.
 9. Sync auth state is part of the RLS contract (issues #43/#44). A sync pass with no Supabase session must return a structured skip (`{ success: true, skippedNoSession: true }`) before touching the outbox or sync metadata. A terminal `42501` recorded while a live session exists must store `last_error` with the `42501-authenticated:` prefix and must never be auto-healed. Unmarked RLS-terminal rows are treated as auth-loss collateral: when auth is restored through `SIGNED_IN`, `TOKEN_REFRESHED`, or sessionful `INITIAL_SESSION`, the engine requeues only rows owned by the signed-in user, and the outbox requeue plus domain `sync_status = 'pending'` reset happen in one SQLite transaction. See "Auth-Restore RLS Heal" below.
-10. Error classification is local-state-only and bounded for the classes it models (issue #48 plus audit finding #6). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is immediately terminal with reason `Immutable identity or check constraint rejected the update (23514)`; inserts already avoid it via `ignoreDuplicates`, and archive patches contain lifecycle fields plus the claimed version, so this remains a guard for other update-like paths or server check drift. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR an RLS assignment grant is pending locally, terminal otherwise. Mastery corrections use direct child delivery assignment evidence only, matching their RPC authority; they never use class/group membership-mediated grants. For other tables, grant evidence covers a direct active, unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject and the membership-mediated child arms of `private.current_user_can_write_for_child`: an active class/group membership joined to its active assignment counts while either half is `pending`/`failed`/`in_flight`, provided neither half is terminal. The `child_class_memberships` or `child_group_memberships` row currently being inserted is excluded from this query because an INSERT cannot grant its own prerequisite authority; a different pending membership path still counts. `computeEvidencePending` resolves the runtime connection once through `resolveDatabase`, then uses that resolved handle for domain-row, direct-assignment, and membership-mediated reads, including the production engine where no database is injected. Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. `UPDATE_NOT_APPLIED` uses the same grant evidence and is also retriable while the record's exact insert operation remains owed (`hasPendingOperation`); it is terminal when none of those evidence paths is pending. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. The deterministic class `PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514` is retriable for attempts 1 through 7; attempt 8 becomes terminal with `retry_count = 8` and a `deterministic:` reason. `ARCHIVE_NOT_APPLIED` is terminal immediately because the server did not return the one exact updated id required to finalize the lifecycle transition. Codeless network/timeout errors remain retriable without an attempt cap. Force "Sync Now" includes terminal rows, so a repaired server condition can resurrect and finalize them. See "Error Classification" below.
+10. Error classification is local-state-only and bounded for the classes it models (issue #48 plus audit finding #6). `23514` from the immutable-assignment identity triggers (`child_ea_assignments`, `class_ea_assignments`, `group_ea_assignments`) is immediately terminal with reason `Immutable identity or check constraint rejected the update (23514)`; inserts already avoid it via `ignoreDuplicates`, and archive patches contain lifecycle fields plus the claimed version, so this remains a guard for other update-like paths or server check drift. `23503` is retriable while the FK parent has a `pending`/`failed`/`in_flight` `sync_outbox` row (`hasPendingRecord`), terminal otherwise. `42501` is retriable while the FK parent OR an RLS assignment grant is pending locally, terminal otherwise. Mastery corrections use direct child delivery assignment evidence only, matching their RPC authority; they never use class/group membership-mediated grants. For other tables, grant evidence covers a direct active, unsynced `child_ea_assignments`/`class_ea_assignments`/`group_ea_assignments` row for the record's subject and the membership-mediated child arms of `private.current_user_can_write_for_child`: an active class/group membership joined to its active assignment counts while either half is `pending`/`failed`/`in_flight`, provided neither half is terminal. The `child_class_memberships` or `child_group_memberships` row currently being inserted is excluded from this query because an INSERT cannot grant its own prerequisite authority; a different pending membership path still counts. `computeEvidencePending` resolves the runtime connection once through `resolveDatabase`, then uses that resolved handle for domain-row, direct-assignment, and membership-mediated reads, including the production engine where no database is injected. Subject and FK values resolve from the outbox payload first and the record's own local domain row second, so archive/update payloads still yield evidence. `UPDATE_NOT_APPLIED` uses the same grant evidence and is also retriable while the record's exact insert operation remains owed (`hasPendingOperation`); it is terminal when none of those evidence paths is pending. The `42501` no-session downgrade (Item 9) still applies to an otherwise-terminal `42501`. The deterministic class `PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514` is retriable for attempts 1 through 7; attempt 8 becomes terminal with `retry_count = 8` and a `deterministic:` reason. `ARCHIVE_NOT_APPLIED` is terminal immediately because the server did not return the one exact updated id required to finalize the lifecycle transition. Codeless network/timeout errors remain retriable without an attempt cap. A forced pass (Sync now, Retry, pull-to-refresh, sign-out) ignores backoff and re-sends terminal rows only for idempotent history (every `insert`, and the `battery_runs`, `letter_mastery` and `skill_mastery` RPC `update`s) and the children `hard_delete` (`isResendableRefusal`), so a repaired server condition heals them. It never re-sends a terminal archive, restore or edit (lifecycle safety O1, D6); those leave the phone only through the delivered-receipt exit. See "Error Classification" and "Refused rows: forced passes and the delivered-receipt exit" below.
 
     **B2 / C19 exception to Item 10's active-only grants:** only `sessions` and
     `session_attendees` also use `{ heldGroupAssignment: 'group_id' }`. An owed `insert`
@@ -988,8 +988,11 @@ A terminal row always remains eligible to converge to the server copy, even at a
 version. Skipping a pull neither changes the queued payload nor enqueues work.
 
 `MV001` is terminal with reason `Server has a newer version of this record (stale_version)`, never
-marked synced or retried by an ordinary pass; see the error table below. Force Sync Now can retry
-terminal work. A refusal can converge through a subsequent pull for tables that are downloaded.
+marked synced or retried by any pass, forced or not; see the error table below. The server's newer
+version wins (D6, 2026-11-04, which reversed the earlier forced override): the refused edit is kept
+in its delivered `upload_terminal` receipt and the outbox row clears once that receipt holds the
+row's exact revision. The terminal local row converges through a subsequent pull for tables that
+are downloaded.
 
 ### Historical membership guard
 
@@ -1044,13 +1047,12 @@ Home notice. No time-entry download or server-row adoption path is added.
 ### Remaining limits and verification
 
 - `class_grouping_state` has a fixed id and no pull. After reinstall its local version can trail
-  the server and a regroup can become terminal. Forced Sync Now increments it on each retry;
-  revisit this with grouping pulls or a pilot reinstall.
+  the server and a regroup can become terminal. Since lifecycle safety O1 a forced pass no longer
+  pushes the refused regroup through (D6); it clears through its delivered receipt and the server's
+  grouping stays. Revisit this with grouping pulls or a pilot reinstall.
 - A late insert can recreate a hard-deleted child; revisit if Head Office deletes children.
-- After a refused edit is replaced locally by a pull, archiving the record before the forced
-  retry leaves the phone's archived copy with the old content until the next pull: the queued
-  archive owns the row, so the edit's acknowledged write-back is skipped. The server holds the
-  correction. Accepted for the pilot (Codex whole-branch round 2); revisit if seen.
+- (Retired by lifecycle safety O1, 2026-11-04: a refused edit is never retried by a forced pass,
+  so the archive-before-forced-retry write-back gap no longer arises.)
 - `groups` archive ranks ahead of `groups` update. This is latent because `updateGroup` has no
   screen caller; revisit before a group-rename screen ships. Send-time numbering preserves send
   order, not the meaning of an incorrectly ordered queue.
@@ -1075,25 +1077,25 @@ Classification is a pure decision in `classifyError` from `(code, tableName, par
 | `MA001`, `MA002`, `22023`, `UNEXPECTED_RPC_RESULT` | Terminal; assessment/run/correction identity conflict, terminal-status conflict, malformed payload or unknown RPC acknowledgement | none; local shape failures use `22023` before any network call |
 | `23505` | Terminal; never a successful assessment/run/mastery replay | success requires the parsed RPC acknowledgement, never a uniqueness error |
 | `28000` | Retriable | authentication can recover; no terminal acknowledgement |
-| `MV001` | Terminal, never marked synced; reason `Server has a newer version of this record (stale_version)` | none; ordinary passes do not retry it, and the terminal local row can converge through a pull |
+| `MV001` | Terminal, never marked synced; reason `Server has a newer version of this record (stale_version)` | none; no pass retries it (D6), it clears once its delivered receipt holds its exact revision, and the terminal local row converges through a pull |
 | `23514` on `child_ea_assignments` / `class_ea_assignments` / `group_ea_assignments` | Terminal, reason `Immutable identity or check constraint rejected the update (23514)` | none (neither drifted identity nor a check violation is satisfiable by re-push) |
 | `23514` on any other table | Retriable (unchanged, out of #48 scope) | none |
 | `23503` | Retriable while FK parent is pending in the outbox, terminal otherwise | `PARENT_FK_COLUMNS` via `hasPendingRecord` |
 | `42501` (live session) | Retriable while FK parent OR direct/membership-mediated assignment grant is pending; sessions and attendees also count an owed held-group assignment insert, ended or not. Otherwise terminal with the `42501-authenticated:` marker | `PARENT_FK_COLUMNS` + `GRANT_SUBJECTS`; membership-mediated evidence requires an active membership/assignment pair, either half unacknowledged, neither half terminal, excluding the membership row currently being uploaded. Held-group evidence joins a nonterminal owed `insert` for the group to this signed-in EA's assignment via outbox `owner_user_id`; archive alone does not count; mastery uses only the direct child assignment arm |
 | `42501` (no session) | Retriable, unmarked (Item 9) | n/a |
 | `UPDATE_NOT_APPLIED` | Retriable while the record's own insert OR direct/membership-mediated assignment grant is pending; sessions and attendees also count an owed insert of this EA's group assignment, ended or not. Terminal otherwise | exact `insert` via `hasPendingOperation` + `GRANT_SUBJECTS`, including the EA-scoped, nonterminal held-group insert evidence above |
-| `ARCHIVE_NOT_APPLIED` | Terminal; the server returned no exact updated-row acknowledgment | returned id set from `update(...).select('id')` |
-| `RESTORE_NOT_APPLIED` | Terminal; the server returned no exact updated-row acknowledgment for a lifecycle restore | returned id set from `update(...).select('id')` |
+| `ARCHIVE_NOT_APPLIED` | Terminal; the server returned no exact updated-row acknowledgment. Never re-sent; clears once its delivered receipt holds its exact revision (O1) | returned id set from `update(...).select('id')` |
+| `RESTORE_NOT_APPLIED` | Terminal; the server returned no exact updated-row acknowledgment for a lifecycle restore. Never re-sent; clears once its delivered receipt holds its exact revision (O1) | returned id set from `update(...).select('id')` |
 | `PGRST204`, `42703`, `22P02`, `23502`, non-immutable `23514` | Retriable for attempts 1-7; terminal on attempt 8 with `deterministic:` prefix and `retry_count = 8` | persisted outbox `retry_count` |
 | Codeless network/timeout error | Retriable without an attempt cap | none |
 
 Known limitations:
-- Deterministic server errors (`PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514`) have an 8-attempt local budget. Attempts 1-7 use the existing capped exponential backoff; attempt 8 becomes needs-attention with a `deterministic:` reason. A forced Sync Now pass includes the terminal row and can recover it after the server condition is repaired. Codeless network/timeout failures remain retriable indefinitely by design.
+- Deterministic server errors (`PGRST204`, `42703`, `22P02`, `23502`, and non-immutable-table `23514`) have an 8-attempt local budget. Attempts 1-7 use the existing capped exponential backoff; attempt 8 becomes needs-attention with a `deterministic:` reason. A forced pass re-sends the terminal row and can recover it after the server condition is repaired only when it is resendable history (an insert or a history RPC); a deterministic terminal archive, restore or edit leaves through the delivered-receipt exit instead (O1). Codeless network/timeout failures remain retriable indefinitely by design.
 - `staff_programme_assignments` grants are not device-produced (never pushed), so a `42501` that needs one stays terminal, which is correct: a real programme-assignment denial.
-- A parent or grant that heals through the Item 9 auth-restore after its child was already stamped terminal does not auto-rescue the child (identical to pre-#48 behavior); force "Sync Now" (`includeTerminal`) resurrects the chain.
+- A parent or grant that heals through the Item 9 auth-restore after its child was already stamped terminal does not auto-rescue the child (identical to pre-#48 behavior); a forced pass (`includeTerminal`) resurrects the chain's inserts and history RPCs, never its archives, restores or edits (O1).
 - Non-immutable-table `23514` follows the 8-attempt deterministic budget. A CHECK violation on an immutable-assignment table (for example, `unassigned_at >= assigned_at`) remains immediately terminal and shares the identity reason label.
 - Same-record ordering: `findBlockingDependency` defers an acknowledged edit and every lifecycle operation while its own `insert` is owed; it also defers a newer lifecycle intent behind an older in-flight one. The mastery ordering gap is closed by D1: toggles share one correction slot, an older save cannot replace a newer owed correction, and the receipt-backed RPC orders uploads by correction time plus UUID.
-- Legacy per-operation lifecycle rows (`<table>:<record>:archive` / `:restore`) are deferred ahead of the single lifecycle slot, and deleted at enqueue when not in flight, but are not consolidated at startup. No build before `feat/upload-path-correctness` ever queued `restore`, so the only realistic legacy row is a lone `:archive`, which the deferral orders correctly. One narrow residue remains on development devices only: a legacy archive in flight during reactivation that then goes terminal, after which the slot's restore succeeds and a forced Sync Now (`includeTerminal`) replays the terminal archive. Accepted 2026-10-10 because `masi-app-sqlite` has no field users and launch is a clean install; clear development outboxes before field launch rather than ship migration code for development data.
+- Legacy per-operation lifecycle rows (`<table>:<record>:archive` / `:restore`) are deferred ahead of the single lifecycle slot, and deleted at enqueue when not in flight, but are not consolidated at startup. No build before `feat/upload-path-correctness` ever queued `restore`, so the only realistic legacy row is a lone `:archive`, which the deferral orders correctly. One narrow residue remained on development devices only: a legacy archive in flight during reactivation that then goes terminal, after which the slot's restore succeeds and a forced Sync Now replayed the terminal archive. Accepted 2026-10-10; closed by lifecycle safety O1 (2026-11-04), since a forced pass never re-sends a terminal archive.
 - The membership-mediated query does not filter assignments to the signed-in EA, as `hasPendingActiveAssignment` never has. It can keep an edit retrying slightly longer, never drop one. B2's held-group evidence is different: `hasOwedHeldGroupAssignmentInsert` filters to `outboxRecord.owner_user_id` and requires an owed insert, not merely an unsynced domain row; it ignores `unassigned_at` only for sessions and attendees. Other grants remain active-only.
 - Evidence is deliberately local and conservative: a membership-mediated grant counts only when the active membership and active assignment both exist locally, at least one half is unacknowledged, and neither half is terminal. A grant that exists only on the server cannot make a local zero-row result retriable.
 
@@ -1978,6 +1980,73 @@ Spec: `docs/superpowers/specs/2026-10-09-actor-lifecycle-and-mutation-ownership-
 - **Field-release prerequisite (ruling 11).** Sign-out aborts in-flight uploads, so an upload the server already accepted may be re-sent when the EA returns. Identical replay is proven harmless (Task 4 T5). Ordering an uncertain older write against a newer one is owned by the upload-contract spec and must be closed before field release.
 - **Device gates still open:** D1–D7 on the build intended to ship, including D7's native close under load on iOS and Android. Also confirm that `listDatabaseNames` finds the SQLite files on both platforms and visually check both sign-out sheets. Local Jest results do not close these gates.
 
+## Refused rows: forced passes and the delivered-receipt exit
+
+Lifecycle safety O1 (2026-11-04; plan `docs/superpowers/plans/2026-11-04-lifecycle-safety.md`,
+review rounds 1 and 2; D6, D8; MA-BUG-20261104-011, -018, -019, -020, -021). JS-only under
+runtimeVersion 1.5.0: no SQLite migration, table, column or outbox op type.
+
+**Forced passes.** Sync now, Retry, pull-to-refresh and sign-out ignore backoff for owed rows and
+re-send a terminal row only when `isResendableRefusal` holds: every `insert` (an upsert or
+insert-or-ignore), the `battery_runs`, `letter_mastery` and `skill_mastery` RPC `update`s, and the
+children `hard_delete`. `getReadyRecords({ includeTerminal })`, the claim and `retryFailedItem`
+all apply it, so a refused archive, restore or edit can never be claimed again. A refused archive,
+restore or edit is also never registered as an in-pass blocker: it says nothing about whether its
+row exists on the server, and waiting on it would be forever.
+
+**Claim and hand-back (MA-BUG-021).** `markInFlightAndGet` records each claimed row exactly as it
+was (`claimedFromStatus`, `claimedFromUpdatedAt`, `claimedFromPayload`, `claimedFromLastError`) and
+the domain status and version its stamp changes (`claimedDomainStatus`, `claimedDomainVersion`,
+`claimedVersion`). A refused row that is then not attempted (deferred past the fallback budget, a
+user switch, a thrown request, batch or fallback) goes back through `restoreRefusedClaims`
+unchanged, so its delivered receipt still matches: compare-and-set on the claim's `updated_at`,
+and the domain version reverted only from the version this claim stamped. After a claim that
+committed and then threw, only the status comes back; the stamped payload and domain version stay
+equal. A real server answer keeps its normal classification. `markReady`, `markReadyMany` and the stale-finalize
+restore never demote a terminal row. A claim that throws hands back only the rows it left
+`in_flight` (a rolled-back claim changes nothing). A `findBlockingDependency` throw fails only its
+row. Residual: a crash mid-pass leaves claimed refused rows `in_flight`, and the next pass's
+`resetInFlight` makes them `pending`; they are resendable history, so this costs one extra attempt.
+
+**The exact-revision delivered-receipt rule.** A terminal row R may leave the phone only when its
+`upload_terminal` receipt (looked up by `uploadTerminalParts(R)`) is `sent`, is schema 2, and has a
+delivery proof in `local_state` under `delivered_receipt:<incident id>` for its current
+`report_generation`, and that proof names R's id and R's current `updated_at`, has a `wireDigest`
+equal to the digest of `buildSyncPayload` of R as it is now, and `cut = false`. `markSent` writes
+the proof `{ report_generation, outboxId, outboxUpdatedAt, wireDigest, cut }` from the bounded
+`report_snapshot` that was accepted, in the same transaction and before clearing it; `cut` is true
+when any `*Truncated` marker or `wirePayloadError` was in the accepted copy, so a later, smaller
+delivery block cannot re-bound it uncut. The check and the delete share one SQLite transaction
+(`services/deliveredReceipt.js`, `readDeliveredReceipt`).
+- **Deviation from the plan's condition (a):** `has_unsent_changes = 0` is not required. The
+  observer re-records every live receipt on its 15-minute `last_seen_at` refresh, which sets
+  `has_unsent_changes = 1` without any change to the work, so the exit would close 15 minutes after
+  each send. The proof is compared with R itself instead, which is stronger.
+- A sent receipt with no proof for its generation (sent before this update, or a proof that names
+  no outbox row) is sent once more through the existing `promote` path (`promoteUndelivered`, from
+  the observer); that send writes the proof, so it is not repeated.
+- Proof keys leave with their outbox row or receipt: on each exit, on queue eviction, and in a
+  sweep after every pass's drain.
+- A receipt `rejected` (oversize or 22023), a cut proof, or a schema-1 receipt can never prove
+  delivery: the item says "Send diagnostics, then contact support."
+
+**Exits.** After every pass's receipt drain, `resolveDeliveredRefusals` deletes refused archives,
+restores and edits (`ARCHIVE_NOT_APPLIED`, `RESTORE_NOT_APPLIED`, `MV001`, `UPDATE_NOT_APPLIED`,
+or a marked `42501`) whose rule holds: the server wins and the receipt keeps the EA's intent. The
+domain row keeps `sync_status = 'terminal'`, so any later pull converges it whatever its version.
+Every other refusal (history, the children `hard_delete`, other codes, an unmarked `42501` that the
+Item 9 heal may requeue) waits for the EA's "The office has a copy — remove from this phone"
+(`removeDeliveredItem` → `syncOutboxRepository.deleteRecord`), which removes only the stuck
+upload; the local record stays. A `FOREIGN_OWNER` quarantine never leaves.
+`getSyncStatus().needsAttentionItems` carries `outboxId`, `delivery` (`delivered` / `waiting` /
+`support`), `clearsItself`, `canRemove` and `canRetry`; Sync status words them and Home's card can
+be dismissed once every item is `delivered`.
+
+**Known limits.** A refused history row that a forced pass re-sends and the server refuses again
+gets a new `updated_at`, so its exit waits for the next receipt send (the observer's daily
+re-send of a changed receipt, or an update's release change). Tests: `refusedRowExit.test.js`,
+`forcedRefusalHardening.test.js`, `offlineSyncOutbox.test.js`, `rowVersionSend.test.js`.
+
 ## Field diagnostics: immutable receipts and observed incidents
 
 **Authority and evidence boundary (2026-10-29):**
@@ -2049,8 +2118,8 @@ records in the active EA's file only. It never uploads another EA's domain work.
 
 | Kind | Condition parts (before fixed-namespace UUIDv5) | Trigger / evidence contract |
 |---|---|---|
-| `upload_terminal` | table, record_id, operation, outbox created_at, errorClass, errorCode | Each EA-owned terminal row; raw record/wire ids, actual wire payload, lastError, retries and outbox timestamps. A changed class/code is a new condition. |
-| `upload_backlog_stale` | `'backlog'` | Oldest pending/failed row >72 h AND real server response within 24 h; counts by class/table/code, oldest row and ≤10 distinct errors. |
+| `upload_terminal` | table, record_id, operation, outbox created_at, errorClass, errorCode (`uploadTerminalParts`) | Each EA-owned terminal row; raw record/wire ids, its `outboxId` (O1), actual wire payload, lastError, retries and outbox timestamps. A changed class/code is a new condition. Its delivery proof decides the row's exit (see "Refused rows: forced passes and the delivered-receipt exit"). |
+| `upload_backlog_stale` | `'backlog'` | Oldest pending/failed row >24 h (72 h before lifecycle safety O1, lowered for the November 2026 retest) AND real server response within 24 h; counts by class/table/code, oldest row and ≤10 distinct errors. |
 | `reconcile_breaker_tripped` | breaker scope | Durable `pull_reconcile_breaker:` state: scope/family, candidate/would-end counts and time. |
 | `pull_failing` | scopeFamily, failureKind | History failure ≥24 h with no success since; scope, message, age and cursor. Empty outbox does not suppress it. |
 | `app_error_caught` | errorName, normalized-message digest, first component | ErrorBoundary event while a handle is open; raw message, stack, componentStack and components. Without a handle, Sentry only. |

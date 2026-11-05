@@ -8753,3 +8753,64 @@ class resolver. Codex code review (gpt-6-astra): approve; its one finding (the c
 could not tell name order from id order) is fixed by giving the fixture classes names whose order
 opposes their ids. The Django real-Postgres gate (`api/tests_masi_app_postgres.py`) passed against
 the retained harness database, decoding both v2 functions through the new read-only guard.
+
+### 2026-11-04 — Lifecycle safety O1: refused rows resolve and get a lossless exit (`feat/lifecycle-ota-stuck-items`)
+
+Work order 4 of the approved lifecycle-safety plan (`docs/superpowers/plans/2026-11-04-lifecycle-safety.md`,
+O1, both "Corrections adopted" sections, D6, D8). Closes, pending review, merge, OTA and device checks:
+MA-BUG-20261104-011, -018, -019, -020, -021. JS only under runtimeVersion 1.5.0: no SQLite migration,
+table, column or outbox op type. The contract is in `documentation/rls-sync-contract-map.md`,
+"Refused rows: forced passes and the delivered-receipt exit".
+
+**What changed.**
+- Forced passes (Sync now, Retry, pull-to-refresh, sign-out) re-send a refused row only when it is
+  idempotent history (every insert; the battery-run, letter- and skill-mastery RPC updates) or the
+  children `hard_delete` (`isResendableRefusal`). The claim and Retry apply the same rule, so a
+  refused archive, restore or edit can never be sent again (ends the MV001 forced override, D6). A
+  refused lifecycle or edit row no longer holds back its family in the same pass.
+- The exact-revision delivered-receipt rule: `markSent` writes `delivered_receipt:<incident id>` to
+  `local_state` from the accepted bounded snapshot (generation, outbox id, the row's `updated_at`, a
+  wire digest, and whether anything was cut). A refused row leaves only while its receipt is sent and
+  the proof matches the row as it is now, uncut; check and delete share one transaction. Refused
+  archives, restores and edits then clear by themselves after each pass's receipt drain; refused
+  history waits for "The office has a copy — remove from this phone". A receipt sent without a proof
+  is sent once more through `promote`. Proof keys leave with their row or receipt.
+- Needs attention: plain names for every outbox table, no ids or server errors, a per-item "what
+  happens next" line, Retry only for resendable rows, the exit behind a confirm sheet. Home's card can
+  be dismissed once every item has its office copy. The sign-out sheet promises an upload only for
+  waiting work (`countUnsent` now also returns `needsAttention`).
+- Hardening (MA-BUG-021): the claim records each row exactly as it was; a refused row that is then
+  deferred, switched away or thrown is put back unchanged (compare-and-set, domain version reverted
+  only from this claim's stamp). `markReady`, `markReadyMany` and the stale-finalize restore never
+  demote terminal. A claim that throws hands back only rows it left in flight. A dependency check
+  that throws fails only its row.
+- `upload_backlog_stale` at 24 h (was 72 h). The newer-data screen says to contact support instead
+  of sending the EA to an app store with nothing newer after a same-version OTA rollback.
+
+**Decisions and deviations.**
+- **Condition (a) drops `has_unsent_changes = 0`.** The observer re-records every live receipt on its
+  15-minute last-seen refresh, which sets `has_unsent_changes = 1` with no change to the work, so the
+  plan's literal rule would close the exit 15 minutes after each send. The proof is compared with the
+  row itself (id, `updated_at`, wire digest, cut), which is stronger. Pinned by
+  `refusedRowExit.test.js` "a last-seen refresh after delivery keeps the exit".
+- The receipt payload gains `outboxId` (the server accepts any payload object). On the OTA, every
+  live receipt is sent once more anyway (release change), now with its outbox id.
+- After an auto-clear the domain row keeps `sync_status = 'terminal'`, so any later pull converges it
+  whatever its version (a `synced` row would refuse a lower server version).
+- The exit removes only the stuck upload; the EA's local record stays.
+- Added copy for review: "Waiting for the office to get a copy." (online, not yet delivered) and the
+  Home subtitle "The office has a copy". The plan's "Connect to the internet so the office gets a
+  copy." is used offline.
+
+**Known limits.** A refused history row that a forced pass re-sends and the server refuses again
+gets a new revision, so its exit waits for the next receipt send (up to a day). A crash mid-pass
+leaves claimed refused rows in flight and the next pass makes them pending (one extra attempt). A
+schema-1 receipt can never prove delivery ("Send diagnostics, then contact support."). After a
+reinstall a trailing `class_grouping_state` regroup is no longer forced through.
+
+**Verification (Node 20).** RED before GREEN for each slice: the forced-pass contract (the rewritten
+`offlineSyncOutbox` and `rowVersionSend` cases re-sent `update:classes`, `update:children`,
+`update:group_ea_assignments` and returned `totalSynced: 1`), hardening (deferred refused rows came
+back `pending`, thrown ones `failed`), and the exit, display-name, Home, sign-out, 24 h and copy
+tests. Final: unit 519 suites / 8,232 tests passed (`npx jest`); integration 111 suites / 1,536 tests passed
+(`npx jest -c jest.integration.config.js`). No SQL changed, so no PostgreSQL harness was run.
