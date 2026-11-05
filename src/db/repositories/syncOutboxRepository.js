@@ -22,6 +22,7 @@ const toOutboxRecord = (row) => {
 
 const toFailedItem = (row) => ({
   outboxId: row.id,
+  errorCode: row.error_code ?? null,
   table: row.table_name,
   id: row.record_id,
   operation: row.operation,
@@ -51,27 +52,29 @@ export const CHILD_RELATIONSHIP_TABLES = Object.freeze([
 ]);
 const inList = (values) => values.map((value) => `'${value}'`).join(', ');
 
-// Combined-OTA review (2026-11-05): a refused relationship INSERT of a child this EA removed (the
-// removal is queued, or done: archived locally as 'removed_by_ea') is never sent again, by any
-// path, so it can never land after the removal and re-create a grant. It clears under the
-// delivered-receipt rule like a refused lifecycle row. `alias` names the outbox row being judged.
+// Combined-OTA review (2026-11-05): a refused relationship INSERT of a child this EA removed is
+// never sent again, by any path, so it can never land after the removal and re-create a grant. It
+// clears under the delivered-receipt rule like a refused lifecycle row. The mark lives in the
+// outbox, where no pull can reach it: while the children hard_delete is queued its row marks the
+// child, and when the hard_delete is acknowledged the child's refused relationship INSERTs are
+// stamped REMOVED_WITH_CHILD in the same transaction (second review). `alias` names the outbox
+// row being judged.
+export const REMOVED_WITH_CHILD = 'REMOVED_WITH_CHILD';
 export const removedChildRelationshipInsertSql = (alias = 'sync_outbox') => `(${alias}.operation = 'insert'
   and ${alias}.table_name in (${inList(CHILD_RELATIONSHIP_TABLES)})
-  and (exists (select 1 from children removed_child
-        where removed_child.id = json_extract(${alias}.payload, '$.child_id')
-          and removed_child.archive_reason = 'removed_by_ea')
+  and (${alias}.error_code = '${REMOVED_WITH_CHILD}'
     or exists (select 1 from sync_outbox removal
         where removal.table_name = 'children' and removal.operation = 'hard_delete'
           and removal.record_id = json_extract(${alias}.payload, '$.child_id'))))`;
 export const isRemovedChildRelationshipInsert = (row, removedChildIds) => {
   if (row?.operation !== 'insert' || !CHILD_RELATIONSHIP_TABLES.includes(row.table_name)) return false;
+  if (row.error_code === REMOVED_WITH_CHILD) return true;
   const payload = typeof row.payload === 'string' ? decodeJson(row.payload, null) : row.payload;
   return Boolean(payload?.child_id) && removedChildIds.has(payload.child_id);
 };
-// The children this EA removed, for the in-memory form of the rule above.
+// The children whose removal is still queued, for the in-memory form of the rule above.
 export const readRemovedChildIds = async (db) => new Set((await db.getAllAsync(`
-  select id from children where archive_reason = 'removed_by_ea'
-  union select record_id from sync_outbox where table_name = 'children' and operation = 'hard_delete'
+  select record_id as id from sync_outbox where table_name = 'children' and operation = 'hard_delete'
 `)).map((row) => row.id));
 
 export const isResendableRefusal = ({ table_name: tableName, operation } = {}) => (

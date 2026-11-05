@@ -135,7 +135,11 @@ export const describeNeedsAttentionItem = (item = {}, { isOnline = true } = {}) 
   }
   return {
     title: syncItemName(item.table),
-    detail: 'The office could not accept this.',
+    // A refused relationship row of a child this EA removed (REMOVED_WITH_CHILD) is not a failure
+    // the EA can act on: the removal made it unnecessary, and it clears once the office has a copy.
+    detail: item.errorCode === 'REMOVED_WITH_CHILD'
+      ? 'You removed this child, so this is no longer needed.'
+      : 'The office could not accept this.',
     hint,
     canRemove: Boolean(item.canRemove),
     canRetry: Boolean(item.canRetry),

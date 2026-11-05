@@ -26,6 +26,7 @@ import {
   isResendableRefusal,
   outboxRecordId,
   readRemovedChildIds,
+  REMOVED_WITH_CHILD,
   RESENDABLE_REFUSAL_SQL,
 } from '../db/repositories/syncOutboxRepository';
 import {
@@ -891,6 +892,19 @@ const restorePendingAfterStaleFinalize = async (txn, outboxRecord, tableName) =>
 // again: the cause of its refusal is gone. It then keeps the insert's acknowledgement from
 // overwriting the newer local content (hasRemainingOutbox below).
 const NOT_APPLIED_CODES = "('UPDATE_NOT_APPLIED', 'ARCHIVE_NOT_APPLIED', 'RESTORE_NOT_APPLIED')";
+// When a Delete child is acknowledged, its child's refused relationship INSERTs (this EA's) are
+// stamped REMOVED_WITH_CHILD in the same transaction, so they stay unsendable after the hard_delete
+// row is gone, whatever a later pull writes to the child (second review, 2026-11-05).
+const stampRefusalsRemovedWithChild = async (txn, outboxRecord, tableName) => {
+  if (outboxRecord.operation !== 'hard_delete' || tableName !== 'children') return;
+  await txn.runAsync(`
+    update sync_outbox set error_code = '${REMOVED_WITH_CHILD}', updated_at = ?
+    where status = 'terminal' and operation = 'insert' and owner_user_id = ?
+      and table_name in (${CHILD_RELATIONSHIP_TABLES.map(() => '?').join(', ')})
+      and json_extract(payload, '$.child_id') = ?
+  `, timestamp(), outboxRecord.owner_user_id, ...CHILD_RELATIONSHIP_TABLES, outboxRecord.record_id);
+};
+
 const releaseRefusalsAfterOwnInsert = async (txn, outboxRecord, tableName) => {
   if (outboxRecord.operation !== 'insert') return;
   await txn.runAsync(`
@@ -931,6 +945,7 @@ const finalizeSuccess = async ({
     return restorePendingAfterStaleFinalize(txn, outboxRecord, tableName);
   }
 
+  await stampRefusalsRemovedWithChild(txn, outboxRecord, tableName);
   if (outboxRecord.operation !== 'hard_delete') {
     await releaseRefusalsAfterOwnInsert(txn, outboxRecord, tableName);
     const hasRemainingOutbox = await txn.getFirstAsync(`

@@ -212,10 +212,7 @@ describe('refused rows in a forced pass', () => {
 
   // Combined-OTA review: a removed child's refused relationship INSERT could otherwise land after
   // the removal and re-create a grant.
-  test.each([
-    ['removal queued', async () => outbox.enqueue({ tableName: 'children', recordId: 'child-gone', operation: 'hard_delete', payload: { id: 'child-gone' } })],
-    ['removal done', async () => db.runAsync("update children set archived_at = '2026-11-04T08:00:00.000Z', archive_reason = 'removed_by_ea' where id = 'child-gone'")],
-  ])('no retry path re-sends a refused relationship INSERT of a removed child (%s)', async (_name, remove) => {
+  const seedRemovedChildRefusals = async () => {
     for (const id of ['child-gone', 'child-kept']) {
       await db.runAsync(`insert into children (id, first_name, last_name, created_by, sync_status)
         values (?, 'Amahle', 'Dlamini', ?, 'synced')`, id, USER);
@@ -224,7 +221,20 @@ describe('refused rows in a forced pass', () => {
       await outbox.markTerminalFailure(`child_ea_assignments:cea-${id}:insert`, {
         errorMessage: 'new row violates row-level security policy', errorCode: '42501' });
     }
-    await remove();
+    await outbox.enqueue({ tableName: 'children', recordId: 'child-gone', operation: 'hard_delete', payload: { id: 'child-gone' } });
+  };
+  const acknowledgeRemoval = async () => {
+    const { supabaseClient } = createSupabaseMock({ rpcResults: { delete_child_if_no_history: { data: true, error: null } } });
+    await engine(supabaseClient).syncAll();
+    expect(await outbox.getById('children:child-gone:hard_delete')).toBeNull();
+  };
+
+  test.each([
+    ['removal queued', async () => {}],
+    ['removal acknowledged', acknowledgeRemoval],
+  ])('no retry path re-sends a refused relationship INSERT of a removed child (%s)', async (_name, settle) => {
+    await seedRemovedChildRefusals();
+    await settle();
     const refusedIds = (await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true }))
       .filter(row => row.table_name === 'child_ea_assignments').map(row => row.id);
     expect(refusedIds).toEqual(['child_ea_assignments:cea-child-kept:insert']);
@@ -238,8 +248,44 @@ describe('refused rows in a forced pass', () => {
       { id: 'child_ea_assignments:cea-child-gone:insert', status: 'terminal' },
       { id: 'child_ea_assignments:cea-child-kept:insert', status: 'pending' },
     ]);
-    expect(refusalExit({ ...(await outbox.getById('child_ea_assignments:cea-child-gone:insert')) },
-      new Set(['child-gone']))).toBe('clears_itself');
+    const queuedRemovals = new Set((await db.getAllAsync("select record_id from sync_outbox where operation = 'hard_delete'")).map(row => row.record_id));
+    expect(refusalExit(await outbox.getById('child_ea_assignments:cea-child-gone:insert'), queuedRemovals)).toBe('clears_itself');
+  });
+
+  // Second review: the mark is stamped with the acknowledgement, so a pull cannot wipe it, and it
+  // is all or nothing with the acknowledgement.
+  test('acknowledging a Delete child stamps its refused relationship INSERTs in the same transaction', async () => {
+    await seedRemovedChildRefusals();
+    await acknowledgeRemoval();
+    expect(await outbox.getById('child_ea_assignments:cea-child-gone:insert')).toMatchObject({ status: 'terminal', error_code: 'REMOVED_WITH_CHILD' });
+    expect(await outbox.getById('child_ea_assignments:cea-child-kept:insert')).toMatchObject({ error_code: '42501' });
+    // A pull that rewrites the child cannot make the row sendable.
+    await db.runAsync("update children set archived_at = null, archive_reason = null, sync_status = 'synced' where id = 'child-gone'");
+    expect((await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true })).map(row => row.id))
+      .not.toContain('child_ea_assignments:cea-child-gone:insert');
+  });
+
+  test('if the stamp cannot be written, the Delete child acknowledgement is not kept either', async () => {
+    await seedRemovedChildRefusals();
+    await db.execAsync(`create trigger forbid_removed_stamp before update on sync_outbox
+      when new.error_code = 'REMOVED_WITH_CHILD' begin select raise(abort, 'stamp refused'); end;`);
+    const { supabaseClient } = createSupabaseMock({ rpcResults: { delete_child_if_no_history: { data: true, error: null } } });
+    await engine(supabaseClient).syncAll();
+    expect(await outbox.getById('children:child-gone:hard_delete')).toMatchObject({ status: 'failed' });
+    expect(await outbox.getById('child_ea_assignments:cea-child-gone:insert')).toMatchObject({ error_code: '42501' });
+  });
+
+  // Without the outbox mark, the child's own record says nothing: Head Office may un-archive a
+  // child and leave archive_reason set, and the child's later refusals must stay resendable.
+  test('a child Head Office un-archived keeps its later refused relationship INSERTs resendable', async () => {
+    await db.runAsync(`insert into children (id, first_name, last_name, created_by, archived_at, archive_reason, sync_status)
+      values ('child-back', 'Amahle', 'Dlamini', ?, null, 'removed_by_ea', 'synced')`, USER);
+    await outbox.enqueue({ tableName: 'child_ea_assignments', recordId: 'cea-back', operation: 'insert',
+      payload: { id: 'cea-back', user_id: USER, child_id: 'child-back', created_by: USER } });
+    await outbox.markTerminalFailure('child_ea_assignments:cea-back:insert', { errorMessage: 'denied', errorCode: '42501' });
+    expect((await outbox.getReadyRecords({ includeTerminal: true, includeBackedOff: true })).map(row => row.id))
+      .toEqual(['child_ea_assignments:cea-back:insert']);
+    expect(refusalExit(await outbox.getById('child_ea_assignments:cea-back:insert'), new Set())).toBe('ea_removes');
   });
 
   // Combined-OTA review item 4b: like the auth-restore heal, Retry leaves the removed child's

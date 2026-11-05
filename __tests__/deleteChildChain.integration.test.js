@@ -363,8 +363,9 @@ test('a relationship INSERT the server keeps refusing does not hold the deletion
   ]);
   expect(server.all('session_attendees').map(row => row.child_id)).toEqual([C]);
   expect(server.all('letter_mastery').map(row => row.child_id)).toEqual([C]);
+  // Acknowledging the removal stamped the refused INSERT, so no later pull can make it sendable.
   const refusedInsert = (await outbox()).find(row => row.table_name === 'child_programme_enrollments');
-  expect(refusedInsert).toMatchObject({ operation: 'insert', status: 'terminal', error_code: '42501' });
+  expect(refusedInsert).toMatchObject({ operation: 'insert', status: 'terminal', error_code: 'REMOVED_WITH_CHILD' });
   // Once refused for good, forced passes never send it again.
   const sends = () => server.summary().filter(line => line.startsWith('POST child_programme_enrollments')).length;
   const sentBefore = sends();
@@ -580,4 +581,61 @@ test('Delete child leaves the child in a group this EA created but another EA no
     `rpc/delete_child_if_no_history:${C} -> ok`,
   ]);
   expect(server.t('child_group_memberships').get(MEMBERSHIP).removed_at).toBeUndefined();
+});
+
+// Second review (reviewer repro zzR2R1): the "removed" mark must survive a pull. For a co-held
+// child the server keeps the child live after this EA leaves, so a roster pull rewrites the local
+// child without any removal mark. The mark lives in the outbox instead: when the Delete child is
+// acknowledged, the child's refused relationship INSERTs are stamped REMOVED_WITH_CHILD.
+test('a pull that rewrites a co-held child after its removal does not make its refused relationship INSERT resendable', async () => {
+  await repos.localState.set('support_auto_bundle_last_at', '2099-01-01T00:00:00.000Z');
+  await seedBoth([...baseRows(), ...serverChildRows(C, { otherEaNumeracy: true })]);
+  await repos.groups.addChildToGroup({ id: MEMBERSHIP, child_id: C, group_id: GROUP, created_by: USER, synced: false });
+  tick();
+  await recordLesson(C);
+  tick();
+  expect(await repos.children.removeChild(C)).toBe(true);
+  tick();
+  let refusedOnce = false;
+  let receiptsDown = true;
+  server.state.refuse = ({ method, target }) => {
+    if (method === 'POST' && target === 'child_group_memberships' && !refusedOnce) {
+      refusedOnce = true;
+      return { status: 403, code: '42501', message: 'new row violates row-level security policy for table "child_group_memberships"' };
+    }
+    if (target === 'rpc/report_mobile_support_incident_v2' && receiptsDown) {
+      return { status: 503, code: '54000', message: 'Incident receipt allowance exhausted' };
+    }
+    return null;
+  };
+  await sync();
+  await statusItems();
+  elapseBackoff();
+  await sync();
+  await statusItems();
+  expect(server.summary().filter(line => line.startsWith('rpc/delete_child_if_no_history'))).toEqual([
+    `rpc/delete_child_if_no_history:${C} -> ok`,
+  ]);
+  expect((await outbox()).map(row => `${row.table_name}:${row.operation}:${row.status}:${row.error_code}`)).toEqual([
+    'child_group_memberships:insert:terminal:REMOVED_WITH_CHILD',
+  ]);
+  // The class roster pull saves the server's copy: the child stays live for the other EA.
+  const serverChild = server.t('children').get(C);
+  await repos.children.saveServerChildRow({ ...serverChild, archived_at: serverChild.archived_at ?? null,
+    archive_reason: serverChild.archive_reason ?? null, sync_status: 'synced' });
+  expect((await read('select archive_reason from children where id = ?', C))[0]).toEqual({ archive_reason: null });
+  expect((await statusItems()).find(item => item.table === 'child_group_memberships'))
+    .toMatchObject({ clearsItself: true, canRetry: false });
+
+  receiptsDown = false;
+  const mark = server.log.length;
+  await sync({ force: true });
+  expect(passRequests(mark).filter(line => line.startsWith('POST child_group_memberships'))).toEqual([]);
+  expect(server.all('child_group_memberships').filter(row => row.child_id === C && row.removed_at == null)).toEqual([]);
+  // Its new receipt is delivered, so it clears by itself.
+  await statusItems();
+  await sync();
+  await statusItems();
+  await sync();
+  expect(await outbox()).toEqual([]);
 });

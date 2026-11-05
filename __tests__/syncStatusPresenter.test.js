@@ -293,6 +293,14 @@ describe('needs-attention items', () => {
     expect(JSON.stringify(described)).not.toMatch(/abc12345|session_attendees|row-level|42501/);
   });
 
+  test('a relationship row of a child the EA removed says so in plain words', () => {
+    const described = describeNeedsAttentionItem(item({ table: 'child_group_memberships', errorCode: 'REMOVED_WITH_CHILD',
+      clearsItself: true, canRetry: false }), { isOnline: true });
+    expect(described).toMatchObject({ title: 'Group list', detail: 'You removed this child, so this is no longer needed.',
+      hint: 'Waiting for the office to get a copy.', canRetry: false });
+    expect(JSON.stringify(described)).not.toMatch(/REMOVED_WITH_CHILD/);
+  });
+
   test('only delivered history offers the exit, and only resendable rows offer Retry', () => {
     expect(describeNeedsAttentionItem(item({ delivery: 'delivered', canRemove: true }), { isOnline: true })).toMatchObject({
       canRemove: true, canRetry: true, removeLabel: 'Remove from this phone',
