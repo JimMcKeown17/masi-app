@@ -147,8 +147,10 @@ create policy session_attendees_update_held_at_time on public.session_attendees
 -- The RESTRICTIVE session_attendees_group_held_insert/update policies (20261021140000) are
 -- unchanged.
 
--- Its last users were the attendee UPDATE and DELETE policies (the DELETE policy went in
--- 20261105120000). Its effective definition was 20260521144901.
+-- Its last users were the attendee UPDATE and DELETE policies. 20261105120000 drops the DELETE
+-- policy too; dropping it here as well lets this migration apply before that one (the plan allows
+-- S2 to ship first). Its effective definition was 20260521144901.
+drop policy if exists session_attendees_delete_own_session_active_assignment on public.session_attendees;
 drop function if exists private.can_modify_session_attendee(uuid, uuid);
 
 -- 3 (continued) and 4. Assessments and Battery Runs: programme held on the work's day; a run's

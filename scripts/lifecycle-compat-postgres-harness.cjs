@@ -1368,6 +1368,17 @@ const main = async () => {
       else evaluateCase(testCase, baseOut, curOut, failures, summary);
     });
     catalogChecks(current, failures, summary);
+    // Review follow-up 2: the plan lets S2 ship before S1/S3/S4, so it must apply alone onto the
+    // baseline server (in a rolled-back transaction).
+    {
+      const s2 = fs.readFileSync(path.join(MIGRATIONS_DIR, '20261105120200_held_at_time_history_authority.sql'), 'utf8');
+      const result = spawnSync('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '-Atq', baseline], {
+        input: `BEGIN;\n${s2}\nROLLBACK;\n`, encoding: 'utf8', env: buildPsqlEnv('s2-alone'), timeout: 180_000,
+      });
+      const ok = result.status === 0;
+      summary.push({ id: 'migration.s2_applies_alone_on_baseline', plan: 'T1 review follow-up 2', status: ok ? 'pass' : 'FAIL', failures: ok ? 0 : 1 });
+      if (!ok) failures.push(`migration.s2_applies_alone_on_baseline: ${(result.stderr || '').split('\n').filter((line) => /ERROR|DETAIL|HINT/.test(line)).join(' ')}`);
+    }
     await runRaces(current, failures, summary);
 
     const passed = summary.filter((s) => s.status === 'pass').length;
