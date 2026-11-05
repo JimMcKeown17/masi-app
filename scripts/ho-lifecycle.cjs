@@ -132,7 +132,20 @@ SELECT pg_catalog.jsonb_build_object(
     FROM pg_catalog.jsonb_each_text((:'args')::jsonb -> 'emails') e), '{}'::jsonb),
   'programmes', (SELECT coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'id', p.id, 'code', p.code, 'name', p.name)), '[]'::jsonb)
-    FROM public.programmes p WHERE p.code = (:'args')::jsonb ->> 'programme_code'));
+    FROM public.programmes p WHERE p.code = (:'args')::jsonb ->> 'programme_code'),
+  -- Display names only, so the operator can check each id in the preview before --apply.
+  'entities', (SELECT coalesce(pg_catalog.jsonb_agg(x.entity ORDER BY x.entity ->> 'id'), '[]'::jsonb) FROM (
+      SELECT pg_catalog.jsonb_build_object('kind', 'child', 'id', c.id, 'name', concat_ws(' ', c.first_name, c.last_name),
+        'archived', c.archived_at IS NOT NULL) AS entity
+      FROM public.children c WHERE c.id::text IN (SELECT pg_catalog.jsonb_array_elements_text((:'args')::jsonb -> 'ids'))
+      UNION ALL
+      SELECT pg_catalog.jsonb_build_object('kind', 'class', 'id', cl.id, 'name', cl.name, 'grade', cl.grade,
+        'archived', cl.archived_at IS NOT NULL)
+      FROM public.classes cl WHERE cl.id::text IN (SELECT pg_catalog.jsonb_array_elements_text((:'args')::jsonb -> 'ids'))
+      UNION ALL
+      SELECT pg_catalog.jsonb_build_object('kind', 'group', 'id', g.id, 'name', g.name, 'class_id', g.class_id,
+        'archived', g.archived_at IS NOT NULL)
+      FROM public.groups g WHERE g.id::text IN (SELECT pg_catalog.jsonb_array_elements_text((:'args')::jsonb -> 'ids'))) x));
 ROLLBACK;`;
 
 // The plan and the change are one anonymous PL/pgSQL block: nothing is stored in the
@@ -551,7 +564,8 @@ const runCli = (argv, {
     print({ project_ref: PROJECT_REF, command: label, mode: options.apply ? 'apply' : 'dry_run' });
 
     const emails = options.command === 'handover' ? { from: options.from, to: options.to } : { ea: options.ea };
-    const resolved = query(RESOLVE_SQL, { emails, programme_code: options.programme ?? null });
+    const entityIds = [...(options.children ?? []), options.class, options.group].filter(Boolean);
+    const resolved = query(RESOLVE_SQL, { emails, programme_code: options.programme ?? null, ids: entityIds });
     const users = Object.fromEntries(Object.keys(emails).map(key => [key, single(resolved.users?.[key], key)]));
     if (users.from && users.from.id === users.to.id) throw new Error('--from and --to resolve to the same EA.');
     const opener = options.command === 'handover' ? users.to : (options.command === 'reopen' ? users.ea : null);
@@ -563,9 +577,9 @@ const runCli = (argv, {
       }
       [programme] = resolved.programmes;
     }
+    const entities = Array.isArray(resolved.entities) ? resolved.entities : [];
     print({ targets: { ...users, ...(programme ? { programme } : {}),
-      ...(options.children ? { child_ids: options.children } : {}),
-      ...(options.class ? { class_id: options.class } : {}), ...(options.group ? { group_id: options.group } : {}),
+      entities: entityIds.map(entityId => entities.find(entity => entity.id === entityId) ?? { id: entityId, found: false }),
       ...(options.delivery ? { delivery: options.delivery } : {}), reason: options.reason, operator: options.operator } });
 
     const args = {

@@ -4,7 +4,9 @@ Built 2026-10-17; migration applied to `masi-app-sqlite` and device-proven on 20
 Jim's decision to use Zazi's Auth-ban mechanism with an operator script before building a Head
 Office website. The [ROADMAP §0](./ROADMAP.md) owns the remaining gates; the
 [contract map](./rls-sync-contract-map.md#ea-access-suspension--applied-to-hosted-device-proven)
-describes the SQL and grants.
+describes the SQL and grants. Handing over, ending and reopening an EA's children, classes and
+groups is in [Head Office lifecycle changes](#head-office-lifecycle-changes-handover-end-delivery-reopen)
+below.
 
 ## Before first use
 
@@ -96,3 +98,139 @@ phone that reconnects can still upload with it; that is the accepted residual wi
 let the token really expire: moving the phone's clock forward makes it look expired to the phone
 only, so the server still accepts uploads. Repeat this proof on the pilot build if auth or sync
 changes.
+
+## Head Office lifecycle changes: handover, end delivery, reopen
+
+Built 2026-11-05 for the November 2026 retest (lifecycle-safety plan step H1,
+[plan](../docs/superpowers/plans/2026-11-04-lifecycle-safety.md); ADR-0014). Every Head Office
+change to who teaches a child, class or group goes through `scripts/ho-lifecycle.cjs`. It uses the
+same fixed `masi-app-sqlite` target, `.env.local` password handling, `psql` setup and exact,
+case-insensitive email match as the EA access commands above. So far it has run only on disposable
+PostgreSQL with the current migrations (`npm run verify:ho-lifecycle:postgres`, also in CI). The
+first `--apply` against `masi-app-sqlite` needs Jim's go-ahead.
+
+### Rules
+
+- **End or reopen rows only with this script.** Never edit `unassigned_at`, `handover_reason` or
+  `row_version` by hand, and never bump `row_version` when you end a row.
+- **Never DELETE** children, classes, groups, Auth users or `public.users` rows. Deleting a login
+  deletes that EA's sessions, assessments and ticks (MA-BUG-20261104-008).
+- **Off-boarding is suspend only**, in this order:
+  1. the EA taps Profile → Support tools → Send diagnostics;
+  2. support checks the receipt shows 0 waiting, and that every needs-attention item has its own
+     receipt on the server (`npm run bugs:incidents`);
+  3. `npm run ea:suspend` (above);
+  4. hand the EA's children, classes and groups over with this script.
+- **Until the server fix (plan step R1) is live and the EA's phone has the app update**, the EA's
+  phone must upload everything before any change (interim rule 1 in
+  [`lifecycle-interim-field-rules.md`](./lifecycle-interim-field-rules.md)).
+- **No reopen, and no handover back to a former holder,** for an EA whose receipts show a refused
+  archive or restore, until that phone has the app update (plan step O1; interim rule 2). Their
+  phone would send the old archive again and end the row again.
+
+### Commands
+
+Run from this checkout with Node 20 (`PATH=$HOME/.nvm/versions/node/v20.19.4/bin:$PATH`). Every
+command needs `--reason` (1–1000 characters) and `--operator` (1–200). Without `--apply` it only
+reads and prints the plan. Child, class and group ids are UUIDs: copy them from the dashboard or a
+read-only query; the plan prints each one's name so you can check it.
+
+```sh
+npm run ho:handover -- child --from old@example.test --to new@example.test --children <child-id>[,<child-id>...] --reason "EA left the school" --operator "Your name"
+npm run ho:handover -- class --from old@example.test --to new@example.test --class <class-id> --programme literacy --delivery move --reason "..." --operator "..."
+npm run ho:handover -- group --from old@example.test --to new@example.test --group <group-id> --reason "..." --operator "..."
+npm run ho:end-delivery -- --ea ea@example.test --children <child-id>[,<child-id>...] --reason "..." --operator "..."
+npm run ho:reopen -- child --ea ea@example.test --children <child-id>[,<child-id>...] --reason "..." --operator "..."
+npm run ho:reopen -- class --ea ea@example.test --class <class-id> --programme literacy --reason "..." --operator "..."
+```
+
+Add `--apply` to the same command to make the change.
+
+| Command | Ends (at server time) | Opens |
+| --- | --- | --- |
+| `handover child` | `--from`'s delivery rows (`child_ea_assignments`) for each child | `--to`'s delivery row: reopened in place if they held the child before, otherwise added with the app's id |
+| `handover class --delivery move` | `--from`'s class row for that programme, and their delivery rows for children with an open membership in the class | `--to`'s class row and those delivery rows, reopened or added the same way |
+| `handover class --delivery stay` | `--from`'s class row only (an assessor takeover); the plan lists the delivery children left with `--from` | `--to`'s class row |
+| `handover group` | `--from`'s `group_ea_assignments` row | a new row for `--to` with a fresh id |
+| `end-delivery` | the EA's delivery rows for the named children | nothing |
+| `reopen child` / `reopen class` | nothing | the EA's own earlier row, in place |
+
+- **A class handover never moves groups.** The plan lists `--from`'s groups in that class; hand
+  each one over with `handover group`, or the new EA's group lessons will be refused.
+- **Reopen and handover-back keep the row's identity and start date** and clear its end. The plan
+  prints the gap (`from`, `to`, `hours`). The EA held nothing during the gap, so work dated inside it
+  is still not covered by this row.
+- **A group handover always adds a new row.** A group's app id depends on the group alone and the EA
+  on a row cannot change, so an earlier row is never reopened for a different EA. To give a group
+  back, hand it over again.
+- Ends set `handover_reason` to your `--reason` on class and group rows (delivery rows have no such
+  column). New rows have no `created_by`; your `--operator` appears only in the printed output, so
+  keep that output in the operational record.
+
+### Read the plan before `--apply`
+
+The output is JSON lines: `targets` (both EAs' ids and emails, the programme, and the named
+children, class or group with their names), then `plan`:
+
+- `actions`: `end`, `reopen` (with `gap`), `insert`, `already_active` (nothing to do) or `not_active`
+  (that EA held nothing to end).
+- `notes`: things the command will not do for you, such as `groups_not_moved` or
+  `delivery_stays_with_predecessor`.
+- `refusals`: the command will not run. Fix the cause, then run the dry run again.
+
+| Refusal | Meaning and what to do |
+| --- | --- |
+| `child_not_found`, `class_not_found`, `group_not_found` | Wrong id. Copy it again. |
+| `child_archived`, `class_archived`, `group_archived` | The script never gives access to an archived child, class or group. Un-archiving is not in this script: ask Jim. For an archived child that an EA still delivers to, use `end-delivery`. |
+| `ea_not_in_programme` | The new EA has no open programme assignment for this class or group's programme. Fix their programme first, or their lessons would be refused. |
+| `predecessor_not_holding` | `--from` does not hold this child, class or group. Check the plan; to give back an EA's own ended row, use `reopen`. |
+| `no_row_to_reopen` | The EA never held it under the app's id. Use `handover` from the current holder. |
+| `deterministic_id_conflict` | The row with the app's id belongs to someone else. Stop and record an MA-BUG. |
+
+The script also refuses an email with no exact match or more than one match, a target without an
+EA profile, `--from` and `--to` that are the same EA, a suspended `--to` (or reopened) EA, and an
+unknown programme code.
+
+### Apply, failures and reruns
+
+`--apply` prints the same plan, then in one transaction: locks the rows in the fixed order
+children → classes → groups, works the plan out again from the locked rows, stops if anything is
+refused or changed, makes the changes and commits. It then reads every changed row back by id and
+prints `confirmed: true` only when each end is set, each opened row is open, and no `row_version`
+moved. The script never deletes and never bumps `row_version`.
+
+- **If `--apply` fails or the connection drops, the change may already have committed.** Run the
+  same command without `--apply`. A change that already happened shows only `already_active` and
+  `not_active`. Running it again with `--apply` is safe: it changes nothing that is already done.
+- `ho_lifecycle_retry`, or a lock timeout, means a phone or another change touched the same rows.
+  Nothing was changed; run the command again.
+- `read_back_unconfirmed` means the commit may have happened but the read-back did not match. Run
+  the dry run, and record an MA-BUG if it is not explained.
+
+### What the script does not do
+
+It does not un-archive anything, reopen class or group memberships or programme enrollments, move
+children between classes or groups, change an EA's programme, end group memberships (including the
+duplicates the daily check lists), or delete anything. Those need a separate decision.
+
+### Daily check
+
+`scripts/lifecycle-invariants.sql` is one read-only query. The `/bug-sync` sweep runs it daily
+during the retest (weekly after week 1) and turns each new hit into an MA-BUG record:
+
+```sh
+npm run sqlite:staging:query -- "$(cat scripts/lifecycle-invariants.sql)"
+```
+
+Each row is one hit: `check_name`, `entity_table`, `entity_id` and the evidence in `detail`. Zero
+rows means every check passed.
+
+| Check | What it finds |
+| --- | --- |
+| `archived_child_still_held`, `archived_class_still_assigned`, `archived_group_still_assigned` | An archived child, class or group that an EA can still write for |
+| `live_group_in_archived_class` | A live group whose class is archived |
+| `unheld_live_child`, `unheld_live_class` | A live child or class that no EA holds |
+| `delivery_child_without_live_class` | A child someone delivers to with no open membership in a live class: it drops out of My Children |
+| `duplicate_active_group_membership` | The same child twice in one group (MA-BUG-20261104-017) |
+| `upload_terminal_receipts` | Refused uploads, by table and error code, across all receipts |
+| `suspended_ea_with_backlog` | A suspended EA whose newest receipt shows work still waiting, or who never sent one: restore, let the phone upload, suspend again |

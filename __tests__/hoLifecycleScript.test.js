@@ -197,7 +197,8 @@ describe('operator execution', () => {
       expect(options.input).toMatch(/^BEGIN READ ONLY;/);
       expect(options.input).not.toMatch(/\bCOMMIT\b|FOR UPDATE/);
     }
-    expect(variables(spawnSync.mock.calls[0]).args.emails).toEqual({ from: A.email, to: B.email });
+    expect(variables(spawnSync.mock.calls[0]).args).toEqual(expect.objectContaining({
+      emails: { from: A.email, to: B.email }, ids: [CHILD_A] }));
     expect(spawnSync.mock.calls[0][2].input).toContain("lower(a.email) = lower(e.value)");
     expect(variables(spawnSync.mock.calls[1]).args).toEqual(expect.objectContaining({
       command: 'handover', scope: 'child', from_id: A.id, to_id: B.id, child_ids: [CHILD_A],

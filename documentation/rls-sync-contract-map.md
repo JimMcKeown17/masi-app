@@ -90,6 +90,26 @@ denials under permissive default ACLs, and service-role execution; this sandbox 
 to localhost PostgreSQL, so these cases are not yet verified. See the
 [operator runbook](./ea-access-runbook.md) and [verification register](./build-log.md#verification-register).
 
+### Head Office lifecycle script — built 2026-11-05; not yet run against hosted
+
+`scripts/ho-lifecycle.cjs` (lifecycle-safety plan H1) is the Head Office tool for ending, handing over and reopening
+`child_ea_assignments`, `class_ea_assignments` and `group_ea_assignments` rows. It runs
+as postgres on the same fixed pooler target as `ea-access.cjs`, adds no server function, table,
+policy or grant, and changes no phone payload or outbox operation. One anonymous PL/pgSQL block per
+command: the dry run is READ ONLY with no lock or write statement; apply locks children → classes →
+groups (ids ascending, the order the server's archive decisions use), recomputes the plan, then
+ends rows at `greatest(now(), assigned_at)`, reopens deterministic rows in place (clears
+`unassigned_at`, and `handover_reason` on class rows; identity columns and `assigned_at`
+untouched, so `<table>_prevent_identity_change` passes) or inserts them. It never writes
+`row_version`: an equal-version pull applies on the phone (Row versions, below). Child and class
+ids follow the Item 11 derivation in SQL (`extensions.uuid_generate_v5`, U+001F join); the CLI
+recomputes each with its parity-tested JS mirror and refuses on any mismatch. A group successor
+gets a fresh id, because `f(group_id)` stays with the first holder and `ea_user_id` is immutable;
+an earlier group row is never reopened for another EA. Daily read-only checks are
+`scripts/lifecycle-invariants.sql`. Proof: `npm run verify:ho-lifecycle:postgres`, all current
+migrations (none of the server batch's lifecycle migrations yet); runbook in
+[`ea-access-runbook.md`](./ea-access-runbook.md#head-office-lifecycle-changes-handover-end-delivery-reopen).
+
 ## Pre-Live History Authorization — Hosted Session Gate Passed; Assessment Gate Open
 
 Read-only Gate 0 inspection on 2026-08-27 verified the live policies and helper bodies on

@@ -8753,3 +8753,98 @@ class resolver. Codex code review (gpt-6-astra): approve; its one finding (the c
 could not tell name order from id order) is fixed by giving the fixture classes names whose order
 opposes their ids. The Django real-Postgres gate (`api/tests_masi_app_postgres.py`) passed against
 the retained harness database, decoding both v2 functions through the new read-only guard.
+
+### 2026-11-05 — Head Office lifecycle script, runbook and daily invariant check (feat/lifecycle-ho-tools, plan H1)
+
+Lifecycle-safety plan step H1 (`docs/superpowers/plans/2026-11-04-lifecycle-safety.md`), closing the
+Head Office side of MA-BUG-20261104-010 and the detection side of -017. No live data, staging,
+Supabase CLI or `.env.local` was touched; everything ran on a disposable local PostgreSQL 17.
+
+**Built.**
+- `scripts/ho-lifecycle.cjs` with `npm run ho:handover` (child | class | group),
+  `ho:end-delivery` and `ho:reopen` (child | class). Dry run by default; `--apply`; exact,
+  case-insensitive email match (missing, ambiguous, profile-less, same-EA and suspended successor
+  are refused); required `--reason`/`--operator`. The target is pinned through `ea-access.cjs`'s
+  own `buildConnectionString`, so the legacy ref and any non-SQLite host are refused before any
+  connection. Inputs travel as one JSON psql variable, never as SQL text.
+- One anonymous PL/pgSQL block per command (no server function or table). The dry-run program has
+  no lock or write statement and runs `BEGIN READ ONLY`; the CLI requires the database to report
+  `transaction_read_only = on`. Apply locks children → classes → groups (ids ascending) before any
+  grant change, recomputes the plan from the locked rows, stops on any refusal, ends rows at
+  `greatest(now(), assigned_at)`, reopens deterministic rows in place or inserts them, commits, and
+  then confirms through a separate READ ONLY read-back by id (ends set, opened rows open,
+  `row_version` unchanged). A class delivery move re-checks the delivery roster after locking and
+  asks for a rerun if it grew.
+- Deterministic ids are computed in SQL (`extensions.uuid_generate_v5`, as
+  `private.letter_mastery_id` does) and checked by the CLI against a JS mirror of
+  `deterministicDomainId`. A jest parity test compares that mirror with the app's own
+  `childEaAssignmentDomainId` / `classEaAssignmentDomainId` and with an id recorded in the
+  MA-BUG-20261104-001 repro fixture.
+- `scripts/lifecycle-invariants.sql`: one read-only SELECT (no psql variables, so the staging query
+  helper can run it as a string) returning labelled rows for the plan's checks: archived
+  children/classes/groups still held, live groups in archived classes, unheld live children and
+  classes, delivery children with no live class, duplicate active (child, group) memberships,
+  `upload_terminal` receipts by table and code, and suspended EAs whose newest receipt shows work
+  waiting (or who never sent one). "Held" uses the three arms of
+  `current_user_can_write_for_child`.
+- `scripts/ho-lifecycle-postgres-harness.cjs` (`npm run verify:ho-lifecycle:postgres`, CI step
+  after the EA access harness) drives the real `runCli` against all 42 current migrations. Only
+  psql's `--dbname` is redirected, after asserting the script built its pinned target.
+- Runbook section in `documentation/ea-access-runbook.md`; daily-sweep note in
+  `.agents/skills/bug-sync/SKILL.md`; contract-map subsection "Head Office lifecycle script";
+  `ea-access.cjs` now exports `resolvePsql` (no behaviour change).
+
+**Decisions and deviations (code wins over the plan where they differ).**
+- `child_ea_assignments` has no `handover_reason` column (only class and group assignments do); the
+  plan's S1 wording lists one. The script records the reason on class and group ends only.
+- `reopen` covers child and class rows. A group row is never reopened for a returning EA: a group's
+  deterministic id is f(group) and `ea_user_id` is immutable, so a group goes back with
+  `handover group` (another fresh id).
+- Class commands take an explicit `--programme`, and class handover an explicit
+  `--delivery move|stay` (CONTEXT.md: a handover moves delivery when the successor takes over the
+  intervention; an assessor takeover does not). A class handover never moves groups; the plan
+  lists the predecessor's groups in that class.
+- Added refusals the plan does not list: no grant to an archived child/class/group; no class or
+  group grant to an EA outside that programme (their lessons would be refused); `reopen` never
+  inserts. The dry run prints each named child/class/group's display name so the operator can
+  check ids.
+- Inserted rows have `created_by` NULL (the operator is not a `public.users` row); the operator name
+  is in the printed output only, since the plan allows no new table.
+
+**Verification (Node 20).**
+- RED first: the new unit suite failed on the missing module before implementation; the invariant
+  static tests failed on the missing file. Mutation checks: swapping the lock order, changing the
+  id join character, skipping the read-only check, ignoring `row_version` in confirmation and
+  disabling the id check each failed the unit suite; dropping reopen-in-place (reproducing
+  MA-BUG-010's mechanism as a primary-key clash), bumping `row_version` on end, removing the apply
+  locks and breaking idempotency each failed the harness. One invariant mutation (dropping the
+  group arm from "held") first survived; class-only and group-only held children were added to the
+  clean fixture, after which dropping either arm failed it.
+- `npx jest __tests__/hoLifecycleScript.test.js __tests__/eaAccessScript.test.js`: 2 suites /
+  105 tests passed (61 in the new suite).
+- `npm run verify:ho-lifecycle:postgres` (disposable `postgres:17-alpine`, PGTZ=UTC): 30 checks
+  passed over 42 migrations through `20261104132732`: invariant query empty on reference data and on
+  a clean fixture, exactly one hit per check on a seeded fixture, the no-receipt case, and the file
+  run unchanged inside a READ ONLY transaction; every command's dry run changes nothing; A→B→A child
+  handover (successor row reopened in place, identity, start and `row_version` kept, gap printed);
+  class handover with delivery moved and back with delivery kept; group handover with fresh ids;
+  rerun after a simulated lost response after COMMIT for child and group handover (no-op,
+  confirmed); `end-delivery` waits for a held child-row lock while the dry run does not; reopen of
+  child and class rows; eight refusals that change nothing and never reach COMMIT; no `row_version`
+  bumped anywhere.
+- Full unit suite `npx jest --silent`: 512/518 suites, 8,188/8,204 tests passed. All failures are
+  this worktree's incomplete `node_modules` (`expo-image-picker` and `@expo-google-fonts/andika`
+  are in package.json but not installed): `supportScreenshot`, `ProfileDiagnostics`,
+  `signedInTree`, `App.plan5` (Cannot find module) and `numberCard` (font file ENOENT).
+  `AssessmentChildSelectScreen.battery` timed out under parallel load and passed alone (69/69).
+- Integration suite `npx jest -c jest.integration.config.js --silent`: 110/111 suites,
+  1,524/1,524 tests passed; `signedInTree` cannot load for the same missing font module.
+
+**Not verified / open.** Tested on current migrations only, not with the server batch's lifecycle
+migrations (`20261105120000`–`20261105120300`); the script runs as postgres, so the guard's
+EA-only rules should not apply, but rerun the harness on the server branch. Never run against
+`masi-app-sqlite`; the first `--apply` there needs Jim's go-ahead. The invariant query's run
+through `supabase db query` (the staging helper) is untested here. Until the server guard (S1) is
+live, a 1.5.0 phone's stale archive or restore can still undo a Head Office end or reopen
+(MA-BUG-20261104-006); the runbook keeps the interim upload-first rule and the no-reopen rule
+for phones with refused archives.

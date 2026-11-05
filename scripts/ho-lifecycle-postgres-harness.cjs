@@ -230,7 +230,8 @@ const makeCli = (databaseUrl) => {
         log: line => log.push(JSON.parse(line)) });
     } catch (caught) { error = caught; }
     const pick = key => log.find(entry => entry[key])?.[key];
-    return { error, calls, plan: pick('plan'), applied: pick('applied'), confirmed: log.some(entry => entry.confirmed === true) };
+    return { error, calls, targets: pick('targets'), plan: pick('plan'), applied: pick('applied'),
+      confirmed: log.some(entry => entry.confirmed === true) };
   };
   cli.cleanup = () => fs.rmSync(cwd, { recursive: true, force: true });
   return cli;
@@ -290,6 +291,10 @@ const runCommandCases = (databaseUrl, summary) => {
     ]) {
       const result = ok(cli(argv), `dry-run-${label}`);
       assert.equal(result.plan.read_only, 'on');
+      if (label === 'handover-child') {
+        assert.deepEqual(result.targets.entities, [{ kind: 'child', id: X1, name: 'Child One', archived: false }]);
+        assert.deepEqual([result.targets.from.id, result.targets.to.id, result.targets.to.email], [A, B, 'EA.B@Example.test']);
+      }
       assert.deepEqual(kinds(result.plan.actions), expected, label);
       assert.equal(result.calls.length, 2);
       assert.ok(result.calls.every(input => /^BEGIN READ ONLY;/.test(input) && !/\bCOMMIT\b/.test(input)));
