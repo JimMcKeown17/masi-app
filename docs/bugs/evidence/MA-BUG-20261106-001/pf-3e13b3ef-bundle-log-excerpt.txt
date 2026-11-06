@@ -1,0 +1,115 @@
+Safe excerpt of diagnostic bundle 9e98a139-e160-4086-9c5c-da6fb965a9d8 (trigger pull_failing),
+downloaded with --fetch pf:3e13b3ef (report 3ba47c20-edfc-5af1-8ee5-f2e341f4ba50).
+Original stays in gitignored docs/bugs/user-submissions-bundles/pf:3e13b3ef/;
+original SHA-256 c604aa5d75b6afa6042c235c9734f58896ce0f2a68f9070fcb7a44c5e057cfd9.
+Account: test@masinyusane.org (test account). Device: iPhone 13, iOS 26.3.1, build 26.
+Messages cut at the first stack frame; app container paths removed. No learner data.
+
+capturedAt: 2026-11-03T04:13:00.845Z
+sync_state history cursors at capture (scope family | lastPulledAt | lastFailureAt | lastFailureKind):
+  assessment_history_pull | 2026-10-29T11:38:59.084Z | 2026-10-31T08:18:49.594Z | query
+  battery_run_history_pull | 2026-10-29T11:38:57.953Z | 2026-10-31T08:18:49.578Z | query
+  child_data_pull | 2026-10-29T11:39:07.356Z | (no history cursor) | -
+  classes_pull | 2026-10-29T11:38:59.874Z | (no history cursor) | -
+  letter_mastery_pull | 2026-10-29T11:39:00.708Z | 2026-10-31T08:18:49.599Z | query
+  session_history_pull | 2026-10-29T11:39:04.071Z | 2026-10-31T08:18:49.569Z | query
+failedOutboxRows: 0
+
+Log lines, oldest first, from 2026-10-29T11:38Z (time | level | message):
+2026-10-29T11:38:51.477Z | LOG | App came to foreground
+2026-10-29T11:38:51.488Z | LOG | Requesting domain pull: foreground
+2026-10-29T11:38:51.637Z | LOG | App going to background
+2026-10-29T11:38:54.196Z | LOG | Could not fetch schools from server (likely offline): TypeError: Network request failed
+2026-10-29T11:38:54.496Z | LOG | App came to foreground
+2026-10-29T11:38:54.505Z | LOG | Requesting domain pull: foreground
+2026-10-29T11:38:56.916Z | LOG | [BatteryRunHistory] start forced=false mode=delta firstWalk=false
+2026-10-29T11:38:57.982Z | LOG | [BatteryRunHistory] end status=complete pages=1 durationMs=1066 complete=true rpcMs=1031 saveMs=8 firstCommitMs=1039
+2026-10-29T11:38:58.087Z | LOG | [AssessmentHistory] start forced=false mode=delta firstWalk=false
+2026-10-29T11:38:59.111Z | LOG | [AssessmentHistory] end status=complete pages=1 durationMs=1024 complete=true rpcMs=983 saveMs=14 firstCommitMs=998
+2026-10-29T11:38:59.134Z | LOG | [LetterMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-10-29T11:39:00.739Z | LOG | [LetterMasteryHistory] end status=complete pages=1 durationMs=1605 complete=true rpcMs=1569 saveMs=7 firstCommitMs=1576
+2026-10-29T11:39:02.805Z | LOG | [SessionHistory] start forced=false mode=delta firstWalk=false
+2026-10-29T11:39:04.098Z | LOG | [SessionHistory] end status=complete pages=1 durationMs=1293 complete=true
+2026-10-29T11:39:12.044Z | LOG | Starting sync...
+2026-10-29T11:39:12.517Z | LOG | Sync completed: {"success":true,"totalSynced":1,"totalFailed":0,"totalTerminal":0,"totalRetriable":0,"totalDeferred":0,"failedRecords":[],"tableResults":{"time_entries":{"success":true,"synced":1,"fai
+2026-10-29T11:39:23.748Z | LOG | App going to background
+2026-10-29T11:42:40.361Z | LOG | App going to background
+2026-10-29T11:42:59.061Z | LOG | App came to foreground
+2026-10-29T11:42:59.662Z | LOG | App going to background
+2026-10-31T08:18:49.340Z | LOG | Running "main"
+2026-10-31T08:18:49.357Z | LOG | [motion] device tier {"platform":"ios","totalMemory":3840114688,"deviceYearClass":2021,"tier":"high"}
+2026-10-31T08:18:49.402Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:18:49.402Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:18:49.402Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:18:49.403Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:18:49.404Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:18:49.404Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:18:49.428Z | ERROR | Error loading profile: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:18:49.439Z | LOG | Requesting domain pull: reconnect
+2026-10-31T08:18:49.443Z | ERROR | Error refreshing reference data: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:18:49.451Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:18:49.460Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:18:49.462Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:18:49.463Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:18:49.482Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:18:49.503Z | ERROR | Error loading classes from server: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:18:49.568Z | LOG | [SessionHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:18:49.570Z | WARN | [SessionHistory] end status=query pages=0 durationMs=2 complete=false failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:18:49.578Z | LOG | [BatteryRunHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:18:49.580Z | WARN | [BatteryRunHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=0 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:18:49.593Z | LOG | [AssessmentHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:18:49.595Z | WARN | [AssessmentHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:18:49.598Z | LOG | [LetterMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:18:49.600Z | WARN | [LetterMasteryHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:18:50.567Z | LOG | Starting sync...
+2026-10-31T08:18:50.594Z | LOG | Sync skipped: no auth session
+2026-10-31T08:18:50.618Z | LOG | Sync completed: {"success":true,"skippedNoSession":true,"totalSynced":0,"totalFailed":0,"totalTerminal":0,"totalRetriable":0,"totalDeferred":0,"failedRecords":[],"tableResults":{},"preflightErrors":[]
+2026-10-31T08:19:04.413Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":false,"online":false}
+2026-10-31T08:19:11.912Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:19:11.915Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:19:11.917Z | ERROR | Error refreshing reference data: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:19:11.942Z | LOG | Requesting domain pull: reconnect
+2026-10-31T08:19:11.956Z | ERROR | Error loading profile: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:19:11.977Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:19:11.984Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:19:11.986Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:19:11.995Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-10-31T08:19:12.000Z | ERROR | Error loading classes from server: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:19:12.017Z | ERROR | Error loading classes from server: {"message":"AuthUnavailableError: auth unavailable","details":"<stack removed>
+2026-10-31T08:19:12.046Z | LOG | [SessionHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.048Z | WARN | [SessionHistory] end status=query pages=0 durationMs=2 complete=false failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.069Z | LOG | [BatteryRunHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.072Z | WARN | [BatteryRunHistory] end status=query pages=0 durationMs=3 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.091Z | LOG | [SessionHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.092Z | WARN | [SessionHistory] end status=query pages=0 durationMs=2 complete=false failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.103Z | LOG | [AssessmentHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.106Z | WARN | [AssessmentHistory] end status=query pages=0 durationMs=3 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.114Z | LOG | [LetterMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.116Z | WARN | [LetterMasteryHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.132Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:19:12.133Z | LOG | [BatteryRunHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.135Z | WARN | [BatteryRunHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.138Z | LOG | [AssessmentHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.140Z | WARN | [AssessmentHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:12.143Z | LOG | [LetterMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-10-31T08:19:12.144Z | WARN | [LetterMasteryHistory] end status=query pages=0 durationMs=1 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-10-31T08:19:13.035Z | LOG | Starting sync...
+2026-10-31T08:19:13.059Z | LOG | Sync skipped: no auth session
+2026-10-31T08:19:13.075Z | LOG | Sync completed: {"success":true,"skippedNoSession":true,"totalSynced":0,"totalFailed":0,"totalTerminal":0,"totalRetriable":0,"totalDeferred":0,"failedRecords":[],"tableResults":{},"preflightErrors":[]
+2026-10-31T08:19:13.259Z | LOG | App going to background
+2026-10-31T08:19:14.262Z | LOG | Starting sync...
+2026-10-31T08:19:14.283Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-10-31T08:19:14.287Z | LOG | Sync skipped: no auth session
+2026-10-31T08:19:14.302Z | LOG | Sync completed: {"success":true,"skippedNoSession":true,"totalSynced":0,"totalFailed":0,"totalTerminal":0,"totalRetriable":0,"totalDeferred":0,"failedRecords":[],"tableResults":{},"preflightErrors":[]
+2026-10-31T08:23:22.261Z | ERROR | TypeError: Network request failed TypeError: Network request failed
+2026-10-31T08:23:22.262Z | ERROR | AuthRetryableFetchError: Network request failed AuthRetryableFetchError: Network request failed
+2026-10-31T08:23:22.264Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":false,"online":false}
+2026-10-31T08:23:22.686Z | LOG | App came to foreground
+2026-10-31T08:23:22.711Z | LOG | Requesting domain pull: foreground
+2026-10-31T08:23:23.397Z | ERROR | AuthApiError: Invalid Refresh Token: Refresh Token Not Found AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+2026-10-31T15:58:13.823Z | LOG | Running "main"
+2026-10-31T15:58:13.856Z | LOG | [motion] device tier {"platform":"ios","totalMemory":3840114688,"deviceYearClass":2021,"tier":"high"}
+2026-11-03T04:12:01.840Z | LOG | Running "main"
+2026-11-03T04:12:01.858Z | LOG | [motion] device tier {"platform":"ios","totalMemory":3840114688,"deviceYearClass":2021,"tier":"high"}
+2026-11-03T04:13:00.691Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":true,"online":true}
+2026-11-03T04:13:00.723Z | LOG | Requesting domain pull: reconnect
