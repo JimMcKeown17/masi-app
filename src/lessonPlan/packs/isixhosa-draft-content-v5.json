@@ -1,0 +1,2741 @@
+{
+ "id": "isixhosa-draft-content-v5",
+ "language": "isixhosa",
+ "channel": "release",
+ "letter_order": "isixhosa-order-2026-10-23",
+ "generated_from": {
+  "repo": "early-reader-books",
+  "commit": "e73cef3453df742bb935857016a048d1b519aab9",
+  "note": "DRAFT for team testing (Jim, 2026-11-05): candidate words and books, not yet signed off by native speakers",
+  "from_preview": {
+   "file": "isixhosa-candidates-preview-v3.json",
+   "sha256": "51a52318f4e130c9973f46561a4eeb218e25f93c9563642363032cada8a2d201"
+  },
+  "curation": {
+   "words_per_step": 25,
+   "rule": "per step, the best-ranked words no reviewer flagged as junk or another language, plus every word the books use",
+   "kept": 352,
+   "dropped_flagged": 104,
+   "dropped_beyond_cap": 2872
+  }
+ },
+ "sound_inventory": [
+  "a",
+  "b",
+  "c",
+  "d",
+  "e",
+  "f",
+  "g",
+  "h",
+  "i",
+  "j",
+  "k",
+  "l",
+  "m",
+  "n",
+  "o",
+  "p",
+  "q",
+  "r",
+  "s",
+  "t",
+  "u",
+  "v",
+  "w",
+  "x",
+  "y",
+  "z",
+  "th",
+  "ph",
+  "kh",
+  "ny",
+  "hl",
+  "bh",
+  "nc",
+  "dl",
+  "ty",
+  "sh",
+  "tsh"
+ ],
+ "letter_steps": [
+  {
+   "step": 1,
+   "new_letters": [
+    "o",
+    "m",
+    "l",
+    "a"
+   ],
+   "size_exception": "step 1 teaches four letters so children can read words from the first session",
+   "blends": [
+    "mo",
+    "ma",
+    "lo",
+    "la"
+   ],
+   "words": [
+    "mo-lo",
+    "lo-o",
+    "lam",
+    "ma-ma",
+    "la-la",
+    "la-a",
+    "a-la",
+    "a-lo",
+    "o-o-ma-ma",
+    "o-lo"
+   ],
+   "readers": [
+    "xh-int-v1-r01",
+    "xh-int-v1-r02"
+   ]
+  },
+  {
+   "step": 2,
+   "new_letters": [
+    "k",
+    "u"
+   ],
+   "blends": [
+    "mu",
+    "lu",
+    "ko",
+    "ka",
+    "ku"
+   ],
+   "words": [
+    "u-ma-ma",
+    "ko-ko",
+    "o-ku",
+    "ku-lo",
+    "um-lo-mo",
+    "o-ko",
+    "o-lu",
+    "lu-la",
+    "lo-ku-la-la",
+    "ka-lo-ku",
+    "ku-la",
+    "ku-lu-la"
+   ],
+   "readers": [
+    "xh-int-v1-r03",
+    "xh-int-v1-r04"
+   ]
+  },
+  {
+   "step": 3,
+   "new_letters": [
+    "e",
+    "n"
+   ],
+   "blends": [
+    "me",
+    "le",
+    "ke",
+    "no",
+    "na",
+    "nu",
+    "ne"
+   ],
+   "words": [
+    "ku-le",
+    "e-nku-lu",
+    "mna",
+    "nam",
+    "o-nke",
+    "ma-me-la",
+    "u-ma-me-le",
+    "lo-nke",
+    "e-lo",
+    "na-lo",
+    "ko-nke",
+    "u-ma-lu-me"
+   ],
+   "readers": [
+    "xh-int-v1-r05",
+    "xh-int-v1-r06"
+   ]
+  },
+  {
+   "step": 4,
+   "new_letters": [
+    "i",
+    "z"
+   ],
+   "blends": [
+    "mi",
+    "li",
+    "ki",
+    "ni",
+    "zo",
+    "za",
+    "zu",
+    "ze",
+    "zi"
+   ],
+   "words": [
+    "u-ze",
+    "u-ku-ze",
+    "a-ma-nzi",
+    "e-li",
+    "zo-nke",
+    "e-zi",
+    "i-mi-ni",
+    "a-ze",
+    "u-za",
+    "i-mo-zu-lu",
+    "u-ni-ke",
+    "ni-ka"
+   ],
+   "readers": []
+  },
+  {
+   "step": 5,
+   "new_letters": [
+    "s",
+    "t"
+   ],
+   "blends": [
+    "so",
+    "sa",
+    "su",
+    "se",
+    "si",
+    "to",
+    "ta",
+    "tu",
+    "te",
+    "ti"
+   ],
+   "words": [
+    "u-su-ku",
+    "nto-ni",
+    "i-nto",
+    "i-kla-si",
+    "um-ntu",
+    "i-ko-ta",
+    "i-zi-nto",
+    "nto",
+    "u-ta-ta",
+    "i-i-ntsu-ku",
+    "o-lu-si-si-se-ko",
+    "u-nko-si-ka-zi"
+   ],
+   "readers": []
+  },
+  {
+   "step": 6,
+   "new_letters": [
+    "f",
+    "b"
+   ],
+   "blends": [
+    "fo",
+    "fa",
+    "fu",
+    "fe",
+    "fi",
+    "bo",
+    "ba",
+    "bu",
+    "be",
+    "bi"
+   ],
+   "words": [
+    "u-ku-ba",
+    "i-ba-li",
+    "i-mi-bu-zo",
+    "um-se-be-nzi",
+    "o-o-no-bu-mba",
+    "se-be-nzi-sa",
+    "a-ba-ntu",
+    "ku-ba",
+    "ko-ku-ba",
+    "i-mi-se-be-nzi",
+    "za-bo",
+    "ku-fu-ne-ka"
+   ],
+   "readers": []
+  },
+  {
+   "step": 7,
+   "new_letters": [
+    "y",
+    "d"
+   ],
+   "blends": [
+    "yo",
+    "ya",
+    "yu",
+    "ye",
+    "yi",
+    "do",
+    "da",
+    "du",
+    "de",
+    "di"
+   ],
+   "words": [
+    "a-ba-fu-ndi",
+    "u-ku-fu-nda",
+    "i-za-ndi",
+    "fu-nda",
+    "yo-nke",
+    "yom-se-be-nzi",
+    "a-la-nde-la-yo",
+    "u-ku-ya",
+    "i-sa-ndi",
+    "u-mfu-ndi",
+    "yi-nto-ni",
+    "i-i-nda-ba"
+   ],
+   "readers": []
+  },
+  {
+   "step": 8,
+   "new_letters": [
+    "c",
+    "p"
+   ],
+   "blends": [
+    "co",
+    "ca",
+    "cu",
+    "ce",
+    "ci",
+    "po",
+    "pa",
+    "pu",
+    "pe",
+    "pi"
+   ],
+   "words": [
+    "i-mpu-ku",
+    "e-ca-le-ni",
+    "i-i-mpe-ndu-lo",
+    "a-ce-bi-se",
+    "cu-la",
+    "ne-mpu-ku",
+    "um-cu-lo",
+    "i-mpe-ndu-lo",
+    "ca-ci-sa",
+    "i-ca-la",
+    "i-i-pe-nsi-le",
+    "ndi-ce-la"
+   ],
+   "readers": []
+  },
+  {
+   "step": 9,
+   "new_letters": [
+    "q",
+    "w"
+   ],
+   "blends": [
+    "qo",
+    "qa",
+    "qu",
+    "qe",
+    "qi",
+    "wo",
+    "wa",
+    "wu",
+    "we",
+    "wi"
+   ],
+   "words": [
+    "ko-dwa",
+    "kwa-ye",
+    "we-dwa",
+    "a-ba-ntwa-na",
+    "u-lwa-zi",
+    "i-qe-la",
+    "e-si-ko-lwe-ni",
+    "qi-ni-se-ka",
+    "a-ma-nqa-ku",
+    "a-ma-qe-la",
+    "um-ntwa-na",
+    "i-nda-wo"
+   ],
+   "readers": []
+  },
+  {
+   "step": 10,
+   "new_letters": [
+    "v",
+    "g"
+   ],
+   "blends": [
+    "vo",
+    "va",
+    "vu",
+    "ve",
+    "vi",
+    "go",
+    "ga",
+    "gu",
+    "ge",
+    "gi"
+   ],
+   "words": [
+    "a-ma-ga-ma",
+    "i-ve-ki",
+    "ma-ga-ma",
+    "i-ga-ma",
+    "e-mva",
+    "i-nga-ba",
+    "nga-ba-bi-ni",
+    "ngo-ku",
+    "nga-yo",
+    "u-ci-nga",
+    "ye-ba-nga",
+    "nga-ma-qe-la"
+   ],
+   "readers": []
+  },
+  {
+   "step": 11,
+   "new_letters": [
+    "x",
+    "h"
+   ],
+   "blends": [
+    "xo",
+    "xa",
+    "xu",
+    "xe",
+    "xi",
+    "ho",
+    "ha",
+    "hu",
+    "he",
+    "hi"
+   ],
+   "words": [
+    "ha-yi",
+    "i-i-nkcu-ka-cha",
+    "i-zi-xho-bo",
+    "zi-qhe-li-se",
+    "i-si-xho-sa",
+    "xo-xa-ni",
+    "no-ku-cho-nga",
+    "o-gxi-la",
+    "u-ha-mbo",
+    "u-nga-gxi-la",
+    "um-xho-lo",
+    "xe-la"
+   ],
+   "readers": []
+  },
+  {
+   "step": 12,
+   "new_letters": [
+    "j",
+    "r"
+   ],
+   "blends": [
+    "jo",
+    "ja",
+    "ju",
+    "je",
+    "ji",
+    "ro",
+    "ra",
+    "ru",
+    "re",
+    "ri"
+   ],
+   "words": [
+    "nja-ni",
+    "jo-nga",
+    "nje",
+    "ji-ke-le-za",
+    "ji-ka",
+    "nje-ngo-ko",
+    "rho-qo",
+    "nja-lo",
+    "u-ya-jo-nga",
+    "nje-ngo-ku-ba",
+    "a-jo-ngi-si-swa-yo",
+    "i-nja-ni"
+   ],
+   "readers": []
+  }
+ ],
+ "sound_steps": [
+  {
+   "step": 13,
+   "new_sounds": [
+    "th"
+   ],
+   "words": [
+    "ku-thi",
+    "tha-tha",
+    "the-tha",
+    "thi-na",
+    "thu-ma",
+    "um-thi",
+    "u-thu-li"
+   ],
+   "readers": []
+  },
+  {
+   "step": 14,
+   "new_sounds": [
+    "ph"
+   ],
+   "words": [
+    "i-phe-pha",
+    "i-phi-ka",
+    "pha-mbi",
+    "phe-ka",
+    "phe-zu",
+    "pho-la",
+    "u-pha-wu"
+   ],
+   "readers": []
+  },
+  {
+   "step": 15,
+   "new_sounds": [
+    "kh"
+   ],
+   "words": [
+    "i-kha-ya",
+    "i-kho-wa",
+    "i-khu-ba",
+    "ka-khu-lu",
+    "kha-ba",
+    "kha-la",
+    "kha-nge-la",
+    "u-kho-lo",
+    "u-kho-zi"
+   ],
+   "readers": []
+  },
+  {
+   "step": 16,
+   "new_sounds": [
+    "ny"
+   ],
+   "words": [
+    "i-nya-ma",
+    "i-nyo-ka",
+    "ku-nye",
+    "u-nya-ka",
+    "u-nya-na",
+    "u-nya-wo"
+   ],
+   "readers": []
+  },
+  {
+   "step": 17,
+   "new_sounds": [
+    "hl"
+   ],
+   "words": [
+    "a-me-hlo",
+    "hla-la",
+    "hle-ka",
+    "hlo-hla",
+    "i-hlo-bo",
+    "i-hlo-si",
+    "u-bu-hle"
+   ],
+   "readers": []
+  },
+  {
+   "step": 18,
+   "new_sounds": [
+    "bh"
+   ],
+   "words": [
+    "bha-ka",
+    "bha-la",
+    "i-bha-fu",
+    "i-bha-si",
+    "i-bhe-di",
+    "i-bho-di"
+   ],
+   "readers": []
+  },
+  {
+   "step": 19,
+   "new_sounds": [
+    "nc"
+   ],
+   "words": [
+    "i-nci-nci",
+    "i-ncwa-di",
+    "ncu-ma",
+    "u-nce-do"
+   ],
+   "readers": []
+  },
+  {
+   "step": 20,
+   "new_sounds": [
+    "dl"
+   ],
+   "words": [
+    "dla-la",
+    "dlu-la",
+    "u-ku-dla-la",
+    "um-dla-lo"
+   ],
+   "readers": []
+  },
+  {
+   "step": 21,
+   "new_sounds": [
+    "ty"
+   ],
+   "words": [
+    "a-ma-tye",
+    "i-zi-tya",
+    "tye-ba",
+    "u-ku-tya"
+   ],
+   "readers": []
+  },
+  {
+   "step": 22,
+   "new_sounds": [
+    "sh"
+   ],
+   "words": [
+    "i-gu-sha",
+    "i-ha-she",
+    "i-shu-mi",
+    "i-xe-sha",
+    "qe-sha"
+   ],
+   "readers": []
+  },
+  {
+   "step": 23,
+   "new_sounds": [
+    "tsh"
+   ],
+   "words": [
+    "i-tshi-le",
+    "na-tsho",
+    "tshe-la",
+    "tshi-sa",
+    "tshi-za",
+    "u-tshi-lo",
+    "u-tsho"
+   ],
+   "readers": []
+  }
+ ],
+ "readers": {
+  "xh-int-v1-r01": {
+   "title": "Molo, Lolo!",
+   "step": 1,
+   "tricky_words": [],
+   "pages": [
+    "Molo, Lolo!",
+    "Mmm.",
+    "Lolo! Molo!",
+    "Mmm… lala.",
+    "Molo, Malo!"
+   ]
+  },
+  "xh-int-v1-r02": {
+   "title": "Laa…",
+   "step": 1,
+   "tricky_words": [],
+   "pages": [
+    "Molo, Lolo!",
+    "Lolo! Laa…",
+    "Mmm.",
+    "Mama…",
+    "Molo."
+   ]
+  },
+  "xh-int-v1-r03": {
+   "title": "Molo, mama!",
+   "step": 2,
+   "tricky_words": [],
+   "pages": [
+    "Molo.",
+    "Molo!",
+    "Molo, mama!",
+    "Molo, Malo.",
+    "Lolo… molo!"
+   ]
+  },
+  "xh-int-v1-r04": {
+   "title": "Kulula, Malo?",
+   "step": 2,
+   "tricky_words": [],
+   "pages": [
+    "Kulula!",
+    "Mmm.",
+    "Kulula…",
+    "Mmm!",
+    "Kulula, Malo."
+   ]
+  },
+  "xh-int-v1-r05": {
+   "title": "Ekunene, Malo!",
+   "step": 3,
+   "tricky_words": [],
+   "pages": [
+    "Kulula!",
+    "Ekunene!",
+    "Kulula!",
+    "Kulula…",
+    "Ekunene."
+   ]
+  },
+  "xh-int-v1-r06": {
+   "title": "Mna!",
+   "step": 3,
+   "tricky_words": [],
+   "pages": [
+    "Mna!",
+    "Malo?",
+    "Mama!",
+    "Mmm!",
+    "Nam?"
+   ]
+  }
+ },
+ "word_bank": [
+  {
+   "text": "ala",
+   "syllables": "a-la",
+   "step": 1
+  },
+  {
+   "text": "alo",
+   "syllables": "a-lo",
+   "step": 1
+  },
+  {
+   "text": "la",
+   "syllables": "la",
+   "step": 1
+  },
+  {
+   "text": "laa",
+   "syllables": "la-a",
+   "step": 1
+  },
+  {
+   "text": "lala",
+   "syllables": "la-la",
+   "step": 1
+  },
+  {
+   "text": "lam",
+   "syllables": "lam",
+   "step": 1
+  },
+  {
+   "text": "lo",
+   "syllables": "lo",
+   "step": 1
+  },
+  {
+   "text": "loo",
+   "syllables": "lo-o",
+   "step": 1
+  },
+  {
+   "text": "mama",
+   "syllables": "ma-ma",
+   "step": 1
+  },
+  {
+   "text": "molo",
+   "syllables": "mo-lo",
+   "step": 1
+  },
+  {
+   "text": "olo",
+   "syllables": "o-lo",
+   "step": 1
+  },
+  {
+   "text": "oomama",
+   "syllables": "o-o-ma-ma",
+   "step": 1
+  },
+  {
+   "text": "alula",
+   "syllables": "a-lu-la",
+   "step": 2
+  },
+  {
+   "text": "kaloku",
+   "syllables": "ka-lo-ku",
+   "step": 2
+  },
+  {
+   "text": "koko",
+   "syllables": "ko-ko",
+   "step": 2
+  },
+  {
+   "text": "koku",
+   "syllables": "ko-ku",
+   "step": 2
+  },
+  {
+   "text": "kolu",
+   "syllables": "ko-lu",
+   "step": 2
+  },
+  {
+   "text": "kula",
+   "syllables": "ku-la",
+   "step": 2
+  },
+  {
+   "text": "kulaa",
+   "syllables": "ku-la-a",
+   "step": 2
+  },
+  {
+   "text": "kulala",
+   "syllables": "ku-la-la",
+   "step": 2
+  },
+  {
+   "text": "kulo",
+   "syllables": "ku-lo",
+   "step": 2
+  },
+  {
+   "text": "kuloo",
+   "syllables": "ku-lo-o",
+   "step": 2
+  },
+  {
+   "text": "kulula",
+   "syllables": "ku-lu-la",
+   "step": 2
+  },
+  {
+   "text": "kum",
+   "syllables": "kum",
+   "step": 2
+  },
+  {
+   "text": "kumama",
+   "syllables": "ku-ma-ma",
+   "step": 2
+  },
+  {
+   "text": "lokulala",
+   "syllables": "lo-ku-la-la",
+   "step": 2
+  },
+  {
+   "text": "lula",
+   "syllables": "lu-la",
+   "step": 2
+  },
+  {
+   "text": "oko",
+   "syllables": "o-ko",
+   "step": 2
+  },
+  {
+   "text": "oku",
+   "syllables": "o-ku",
+   "step": 2
+  },
+  {
+   "text": "olu",
+   "syllables": "o-lu",
+   "step": 2
+  },
+  {
+   "text": "ukulala",
+   "syllables": "u-ku-la-la",
+   "step": 2
+  },
+  {
+   "text": "ukuluma",
+   "syllables": "u-ku-lu-ma",
+   "step": 2
+  },
+  {
+   "text": "ukuma",
+   "syllables": "u-ku-ma",
+   "step": 2
+  },
+  {
+   "text": "ulala",
+   "syllables": "u-la-la",
+   "step": 2
+  },
+  {
+   "text": "umama",
+   "syllables": "u-ma-ma",
+   "step": 2
+  },
+  {
+   "text": "umlomo",
+   "syllables": "um-lo-mo",
+   "step": 2
+  },
+  {
+   "text": "amane",
+   "syllables": "a-ma-ne",
+   "step": 3
+  },
+  {
+   "text": "amele",
+   "syllables": "a-me-le",
+   "step": 3
+  },
+  {
+   "text": "anele",
+   "syllables": "a-ne-le",
+   "step": 3
+  },
+  {
+   "text": "ekunene",
+   "syllables": "e-ku-ne-ne",
+   "step": 3
+  },
+  {
+   "text": "elo",
+   "syllables": "e-lo",
+   "step": 3
+  },
+  {
+   "text": "elula",
+   "syllables": "e-lu-la",
+   "step": 3
+  },
+  {
+   "text": "enkulu",
+   "syllables": "e-nku-lu",
+   "step": 3
+  },
+  {
+   "text": "ke",
+   "syllables": "ke",
+   "step": 3
+  },
+  {
+   "text": "konke",
+   "syllables": "ko-nke",
+   "step": 3
+  },
+  {
+   "text": "kule",
+   "syllables": "ku-le",
+   "step": 3
+  },
+  {
+   "text": "kumele",
+   "syllables": "ku-me-le",
+   "step": 3
+  },
+  {
+   "text": "le",
+   "syllables": "le",
+   "step": 3
+  },
+  {
+   "text": "lona",
+   "syllables": "lo-na",
+   "step": 3
+  },
+  {
+   "text": "lonke",
+   "syllables": "lo-nke",
+   "step": 3
+  },
+  {
+   "text": "mamela",
+   "syllables": "ma-me-la",
+   "step": 3
+  },
+  {
+   "text": "mna",
+   "syllables": "mna",
+   "step": 3
+  },
+  {
+   "text": "na",
+   "syllables": "na",
+   "step": 3
+  },
+  {
+   "text": "nalo",
+   "syllables": "na-lo",
+   "step": 3
+  },
+  {
+   "text": "nam",
+   "syllables": "nam",
+   "step": 3
+  },
+  {
+   "text": "nkomo",
+   "syllables": "nko-mo",
+   "step": 3
+  },
+  {
+   "text": "noko",
+   "syllables": "no-ko",
+   "step": 3
+  },
+  {
+   "text": "nomama",
+   "syllables": "no-ma-ma",
+   "step": 3
+  },
+  {
+   "text": "onke",
+   "syllables": "o-nke",
+   "step": 3
+  },
+  {
+   "text": "umalume",
+   "syllables": "u-ma-lu-me",
+   "step": 3
+  },
+  {
+   "text": "umamele",
+   "syllables": "u-ma-me-le",
+   "step": 3
+  },
+  {
+   "text": "amanzi",
+   "syllables": "a-ma-nzi",
+   "step": 4
+  },
+  {
+   "text": "aza",
+   "syllables": "a-za",
+   "step": 4
+  },
+  {
+   "text": "aze",
+   "syllables": "a-ze",
+   "step": 4
+  },
+  {
+   "text": "eli",
+   "syllables": "e-li",
+   "step": 4
+  },
+  {
+   "text": "emanzini",
+   "syllables": "e-ma-nzi-ni",
+   "step": 4
+  },
+  {
+   "text": "ezi",
+   "syllables": "e-zi",
+   "step": 4
+  },
+  {
+   "text": "ezininzi",
+   "syllables": "e-zi-ni-nzi",
+   "step": 4
+  },
+  {
+   "text": "imilenze",
+   "syllables": "i-mi-le-nze",
+   "step": 4
+  },
+  {
+   "text": "imini",
+   "syllables": "i-mi-ni",
+   "step": 4
+  },
+  {
+   "text": "imozulu",
+   "syllables": "i-mo-zu-lu",
+   "step": 4
+  },
+  {
+   "text": "iza",
+   "syllables": "i-za",
+   "step": 4
+  },
+  {
+   "text": "izolile",
+   "syllables": "i-zo-li-le",
+   "step": 4
+  },
+  {
+   "text": "lize",
+   "syllables": "li-ze",
+   "step": 4
+  },
+  {
+   "text": "mini",
+   "syllables": "mi-ni",
+   "step": 4
+  },
+  {
+   "text": "nazo",
+   "syllables": "na-zo",
+   "step": 4
+  },
+  {
+   "text": "nika",
+   "syllables": "ni-ka",
+   "step": 4
+  },
+  {
+   "text": "ukuze",
+   "syllables": "u-ku-ze",
+   "step": 4
+  },
+  {
+   "text": "umnumzana",
+   "syllables": "um-num-za-na",
+   "step": 4
+  },
+  {
+   "text": "umzekelo",
+   "syllables": "um-ze-ke-lo",
+   "step": 4
+  },
+  {
+   "text": "unike",
+   "syllables": "u-ni-ke",
+   "step": 4
+  },
+  {
+   "text": "uza",
+   "syllables": "u-za",
+   "step": 4
+  },
+  {
+   "text": "uze",
+   "syllables": "u-ze",
+   "step": 4
+  },
+  {
+   "text": "zam",
+   "syllables": "zam",
+   "step": 4
+  },
+  {
+   "text": "ze",
+   "syllables": "ze",
+   "step": 4
+  },
+  {
+   "text": "zonke",
+   "syllables": "zo-nke",
+   "step": 4
+  },
+  {
+   "text": "eklasini",
+   "syllables": "e-kla-si-ni",
+   "step": 5
+  },
+  {
+   "text": "esi",
+   "syllables": "e-si",
+   "step": 5
+  },
+  {
+   "text": "eso",
+   "syllables": "e-so",
+   "step": 5
+  },
+  {
+   "text": "iintsuku",
+   "syllables": "i-i-ntsu-ku",
+   "step": 5
+  },
+  {
+   "text": "iklasi",
+   "syllables": "i-kla-si",
+   "step": 5
+  },
+  {
+   "text": "ikota",
+   "syllables": "i-ko-ta",
+   "step": 5
+  },
+  {
+   "text": "intlanzi",
+   "syllables": "i-ntla-nzi",
+   "step": 5
+  },
+  {
+   "text": "into",
+   "syllables": "i-nto",
+   "step": 5
+  },
+  {
+   "text": "isikolo",
+   "syllables": "i-si-ko-lo",
+   "step": 5
+  },
+  {
+   "text": "isonka",
+   "syllables": "i-so-nka",
+   "step": 5
+  },
+  {
+   "text": "izinto",
+   "syllables": "i-zi-nto",
+   "step": 5
+  },
+  {
+   "text": "kuso",
+   "syllables": "ku-so",
+   "step": 5
+  },
+  {
+   "text": "nosana",
+   "syllables": "no-sa-na",
+   "step": 5
+  },
+  {
+   "text": "nto",
+   "syllables": "nto",
+   "step": 5
+  },
+  {
+   "text": "ntoni",
+   "syllables": "nto-ni",
+   "step": 5
+  },
+  {
+   "text": "olusisiseko",
+   "syllables": "o-lu-si-si-se-ko",
+   "step": 5
+  },
+  {
+   "text": "sam",
+   "syllables": "sam",
+   "step": 5
+  },
+  {
+   "text": "sele",
+   "syllables": "se-le",
+   "step": 5
+  },
+  {
+   "text": "siza",
+   "syllables": "si-za",
+   "step": 5
+  },
+  {
+   "text": "umntu",
+   "syllables": "um-ntu",
+   "step": 5
+  },
+  {
+   "text": "unkosazana",
+   "syllables": "u-nko-sa-za-na",
+   "step": 5
+  },
+  {
+   "text": "unkosikazi",
+   "syllables": "u-nko-si-ka-zi",
+   "step": 5
+  },
+  {
+   "text": "usele",
+   "syllables": "u-se-le",
+   "step": 5
+  },
+  {
+   "text": "usuku",
+   "syllables": "u-su-ku",
+   "step": 5
+  },
+  {
+   "text": "utata",
+   "syllables": "u-ta-ta",
+   "step": 5
+  },
+  {
+   "text": "aba",
+   "syllables": "a-ba",
+   "step": 6
+  },
+  {
+   "text": "abantu",
+   "syllables": "a-ba-ntu",
+   "step": 6
+  },
+  {
+   "text": "benza",
+   "syllables": "be-nza",
+   "step": 6
+  },
+  {
+   "text": "biza",
+   "syllables": "bi-za",
+   "step": 6
+  },
+  {
+   "text": "bonisa",
+   "syllables": "bo-ni-sa",
+   "step": 6
+  },
+  {
+   "text": "bonke",
+   "syllables": "bo-nke",
+   "step": 6
+  },
+  {
+   "text": "buza",
+   "syllables": "bu-za",
+   "step": 6
+  },
+  {
+   "text": "ebalini",
+   "syllables": "e-ba-li-ni",
+   "step": 6
+  },
+  {
+   "text": "ibali",
+   "syllables": "i-ba-li",
+   "step": 6
+  },
+  {
+   "text": "imibuzo",
+   "syllables": "i-mi-bu-zo",
+   "step": 6
+  },
+  {
+   "text": "imifanekiso",
+   "syllables": "i-mi-fa-ne-ki-so",
+   "step": 6
+  },
+  {
+   "text": "imisebenzi",
+   "syllables": "i-mi-se-be-nzi",
+   "step": 6
+  },
+  {
+   "text": "kokuba",
+   "syllables": "ko-ku-ba",
+   "step": 6
+  },
+  {
+   "text": "kuba",
+   "syllables": "ku-ba",
+   "step": 6
+  },
+  {
+   "text": "kufuneka",
+   "syllables": "ku-fu-ne-ka",
+   "step": 6
+  },
+  {
+   "text": "oonobumba",
+   "syllables": "o-o-no-bu-mba",
+   "step": 6
+  },
+  {
+   "text": "sebenzisa",
+   "syllables": "se-be-nzi-sa",
+   "step": 6
+  },
+  {
+   "text": "ukuba",
+   "syllables": "u-ku-ba",
+   "step": 6
+  },
+  {
+   "text": "umfanekiso",
+   "syllables": "u-mfa-ne-ki-so",
+   "step": 6
+  },
+  {
+   "text": "umsebenzi",
+   "syllables": "um-se-be-nzi",
+   "step": 6
+  },
+  {
+   "text": "usebenzise",
+   "syllables": "u-se-be-nzi-se",
+   "step": 6
+  },
+  {
+   "text": "zabo",
+   "syllables": "za-bo",
+   "step": 6
+  },
+  {
+   "text": "zemisebenzi",
+   "syllables": "ze-mi-se-be-nzi",
+   "step": 6
+  },
+  {
+   "text": "zoba",
+   "syllables": "zo-ba",
+   "step": 6
+  },
+  {
+   "text": "zobomi",
+   "syllables": "zo-bo-mi",
+   "step": 6
+  },
+  {
+   "text": "abafundi",
+   "syllables": "a-ba-fu-ndi",
+   "step": 7
+  },
+  {
+   "text": "alandelayo",
+   "syllables": "a-la-nde-la-yo",
+   "step": 7
+  },
+  {
+   "text": "anesandi",
+   "syllables": "a-ne-sa-ndi",
+   "step": 7
+  },
+  {
+   "text": "bafunda",
+   "syllables": "ba-fu-nda",
+   "step": 7
+  },
+  {
+   "text": "funda",
+   "syllables": "fu-nda",
+   "step": 7
+  },
+  {
+   "text": "iindaba",
+   "syllables": "i-i-nda-ba",
+   "step": 7
+  },
+  {
+   "text": "isandi",
+   "syllables": "i-sa-ndi",
+   "step": 7
+  },
+  {
+   "text": "izandi",
+   "syllables": "i-za-ndi",
+   "step": 7
+  },
+  {
+   "text": "masifunde",
+   "syllables": "ma-si-fu-nde",
+   "step": 7
+  },
+  {
+   "text": "naye",
+   "syllables": "na-ye",
+   "step": 7
+  },
+  {
+   "text": "ndiza",
+   "syllables": "ndi-za",
+   "step": 7
+  },
+  {
+   "text": "sayina",
+   "syllables": "sa-yi-na",
+   "step": 7
+  },
+  {
+   "text": "ufunde",
+   "syllables": "u-fu-nde",
+   "step": 7
+  },
+  {
+   "text": "ukufunda",
+   "syllables": "u-ku-fu-nda",
+   "step": 7
+  },
+  {
+   "text": "ukuya",
+   "syllables": "u-ku-ya",
+   "step": 7
+  },
+  {
+   "text": "umfundi",
+   "syllables": "u-mfu-ndi",
+   "step": 7
+  },
+  {
+   "text": "yam",
+   "syllables": "yam",
+   "step": 7
+  },
+  {
+   "text": "yazisa",
+   "syllables": "ya-zi-sa",
+   "step": 7
+  },
+  {
+   "text": "yenza",
+   "syllables": "ye-nza",
+   "step": 7
+  },
+  {
+   "text": "yesi",
+   "syllables": "ye-si",
+   "step": 7
+  },
+  {
+   "text": "yintoni",
+   "syllables": "yi-nto-ni",
+   "step": 7
+  },
+  {
+   "text": "yokufunda",
+   "syllables": "yo-ku-fu-nda",
+   "step": 7
+  },
+  {
+   "text": "yomsebenzi",
+   "syllables": "yom-se-be-nzi",
+   "step": 7
+  },
+  {
+   "text": "yonke",
+   "syllables": "yo-nke",
+   "step": 7
+  },
+  {
+   "text": "yosuku",
+   "syllables": "yo-su-ku",
+   "step": 7
+  },
+  {
+   "text": "acebise",
+   "syllables": "a-ce-bi-se",
+   "step": 8
+  },
+  {
+   "text": "amapolisa",
+   "syllables": "a-ma-po-li-sa",
+   "step": 8
+  },
+  {
+   "text": "cacisa",
+   "syllables": "ca-ci-sa",
+   "step": 8
+  },
+  {
+   "text": "cela",
+   "syllables": "ce-la",
+   "step": 8
+  },
+  {
+   "text": "cula",
+   "syllables": "cu-la",
+   "step": 8
+  },
+  {
+   "text": "ecaleni",
+   "syllables": "e-ca-le-ni",
+   "step": 8
+  },
+  {
+   "text": "ecela",
+   "syllables": "e-ce-la",
+   "step": 8
+  },
+  {
+   "text": "esipilini",
+   "syllables": "e-si-pi-li-ni",
+   "step": 8
+  },
+  {
+   "text": "icala",
+   "syllables": "i-ca-la",
+   "step": 8
+  },
+  {
+   "text": "iimpendulo",
+   "syllables": "i-i-mpe-ndu-lo",
+   "step": 8
+  },
+  {
+   "text": "iipensile",
+   "syllables": "i-i-pe-nsi-le",
+   "step": 8
+  },
+  {
+   "text": "iitapile",
+   "syllables": "i-i-ta-pi-le",
+   "step": 8
+  },
+  {
+   "text": "impendulo",
+   "syllables": "i-mpe-ndu-lo",
+   "step": 8
+  },
+  {
+   "text": "impuku",
+   "syllables": "i-mpu-ku",
+   "step": 8
+  },
+  {
+   "text": "ipensile",
+   "syllables": "i-pe-nsi-le",
+   "step": 8
+  },
+  {
+   "text": "ipeyinti",
+   "syllables": "i-pe-yi-nti",
+   "step": 8
+  },
+  {
+   "text": "kucela",
+   "syllables": "ku-ce-la",
+   "step": 8
+  },
+  {
+   "text": "lomculo",
+   "syllables": "lom-cu-lo",
+   "step": 8
+  },
+  {
+   "text": "ndicela",
+   "syllables": "ndi-ce-la",
+   "step": 8
+  },
+  {
+   "text": "nempuku",
+   "syllables": "ne-mpu-ku",
+   "step": 8
+  },
+  {
+   "text": "samapolisa",
+   "syllables": "sa-ma-po-li-sa",
+   "step": 8
+  },
+  {
+   "text": "ucacise",
+   "syllables": "u-ca-ci-se",
+   "step": 8
+  },
+  {
+   "text": "ukucula",
+   "syllables": "u-ku-cu-la",
+   "step": 8
+  },
+  {
+   "text": "umculo",
+   "syllables": "um-cu-lo",
+   "step": 8
+  },
+  {
+   "text": "yamapolisa",
+   "syllables": "ya-ma-po-li-sa",
+   "step": 8
+  },
+  {
+   "text": "abantwana",
+   "syllables": "a-ba-ntwa-na",
+   "step": 9
+  },
+  {
+   "text": "amanqaku",
+   "syllables": "a-ma-nqa-ku",
+   "step": 9
+  },
+  {
+   "text": "amaqela",
+   "syllables": "a-ma-qe-la",
+   "step": 9
+  },
+  {
+   "text": "esikolweni",
+   "syllables": "e-si-ko-lwe-ni",
+   "step": 9
+  },
+  {
+   "text": "eyedwa",
+   "syllables": "e-ye-dwa",
+   "step": 9
+  },
+  {
+   "text": "indawo",
+   "syllables": "i-nda-wo",
+   "step": 9
+  },
+  {
+   "text": "iqela",
+   "syllables": "i-qe-la",
+   "step": 9
+  },
+  {
+   "text": "kodwa",
+   "syllables": "ko-dwa",
+   "step": 9
+  },
+  {
+   "text": "kwaye",
+   "syllables": "kwa-ye",
+   "step": 9
+  },
+  {
+   "text": "kwimisebenzi",
+   "syllables": "kwi-mi-se-be-nzi",
+   "step": 9
+  },
+  {
+   "text": "nawe",
+   "syllables": "na-we",
+   "step": 9
+  },
+  {
+   "text": "nawo",
+   "syllables": "na-wo",
+   "step": 9
+  },
+  {
+   "text": "nkawu",
+   "syllables": "nka-wu",
+   "step": 9
+  },
+  {
+   "text": "owenza",
+   "syllables": "o-we-nza",
+   "step": 9
+  },
+  {
+   "text": "qiniseka",
+   "syllables": "qi-ni-se-ka",
+   "step": 9
+  },
+  {
+   "text": "ukwenza",
+   "syllables": "u-kwe-nza",
+   "step": 9
+  },
+  {
+   "text": "ulwazi",
+   "syllables": "u-lwa-zi",
+   "step": 9
+  },
+  {
+   "text": "umntwana",
+   "syllables": "um-ntwa-na",
+   "step": 9
+  },
+  {
+   "text": "wabo",
+   "syllables": "wa-bo",
+   "step": 9
+  },
+  {
+   "text": "wabona",
+   "syllables": "wa-bo-na",
+   "step": 9
+  },
+  {
+   "text": "wabuza",
+   "syllables": "wa-bu-za",
+   "step": 9
+  },
+  {
+   "text": "wam",
+   "syllables": "wam",
+   "step": 9
+  },
+  {
+   "text": "waza",
+   "syllables": "wa-za",
+   "step": 9
+  },
+  {
+   "text": "wedwa",
+   "syllables": "we-dwa",
+   "step": 9
+  },
+  {
+   "text": "wonke",
+   "syllables": "wo-nke",
+   "step": 9
+  },
+  {
+   "text": "amagama",
+   "syllables": "a-ma-ga-ma",
+   "step": 10
+  },
+  {
+   "text": "emva",
+   "syllables": "e-mva",
+   "step": 10
+  },
+  {
+   "text": "ezobugcisa",
+   "syllables": "e-zo-bu-gci-sa",
+   "step": 10
+  },
+  {
+   "text": "igama",
+   "syllables": "i-ga-ma",
+   "step": 10
+  },
+  {
+   "text": "ingaba",
+   "syllables": "i-nga-ba",
+   "step": 10
+  },
+  {
+   "text": "ingoma",
+   "syllables": "i-ngo-ma",
+   "step": 10
+  },
+  {
+   "text": "ingqiqo",
+   "syllables": "i-ngqi-qo",
+   "step": 10
+  },
+  {
+   "text": "intsingiselo",
+   "syllables": "i-ntsi-ngi-se-lo",
+   "step": 10
+  },
+  {
+   "text": "isivakalisi",
+   "syllables": "i-si-va-ka-li-si",
+   "step": 10
+  },
+  {
+   "text": "iveki",
+   "syllables": "i-ve-ki",
+   "step": 10
+  },
+  {
+   "text": "magama",
+   "syllables": "ma-ga-ma",
+   "step": 10
+  },
+  {
+   "text": "nemvakalelo",
+   "syllables": "ne-mva-ka-le-lo",
+   "step": 10
+  },
+  {
+   "text": "ngababini",
+   "syllables": "nga-ba-bi-ni",
+   "step": 10
+  },
+  {
+   "text": "ngamaqela",
+   "syllables": "nga-ma-qe-la",
+   "step": 10
+  },
+  {
+   "text": "ngayo",
+   "syllables": "nga-yo",
+   "step": 10
+  },
+  {
+   "text": "ngemini",
+   "syllables": "nge-mi-ni",
+   "step": 10
+  },
+  {
+   "text": "ngoko",
+   "syllables": "ngo-ko",
+   "step": 10
+  },
+  {
+   "text": "ngoku",
+   "syllables": "ngo-ku",
+   "step": 10
+  },
+  {
+   "text": "ngokuvakalayo",
+   "syllables": "ngo-ku-va-ka-la-yo",
+   "step": 10
+  },
+  {
+   "text": "ngokuzolileyo",
+   "syllables": "ngo-ku-zo-li-le-yo",
+   "step": 10
+  },
+  {
+   "text": "ngosuku",
+   "syllables": "ngo-su-ku",
+   "step": 10
+  },
+  {
+   "text": "ngubani",
+   "syllables": "ngu-ba-ni",
+   "step": 10
+  },
+  {
+   "text": "ucinga",
+   "syllables": "u-ci-nga",
+   "step": 10
+  },
+  {
+   "text": "ukuguqula",
+   "syllables": "u-ku-gu-qu-la",
+   "step": 10
+  },
+  {
+   "text": "yebanga",
+   "syllables": "ye-ba-nga",
+   "step": 10
+  },
+  {
+   "text": "chaza",
+   "syllables": "cha-za",
+   "step": 11
+  },
+  {
+   "text": "echanekileyo",
+   "syllables": "e-cha-ne-ki-le-yo",
+   "step": 11
+  },
+  {
+   "text": "echibini",
+   "syllables": "e-chi-bi-ni",
+   "step": 11
+  },
+  {
+   "text": "hayi",
+   "syllables": "ha-yi",
+   "step": 11
+  },
+  {
+   "text": "iinkcukacha",
+   "syllables": "i-i-nkcu-ka-cha",
+   "step": 11
+  },
+  {
+   "text": "ingxelo",
+   "syllables": "i-ngxe-lo",
+   "step": 11
+  },
+  {
+   "text": "inxaxheba",
+   "syllables": "i-nxa-xhe-ba",
+   "step": 11
+  },
+  {
+   "text": "isixhosa",
+   "syllables": "i-si-xho-sa",
+   "step": 11
+  },
+  {
+   "text": "iziqhamo",
+   "syllables": "i-zi-qha-mo",
+   "step": 11
+  },
+  {
+   "text": "izixhobo",
+   "syllables": "i-zi-xho-bo",
+   "step": 11
+  },
+  {
+   "text": "nokuchonga",
+   "syllables": "no-ku-cho-nga",
+   "step": 11
+  },
+  {
+   "text": "ogxila",
+   "syllables": "o-gxi-la",
+   "step": 11
+  },
+  {
+   "text": "qho",
+   "syllables": "qho",
+   "step": 11
+  },
+  {
+   "text": "uhambo",
+   "syllables": "u-ha-mbo",
+   "step": 11
+  },
+  {
+   "text": "ukuhamba",
+   "syllables": "u-ku-ha-mba",
+   "step": 11
+  },
+  {
+   "text": "umhambi",
+   "syllables": "um-ha-mbi",
+   "step": 11
+  },
+  {
+   "text": "umxholo",
+   "syllables": "um-xho-lo",
+   "step": 11
+  },
+  {
+   "text": "ungagxila",
+   "syllables": "u-nga-gxi-la",
+   "step": 11
+  },
+  {
+   "text": "uxolo",
+   "syllables": "u-xo-lo",
+   "step": 11
+  },
+  {
+   "text": "wahamba",
+   "syllables": "wa-ha-mba",
+   "step": 11
+  },
+  {
+   "text": "xa",
+   "syllables": "xa",
+   "step": 11
+  },
+  {
+   "text": "xela",
+   "syllables": "xe-la",
+   "step": 11
+  },
+  {
+   "text": "xelela",
+   "syllables": "xe-le-la",
+   "step": 11
+  },
+  {
+   "text": "xoxani",
+   "syllables": "xo-xa-ni",
+   "step": 11
+  },
+  {
+   "text": "ziqhelise",
+   "syllables": "zi-qhe-li-se",
+   "step": 11
+  },
+  {
+   "text": "ajongisiswayo",
+   "syllables": "a-jo-ngi-si-swa-yo",
+   "step": 12
+  },
+  {
+   "text": "emlanjeni",
+   "syllables": "em-la-nje-ni",
+   "step": 12
+  },
+  {
+   "text": "enje",
+   "syllables": "e-nje",
+   "step": 12
+  },
+  {
+   "text": "idayari",
+   "syllables": "i-da-ya-ri",
+   "step": 12
+  },
+  {
+   "text": "ijezi",
+   "syllables": "i-je-zi",
+   "step": 12
+  },
+  {
+   "text": "inja",
+   "syllables": "i-nja",
+   "step": 12
+  },
+  {
+   "text": "injani",
+   "syllables": "i-nja-ni",
+   "step": 12
+  },
+  {
+   "text": "irejista",
+   "syllables": "i-re-ji-sta",
+   "step": 12
+  },
+  {
+   "text": "jika",
+   "syllables": "ji-ka",
+   "step": 12
+  },
+  {
+   "text": "jikeleza",
+   "syllables": "ji-ke-le-za",
+   "step": 12
+  },
+  {
+   "text": "jonga",
+   "syllables": "jo-nga",
+   "step": 12
+  },
+  {
+   "text": "ndajonga",
+   "syllables": "nda-jo-nga",
+   "step": 12
+  },
+  {
+   "text": "ndiwujongile",
+   "syllables": "ndi-wu-jo-ngi-le",
+   "step": 12
+  },
+  {
+   "text": "ngujabu",
+   "syllables": "ngu-ja-bu",
+   "step": 12
+  },
+  {
+   "text": "njalo",
+   "syllables": "nja-lo",
+   "step": 12
+  },
+  {
+   "text": "njani",
+   "syllables": "nja-ni",
+   "step": 12
+  },
+  {
+   "text": "nje",
+   "syllables": "nje",
+   "step": 12
+  },
+  {
+   "text": "njengoko",
+   "syllables": "nje-ngo-ko",
+   "step": 12
+  },
+  {
+   "text": "njengokuba",
+   "syllables": "nje-ngo-ku-ba",
+   "step": 12
+  },
+  {
+   "text": "rhoqo",
+   "syllables": "rho-qo",
+   "step": 12
+  },
+  {
+   "text": "uyajonga",
+   "syllables": "u-ya-jo-nga",
+   "step": 12
+  },
+  {
+   "text": "wajonga",
+   "syllables": "wa-jo-nga",
+   "step": 12
+  },
+  {
+   "text": "yerejista",
+   "syllables": "ye-re-ji-sta",
+   "step": 12
+  },
+  {
+   "text": "yesoseji",
+   "syllables": "ye-so-se-ji",
+   "step": 12
+  },
+  {
+   "text": "zesilivere",
+   "syllables": "ze-si-li-ve-re",
+   "step": 12
+  },
+  {
+   "text": "kuthi",
+   "syllables": "ku-thi",
+   "step": 13
+  },
+  {
+   "text": "thatha",
+   "syllables": "tha-tha",
+   "step": 13
+  },
+  {
+   "text": "thetha",
+   "syllables": "the-tha",
+   "step": 13
+  },
+  {
+   "text": "thina",
+   "syllables": "thi-na",
+   "step": 13
+  },
+  {
+   "text": "thuma",
+   "syllables": "thu-ma",
+   "step": 13
+  },
+  {
+   "text": "umthi",
+   "syllables": "um-thi",
+   "step": 13
+  },
+  {
+   "text": "uthuli",
+   "syllables": "u-thu-li",
+   "step": 13
+  },
+  {
+   "text": "iphepha",
+   "syllables": "i-phe-pha",
+   "step": 14
+  },
+  {
+   "text": "iphika",
+   "syllables": "i-phi-ka",
+   "step": 14
+  },
+  {
+   "text": "phambi",
+   "syllables": "pha-mbi",
+   "step": 14
+  },
+  {
+   "text": "pheka",
+   "syllables": "phe-ka",
+   "step": 14
+  },
+  {
+   "text": "phezu",
+   "syllables": "phe-zu",
+   "step": 14
+  },
+  {
+   "text": "phola",
+   "syllables": "pho-la",
+   "step": 14
+  },
+  {
+   "text": "uphawu",
+   "syllables": "u-pha-wu",
+   "step": 14
+  },
+  {
+   "text": "ikhaya",
+   "syllables": "i-kha-ya",
+   "step": 15
+  },
+  {
+   "text": "ikhowa",
+   "syllables": "i-kho-wa",
+   "step": 15
+  },
+  {
+   "text": "ikhuba",
+   "syllables": "i-khu-ba",
+   "step": 15
+  },
+  {
+   "text": "kakhulu",
+   "syllables": "ka-khu-lu",
+   "step": 15
+  },
+  {
+   "text": "khaba",
+   "syllables": "kha-ba",
+   "step": 15
+  },
+  {
+   "text": "khala",
+   "syllables": "kha-la",
+   "step": 15
+  },
+  {
+   "text": "khangela",
+   "syllables": "kha-nge-la",
+   "step": 15
+  },
+  {
+   "text": "ukholo",
+   "syllables": "u-kho-lo",
+   "step": 15
+  },
+  {
+   "text": "ukhozi",
+   "syllables": "u-kho-zi",
+   "step": 15
+  },
+  {
+   "text": "inyama",
+   "syllables": "i-nya-ma",
+   "step": 16
+  },
+  {
+   "text": "inyoka",
+   "syllables": "i-nyo-ka",
+   "step": 16
+  },
+  {
+   "text": "kunye",
+   "syllables": "ku-nye",
+   "step": 16
+  },
+  {
+   "text": "unyaka",
+   "syllables": "u-nya-ka",
+   "step": 16
+  },
+  {
+   "text": "unyana",
+   "syllables": "u-nya-na",
+   "step": 16
+  },
+  {
+   "text": "unyawo",
+   "syllables": "u-nya-wo",
+   "step": 16
+  },
+  {
+   "text": "amehlo",
+   "syllables": "a-me-hlo",
+   "step": 17
+  },
+  {
+   "text": "hlala",
+   "syllables": "hla-la",
+   "step": 17
+  },
+  {
+   "text": "hleka",
+   "syllables": "hle-ka",
+   "step": 17
+  },
+  {
+   "text": "hlohla",
+   "syllables": "hlo-hla",
+   "step": 17
+  },
+  {
+   "text": "ihlobo",
+   "syllables": "i-hlo-bo",
+   "step": 17
+  },
+  {
+   "text": "ihlosi",
+   "syllables": "i-hlo-si",
+   "step": 17
+  },
+  {
+   "text": "ubuhle",
+   "syllables": "u-bu-hle",
+   "step": 17
+  },
+  {
+   "text": "bhaka",
+   "syllables": "bha-ka",
+   "step": 18
+  },
+  {
+   "text": "bhala",
+   "syllables": "bha-la",
+   "step": 18
+  },
+  {
+   "text": "ibhafu",
+   "syllables": "i-bha-fu",
+   "step": 18
+  },
+  {
+   "text": "ibhasi",
+   "syllables": "i-bha-si",
+   "step": 18
+  },
+  {
+   "text": "ibhedi",
+   "syllables": "i-bhe-di",
+   "step": 18
+  },
+  {
+   "text": "ibhodi",
+   "syllables": "i-bho-di",
+   "step": 18
+  },
+  {
+   "text": "incinci",
+   "syllables": "i-nci-nci",
+   "step": 19
+  },
+  {
+   "text": "incwadi",
+   "syllables": "i-ncwa-di",
+   "step": 19
+  },
+  {
+   "text": "ncuma",
+   "syllables": "ncu-ma",
+   "step": 19
+  },
+  {
+   "text": "uncedo",
+   "syllables": "u-nce-do",
+   "step": 19
+  },
+  {
+   "text": "dlala",
+   "syllables": "dla-la",
+   "step": 20
+  },
+  {
+   "text": "dlula",
+   "syllables": "dlu-la",
+   "step": 20
+  },
+  {
+   "text": "ukudlala",
+   "syllables": "u-ku-dla-la",
+   "step": 20
+  },
+  {
+   "text": "umdlalo",
+   "syllables": "um-dla-lo",
+   "step": 20
+  },
+  {
+   "text": "amatye",
+   "syllables": "a-ma-tye",
+   "step": 21
+  },
+  {
+   "text": "izitya",
+   "syllables": "i-zi-tya",
+   "step": 21
+  },
+  {
+   "text": "tyeba",
+   "syllables": "tye-ba",
+   "step": 21
+  },
+  {
+   "text": "ukutya",
+   "syllables": "u-ku-tya",
+   "step": 21
+  },
+  {
+   "text": "igusha",
+   "syllables": "i-gu-sha",
+   "step": 22
+  },
+  {
+   "text": "ihashe",
+   "syllables": "i-ha-she",
+   "step": 22
+  },
+  {
+   "text": "ishumi",
+   "syllables": "i-shu-mi",
+   "step": 22
+  },
+  {
+   "text": "ixesha",
+   "syllables": "i-xe-sha",
+   "step": 22
+  },
+  {
+   "text": "qesha",
+   "syllables": "qe-sha",
+   "step": 22
+  },
+  {
+   "text": "itshile",
+   "syllables": "i-tshi-le",
+   "step": 23
+  },
+  {
+   "text": "natsho",
+   "syllables": "na-tsho",
+   "step": 23
+  },
+  {
+   "text": "tshela",
+   "syllables": "tshe-la",
+   "step": 23
+  },
+  {
+   "text": "tshisa",
+   "syllables": "tshi-sa",
+   "step": 23
+  },
+  {
+   "text": "tshiza",
+   "syllables": "tshi-za",
+   "step": 23
+  },
+  {
+   "text": "utshilo",
+   "syllables": "u-tshi-lo",
+   "step": 23
+  },
+  {
+   "text": "utsho",
+   "syllables": "u-tsho",
+   "step": 23
+  }
+ ],
+ "reader_details": {
+  "xh-int-v1-r01": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Molo, Lolo!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Lolo! Molo!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm… lala."
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Molo, Malo!"
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r02": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Molo, Lolo!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Lolo! Laa…"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Mama…"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Molo."
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r03": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Molo."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Molo!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Molo, mama!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Molo, Malo."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Lolo… molo!"
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r04": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm."
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula…"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Mmm!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Kulula, Malo."
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r05": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Ekunene!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Kulula…"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Ekunene."
+     }
+    ]
+   ]
+  },
+  "xh-int-v1-r06": {
+   "retired": false,
+   "speakers": {
+    "malo": {
+     "name": "Malo",
+     "colour": "red"
+    },
+    "lolo": {
+     "name": "Lolo",
+     "colour": "blue"
+    }
+   },
+   "page_lines": [
+    [
+     {
+      "speaker": "malo",
+      "text": "Mna!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Malo?"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Mama!"
+     }
+    ],
+    [
+     {
+      "speaker": "lolo",
+      "text": "Mmm!"
+     }
+    ],
+    [
+     {
+      "speaker": "malo",
+      "text": "Nam?"
+     }
+    ]
+   ]
+  }
+ }
+}

@@ -10279,3 +10279,16 @@ the merge's own `merge-tree` into HEAD, and its walk.
   known timing failure under a full parallel run.
 - **Not published.** No OTA was made from this branch; publishing stays with `npm run ota:publish` and its
   rollback guard, after merge.
+
+### 2026-11-06 — isiXhosa draft content v5: the team's word review, ukolo → ukholo (`feat/xh-content-v5`)
+
+- **Why:** Jim's staff reviewed the isiXhosa app word list: "Only spotted one word I didn't know in isiXhosa.
+  'ukolo'. Otherwise all good." The real word is *ukholo* (faith). In early-reader-books #4 the word bank records
+  the review (351 approved; ukolo rejected and replaced by ukholo, attested), and the exports are rebuilt:
+  `isixhosa-candidates-preview-v3` and `isixhosa-draft-content-v5` (built from e73cef3, sha256 `26ccc97b…60be`).
+- **Change:** both files are vendored unchanged; v5 is the current release for `isixhosa-order-2026-10-23`.
+  Preview v3 is bundled (preview channel) because `lessonPlanPacks` checks each release's words against the
+  preview it names. v3 and v4 stay bundled; test rows pin that drafts saved on them still resolve.
+- **What phones will see:** step 2 loses *ukolo* (it had fewer than 25 candidates, so nothing backfills);
+  the kh step (15) gains *ukholo*. Still 352 words. Books and blends are unchanged from v4.
+- **Not published.** No OTA from this branch.
