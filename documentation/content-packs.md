@@ -47,7 +47,7 @@ The current edition is `2026-10-23`:
 
 | Code | Letter order | Current release | Current preview |
 |---|---|---|---|
-| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-draft-content-v3` | none (falls back to release) |
+| `xh` | `isixhosa-order-2026-10-23` | `isixhosa-draft-content-v4` | none (falls back to release) |
 | `en` | `english-order-2026-10-23` | `english-draft-content-v2` | none (falls back to release) |
 | `af` | `afrikaans-order-2026-10-23` | `afrikaans-draft-content-v2` | none (falls back to release) |
 
@@ -71,6 +71,10 @@ enough for the language team to review before January 2027. Outcome-test words s
 `generated_from.curation` records the rule and counts. Blends and steps equal the preview exports
 below. isiXhosa v3 has six readers, two per step for steps 1 to 3: **Molo, Lolo!** and **Laa…**
 (step 1), **Ukulala** and **Kulula, Malo?** (step 2), **Ekunene, Malo!** and **Mna!** (step 3).
+**isiXhosa v4** (books commit `4665444`, 2026-11-05) differs from v3 only in book 3: Jim found
+**Ukulala** confusing (its joke played *kulula* "it's easy" against *ukulala* "to sleep"), so book 3
+is now **Molo, mama!**. It uses step-1 letters only, so the app suggests it first to a new step-1
+group (the highest-step readable book). v3 stays bundled because saved drafts may name it.
 Earlier draft versions (isiXhosa v1 and v2, English and Afrikaans v1) were never bundled. English and Afrikaans have no books yet. Later versions (more books, then the signed-off lists)
 are new files with new ids; never edit these.
 

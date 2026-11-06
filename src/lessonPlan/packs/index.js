@@ -9,6 +9,7 @@ import isixhosaPreviewV2 from './isixhosa-candidates-preview-v2.json';
 import englishPreview from './english-candidates-preview-v1.json';
 import afrikaansPreview from './afrikaans-candidates-preview-v1.json';
 import isixhosaDraftContent from './isixhosa-draft-content-v3.json';
+import isixhosaDraftContentV4 from './isixhosa-draft-content-v4.json';
 import englishDraftContent from './english-draft-content-v2.json';
 import afrikaansDraftContent from './afrikaans-draft-content-v2.json';
 import { packLetterOrderId } from './packLetterOrder';
@@ -77,12 +78,13 @@ export const { BUNDLED_PACKS, CURRENT_PACK_IDS, getPackForOrder, getPackById } =
   [isixhosaInterim, englishInterim, afrikaansInterim, isixhosaPreview,
     isixhosaInterimV2, englishInterimV2, afrikaansInterimV2,
     isixhosaPreviewV2, englishPreview, afrikaansPreview,
-    isixhosaDraftContent, englishDraftContent, afrikaansDraftContent],
+    isixhosaDraftContent, englishDraftContent, afrikaansDraftContent, isixhosaDraftContentV4],
   {
     // Draft words, blends and books for team testing (Jim, 2026-11-05); not yet signed off by
     // native speakers. Every build, preview content or not, teaches from these packs.
+    // isiXhosa v4 (2026-11-05): book 3 is now "Molo, mama!"; v3 stays bundled for history.
     release: {
-      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v3',
+      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v4',
       'english-order-2026-10-23': 'english-draft-content-v2',
       'afrikaans-order-2026-10-23': 'afrikaans-draft-content-v2',
     },
