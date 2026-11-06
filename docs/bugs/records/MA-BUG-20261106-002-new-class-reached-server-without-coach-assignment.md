@@ -22,7 +22,7 @@ verification_state: NOT_TESTED
 root_cause_confidence_pct: 30
 confidence_basis: Live rows show the class without any class_ea_assignments row; the push order and the class-save transaction make an interrupted or refused assignment upload plausible, but the phone's outbox has not been seen.
 
-created_at_utc: 2026-11-06T20:10:00Z
+created_at_utc: 2026-11-06T19:56:24Z
 updated_at_utc: 2026-11-06T20:12:22Z
 first_observed_at: 2026-11-06T08:14:32.666Z
 last_observed_at: 2026-11-06T20:11:08Z
@@ -150,9 +150,10 @@ Read-only SQL on `segygjzpujphwvrubusm`, 2026-11-06 19:47 UTC:
   and the other at 5 (`b99b7199…`) were updated on the server after creation (`updated_at` later
   than `created_at`), and all have a holder. This class is the only one created today above
   `row_version` 2 with no server update.
-- Inference, not observed: the class insert was claimed for sending four times with no local
-  edit, and the first three claims did not write the row (each send failed or was refused, or its
-  pass stopped before sending); the fourth delivered it. The other classes above 2 can owe their
+- Inference, not observed: three earlier claims on this class (claims of its insert, or of a
+  local edit's update, which raises the same `row_version`) did not write the row (each send
+  failed or was refused, or its pass stopped before sending); the last claim of the insert
+  delivered it. The other classes above 2 can owe their
   versions to later updates, so they are no comparison for repeated sends.
 - The coach: `staff_programme_assignments` row active since 2026-11-05 23:18:55, programme
   `9707ede3-14ab-4f56-bd5f-1179d034de1f`. No other rows: 0 class assignments, 0 child
@@ -161,15 +162,19 @@ Read-only SQL on `segygjzpujphwvrubusm`, 2026-11-06 19:47 UTC:
   agent `okhttp/4.12.0`) created 07:31:41, last refreshed 2026-11-06 12:05:56; one `node`
   session created 2026-11-05 23:29:51 that has never been refreshed (a script sign-in, which script
   is not verified).
-  The phone was running and online at about 12:05 UTC, about four hours after the class arrived.
+  The phone was running and online at about 12:05 UTC, about four hours after it created the class
+  (08:14 UTC); when the class reached the server is unknown.
 - Source (`origin/main` `ba148296`):
   - `classesRepository.js`: a local class save with no active programme throws ("classes.programme_id
     is required"), so a class cannot be saved without its assignment that way. Otherwise the
     assignment row and its `insert` outbox row are written in the same transaction as the class.
   - `offlineSync.js` `PUSH_ORDER`: `classes` is pushed second, `class_ea_assignments` seventh,
     so an upload pass can deliver the class and stop before the assignment.
-  - A `42501`/`23503` refusal with no pending parent evidence, `23505` and `MV001` are terminal and
-    would produce an `upload_terminal` receipt. Any other error code is retried with no receipt
+  - Codes the sync engine treats as permanent refusals (`offlineSync.js` `classifyError`, lines
+    483-531: 23514 on assignment tables, 23505, 23503/42501/UPDATE_NOT_APPLIED without pending
+    parent evidence, MV001, 22023, MA001/MA002, LOCAL_ONLY_REFERENCE, MISSING_OUTBOX_PAYLOAD,
+    ARCHIVE_REQUIRED/ARCHIVE_NOT_APPLIED/RESTORE_NOT_APPLIED, UNEXPECTED_RPC_RESULT) produce an
+    `upload_terminal` receipt. 28000, network errors and other codes are retried with no receipt
     until the `upload_backlog_stale` check (oldest waiting row older than 24 hours, and a server
     response within 24 hours), so the earliest automatic signal is about 2026-11-07T08:14Z.
 
@@ -177,11 +182,11 @@ Read-only SQL on `segygjzpujphwvrubusm`, 2026-11-06 19:47 UTC:
 
 | Hypothesis | Evidence for | Evidence against | Confidence | Next discriminating check |
 | --- | --- | --- | ---: | --- |
-| H1. The upload pass stopped after the class and before the assignment (connection lost or app closed); the assignment waits in the phone's outbox | Push order; same-transaction save; no other uploads from the coach; `row_version` 5 on a never-updated row: three earlier claims did not write the class, so this phone's upload passes were failing or stopping after the class was saved | The phone was online with the app running at about 12:05 UTC, when a sync would normally send it | 25% | Recheck the class's assignment rows after the coach's next sync |
-| H2. The assignment insert was refused and is retrying (non-terminal code), which sends no receipt for 24 hours | No receipt is expected yet; fits the 12:05 window; the class itself needed four claims, so sends from this phone were not landing on the first try | Nothing direct | 30% | An `upload_backlog_stale` receipt from this coach after 2026-11-07T08:14Z, or a Send diagnostics bundle |
+| H1. The upload pass stopped after the class and before the assignment (connection lost or app closed); the assignment waits in the phone's outbox | Push order; same-transaction save; no other uploads from the coach; Inferred: `row_version` 5 on a never-updated row means earlier claims did not write the class, so this phone's upload passes were failing or stopping after the class was saved | The phone was online with the app running at about 12:05 UTC, when a sync would normally send it | 25% | Recheck the class's assignment rows after the coach's next sync |
+| H2. The assignment insert was refused and is retrying (non-terminal code), which sends no receipt for 24 hours | No receipt is expected yet; fits the 12:05 window; at least one earlier upload pass did not write the class (inferred), so sends from this phone were not landing on the first try | Nothing direct | 30% | An `upload_backlog_stale` receipt from this coach after 2026-11-07T08:14Z, or a Send diagnostics bundle |
 | H3. The assignment insert was refused terminally and its receipt has not arrived | Fits the missing row | A terminal refusal is reported at the next sync status read and sent on the next drain; the phone was online at about 12:05 | 15% | An `upload_terminal` receipt from this coach |
 | H4. The class was saved without an assignment because the phone had no active programme | First-day account | Source throws in that case; the coach has an active programme since 11-05 23:18 | 2% | None |
-| H5. The class was written by something other than the coach's phone | None | Millisecond `created_at`, as a phone stamps it; `row_version` 5 on a single insert matches the phone's claim stamping, which a script or Head Office tool has no reason to write; not checked against Head Office tools | 5% | Ask Jim whether any script or dashboard created classes on 2026-11-06 |
+| H5. The class was written by something other than the coach's phone | A `node` session exists on the account (2026-11-05 23:29:51) | That session was never refreshed, so its token expired long before 08:14 (if the token lifetime is the default 1 h; not checked); millisecond `created_at` rules out the server clock but not a script; `row_version` 5 on a single insert matches the phone's claim stamping, which a script or Head Office tool has no reason to write; not checked against Head Office tools | 5% | Ask Jim whether any script or dashboard created classes on 2026-11-06 |
 
 ## Root cause
 
@@ -214,8 +219,9 @@ with Jim's go-ahead.
 | 2026-11-06T12:05:56Z | Coach's phone | Login refreshed (app running and online) | `auth.sessions.refreshed_at` |
 | 2026-11-06T19:27:12Z | Claude | Daily invariant check: `unheld_live_class` hit | `scripts/lifecycle-invariants.sql` |
 | 2026-11-06T19:47Z | Claude | Live rows rechecked read-only: still no assignment | SQL above |
-| 2026-11-06T20:10:00Z | Claude | Recorded as a provisional lead | No database writes |
+| 2026-11-06T19:56:24Z | Claude | Recorded as a provisional lead | No database writes |
 | 2026-11-06T20:11:08Z | Claude | Rechecked read-only: still no assignment, 0 children, `row_version` 5; live `classes` triggers listed | `now()` of the query; no database writes |
+| 2026-11-06T20:12:59Z | Claude | Corrected after independent verification | commit 9671e99e |
 
 ## Open questions
 

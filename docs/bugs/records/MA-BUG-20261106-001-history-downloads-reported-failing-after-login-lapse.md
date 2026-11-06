@@ -22,7 +22,7 @@ verification_state: NOT_TESTED
 root_cause_confidence_pct: 70
 confidence_basis: The phone's own log shows every history walk ending in 1-3 ms with AuthUnavailableError, stored as failureKind=query, at 2026-10-31T08:18:49Z, and no walk again until the observer reported those markers at 2026-11-03T04:13:00.8Z; source shows AuthUnavailableError carries no code (so classifyPullFailureKind calls it query) and the observer checks only the marker's age; not reproduced.
 
-created_at_utc: 2026-11-06T20:10:00Z
+created_at_utc: 2026-11-06T19:56:24Z
 updated_at_utc: 2026-11-06T20:12:22Z
 first_observed_at: 2026-10-31T08:18:49.569Z
 last_observed_at: 2026-11-03T04:21:43.757Z
@@ -78,7 +78,7 @@ possible_duplicate_of: []
 No one reported a symptom; these are automatic receipts from a test account's iPhone 13.
 The receipts say four history downloads (past lessons, assessments, test runs and letter
 progress) had been failing for about 68 hours. The phone's own log shows that none of those
-downloads had been attempted in those 68 hours: each failed once, in 2 ms, because the phone
+downloads had been attempted in those 68 hours: each failed in 1-3 ms at 08:18:49Z and again at 08:19:12Z, because the phone
 had no usable login yet, and the phone was not used again until it reported them.
 
 Possible EA-visible effect, not observed: the Sync status screen labels a history scope with a
@@ -114,7 +114,8 @@ read "Incomplete since 31 Oct" until the next successful download.
   at 04:20:45 with "Network request failed" and was last seen failing at 04:21:43. The phone was
   online and delivering receipts at 16:14:59 the same day, and the observer runs on every sync
   status read, yet the 2026-11-05 resends still carry 04:21:43 as last seen. No bundle or log
-  after 04:13 exists to confirm a successful download.
+  after 04:13 exists to confirm a successful download. Receipt envelopes report successful syncs
+  at 2026-11-03T04:20:54Z and 16:19:15Z (uploads, not history downloads).
 - **Duplication, misattribution, or cross-account risk:** None seen.
 
 ## Occurrences
@@ -273,7 +274,8 @@ No fix proposed. Directions to weigh later, separately from approval:
 | 2026-11-03T04:13:00Z | Phone | Four `pull_failing` conditions observed at open; bundle captured | Receipts `58a8b762`, `97b870d3`, `9d8b47f9`, `8c8f4f7a` |
 | 2026-11-03T04:20:45Z | Phone | Session history fails once more ("Network request failed") | `pf:7166e70f` |
 | 2026-11-05T12:34:50Z | Phone | Two resends delivered by build 28 | Receipts `e4182615`, `376c5d03` |
-| 2026-11-06T20:10:00Z | Claude | Recorded from the full receipt sweep (snapshot 2026-11-06T19:42:48.650568+00:00) | Bundle fetched (`--fetch pf:3e13b3ef`, downloaded); resolve inapplicable (not a record-bearing kind); Sentry unavailable |
+| 2026-11-06T19:56:24Z | Claude | Recorded from the full receipt sweep (snapshot 2026-11-06T19:42:48.650568+00:00) | Bundle fetched (`--fetch pf:3e13b3ef`, downloaded); resolve inapplicable (not a record-bearing kind); Sentry unavailable |
+| 2026-11-06T20:12:59Z | Claude | Corrected after independent verification | commit 9671e99e |
 
 ## Open questions
 
@@ -283,5 +285,7 @@ No fix proposed. Directions to weigh later, separately from approval:
   later, so a stale report needs that marker plus no successful walk for 24 hours or more, not
   just a weekend gap. How often that happens decides whether this is a test-phone oddity or a
   weekly source of noise in the retest.
+- Why did session history still carry the 10-31 marker at 04:20:44, 7.7 min after sign-in, when
+  the other three scopes had cleared?
 - Why was the iPhone 13's refresh token not found on 2026-10-31? The auth audit log is empty;
   the next check is the Supabase Auth logs for 2026-10-31 08:00–08:30 UTC.

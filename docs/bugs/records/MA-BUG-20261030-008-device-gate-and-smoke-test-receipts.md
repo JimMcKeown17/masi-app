@@ -233,10 +233,12 @@ None.
 | --- | --- | --- | --- |
 | 2026-10-30T23:08:55Z | Claude | First full sweep | 10 receipts, 10 unrecorded |
 | 2026-10-30T23:30:00Z | Claude | Report recorded | All ten conditions claimed by exact key |
-| 2026-11-06T20:10:00Z | Claude | R11–R18 added from the 2026-11-06 full sweep | Eight test conditions claimed by exact key; `er:41d4ddb2` fetched and inspected |
+| 2026-11-06T19:56:24Z | Claude | R11–R18 added from the 2026-11-06 full sweep | Eight test conditions claimed by exact key; `er:41d4ddb2` fetched and inspected |
+| 2026-11-06T20:12:59Z | Claude | Corrected after independent verification | commit 9671e99e |
 
 ## Open questions
 
 - Should test accounts be excluded or labelled in the reader once real EAs
   start reporting? Today the sweep shows them like anyone else. By the 2026-11-06
-  sweep, 18 of 23 conditions were test receipts claimed here.
+  sweep, all 23 conditions came from test accounts: 18 deliberate ones claimed here and 5 in
+  MA-BUG-20261106-001, a real defect found only because test-account receipts were swept.
