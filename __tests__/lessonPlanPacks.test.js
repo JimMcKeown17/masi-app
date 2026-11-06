@@ -26,13 +26,16 @@ const RELEASE_PACK_SHA256 = {
   'afrikaans-draft-content-v2': '2eedf3f3af969636f31cafaad010c7f4eb5e624b6320e4b1e550d68f55566c4b',
   // Book 3 is now "Molo, mama!": books commit 4665444, npm run app-pack -- --version 4 --language isixhosa.
   'isixhosa-draft-content-v4': '5463646c9a24d49543c31d2cd2d0ac4d8d2b5f80cfb96777c7054a0e7562d328',
+  // The team's review (ukolo replaced by ukholo): books commit e73cef3, built from preview v3.
+  'isixhosa-draft-content-v5': '26ccc97b9c8c23e07dd568ffda32f34eb06ed789b5a8ef660b8c139d657160be',
 };
 
 // The current draft content release per language; trimmed to 25 words per step on 2026-11-05.
-const DRAFT_CONTENT = { isixhosa: 'isixhosa-draft-content-v4', english: 'english-draft-content-v2', afrikaans: 'afrikaans-draft-content-v2' };
+const DRAFT_CONTENT = { isixhosa: 'isixhosa-draft-content-v5', english: 'english-draft-content-v2', afrikaans: 'afrikaans-draft-content-v2' };
 
 const PREVIEW_PACK_SHA256 = {
   'isixhosa-candidates-preview-v2': '7d12be70ad6061e4f243854c7375785ab287ff0c963cd43bfb728ad830b89366',
+  'isixhosa-candidates-preview-v3': '51a52318f4e130c9973f46561a4eeb218e25f93c9563642363032cada8a2d201',
   'english-candidates-preview-v1': 'e430d4887104a04db6295bfd407891c3b0a4911c6ba99ab1d243684613364abd',
   'afrikaans-candidates-preview-v1': '76d4aec38b0bd8748bd9bdfd9e9aaa0df3bbaae3c3671d0c4086977cbe800ba7',
 };
@@ -40,7 +43,7 @@ const PREVIEW_PACK_SHA256 = {
 test('current packs are selected by letter order', () => {
   expect(CURRENT_PACK_IDS).toEqual({
     release: {
-      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v4',
+      'isixhosa-order-2026-10-23': 'isixhosa-draft-content-v5',
       'english-order-2026-10-23': 'english-draft-content-v2',
       'afrikaans-order-2026-10-23': 'afrikaans-draft-content-v2',
     },
@@ -139,7 +142,7 @@ test.each([['isixhosa', 2], ['english', 1], ['afrikaans', 1]])(
 
 test('a mapped preview is chosen only with explicit permission (registry fixture)', () => {
   // No order has a preview mapping today; keep the selection rule tested for the next one.
-  const release = getPackById('isixhosa-draft-content-v4');
+  const release = getPackById('isixhosa-draft-content-v5');
   const preview = getPackById('isixhosa-candidates-preview-v2', { allowPreview: true });
   const registry = createPackRegistry([release, preview], {
     release: { 'isixhosa-order-2026-10-23': release.id },
