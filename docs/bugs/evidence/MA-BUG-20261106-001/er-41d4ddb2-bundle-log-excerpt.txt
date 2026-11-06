@@ -1,0 +1,110 @@
+Safe excerpt of diagnostic bundle daf2c747-daa6-429f-ba8b-9fd616faecce (trigger ea_report),
+downloaded with --fetch er:41d4ddb2 (report 2431db21-25f1-55f1-a2f0-b7bd6864ff48; MA-BUG-20261030-008 R14).
+Original stays in gitignored docs/bugs/user-submissions-bundles/er:41d4ddb2/;
+original SHA-256 507430a01614555ab80daaad7337703f78b1d02d21143f9fcce22a9f910dff7c.
+Account: the numeracy test account (test account). Device: iPhone 17 (iPhone18,3), iOS 26.6.2, build 28.
+Messages cut at the first stack frame. No learner data.
+
+capturedAt: 2026-11-05T15:17:31.827Z
+Whole log: 325 lines (309 LOG, 10 WARN, 6 ERROR). All 16 WARN and ERROR lines are in the two cold
+starts below; the capture session (from 2026-11-05T15:16:17Z) has none. Lines are kept unchanged
+except for the stack cut, and cover only the two windows below.
+sync_state history cursors at capture (scope family | lastPulledAt | lastFailureAt | lastFailureKind):
+  assessment_history_pull | 2026-11-05T15:15:31.849Z | none | -
+  battery_run_history_pull | 2026-11-05T15:15:31.348Z | none | -
+  child_data_pull | 2026-11-05T15:16:21.465Z | (no history cursor) | -
+  classes_pull | 2026-11-05T15:16:19.512Z | (no history cursor) | -
+  letter_mastery_pull | 2026-11-05T15:15:32.381Z | none | -
+  session_history_pull | 2026-11-05T15:15:34.201Z | none | -
+  skill_mastery_pull | 2026-11-05T15:15:32.866Z | none | -
+failedOutboxRows: 0
+
+Log lines, oldest first: cold start 2026-11-04T01:37:11Z, then cold start 2026-11-05T15:15:28Z (time | level | message):
+2026-11-04T01:37:11.191Z | LOG | Running "main"
+2026-11-04T01:37:11.229Z | LOG | [motion] device tier {"platform":"ios","totalMemory":8044216320,"deviceYearClass":2025,"tier":"high"}
+2026-11-04T01:37:11.264Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-04T01:37:11.265Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-04T01:37:11.265Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-04T01:37:11.265Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-04T01:37:11.266Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-04T01:37:11.266Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-04T01:37:11.301Z | ERROR | Error loading profile: {"message":"AuthUnavailableError: auth unavailable","details":"AuthUnavailableError: auth unavailable [stack removed]
+2026-11-04T01:37:11.308Z | LOG | Requesting domain pull: reconnect
+2026-11-04T01:37:11.312Z | ERROR | Error refreshing reference data: {"message":"AuthUnavailableError: auth unavailable","details":"AuthUnavailableError: auth unavailable [stack removed]
+2026-11-04T01:37:11.320Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-04T01:37:11.330Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-04T01:37:11.333Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-04T01:37:11.334Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-04T01:37:11.354Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-04T01:37:11.365Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":true,"online":true}
+2026-11-04T01:37:11.373Z | ERROR | Error loading classes from server: {"message":"AuthUnavailableError: auth unavailable","details":"AuthUnavailableError: auth unavailable [stack removed]
+2026-11-04T01:37:11.430Z | LOG | [SessionHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:11.433Z | WARN | [SessionHistory] end status=query pages=0 durationMs=3 complete=false failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-04T01:37:11.440Z | LOG | [BatteryRunHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:11.447Z | WARN | [BatteryRunHistory] end status=query pages=0 durationMs=7 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-04T01:37:11.461Z | LOG | [AssessmentHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:11.463Z | WARN | [AssessmentHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-04T01:37:11.466Z | LOG | [LetterMasteryHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:11.467Z | WARN | [LetterMasteryHistory] end status=query pages=0 durationMs=1 complete=false rpcMs=0 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-04T01:37:11.469Z | LOG | [SkillMasteryHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:11.470Z | WARN | [SkillMasteryHistory] end status=query pages=0 durationMs=1 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-04T01:37:11.629Z | LOG | Requesting domain pull: credentials
+2026-11-04T01:37:12.678Z | LOG | Starting sync...
+2026-11-04T01:37:12.718Z | LOG | Sync completed: {"success":true,"totalSynced":0,"totalFailed":0,"totalTerminal":0,"totalRetriable":0,"totalDeferred":0,"failedRecords":[],"tableResults":{},"preflightErrors":[],"durationMs":3,"incidents":{"sent":0,"rejected":0,"failed":0}}
+2026-11-04T01:37:13.328Z | LOG | [BatteryRunHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:14.267Z | LOG | [BatteryRunHistory] end status=complete pages=2 durationMs=939 complete=true rpcMs=911 saveMs=13 firstCommitMs=462
+2026-11-04T01:37:14.275Z | LOG | [AssessmentHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:16.016Z | LOG | [AssessmentHistory] end status=complete pages=4 durationMs=1741 complete=true rpcMs=1676 saveMs=41 firstCommitMs=400
+2026-11-04T01:37:16.021Z | LOG | [LetterMasteryHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:16.522Z | LOG | [LetterMasteryHistory] end status=complete pages=2 durationMs=501 complete=true rpcMs=477 saveMs=9 firstCommitMs=234
+2026-11-04T01:37:16.529Z | LOG | [SkillMasteryHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:16.729Z | LOG | [SessionHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:17.003Z | LOG | [SkillMasteryHistory] end status=complete pages=2 durationMs=474 complete=true rpcMs=456 saveMs=8 firstCommitMs=228
+2026-11-04T01:37:17.017Z | LOG | [BatteryRunHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:17.519Z | LOG | [BatteryRunHistory] end status=complete pages=2 durationMs=502 complete=true rpcMs=476 saveMs=11 firstCommitMs=241
+2026-11-04T01:37:17.528Z | LOG | [AssessmentHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:17.671Z | LOG | [SessionHistory] end status=complete pages=2 durationMs=942 complete=true
+2026-11-04T01:37:18.320Z | LOG | [AssessmentHistory] end status=complete pages=4 durationMs=792 complete=true rpcMs=722 saveMs=40 firstCommitMs=248
+2026-11-04T01:37:18.326Z | LOG | [LetterMasteryHistory] start forced=false mode=rewalk_due firstWalk=false
+2026-11-04T01:37:18.613Z | LOG | [LetterMasteryHistory] end status=complete pages=2 durationMs=287 complete=true rpcMs=261 saveMs=10 firstCommitMs=129
+2026-11-05T15:15:28.315Z | LOG | Running "main"
+2026-11-05T15:15:28.344Z | LOG | [motion] device tier {"platform":"ios","totalMemory":8044216320,"deviceYearClass":2025,"tier":"high"}
+2026-11-05T15:15:28.384Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-05T15:15:28.385Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-05T15:15:28.385Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-05T15:15:28.385Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-05T15:15:28.386Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-05T15:15:28.386Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":null,"online":true}
+2026-11-05T15:15:28.417Z | ERROR | Error loading profile: {"message":"AuthUnavailableError: auth unavailable","details":"AuthUnavailableError: auth unavailable [stack removed]
+2026-11-05T15:15:28.423Z | LOG | Requesting domain pull: reconnect
+2026-11-05T15:15:28.427Z | ERROR | Error refreshing reference data: {"message":"AuthUnavailableError: auth unavailable","details":"AuthUnavailableError: auth unavailable [stack removed]
+2026-11-05T15:15:28.434Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-05T15:15:28.442Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-05T15:15:28.444Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-05T15:15:28.445Z | LOG | Could not fetch job titles from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-05T15:15:28.468Z | LOG | Could not fetch schools from server (likely offline): AuthUnavailableError: auth unavailable
+2026-11-05T15:15:28.478Z | LOG | Network state changed: {"isConnected":true,"isInternetReachable":true,"online":true}
+2026-11-05T15:15:28.486Z | ERROR | Error loading classes from server: {"message":"AuthUnavailableError: auth unavailable","details":"AuthUnavailableError: auth unavailable [stack removed]
+2026-11-05T15:15:28.638Z | LOG | [SessionHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:28.639Z | WARN | [SessionHistory] end status=query pages=0 durationMs=1 complete=false failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-05T15:15:28.646Z | LOG | [BatteryRunHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:28.650Z | WARN | [BatteryRunHistory] end status=query pages=0 durationMs=4 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-05T15:15:28.661Z | LOG | [AssessmentHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:28.663Z | WARN | [AssessmentHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-05T15:15:28.666Z | LOG | [LetterMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:28.668Z | WARN | [LetterMasteryHistory] end status=query pages=0 durationMs=2 complete=false rpcMs=1 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-05T15:15:28.671Z | LOG | [SkillMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:28.672Z | WARN | [SkillMasteryHistory] end status=query pages=0 durationMs=1 complete=false rpcMs=0 saveMs=0 firstCommitMs=none failureKind=query error="AuthUnavailableError: auth unavailable"
+2026-11-05T15:15:28.918Z | LOG | Requesting domain pull: credentials
+2026-11-05T15:15:29.979Z | LOG | Starting sync...
+2026-11-05T15:15:30.025Z | LOG | Sync completed: {"success":true,"totalSynced":0,"totalFailed":0,"totalTerminal":0,"totalRetriable":0,"totalDeferred":0,"failedRecords":[],"tableResults":{},"preflightErrors":[],"durationMs":2,"incidents":{"sent":0,"rejected":0,"failed":0}}
+2026-11-05T15:15:30.897Z | LOG | [BatteryRunHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:31.363Z | LOG | [BatteryRunHistory] end status=complete pages=1 durationMs=467 complete=true rpcMs=447 saveMs=6 firstCommitMs=454
+2026-11-05T15:15:31.374Z | LOG | [AssessmentHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:31.861Z | LOG | [AssessmentHistory] end status=complete pages=1 durationMs=487 complete=true rpcMs=470 saveMs=6 firstCommitMs=476
+2026-11-05T15:15:31.874Z | LOG | [LetterMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:32.396Z | LOG | [LetterMasteryHistory] end status=complete pages=1 durationMs=522 complete=true rpcMs=505 saveMs=4 firstCommitMs=509
+2026-11-05T15:15:32.406Z | LOG | [SkillMasteryHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:32.880Z | LOG | [SkillMasteryHistory] end status=complete pages=1 durationMs=474 complete=true rpcMs=455 saveMs=6 firstCommitMs=462
+2026-11-05T15:15:33.846Z | LOG | [SessionHistory] start forced=false mode=delta firstWalk=false
+2026-11-05T15:15:34.228Z | LOG | [SessionHistory] end status=complete pages=1 durationMs=382 complete=true

@@ -23,7 +23,7 @@ root_cause_confidence_pct: 95
 confidence_basis: Every receipt matches a dated, logged test action (build log 2026-10-17 D1 gates, 2026-10-29 hosted smoke, 2026-10-30 A03s gates, 2026-10-31 A03s checks and EGMA gate, 2026-11-05 pilot release checks and phone-health-check runs) by test accounts.
 
 created_at_utc: 2026-10-30T23:30:00Z
-updated_at_utc: 2026-11-06T20:10:00Z
+updated_at_utc: 2026-11-06T20:12:22Z
 first_observed_at: 2026-10-17T13:03:08Z
 last_observed_at: 2026-11-05T22:18:06Z
 
@@ -196,7 +196,12 @@ These are the E2E runs.
   The receipt's key hides the row id, so this is consistent, not proven. The left-behind lane
   worked as designed.
 - R14's bundle (SHA-256 `507430a01614555ab80daaad7337703f78b1d02d21143f9fcce22a9f910dff7c`) shows
-  0 failed or refused outbox rows and no warnings or errors in its 325 log lines. Its screenshot
+  0 failed or refused outbox rows. Its 325 log lines hold 10 WARN and 6 ERROR entries, all
+  `AuthUnavailableError` at two cold starts (2026-11-04T01:37:11Z and 2026-11-05T15:15:28Z): the
+  history walks stop in 1-7 ms as `failureKind=query`, then complete about 3-6 s later once the
+  login arrives. That is the classification step of MA-BUG-20261106-001 (safe excerpt in
+  `docs/bugs/evidence/MA-BUG-20261106-001/er-41d4ddb2-bundle-log-excerpt.txt`), not a fault in
+  this report; nothing in the capture session (15:16:17Z on) is a warning or error. Its screenshot
   (SHA-256 `459deebf0c7bd6d8d97417f0eb37c6fe63670016c8c0d411bf3d28b3bdbf67a1`) shows the Maths
   assessment "1 · Count aloud", item 1 of 5, opened from TestFlight at 10:17 local time, with
   nothing wrong on screen. Both stay in gitignored

@@ -23,7 +23,7 @@ root_cause_confidence_pct: 70
 confidence_basis: The phone's own log shows every history walk ending in 1-3 ms with AuthUnavailableError, stored as failureKind=query, at 2026-10-31T08:18:49Z, and no walk again until the observer reported those markers at 2026-11-03T04:13:00.8Z; source shows AuthUnavailableError carries no code (so classifyPullFailureKind calls it query) and the observer checks only the marker's age; not reproduced.
 
 created_at_utc: 2026-11-06T20:10:00Z
-updated_at_utc: 2026-11-06T20:10:00Z
+updated_at_utc: 2026-11-06T20:12:22Z
 first_observed_at: 2026-10-31T08:18:49.569Z
 last_observed_at: 2026-11-03T04:21:43.757Z
 
@@ -56,6 +56,7 @@ support_incident_keys:
 support_incident_signatures: []
 evidence_paths:
   - docs/bugs/evidence/MA-BUG-20261106-001/pf-3e13b3ef-bundle-log-excerpt.txt
+  - docs/bugs/evidence/MA-BUG-20261106-001/er-41d4ddb2-bundle-log-excerpt.txt
   - src/services/historyWalk.js
   - src/services/preloadedChildData.js
   - src/session/staleActor.js
@@ -91,8 +92,10 @@ read "Incomplete since 31 Oct" until the next successful download.
   per history scope (four here), which reads like a server or query failure.
 - **Known affected users:** One test account (`test@masinyusane.org`).
 - **Relevant exposed population:** Any phone whose last open before a gap of 24 hours or more
-  started with an expired login (an EA's phone over a weekend is the obvious case), from the
-  November 2026 retest onward.
+  started with an expired login and ended before a history download succeeded (here the login
+  refresh failed; an app closed within seconds or an offline start are untested), from the
+  November 2026 retest onward. An ordinary cold start clears its marker within seconds (see
+  Observed facts, second device).
 - **Workaround:** None needed.
 
 ## Data-safety assessment
@@ -176,9 +179,11 @@ a gap of more than 24 hours (or a moved clock) before the next open.
   2026-11-03T04:12:01Z. At 04:13:00.723Z the log shows "Requesting domain pull: reconnect"; the
   bundle was captured at 04:13:00.845Z with the four markers from 10-31 still set. No history walk
   appears between 2026-10-31T08:19:12Z and capture.
-- `auth.sessions` (read-only, 2026-11-06): a new Test session was created at 2026-11-03 04:13 with
-  user agent `Masi/28 CFNetwork/3860.400.51`, last refreshed 2026-11-05 12:34 (the time of the
-  build-28 resends). The account signed in again on 11-03 rather than renewing the 10-31 session.
+- `auth.sessions` (read-only, 2026-11-06): a new Test session was created at 2026-11-03 04:13:00Z
+  (a fresh sign-in, 0.35 s before the reconnect pull). Its user agent now reads
+  `Masi/28 CFNetwork/3860.400.51`, matching its last refresh by build 28 on 2026-11-05 12:34 (the
+  time of the build-28 resends), not the sign-in: at 04:13 the phone ran build 26 (bundle
+  runtime). The account signed in again on 11-03 rather than renewing the 10-31 session.
   `auth.audit_log_entries` holds 0 rows, so why the old refresh token was not found is
   unavailable from the server.
 - Source (`origin/main` `ba148296`):
@@ -194,6 +199,16 @@ a gap of more than 24 hours (or a moved clock) before the next open.
     no `lastSuccessAt` field, so in practice the test is the marker's age alone. It runs from
     `getSyncStatus` (`src/services/offlineSync.js`), which can come before the first download of
     a new session.
+- Second device: the `er:41d4ddb2` bundle (MA-BUG-20261030-008 R14; numeracy test account,
+  iPhone 17, iOS 26.6.2, build 28, the pilot build) shows the same
+  `AuthUnavailableError` → `failureKind=query` walk stops at two ordinary cold starts,
+  2026-11-04T01:37:11Z and 2026-11-05T15:15:28Z: all five history walks end in 1-7 ms. Each time
+  "Requesting domain pull: credentials" follows within 0.3 s, and each scope's credentialed walk
+  completes 3-6 s after its stop; the cursors at capture carry no `lastFailureAt`. Safe excerpt:
+  `docs/bugs/evidence/MA-BUG-20261106-001/er-41d4ddb2-bundle-log-excerpt.txt`, SHA-256
+  `35fba6e37ba6403003eba0a846223420a668292e6dbd3df705e6b504167f03b8`, of bundle
+  `daf2c747-daa6-429f-ba8b-9fd616faecce`, original SHA-256 `507430a01614555ab80daaad7337703f78b1d02d21143f9fcce22a9f910dff7c`, kept
+  unchanged in gitignored `docs/bugs/user-submissions-bundles/er:41d4ddb2/`.
 - The build log entry of 2026-11-05 ("First-sweep fixes released") already noted "7
   `pull_failing` receipts from builds 26 and 28 since 2026-11-03". The 7 receipts are the five
   conditions above; build 28 only delivered the two resends.
@@ -262,8 +277,11 @@ No fix proposed. Directions to weigh later, separately from approval:
 
 ## Open questions
 
-- Does the same stale report happen on an ordinary weekend gap, where the login renews
-  normally? That decides whether this is a test-phone oddity or a weekly source of noise in the
-  retest.
+- Does the cold-start marker survive when no credentialed walk follows it: the app closed within
+  seconds of opening, an offline start, or a failed login refresh (as here)? The `er:41d4ddb2`
+  bundle shows an ordinary cold start sets the marker and a credentialed walk clears it 3-6 s
+  later, so a stale report needs that marker plus no successful walk for 24 hours or more, not
+  just a weekend gap. How often that happens decides whether this is a test-phone oddity or a
+  weekly source of noise in the retest.
 - Why was the iPhone 13's refresh token not found on 2026-10-31? The auth audit log is empty;
   the next check is the Supabase Auth logs for 2026-10-31 08:00–08:30 UTC.
