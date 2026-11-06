@@ -129,8 +129,11 @@ shape.
   the field roster. Provision unique temporary credentials privately and prove each account through
   real password sign-in plus the same authenticated RLS reads the app requires.
 - [ ] Mark every test, demo, and fixture account with `app_metadata.is_test_account = true` at
-  creation (`scripts/createTesters.js` sets nothing today), and exclude marked accounts from every
-  report and staff view. Zazi's unmarked demo pair appeared as real EAs on a live staff page
+  creation, and exclude marked accounts from every report and staff view. `scripts/createTesters.js`
+  stamps it since 2026-10-31, and the dashboard excludes flagged accounts (plus any email with `+`
+  before the `@`, plus `MASI_APP_TEST_EMAILS`) unless `include_test` is set. The six staging
+  accounts created before 2026-10-31 were flagged on 2026-11-04 (Jim); all 14 staging accounts carry
+  it. Keep the item open until every future seeder (field roster import included) stamps the flag. Zazi's unmarked demo pair appeared as real EAs on a live staff page
   ([Z15](./zazi-sync-lessons-for-masi-2026-10-08.md)).
 - [x] **Organisation decision closed (Jim, 2026-10-14):** a partner organisation is plausible
   within a year. Adopt the required, no-default `users.organization_id` label, as in Zazi's
